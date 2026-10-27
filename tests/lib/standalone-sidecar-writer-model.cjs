@@ -276,7 +276,8 @@ main().then(() => {
   report.model_sha256 = crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex');
   report.node_version = process.version;
   report.source_bindings = Object.fromEntries(['tests/test-standalone-sidecar.js', 'plugins/data-secure/server/core/bound-file-io.js',
-    'plugins/data-secure/server/background-role-launcher.js', 'plugins/data-secure/server/standalone/desktop-sidecar.js']
+    'plugins/data-secure/server/background-role-launcher.js', 'plugins/data-secure/server/core/background-process-launcher.js',
+    'apps/datasecure-standalone/runtime-adapters/background-role-launcher.js', 'plugins/data-secure/server/standalone/desktop-sidecar.js']
     .map(name => [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, name))).digest('hex')]));
   fs.writeFileSync(path.join(evidence, 'RESULT.json'), JSON.stringify(report, null, 2), { flag: 'wx' });
   process.stdout.write(`ENGINEERING_MODEL PASS ${passed}; real_workers=0; scopes retained at ${evidence}\n`);

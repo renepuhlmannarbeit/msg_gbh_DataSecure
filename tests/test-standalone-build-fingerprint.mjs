@@ -28,7 +28,7 @@ test('Standalone source projection excludes Cowork-only runtime modules independ
     assert.ok(files.has('core/local-review-model.js'));
     assert.ok(files.has('gateway/package-files.js'));
     assert.ok(files.has('gateway/review-meta-io.js'));
-    for (const relative of ['companion/stdio-server.js', 'companion/ipc-session.js',
+    for (const relative of ['durable-runtime-cache.js', 'companion/stdio-server.js', 'companion/ipc-session.js',
       'companion/processor.js', 'companion/job-store.js', 'companion/batch-start-confirmation.js',
       'companion/retention.js', 'companion/completion-summary.js', 'companion/local-confirmation.js',
       'companion/release-verifier.js', 'companion/text-review.js', 'gateway/worker-terminal-presentation.js',
@@ -47,7 +47,8 @@ test('Standalone build identity never reads Cowork-only source files', () => {
       const original = fs[method];
       fs[method] = function(file, ...args) {
         const name = String(file).replaceAll('\\\\', '/');
-        assert.equal(name.includes('/server/companion/'), false, 'Standalone touched a Cowork source: ' + name);
+        assert.equal(name.includes('/server/companion/') || name.endsWith('/server/durable-runtime-cache.js'), false,
+          'Standalone touched a Cowork source: ' + name);
         return original.call(this, file, ...args);
       };
     }

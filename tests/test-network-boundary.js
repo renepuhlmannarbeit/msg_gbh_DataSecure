@@ -30,7 +30,7 @@ test('parser and fixed background roles launch the packaged guard before private
   const runtime = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'runtime.js'), 'utf8');
   const supervisor = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'companion', 'supervisor.js'), 'utf8');
   const batchExecutor = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'gateway', 'batch-executor.js'), 'utf8');
-  const launcher = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'background-role-launcher.js'), 'utf8');
+  const launcher = fs.readFileSync(path.join(root, 'plugins', 'data-secure', 'server', 'core', 'background-process-launcher.js'), 'utf8');
   for (const source of [runtime, launcher]) {
     assert.match(source, /network-deny\.cjs/u);
     assert.match(source, /--require=/u);

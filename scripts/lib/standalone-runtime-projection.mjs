@@ -28,12 +28,13 @@ const PLATFORM_ASSETS = Object.freeze({
 // Keep the shared gateway import names stable for existing journals and worker
 // entrypoints, while sourcing product adapters only from the app tree.
 const ADAPTER_SOURCES = Object.freeze({
+  'background-role-launcher.js': 'background-role-launcher.js',
   'core-policy-fingerprint.js': 'core-policy-fingerprint.js',
   'gateway/local-review-adapter.js': 'gateway/local-review-adapter.js',
   'gateway/product-read-capability.js': 'gateway/product-read-capability.js',
   'gateway/product-terminal-notice.js': 'gateway/product-terminal-notice.js'
 });
-const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)|^companion\/|^gateway\/(?:worker-terminal-presentation|package-store)\.js$/iu;
+const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)|^durable-runtime-cache\.js$|^companion\/|^gateway\/(?:worker-terminal-presentation|package-store)\.js$/iu;
 
 function regular(file) {
   const stat = fs.lstatSync(file);

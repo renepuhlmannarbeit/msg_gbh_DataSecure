@@ -8,6 +8,10 @@ const { createSuite } = require('./helpers');
 const { test, done, assert } = createSuite('Fixed background role launcher');
 const source = fs.readFileSync(path.join(__dirname,
   '../plugins/data-secure/server/background-role-launcher.js'), 'utf8');
+const neutralSource = fs.readFileSync(path.join(__dirname,
+  '../plugins/data-secure/server/core/background-process-launcher.js'), 'utf8');
+const standaloneSource = fs.readFileSync(path.join(__dirname,
+  '../apps/datasecure-standalone/runtime-adapters/background-role-launcher.js'), 'utf8');
 const targets = [
   ['windows-x64', 'win32', 'x64'], ['macos-x64', 'darwin', 'x64'],
   ['macos-arm64', 'darwin', 'arm64'], ['linux-x64', 'linux', 'x64']
@@ -25,7 +29,12 @@ function load(configuration = {}) {
   const server = target[1] === 'win32' ? 'C:\\synthetic-package\\server' : '/synthetic-package/server';
   const command = target[1] === 'win32' ? 'C:\\synthetic-package\\bin\\datasecure.exe'
     : `/synthetic-package/server/runtime/${target[0]}/datasecure`;
-  const state = { calls: [], resolutions: 0, events: [] };
+  const state = { calls: [], resolutions: 0, durableResolutions: 0, ownershipChecks: 0, events: [] };
+  const environment = { NODE_OPTIONS: '--require=private-parent-script', DATASECURE_SEA: '1',
+    ...(configuration.native ? { DATASECURE_NATIVE_EXPORT_CHANNEL: '1', DATASECURE_PRODUCT_CHANNEL: 'standalone',
+      DATASECURE_MACOS_STATIC_CORE_SHA256: 'a'.repeat(64), DATASECURE_MACOS_STATIC_CORE_ARTIFACT_SHA256: 'b'.repeat(64),
+      EU_PRIVACY_DATA_ROOT: '/synthetic/private', EU_PRIVACY_ROOT: '/synthetic/private/workspace' } : {}) };
+  let factory;
   const child = { synthetic: true };
   function capture(kind, executable, args, options) {
     state.events.push(kind);
@@ -38,8 +47,19 @@ function load(configuration = {}) {
   const context = vm.createContext({
     module: { exports: {} }, __dirname: server,
     process: { execPath: command, platform: target[1], arch: target[2],
-      env: { NODE_OPTIONS: '--require=private-parent-script', DATASECURE_SEA: '1' } },
+      env: environment },
     require(name) {
+      if (name === './core/background-process-launcher') {
+        const module = { exports: {} };
+        const nested = vm.createContext({ module, __dirname: targetPath.join(server, 'core'),
+          process: context.process, require(request) {
+            if (request === '../sea-parser-role') return context.require('./sea-parser-role');
+            return context.require(request);
+          } });
+        vm.runInContext(neutralSource, nested, { timeout: 1000 });
+        factory = module.exports;
+        return factory;
+      }
       if (name === 'node:path') return targetPath;
       if (name === 'node:child_process') return {
         spawn: (...args) => capture('spawn', ...args),
@@ -50,8 +70,12 @@ function load(configuration = {}) {
         return Object.hasOwn(configuration, 'sea') ? configuration.sea : true;
       } };
       if (name === './durable-runtime-cache') return {
-        resolveDurableRuntimeRoot() { return configuration.durable || null; }
+        resolveDurableRuntimeRoot() { state.durableResolutions++; return configuration.durable || null; }
       };
+      if (name === './ownership-control') return { assertNativeOwnershipRuntime() {
+        state.events.push('ownership');
+        if (++state.ownershipChecks === configuration.failGuardAt) throw new Error('GUARD_LOST');
+      } };
       assert.strictEqual(name, './sea-parser-role');
       return { resolveSeaParserRole() {
         state.resolutions++;
@@ -61,9 +85,9 @@ function load(configuration = {}) {
       } };
     }
   });
-  vm.runInContext(source, context, { timeout: 1000 });
+  vm.runInContext(configuration.standalone ? standaloneSource : source, context, { timeout: 1000 });
   return { launch: context.module.exports.launchBackgroundRole, state,
-    server, command, targetPath, child };
+    server, command, targetPath, child, environment, factory };
 }
 
 function rejects(fn) {
@@ -300,6 +324,58 @@ test('SEA ignores unknown option getters and normalizes failures without private
   rejects(() => load().launch('batch', Object.defineProperty({}, 'env', { get() {
     throw new Error('private-environment-path');
   } })));
+});
+
+for (const target of targets) for (const role of ['batch', 'review']) {
+  test(`Standalone Node ${target[0]} ${role} stays in its app and never resolves a plugin cache`, () => {
+    const f = load({ target, sea: false, standalone: true,
+      durable: { root: 'foreign-cache', executable: 'foreign-executable' } });
+    assert.strictEqual(f.launch(role, { env: {} }), f.child);
+    assert.strictEqual(f.state.durableResolutions, 0);
+    assert.strictEqual(f.state.calls[0].executable, f.targetPath.join(f.server, 'gateway', `${role}-worker.js`));
+    assert.strictEqual(f.state.calls[0].options.execPath, f.command);
+  });
+}
+test('Standalone fixed SEA flags retain the same worker commands', () => {
+  for (const role of ['batch', 'review']) {
+    const f = load({ standalone: true }); f.launch(role);
+    assert.deepStrictEqual(f.state.calls[0].args, [flags[role]]);
+    assert.strictEqual(f.state.durableResolutions, 0);
+  }
+});
+test('Standalone refuses the companion role before resolving, guarding or spawning', () => {
+  for (const configuration of [{ sea: false }, { sea: true },
+    { target: targets[1], native: true }, { target: targets[2], native: true }]) {
+    const f = load({ ...configuration, standalone: true });
+    rejects(() => f.launch('companion', { env: f.environment }));
+    assert.strictEqual(f.state.calls.length, 0); assert.strictEqual(f.state.resolutions, 0);
+    assert.strictEqual(f.state.ownershipChecks, 0); assert.strictEqual(f.state.durableResolutions, 0);
+  }
+});
+for (const target of targets.slice(1, 3)) for (const role of ['batch', 'review']) {
+  test(`Standalone native ${target[0]} ${role} keeps both in-process guard assertions`, () => {
+    const f = load({ target, native: true, standalone: true });
+    f.launch(role, { env: f.environment });
+    assert.deepStrictEqual(f.state.events, ['ownership', 'ownership', 'fork']);
+    assert.strictEqual(f.state.calls[0].options.execPath, f.command);
+    assert.strictEqual(f.state.calls[0].options.env.NODE_OPTIONS, undefined);
+    assert.deepStrictEqual(f.state.calls[0].options.execArgv, [`--require=${f.targetPath.join(f.server, 'network-deny.cjs')}`]);
+    const lost = load({ target, native: true, standalone: true, failGuardAt: 2 });
+    assert.throws(() => lost.launch(role, { env: lost.environment }), /GUARD_LOST/u);
+    assert.strictEqual(lost.state.calls.length, 0);
+  });
+}
+test('role definitions are immutable snapshots and accessors cannot repoint a launcher', () => {
+  const f = load({ sea: false, standalone: true });
+  const definitions = { batch: { entry: 'gateway/batch-worker.js', flag: flags.batch, transport: 'json-ipc' } };
+  const launch = f.factory.createBackgroundRoleLauncher(definitions);
+  definitions.batch.entry = 'repointed.js'; definitions.batch.flag = '--datasecure-other';
+  launch('batch');
+  assert.strictEqual(f.state.calls[0].executable, f.targetPath.join(f.server, 'gateway', 'batch-worker.js'));
+  let reads = 0;
+  Object.defineProperty(definitions.batch, 'entry', { enumerable: true, get() { reads++; return 'forged.js'; } });
+  rejects(() => f.factory.createBackgroundRoleLauncher(definitions));
+  assert.strictEqual(reads, 0);
 });
 
 done();
