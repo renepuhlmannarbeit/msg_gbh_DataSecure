@@ -487,9 +487,9 @@ function createBatchJournalStore(options = {}) {
       (state.product_channel === 'standalone' && Number.isSafeInteger(state.standalone_control_generation) &&
         state.standalone_control_generation >= 0 && state.standalone_control_generation <= 1000000);
     return state?.token === token && supportedSchema && validProductChannel && validControl && validPseudonymState(state) &&
-      (!markdown || state.ocr_contact_review === true ||
-        !state.items?.some(item => item.status === 'deferred_review')) &&
       Array.isArray(state?.items) && state.items.length > 0 &&
+      (!markdown || state.ocr_contact_review === true ||
+        !state.items.some(item => item.status === 'deferred_review')) &&
       state.items.length <= maxBatchFiles &&
       state.items.every((item) => validPreflightItem(item, state.schema)) &&
       (markdown ? state.items.every(validMarkdownItem) :

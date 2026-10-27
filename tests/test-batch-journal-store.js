@@ -417,6 +417,8 @@ test('normal reads consistently reject invalid schema, token, items and expiry w
     state({ items: [] }),
     state({ items: Array.from({ length: 201 }, () => ({ status: 'pending' })) }),
     state({ items: 'not-an-array' }),
+    state({ schema: 'datasecure-batch/5', product_channel: 'standalone',
+      processing_mode: 'markdown-only', items: {} }),
     state({ expires_at: undefined }),
     state({ expires_at: 'not-a-date' })
   ];
