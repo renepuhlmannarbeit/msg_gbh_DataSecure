@@ -9,6 +9,43 @@ Der spätere Branch-Commit `e95f033f637b57d164d7f49b4a74547224153c45`
 enthält nur Abschlussdokumentation. Die menschlichen Windows- und Mac-Desktoptests
 bleiben Nutzeraufgabe. Es ist keine neue Veröffentlichung beauftragt.
 
+## Aktueller Zwischenstand 27.10.2026, 09:10 UTC
+
+Der unveröffentlichte Review-Branch steht für die letzte vollständige
+Headlessprüfung auf `47d4a717a2fff2a597567e1251028eb5abf8d491`.
+`tests/run-product-suite.js headless` bestand mit dem gepinnten Node 22.23.2:
+328/328 Testdateien, Exit 0. Das unveränderte Originallog liegt unter
+`dist/rc177-current-code-review-v2-20261027/headless-47d4a717-final-20261027.log`
+(SHA-256 `bdf8a2238413033b6994150889315adfba8e5a1492d912518f5754d42ac2e25e`).
+Ein vorangehender Lauf auf `e5123417` war **rot**: Ein Sidecar-Test erwartete
+nach dauerhaft gespeicherter, aber nicht nativ vorbereiteter Ordnerwahl noch
+einen äußeren IPC-Fehler. Der tatsächliche neue Vertrag ist ein erfolgreich
+zugestellter IPC-Rahmen mit innerem `ok:false` und `preparation_pending:true`.
+Die Testannahme wurde auf genau diesen Vertrag korrigiert; Quelle und
+Gegenbeleg bleiben erhalten. Der gezielte vollständige Sidecar-Test und der
+neue Gesamtlauf bestanden. Das ist kein nativer Desktop- oder Mac-Nachweis.
+
+Die zuletzt korrigierten produktiven Pfade halten eine nach dem Speichern
+fehlgeschlagene Ergebnisvorbereitung als eigenen Sperrzustand und lassen
+unbekannte codierte PDF-/OCR-/Bildressourcenfehler nicht als optionale
+Auslassung durch. Die eng begrenzten Gegenfälle waren vor den Fixes rot und
+danach grün; die unabhängigen Quellenreviews sind im aktuellen Reviewordner
+dokumentiert. Ein neuer create-only AST-Arbeitsbestand unter
+`dist/rc177-current-code-review-v7-20261027` bindet exakt den obigen Commit:
+1719 Gitdateien, 43963 JavaScript-Prüfobjekte, keine Parsefehler und keine
+abweichenden Codeblobs. Danach bestanden `npm run test:docs`,
+`cargo test --locked` (302 bestanden, drei ignoriert), `cargo clippy --locked
+--all-targets -- -D warnings` sowie die getrennte
+`test:standalone:conversion`-Kette mit Exit 0. Die Paketprüfung ohne Archiv
+endete erwartbar mit `ENOENT` für das nicht erzeugte Standard-ZIP; daraus
+folgt weder ein Paket-PASS noch ein Produktfehler. Es wurde für diesen
+Reviewstand kein neues Windows- oder Mac-Paket gebaut. Das Register ist
+weiterhin **keine** Einzelprüfung
+dieser Objekte. R0–R9 bleibt offen, einschließlich nativer Windows-/Mac-
+Zielhostfälle, echter Dokumentvergleiche und der übrigen einzelnen Methoden,
+Parameter und Fehlerpfade. Der veröffentlichte RC177-Tag, `main` und seine
+Pakete sind unverändert.
+
 ## Neubasierung 27.10.2026: veröffentlichtes RC177 und aktueller Quellstand
 
 Der erneute Nutzerauftrag umfasst jetzt **zwei getrennte Prüfstände**: den

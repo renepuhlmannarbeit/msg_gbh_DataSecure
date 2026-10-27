@@ -1,5 +1,23 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+**Aktuelle Fortsetzung 27.10.2026:** Der unveröffentlichte Branchcommit
+`47d4a717a2fff2a597567e1251028eb5abf8d491` hat nach zwei eng korrigierten
+Produktpfaden und einer veralteten Sidecar-Testannahme den vollständigen
+Headlesslauf 328/328, Exit 0 bestanden. Das neue create-only Register
+`dist/rc177-current-code-review-v7-20261027` enthält 43963 JavaScript-AST-
+Prüfobjekte ohne Parserfehler, aber **keine** automatische fachliche Freigabe.
+Der Auftrag R0–R9 bleibt offen: jedes eigene Symbol samt Parametern und
+Fehlerpfaden gebunden manuell beurteilen, native und dynamische Lücken
+inventarisieren, risikobasierte Gegenfälle und echte Original-/Markdown-
+Vergleiche durchführen, Befunde eng korrigieren und neu integrieren.
+Dokumentationsprüfung, Windows-Rusttests/Clippy und die Konverterkette sind
+für diesen Quellstand grün; Paket-, native Windows-GUI- und Mac-Zielhostbelege
+stehen noch getrennt aus. Desktopbedienung bleibt Nutzeraufgabe.
+`standalone-document-review-store.js:captureSnapshot` ist ein unabhängig
+identifizierter Wartbarkeitskandidat für eine reine Auslagerung aus der großen
+Factory, aber kein belegter Defekt und keine Änderung ohne begrenzten Nutzen-
+und Regressionsnachweis. RC177-Tag, `main` und Pakete bleiben unverändert.
+
 ## Neuer Auftrag 26.10.2026 · vollständiges Code- und Fachreview von RC177
 
 Der Nutzer beauftragt eine detaillierte Prüfung jeder eigenen produktiven

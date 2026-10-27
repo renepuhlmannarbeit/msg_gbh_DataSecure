@@ -1,5 +1,22 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+**Review-Zwischenstand 27.10.2026:** Der unveröffentlichte Standalone-Branch
+`codex/standalone-export-usability` hat auf Commit `47d4a717a2fff2a597567e1251028eb5abf8d491`
+einen vollständigen Headlesslauf mit 328/328 Testdateien und Exit 0 bestanden.
+Die jüngsten, eng überprüften Korrekturen betreffen die nach dem Speichern
+fehlgeschlagene native Ergebnisvorbereitung und die harte Behandlung unbekannter
+codierter PDF-/OCR-/Bildressourcenfehler. Ein zunächst roter Sidecar-Test
+erwartete noch den alten äußeren IPC-Fehler; nach Anpassung an den tatsächlichen
+inneren Pending-Vertrag waren der gezielte Sidecar-Test und der neue Gesamtlauf
+grün. Dokumentation, 302 Rusttests (drei ignoriert), Clippy und die separate
+Konverterkette bestanden ebenfalls. Ein Paketgate wurde mangels neuem ZIP
+nicht absolviert. Das gebundene AST-Inventar `dist/rc177-current-code-review-v7-20261027`
+ist eine Arbeitsliste mit 43963 JavaScript-Prüfobjekten, kein abgeschlossenes
+Einzelmethodenreview. Native Windows-/Mac-Zielhostprüfungen, Anwender-Desktop-
+tests und große Teile des Code-/Fachreviews bleiben offen. RC177, `main` und
+die veröffentlichten Pakete sind unverändert. Details und Originallog stehen
+im [aktuellen Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
 **Unveröffentlichter Review-Branch, 27.10.2026:** Das vollständige
 Einzelmethoden-/Architekturreview ist weiterhin in Durchführung, siehe
 `docs/acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md`. Zwei eng
