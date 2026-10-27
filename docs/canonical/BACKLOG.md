@@ -62,6 +62,32 @@ committed; kein Push auf `main`, kein neues Paket oder Release.
 Einzelheiten und Loghashes stehen im Reviewplan und in
 `dist/rc177-current-code-review-v2-20261027/`.
 
+**Weitere aktuelle Reviewbefunde 27.10.:** Finding 013 korrigiert den
+irreführenden Cowork-Zwecktext im Standalone-Dateidialog und den
+„Privacy-Ordner“-Titel beim Ergebnisziel, ohne Typen oder Rechte zu ändern.
+Finding 014 verhindert einen interaktiven Ergebnisordnerwechsel, wenn die
+aktuell sichtbare abgeschlossene Exportbindung nicht sicher zum alten
+Laufverzeichnis passt; öffentliche Ergebnisbytes und alte Einstellungen
+bleiben unangetastet. Die Vorher-Gegenfälle waren rot, gezielte Nachtests
+grün. Ein fehlender synthetischer Capture-Port verursachte danach einen
+gesonderten roten Gesamtlauf; der Testadapter wurde eng ergänzt, 83/83
+gezielt und anschließend 328/328 im frischen unveränderten Headlesslauf
+bestanden. Originallogs und SHA stehen im Reviewplan. Kein neues
+veröffentlichtes Windows-/Mac-Paket und kein Desktopnachweis; der RC177-Tag
+bleibt unverändert.
+Die Einzelmethodenliste für Ordner-/Dateidialog und UI-Prozessmetadaten
+bleibt eng begrenzt. Offener Protokollprüfpunkt: LF-getrennte
+Unix-Mehrfachauswahl gegen POSIX-Pfade mit Zeilenumbruch kausal testen und
+gegebenenfalls eindeutig rahmen; kein bereits bestätigter Nutzerfall.
+Die beiden Fixes sind lokal getrennt committed (`f2d2760d`, `944b1bda`).
+Danach wurde ein create-only Windows-Engineering-ZIP aus dem Branch gebaut;
+explizite Paketverifikation und isolierter Sidecar-Smoke bestanden, Exit0.
+Sein Archivhash und die Loghashes stehen im Reviewplan. Der erste
+Pakettestversuch ohne vorhandenes Top-Level-ZIP endete mit `ENOENT` und
+bleibt als fehlender Vorzustand dokumentiert. Der Smoke belegt keine native
+Desktopbedienung und keinen vollständigen Writer-Stillstand. Beide Macs und
+eine neue Version sind nicht gebaut oder veröffentlicht.
+
 Offen bleiben die vollständigen Einzelurteile des JS-/Rust-/Native-/Script-
 Registers, die 1168 produktiven `catch`-Kandidaten, Fachvergleiche,
 performancegebundene Refactorings, native Paket-/Zielhostgates und die

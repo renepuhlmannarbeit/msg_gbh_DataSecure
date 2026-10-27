@@ -191,6 +191,72 @@ Kontrollfluss und native WebView-Wirkung erhalten dadurch keinen Gesamt-PASS.
 Die Statusverzweigung ist wartungsintensiv, aber ohne belegte Fehlwirkung
 kein Anlass für einen riskanten Stilrefactor.
 
+**Weitere begrenzte Befunde 27.10. (unveröffentlicht):** Der gemeinsame
+Dateidialog zeigte im Standalone-Modus auch für reine Konvertierung den
+Cowork-Titel „lokal anonymisieren“; der Ergebnisdialog nannte einen
+„Privacy-Ordner“ (Finding 013, P3). Die Anwendung übergibt jetzt ihre feste
+Produktrolle, der Dialog zeigt einen neutralen Standalone-Zweck und der
+Ergebnisdialog seinen tatsächlichen Zweck. Typen, Dateirechte und Freigaben
+blieben unverändert. Ein zweiter, bedingter Befund betraf den interaktiven
+Ergebnisordnerwechsel (Finding 014, P2): Nach einem bereits veröffentlichten
+Export konnte die private Verlaufsbindung fehlschlagen, während der Wechsel
+den Fehler verschluckte. Jetzt muss die aktuell sichtbare abgeschlossene
+Exportbindung vor dem Speichern des neuen Roots zur alten Laufdirektory passen;
+sonst bleibt die Einstellung unverändert und ein fester Fehler wird angezeigt.
+Der Export selbst wird dadurch nicht rückgängig gemacht. Die Prüfung betrifft
+das produktive Fünferfenster, nicht alle historischen Läufe; öffentliche,
+manuell bearbeitete Markdownbytes werden dabei nicht neu gehasht. Reale
+Nutzerbetroffenheit oder Zielhost-ACL-Fehler sind nicht belegt.
+
+Beide Befunde haben eigene rote Vorher- und gezielte grüne Gegenfälle unter
+`dist/rc177-current-code-review-v2-20261027/`. Der erste gemeinsame
+Gesamtlauf nach Finding 014 war bei 82/83 im synthetischen
+`test-initial-output-provisioning.js` rot: dessen Adapter fehlte der jetzt
+erforderliche Capture-Port. Nach Ergänzung des Ports und der
+Capture-vor-Save-Ordnungsassertion bestand dieser Test 83/83. Der danach
+**unverändert** gestartete vollständige Headlesslauf bestand 328/328,
+Exit0; Originallog
+`headless-picker-binding-adapter-final2-20261027.log`, SHA-256
+`ad5b0a327eb444ab358586810656cb6250cecc2f9e30e376955742dbecb36139`.
+Die roten Logs bleiben erhalten. `git diff --check` war danach sauber.
+Eine native Dateidialog-/Ergebnisordnerbedienung auf Windows oder macOS wurde
+nicht behauptet.
+
+Die zwei Themen wurden getrennt als `f2d2760d` (Dialogzweck) und
+`944b1bda` (Ergebnisbindung) lokal committed. `npm run test:docs` bestand
+mit gepinntem Node 22.23.2, Exit0; Log
+`docs-picker-binding-20261027.log`, SHA-256
+`9f77c5475bf4d3c9823577cb92a986e94806bd9875b36b44b93227db9b47aee6`.
+Ein zunächst aufgerufenes `test:standalone:package` fand erwartungsgemäß
+kein Top-Level-ZIP im Worktree (`ENOENT`); das ist ein fehlender
+Paketvorzustand, kein Produkt- oder Test-PASS. Anschließend wurde aus
+genau diesen Commits ein **unveröffentlichter create-only** Windows-
+Engineering-Build erstellt: `dist/engineering-rc177-review-picker-binding-20261027/`
+mit ZIP-SHA-256
+`dc7e802b8ee8c4c3f4ebaa6fe782c7e7cff1337974385b7a70712b47c877d8ad`
+(113.533.885 Bytes). Explizite Paketverifikation und isolierter
+Sidecar-Smoke bestanden, Exit0; Logs
+`verify-package-picker-binding-20261027.log` SHA-256
+`cb32d2a6d80b2cb11d05be2260caedf8caf979962cd152edf3d653b8caedbf41`
+und `smoke-package-picker-binding-20261027.log` SHA-256
+`04ffa612f3100f2730bef5250fda7245555dac3ca0623840831ceae19df66acf`.
+Der Smoke bewahrt seine synthetische Extraktion mit
+`writer_quiescence=UNCONFIRMED` und `deletion=NOT_ATTEMPTED`; daraus folgt
+kein vollständiger Prozessbaum-, Windows-UI- oder Mac-Zielhostnachweis.
+Das Paket ist nicht der veröffentlichte RC177-Download.
+
+Zusätzlich sind die acht eigenen Funktionen in `local-ui/folder-picker.js`
+und die beiden Funktionen in `local-ui/ui-process-policy.js` mit Parametern,
+Aufrufern und Fehler-/Rechtegrenzen einzeln gelesen. Der Dateipicker ist in
+`FILE-PICKER-METHOD-REVIEW.md` ebenso eingeordnet, **mit einem offenen
+Protokollprüfpunkt**: Unix-Mehrfachauswahl serialisiert Dateipfade per LF,
+obwohl LF in einem POSIX-Pfad vorkommen kann. Ein tatsächlicher
+Mehrfachauswahl-Gegenfall und ein eindeutiger Plattformvertrag fehlen noch;
+dafür gilt kein `REVIEWED_OK` und kein Zielhost-PASS. `uiProcessPolicy` ist
+eine Metadatenauskunft, keine wirksame OS-Sandbox; `os_network_sandbox_verified`
+bleibt ausdrücklich `false`. Diese Methodenschnitte schließen die übrigen
+13.246 produktiven JS-AST-Objekte und nativen Funktionen nicht ab.
+
 Auch nach diesen Gates bleiben R0–R9 als Gesamtauftrag offen: Das Inventar
 ist erst Arbeitsliste, nicht Einzelmethodenreview; der erste Stagingfehler
 ist nicht kausal erklärt; native Paket-/Windows-/Mac-Zielhostgates und
