@@ -389,10 +389,14 @@ async function officeImageMarkdown(bytes, type, extractionOptions, contentOption
         result={...result,coverage:{status:'incomplete',reason_codes:[...new Set([...result.coverage.reason_codes,'IMAGE_PROCESSING_LIMIT'])].sort()}};
         recognized[recognized.length-1]=result;
       }
-      for(const occurrence of occurrences)placements.push({...occurrence,result:recognized.length-1,ordinal:placements.length+1});
+      const checkpointOccurrences=[];
+      for(const occurrence of occurrences){
+        const placed={...occurrence,result:recognized.length-1,ordinal:placements.length+1};
+        placements.push(placed);checkpointOccurrences.push(placed);
+      }
       // An interrupted unit still identifies its real owner rather than claiming
       // a global image ordinal is a source page/slide.
-      const unit=officeOcrCheckpoint(extraction,result,contentOptions,occurrences,checkpointBudget);
+      const unit=officeOcrCheckpoint(extraction,result,contentOptions,checkpointOccurrences,checkpointBudget);
       await checkpoint(unit, recognized.length);
       }
     }

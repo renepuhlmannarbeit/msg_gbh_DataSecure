@@ -242,10 +242,11 @@ function officeOcrLabel(item,label){
 // Omit a whole occurrence before emitting it; never weaken the IPC accumulator.
 function officeOcrCheckpoint(extraction,result,contentOptions,occurrences,budget) {
   const limits=require('../core/ocr-contact-image'),accepted=[],reasons=new Set(result.coverage.reason_codes);
-  for(const [index,occurrence] of occurrences.entries()){
+  for(const occurrence of occurrences){
     if(!result.markdown)break;
-    const ordinal=index+1,label={slide:'Folie',notes:'Notizen zur Folie',sheet:'Arbeitsblatt',document:'Dokumentabschnitt'}[occurrence.kind];
-    if(!label||!Number.isSafeInteger(occurrence.index)||occurrence.index<1)fail('CONVERSION_INPUT_INVALID');
+    const ordinal=occurrence.ordinal,label={slide:'Folie',notes:'Notizen zur Folie',sheet:'Arbeitsblatt',document:'Dokumentabschnitt'}[occurrence.kind];
+    if(!label||!Number.isSafeInteger(occurrence.index)||occurrence.index<1||
+       !Number.isSafeInteger(ordinal)||ordinal<1)fail('CONVERSION_INPUT_INVALID');
     const chars=officeOcrLabel({...occurrence,ordinal},label).length+result.markdown.length+2;
     const contacts=result.ocr_contacts||[],bytes=contacts.reduce((sum,c)=>sum+(c.image?Buffer.byteLength(c.image.png_base64,'base64'):0),0);
     const pixels=contacts.reduce((sum,c)=>sum+(c.image?c.image.width*c.image.height:0),0);

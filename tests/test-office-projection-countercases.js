@@ -56,7 +56,13 @@ async function run(){
  const emit=createCheckpointEmitter({type:'pptx',contentOptions:options,write:async()=>true});
  await emit(base,0);
  const budget={chars:base.markdown.length,contacts:0,bytes:0,pixels:0,units:1};
- for(let i=0;i<3;i++)await emit(officeOcrCheckpoint(base,ocr,options,placements.slice(i*2,i*2+2),budget),i+1);
+ for(let i=0;i<3;i++){
+  const unit=officeOcrCheckpoint(base,ocr,options,placements.slice(i*2,i*2+2),budget);
+  assert.match(unit.markdown,new RegExp(`Grafik ${i*2+1}`, 'u'));
+  if(i<2)assert.match(unit.markdown,new RegExp(`Grafik ${i*2+2}`, 'u'));
+  else {assert.doesNotMatch(unit.markdown,/Grafik 6/u);assert.ok(unit.coverage.reason_codes.includes('IMAGE_PROCESSING_LIMIT'));}
+  await emit(unit,i+1);
+ }
  assert.equal(budget.contacts,5000);assert.equal(final.ocr_contacts.length,5000);assert.ok(final.coverage.reason_codes.includes('IMAGE_PROCESSING_LIMIT'));
  process.stdout.write('PASS 6 Office projection countercases (including real aggregate checkpoint)\n');
 }

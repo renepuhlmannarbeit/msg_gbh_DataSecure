@@ -82,7 +82,8 @@ test('cell placement labels and checkpoint budgets preserve actual Unicode conta
  const result=createMarkdownExtraction({source_type:'xlsx',markdown:text,content_options:contentOptions,coverage:{status:'incomplete',reason_codes:['OCR_CONTACT_VALUES_UNVERIFIED','OCR_NOT_VERIFIED']},ocr_contacts:[{start,end:text.length,page:1,line:1,kind:'email'}]});
  const out=appendOfficeOcr(extraction,[result],contentOptions,[{...o,ordinal:1,result:0}]);assert.match(out.markdown,/Arbeitsblatt 1 · Zelle C2/u);
  assert.equal(out.markdown.slice(out.ocr_contacts[0].start,out.ocr_contacts[0].end),'test@example.invalid');
- const budget={chars:0,contacts:0,bytes:0,pixels:0,units:0};const cp=officeOcrCheckpoint(extraction,result,contentOptions,[o],budget);assert.equal(budget.chars,cp.markdown.length);
+ const budget={chars:0,contacts:0,bytes:0,pixels:0,units:0};const cp=officeOcrCheckpoint(extraction,result,contentOptions,[{...o,ordinal:1}],budget);assert.equal(budget.chars,cp.markdown.length);
+ assert.match(cp.markdown,/Grafik 1/u);
  assert.equal(cp.markdown.slice(cp.ocr_contacts[0].start,cp.ocr_contacts[0].end),'test@example.invalid');
  for(const cell of ['C2\nINJECTION','XFE1','A1048577'])assert.throws(()=>appendOfficeOcr(extraction,[result],contentOptions,[{...o,cell,ordinal:1,result:0}]),{code:'CONVERSION_INPUT_INVALID'});
 });

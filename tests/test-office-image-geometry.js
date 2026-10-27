@@ -29,5 +29,9 @@ test('full-asset OCR is labeled honestly, original native text and exact contact
  assert.equal(out.markdown.slice(out.ocr_contacts[0].start,out.ocr_contacts[0].end),'mail@example.invalid');
  const unit=officeOcrCheckpoint(extraction,result,contentOptions,[occurrence],{chars:0,contacts:0,bytes:0,pixels:0,units:0});
  assert.equal(unit.markdown.slice(unit.ocr_contacts[0].start,unit.ocr_contacts[0].end),'mail@example.invalid');
+ const later=officeOcrCheckpoint(extraction,result,contentOptions,[{...occurrence,ordinal:2,index:2}],
+   {chars:unit.markdown.length,contacts:unit.ocr_contacts.length,bytes:0,pixels:0,units:1});
+ assert.match(later.markdown,/Folie 2 · Grafik 2/u,'a recovered unit retains its document-global picture number');
+ assert.equal(later.ocr_contacts[0].page,2);
 });
 console.log(`${count} passive Office geometry groups passed; no composed-page rendering claim`);
