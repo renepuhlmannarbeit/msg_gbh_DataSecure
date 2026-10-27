@@ -972,6 +972,27 @@ test('private desktop IPC is framed, bounded and independent of line endings', (
     (error) => error.code === 'DESKTOP_IPC_SOURCE_COUNT_INVALID');
 });
 
+test('private desktop IPC assembles fragmented bounded frames without repeated full-buffer copies', () => {
+  const payload = Buffer.from(JSON.stringify({ text: 'x'.repeat(8192) }), 'utf8');
+  const header = Buffer.alloc(4);
+  header.writeUInt32BE(payload.length, 0);
+  const frame = Buffer.concat([header, payload]);
+  const decoder = new FrameDecoder({ validate: value => value });
+  const originalConcat = Buffer.concat;
+  let concatCalls = 0;
+  let messages = [];
+  try {
+    Buffer.concat = (...args) => { concatCalls += 1; return originalConcat(...args); };
+    for (let offset = 0; offset < frame.length; offset += 1) {
+      messages = messages.concat(decoder.push(frame.subarray(offset, offset + 1)));
+    }
+  } finally {
+    Buffer.concat = originalConcat;
+  }
+  assert.deepStrictEqual(messages, [{ text: 'x'.repeat(8192) }]);
+  assert.ok(concatCalls < 10, `fragmented frame copied repeatedly: ${concatCalls}`);
+});
+
 test('Standalone runtime source contains no MCP or JSON-RPC transport', () => {
   const directory = path.join(__dirname, '../plugins/data-secure/server/standalone');
   const runtime = ['application-service.js', 'cli.js'].map((name) => fs.readFileSync(path.join(directory, name), 'utf8')).join('\n');

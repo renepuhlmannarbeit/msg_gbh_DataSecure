@@ -281,31 +281,44 @@ function encodeFrame(message) {
 }
 
 class FrameDecoder {
-  constructor({ validate = validatePrivateMessage } = {}) { this.buffer = Buffer.alloc(0); this.validate = validate; }
+  constructor({ validate = validatePrivateMessage } = {}) {
+    this.buffer = Buffer.alloc(4);
+    this.used = 0;
+    this.frameSize = 0;
+    this.validate = validate;
+  }
 
   push(chunk) {
     if (!Buffer.isBuffer(chunk)) fail('DESKTOP_IPC_BYTES_REQUIRED', 'Desktop-Kanal erwartet Bytes.');
     const messages = [];
     let offset = 0;
     while (offset < chunk.length) {
-      if (this.buffer.length < 4) {
-        const take = Math.min(4 - this.buffer.length, chunk.length - offset);
-        this.buffer = Buffer.concat([this.buffer, chunk.subarray(offset, offset + take)]);
+      if (this.used < 4) {
+        const take = Math.min(4 - this.used, chunk.length - offset);
+        chunk.copy(this.buffer, this.used, offset, offset + take);
+        this.used += take;
         offset += take;
-        if (this.buffer.length < 4) continue;
+        if (this.used < 4) continue;
+        const size = this.buffer.readUInt32BE(0);
+        if (size < 2 || size > MAX_FRAME_BYTES)
+          fail('DESKTOP_IPC_FRAME_INVALID', 'Ungültiger Desktop-Nachrichtenrahmen.');
+        this.frameSize = size + 4;
+        const frame = Buffer.alloc(this.frameSize);
+        this.buffer.copy(frame, 0, 0, 4);
+        this.buffer = frame;
       }
-      const size = this.buffer.readUInt32BE(0);
-      if (size < 2 || size > MAX_FRAME_BYTES)
-        fail('DESKTOP_IPC_FRAME_INVALID', 'Ungültiger Desktop-Nachrichtenrahmen.');
-      const missing = size + 4 - this.buffer.length;
+      const missing = this.frameSize - this.used;
       if (missing > 0) {
         const take = Math.min(missing, chunk.length - offset);
-        this.buffer = Buffer.concat([this.buffer, chunk.subarray(offset, offset + take)]);
+        chunk.copy(this.buffer, this.used, offset, offset + take);
+        this.used += take;
         offset += take;
-        if (this.buffer.length < size + 4) continue;
+        if (this.used < this.frameSize) continue;
       }
-      const payload = this.buffer.subarray(4, size + 4);
-      this.buffer = Buffer.alloc(0);
+      const payload = this.buffer.subarray(4, this.frameSize);
+      this.buffer = Buffer.alloc(4);
+      this.used = 0;
+      this.frameSize = 0;
       let message;
       try { message = JSON.parse(payload.toString('utf8')); }
       catch { fail('DESKTOP_IPC_JSON_INVALID', 'Ungültige Desktop-Nachricht.'); }
