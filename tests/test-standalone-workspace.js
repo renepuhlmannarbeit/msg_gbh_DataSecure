@@ -79,6 +79,7 @@ function harness(options = {}) {
       }
       if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false, files: [] };
       if (command === 'close_review_window') return { ok: true };
+      if (command === 'close_document_reviews') return { ok: true };
       if (command === 'open_embedded_review') return { ok: true, review_generation: ++nativeReviewGeneration };
       if (command.startsWith('open_')) return { ok: true };
       throw Error(`Unexpected command: ${command}`);
@@ -1712,7 +1713,7 @@ testAsync('R6 rapid documents A to History to Settings shares one delayed native
   await h.act('nav-history'); await h.act(`history-${A}-more`); await h.act(`history-${A}-documents`);
   selectedRun(h, A); assert.equal(h.window.__DATASECURE_DOCUMENTS__.activeBatchId(), A);
   await h.act('nav-history');
-  assert.equal(h.window.__DATASECURE_DOCUMENTS__.activeBatchId(), null, 'the actual renderer clears ownership before native close settles');
+  assert.equal(h.window.__DATASECURE_DOCUMENTS__.activeBatchId(), A, 'the document owner remains bound until native close confirms');
   await h.act('nav-settings');
   assert.equal(h.calls.filter(call => call.command === 'close_document_reviews').length, 1);
   finishClose({ ok: true }); await tick(); await tick();
@@ -1721,6 +1722,21 @@ testAsync('R6 rapid documents A to History to Settings shares one delayed native
   assert.equal(h.el('nav-history').attrs['aria-controls'], 'history-view');
   assert.equal(h.el('details-run-id').textContent, `Lauf-ID: ${A}`);
   noAutomaticDecision(h);
+});
+
+testAsync('failed native document close keeps its review binding and blocks navigation', async () => {
+  const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') return documentResponse('markdown-only', 1);
+    if (command === 'close_document_reviews') throw Error('DOCUMENT_REVIEW_INVALID');
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: A, processing_mode: 'markdown-only', status: 'results_available', result_count: 1 }];
+  await h.act('nav-history'); await h.act(`history-${A}-documents`);
+  selectedRun(h, A);
+  await h.act('nav-history'); await tick();
+  assert.equal(h.el('documents-view').hidden, false);
+  assert.equal(h.window.__DATASECURE_DOCUMENTS__.activeBatchId(), A);
+  assert.match(h.el('documents-status').textContent, /DOCUMENT_REVIEW_INVALID|Dokumentansicht/u);
 });
 
 for (const refusal of ['dirty', 'busy']) testAsync(`R6 ${refusal} document navigation refuses without changing run identity or private context`, async () => {

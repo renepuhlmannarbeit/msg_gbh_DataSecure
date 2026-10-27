@@ -1301,10 +1301,20 @@
         if (stateFresh && exportRequest) await openExportDialog();
       } catch (error) { if (batchId === id && ownership === busyGeneration) showError(error); }
     },
-    async close() { if (busy || navigationDraft()) { if (navigationDraft()) status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen.'); return false; } connectionGeneration++; ticket++; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
+    async close() {
+      if (busy || navigationDraft()) { if (navigationDraft()) status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen.'); return false; }
+      busy = true; controls(); connectionGeneration++; ticket++;
+      try {
+        const response = await invoke('close_document_reviews');
+        if (response?.ok !== true) throw new Error('DOCUMENT_REVIEW_INVALID');
+      } catch (error) {
+        busy = false; controls(); showError(error, '', false, 'close_document_reviews'); return false;
+      }
+      busy = false; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
       directResultsSupported = false;
       if ($('document-export-dialog').open) $('document-export-dialog').close();
-      clearText(); renderReceipts(); render(); await invoke('close_document_reviews').catch(() => {}); return true; }
+      clearText(); renderReceipts(); render(); return true;
+    }
   });
   $('documents-open-results').addEventListener('click', async () => {
     if (busy || !stateFresh || publicDirectoryUnavailable() || repairRequired() || navigationDraft() || !processingComplete || !documents.length || !batchId || publicationUnsettled()) return;
