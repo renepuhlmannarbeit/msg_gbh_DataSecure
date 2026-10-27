@@ -15,6 +15,7 @@ const MAX_SOURCE_BYTES = LIMITS.MAX_INPUT_BYTES;
 const MAX_SELECTED_SOURCES = LIMITS.MAX_BATCH_FILES;
 const PICKER_CANCELLED = '__DATASECURE_PICKER_CANCELLED__';
 const PICKER_TITLE = 'Dateien mit DataSecure lokal anonymisieren';
+const STANDALONE_PICKER_TITLE = 'Dateien mit DataSecure lokal verarbeiten';
 const WINDOWS_PICKER_UTF8 = '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)';
 const MAX_NATIVE_PATH_UTF8_BYTES = 32767 * 3;
 const SOURCE_TYPES = Object.freeze({
@@ -179,7 +180,8 @@ function allowedExtensions(allowedTypes) {
   return extensions;
 }
 
-function pickerCommands(platform = process.platform, env = process.env, allowedTypes, multiple = false) {
+function pickerCommands(platform = process.platform, env = process.env, allowedTypes, multiple = false, productChannel) {
+  const title = productChannel === 'standalone' ? STANDALONE_PICKER_TITLE : PICKER_TITLE;
   const extensions = allowedExtensions(allowedTypes);
   const windowsFilter = extensions.map((ext) => `*${ext}`).join(';');
   const unixFilter = extensions.map((ext) => `*${ext}`).join(' ');
@@ -199,7 +201,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
       WINDOWS_PICKER_UTF8,
       'Add-Type -AssemblyName System.Windows.Forms',
       '$dialog = New-Object System.Windows.Forms.OpenFileDialog',
-      `$dialog.Title = '${PICKER_TITLE}'`,
+      `$dialog.Title = '${title}'`,
       `$dialog.Filter = 'Unterstützte Dateien|${windowsFilter}'`,
       `$dialog.Multiselect = $${multiple ? 'true' : 'false'}`,
       'try {',
@@ -220,7 +222,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
   if (platform === 'darwin') {
     const selection = multiple
       ? [
-          `set selectedFiles to choose file with prompt "${PICKER_TITLE}" of type ${macTypeFilter} with multiple selections allowed`,
+          `set selectedFiles to choose file with prompt "${title}" of type ${macTypeFilter} with multiple selections allowed`,
           'set selectedPaths to {}',
           'repeat with selectedFile in selectedFiles',
           'set end of selectedPaths to POSIX path of selectedFile',
@@ -228,7 +230,7 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
           "set AppleScript's text item delimiters to linefeed",
           'return selectedPaths as text'
         ].join('\n')
-      : `POSIX path of (choose file with prompt "${PICKER_TITLE}" of type ${macTypeFilter})`;
+      : `POSIX path of (choose file with prompt "${title}" of type ${macTypeFilter})`;
     const script = ['try', selection, 'on error number -128', `return "${PICKER_CANCELLED}"`, 'end try'].join('\n');
     return [
       {
@@ -238,8 +240,8 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
     ];
   }
   if (platform === 'linux') {
-    const zenityArgs = ['--file-selection', `--title=${PICKER_TITLE}`];
-    const kdialogArgs = ['--getopenfilename', '.', `Unterstützte Dateien (${unixFilter})`, PICKER_TITLE];
+    const zenityArgs = ['--file-selection', `--title=${title}`];
+    const kdialogArgs = ['--getopenfilename', '.', `Unterstützte Dateien (${unixFilter})`, title];
     if (multiple) {
       // Both helpers return one selected path per line. Do not rely on a
       // platform default: without these flags a 100-file batch silently turns
@@ -287,7 +289,7 @@ function validateSelectedPath(selected, options = {}) {
   const sourceType = SOURCE_TYPES[extension];
   if (!sourceType) throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Das ausgewählte Dateiformat wird nicht unterstützt.', candidate);
   if (options.allowedTypes && !new Set(options.allowedTypes).has(sourceType)) {
-    throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.', candidate);
+    throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Dieses Dateiformat ist für den gewählten Ablauf nicht freigegeben.', candidate);
   }
   let stat;
   try {
@@ -330,7 +332,7 @@ async function validateSelectedPathAsync(selected, options = {}) {
   const sourceType = SOURCE_TYPES[extension];
   if (!sourceType) throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Das ausgewählte Dateiformat wird nicht unterstützt.', candidate);
   if (options.allowedTypes && !new Set(options.allowedTypes).has(sourceType)) {
-    throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.', candidate);
+    throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Dieses Dateiformat ist für den gewählten Ablauf nicht freigegeben.', candidate);
   }
   let stat;
   try { stat = await io.lstat(candidate); }
@@ -364,7 +366,7 @@ function documentedNativeCancellation(result, output, platform = process.platfor
 function pickSource(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
-  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes)) {
+  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, false, options.productChannel)) {
     const result = runner(spec.command, spec.args, undefined, options.env || process.env, undefined, pickerOutputMaxBuffer(1));
     if (result?.error?.code === 'ENOENT') {
       unavailable++;
@@ -384,7 +386,7 @@ function pickSource(options = {}) {
 function pickSources(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
-  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true)) {
+  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true, options.productChannel)) {
     const result = runner(spec.command, spec.args, undefined, options.env || process.env, undefined,
       pickerOutputMaxBuffer(options.maxSources ?? MAX_SELECTED_SOURCES));
     if (result?.error?.code === 'ENOENT') {
@@ -460,7 +462,7 @@ async function pickSourcesAsync(options = {}) {
   const runner = options.runner || runPickerAsync;
   let unavailable = 0;
   throwIfSelectionAborted(options.signal);
-  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true)) {
+  for (const spec of pickerCommands(options.platform, options.env, options.allowedTypes, true, options.productChannel)) {
     throwIfSelectionAborted(options.signal);
     const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal,
       pickerOutputMaxBuffer(options.maxSources ?? MAX_SELECTED_SOURCES));

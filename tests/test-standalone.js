@@ -73,6 +73,20 @@ test('Standalone has an isolated product namespace and a simple default output',
   } }), path.join('/mounted/Documents', 'SecureDataMsg'));
 });
 
+testAsync('Standalone file selection passes its product role into picker and source validation', async () => {
+  let pickerOptions, validationOptions;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    pickSourcesAsync: async options => { pickerOptions = options; return [{ sourcePath: FIXTURE_SOURCE_A, sourceType: 'txt', sourceBytes: 4 }]; },
+    validateSelectedPathAsync: async (sourcePath, options) => {
+      validationOptions = options; return { sourcePath, sourceType: 'txt', sourceBytes: 4 };
+    }
+  }) });
+  await service.selectSources('files');
+  await service.validateSourceSelection([FIXTURE_SOURCE_A]);
+  assert.equal(pickerOptions.productChannel, 'standalone');
+  assert.equal(validationOptions.productChannel, 'standalone');
+});
+
 test('native Windows namespace uses only the host-bound canonical root without a fallback', () => {
   const root = 'C:\\Users\\synthetic\\AppData\\Local\\SecureDataMsg-Standalone';
   const environment = { LOCALAPPDATA: 'C:\\different-token', DATASECURE_NATIVE_EXPORT_CHANNEL: '1',

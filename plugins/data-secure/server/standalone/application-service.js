@@ -1030,13 +1030,14 @@ class StandaloneApplicationService {
         allowedTypes: CONVERSION_TYPES, signal, productChannel: 'standalone'
       });
     }
-    return this.deps.pickSourcesAsync({ allowedTypes: CONVERSION_TYPES, signal });
+    return this.deps.pickSourcesAsync({ allowedTypes: CONVERSION_TYPES, signal, productChannel: PRODUCT_CHANNEL });
   }
 
   async validateSourceSelection(sourcePaths, signal, options = {}) {
     const catalogue = options.catalogue === true && typeof options.onRejectedSource === 'function';
     const outcomes = await Promise.allSettled(sourcePaths.map(async (candidate) => {
-      try { return await this.deps.validateSelectedPathAsync(candidate, { allowedTypes: CONVERSION_TYPES, signal }); }
+      try { return await this.deps.validateSelectedPathAsync(candidate, { allowedTypes: CONVERSION_TYPES, signal,
+        productChannel: PRODUCT_CHANNEL }); }
       catch (error) {
         if (!catalogue || !['SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY',
           'SOURCE_ACCESS_DENIED', 'SOURCE_READ_FAILED'].includes(error?.code)) throw error;

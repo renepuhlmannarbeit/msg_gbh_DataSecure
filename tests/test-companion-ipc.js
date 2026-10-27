@@ -40,6 +40,31 @@ test('platform pickers use argument arrays and no network transport', () => {
     'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
 });
 
+test('Standalone file picker names both purposes without claiming anonymization', () => {
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const commands = pickerCommands(platform, { SystemRoot: 'C:\\Windows' }, ['txt', 'pdf'], true, 'standalone');
+    assert.ok(commands.length > 0);
+    for (const command of commands) {
+      const args = command.args.join(' ');
+      assert.match(args, /Dateien mit DataSecure lokal verarbeiten/u);
+      assert.doesNotMatch(args, /lokal anonymisieren/u);
+    }
+  }
+});
+
+testAsync('Standalone result-folder picker names the result purpose on every platform', async () => {
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const seen = [];
+    await assert.rejects(pickFolderAsync({ platform, purpose: 'result',
+      env: { SystemRoot: 'C:\\Windows' }, runner: async (command, args) => {
+        seen.push(args.join(' ')); return { status: 0, stdout: FOLDER_PICKER_CANCELLED };
+      } }), error => error.code === 'LOCAL_SELECTION_CANCELLED');
+    assert.equal(seen.length, 1);
+    assert.match(seen[0], /Ergebnisordner auswählen/u);
+    assert.doesNotMatch(seen[0], /Privacy-Ordner auswählen/u);
+  }
+});
+
 test('privacy-folder picker is local on all supported platforms and never returns a folder through MCP', () => {
   for (const platform of ['win32', 'darwin', 'linux']) {
     const specs = folderPickerCommands(platform, { SystemRoot: 'C:\\Windows' });

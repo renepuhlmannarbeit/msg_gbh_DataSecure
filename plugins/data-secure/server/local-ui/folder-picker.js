@@ -10,6 +10,7 @@ const { WINDOWS_PICKER_UTF8, runPickerAsync, throwIfSelectionAborted, pickerOutp
 
 const FOLDER_PICKER_CANCELLED = '__DATASECURE_FOLDER_PICKER_CANCELLED__';
 const FOLDER_PICKER_TITLE = 'DataSecure-Privacy-Ordner auswählen';
+const RESULT_FOLDER_PICKER_TITLE = 'DataSecure-Ergebnisordner auswählen';
 
 function defaultRunner(command, args, env = process.env) {
   return childProcess.spawnSync(command, args, {
@@ -45,6 +46,9 @@ function folderPurpose(options = {}) {
 function folderPurposeGenitive(options = {}) {
   return `${folderPurpose(options)}s`;
 }
+function selectedTitle(options = {}) {
+  return options.title || (options.purpose === 'result' ? RESULT_FOLDER_PICKER_TITLE : FOLDER_PICKER_TITLE);
+}
 
 function selectionCancelledError(options = {}) {
   const error = new SafeError(`Die Auswahl des ${folderPurposeGenitive(options)} wurde abgebrochen.`);
@@ -55,7 +59,7 @@ function selectionCancelledError(options = {}) {
 function pickFolder(options = {}) {
   const runner = options.runner || defaultRunner;
   let unavailable = 0;
-  for (const spec of pickerCommands(options.platform, options.env, options.title)) {
+  for (const spec of pickerCommands(options.platform, options.env, selectedTitle(options))) {
     const result = runner(spec.command, spec.args, options.env || process.env);
     if (result?.error?.code === 'ENOENT') { unavailable++; continue; }
     if (result?.error?.code === 'ETIMEDOUT') throw Object.assign(new SafeError(`Die Auswahl des ${folderPurposeGenitive(options)} wurde wegen Zeitüberschreitung beendet.`), { code: 'LOCAL_PICKER_TIMEOUT' });
@@ -77,7 +81,7 @@ async function pickFolderAsync(options = {}) {
   const runner = options.runner || runPickerAsync;
   let unavailable = 0;
   throwIfSelectionAborted(options.signal);
-  for (const spec of pickerCommands(options.platform, options.env, options.title)) {
+  for (const spec of pickerCommands(options.platform, options.env, selectedTitle(options))) {
     throwIfSelectionAborted(options.signal);
     const result = await runner(spec.command, spec.args, undefined, options.env || process.env, options.signal, pickerOutputMaxBuffer(1));
     throwIfSelectionAborted(options.signal);
