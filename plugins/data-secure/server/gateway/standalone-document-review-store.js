@@ -45,8 +45,7 @@ const exportNamespace = mode => mode === MARKDOWN ? 'DataSecure-Markdown-Korrekt
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const valid = (value, length) => typeof value === 'string' && new RegExp(`^[a-f0-9]{${length}}$`, 'u').test(value);
 const fail = code => Object.assign(new Error(code), { code });
-const closed = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) &&
-  Object.keys(value).sort().join(',') === keys.split(',').sort().join(',');
+const closed = (value, keys) => exactKeys(value, keys.split(','));
 function validSelection(selection) {
   return Array.isArray(selection) && selection.length > 0 && selection.length <= 200 &&
     selection.every(row => closed(row, 'document_id,output_sha256,revision') &&

@@ -407,6 +407,15 @@ function privateRunPins(f) {
   });
 }
 async function run() {
+  await testAsync('batch decision rejects unexpected own symbol and inherited request fields before publication', async () => {
+    const f = await fixture({ mode: 'markdown-only', count: 1 });
+    const input = metadataInput(f, 'approve', 'batch');
+    const symbolRequest = { ...input.request, [Symbol('unrecognized')]: true };
+    assert.throws(() => f.store.decideBatch(f.batchId, symbolRequest), { code: 'DOCUMENT_REVIEW_INVALID' });
+    const inheritedRequest = Object.assign(Object.create({ unrecognized: true }), input.request);
+    assert.throws(() => f.store.decideBatch(f.batchId, inheritedRequest), { code: 'DOCUMENT_REVIEW_INVALID' });
+    assert.equal(f.store.list(f.batchId).documents[0].approved, false);
+  });
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const scope of ['document', 'batch'])
   await testAsync(`pending metadata ${mode}/${scope}: safe saved vector permits legacy approval/copy/revocation but no current result grant`, async () => {
     const f = await fixture({ mode }); f.edit();
