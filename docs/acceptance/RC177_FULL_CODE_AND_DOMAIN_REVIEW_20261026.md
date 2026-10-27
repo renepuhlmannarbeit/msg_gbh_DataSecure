@@ -1,57 +1,78 @@
 # Vollständiges Code- und Fachreview · RC177 / Standalone
 
-**Aktueller unveröffentlichter Reviewschnitt 27.10.2026:** Produktcommit
-`1b089367a0cb72ec62625f5e7e780459d134c4df`, Fingerprint
-`222fe82b4c40651c4ae02895fabfabe19bd129fe1c2d14207fdc4654213fe1b5` (386 Produktinputs).
-`063cfb43` korrigiert METHOD-20261027-NAMING-01: Neue vollständige
-Ergebnisgenerationen erhalten Erstnamen und Unterordner anhand der privaten
-Dokument-ID-Bindung. Aktuelle Inhalte stammen aus der privaten Revision.
-Historische `/1`–`/3`-Aufträge, bearbeitbare öffentliche Kopien und der
-separate flache KI-Export behalten ihre Verträge. Der neue `/4`-Baumvertrag
-bindet Elternidentitäten, Ordnerintents und exakte rekursive Inventuren bis
-Rust. Die etablierte Reservierung einer Quellwurzel `Vertraulich` wird bei
-betroffenen Altstapeln ausdrücklich im neuen Plan und in der Zuordnung belegt.
-Keine Adoptions-, Lösch- oder allgemeinen Pfadrechte ergänzt.
+## Aktueller Fortschritt 27.10.2026 nach19:49UTC
 
-Die neuen Namensgegenfälle waren zuerst rot. Danach: 125 Generationenfälle,
-83 Beilagen-/Übersichts-/Workbookfälle, echte Windows-Node→Rust-Komposition
-für drei Namensmodi sowie native Baumgegenfälle grün. Die frühere volle
-Rustsuite bestand 311 Fälle/3 ignoriert; danach ergänzte Grenzfälle bestanden
-gezielt. Eine frische volle Suite am gemeinsamen Endstand steht noch aus.
-Unabhängige Quellenreviews fanden und schlossen auch die Begleitdatei-
-Nachprüfungslücke. Rote Zwischenläufe und enge Fixture-/Schemafehler bleiben
-unverändert erhalten.
+Produktcommit `6265f46e1bbec00b6307044d9f39c42e2e60fa08`, Fingerprint
+`4bb2b2fe40ece368de4affd2ab7c0183372828d62616fe7e29f0246e2ffe1331` /386 Inputs. Alle neuen Topics sind lokal und unveröffentlicht.
 
-`1b089367` korrigiert METHOD-20261027-SVG-WS-01 (P2) und SVG-LIMIT-02
-(P3): CSS-/SVG-Whitespace wird explizit behandelt, Unicode-Klassen und Text
-werden nicht in andere Tokens normalisiert. Parserlimits greifen beim ersten
-überzähligen Teil. Ein echter Rastergegenfall wechselte für sichtbaren Text
-von 0 auf die erwarteten 629 dunklen Pixel; die vollständige Grafikdecodersuite
-bestand 64 Gruppen. Unabhängiges tatsächliches Delta-Gegenlesen ohne weiteren
-bestätigten Blocker. Schutzgrenzen und ehrliche Auslassungscodes bleiben bestehen.
+Der davor gefrorene Schnitt`28189b27482ae7bf0be5b85bce5c3e229ef4d270`
+endete19:40:15.344UTC mit328/328 Headlessdateien/Exit0. Sein OriginallogSHA
+`bad5887cc628aa5aa0d34ae207978317e9125cb368b7d8495949d7a9fcc83c3c` und
+alle weiteren sechs lokalen FINALs sind PASS/inputs_unchanged=true.312Rustfälle/
+3ignoriert, Clippy,8Konverterdateien, Prepare/Release, Archiv/Sidecar und frisches
+Plugin-Erhaltungspaket/CLI-Strukturprüfung bestanden. Alle1728Rawinputs unverändert.
+Kein GUI; der Runner nennt sechs alte Formfälle NOT_RUN. Keine alte11er-Zahl kopieren.
 
-Die zuvor lokal getrennten Policy-/Launcheradapter und die Qualitätsidentität
-entfernen Cowork-Build-/Cachekopplung aus Standalone. Der neutrale Kern bleibt
-eine gepflegte Quellimplementierung. Der Recoveryfix lässt nur eigene feste
-Busy-Codes vor Aktionseintritt überspringen. Der volle alte 16e8-Lauf war bei
-zwei veralteten Intakeassertionen rot; Testfix `6bdde433` behält alle
-Schutzassertionen. Alte Engineeringpakete und frühere Policy-Kompatibilität
-belegen ausschließlich ihren damaligen Schnitt. Die jetzigen Inhaltsänderungen
-erfordern neue Fingerprints, Gesamt-/Native-/Konverter-/Paketbelege.
+Das zugehörige Engineering-ZIP hat113563098Bytes/SHA
+`82465af87af03f473f4950dae63f0d4613bdcc996c812b43780e44ffb7e4ab2b`,
+EXE`088833385cd0b98f34da864bba9ae589ba5d7b45296ce33602d9c3c067d8bfb3`.
+Main und unabhängiger tatsächlicher Archivgegenreview prüften1194Einträge,
+271Projektionsdateien, fünf Appadapter und48Policydateien. Host-Companion,
+MCP, Runtime-Cache, Paketstore und Terminalpresenter fehlen. Quelle/Qualitäts-
+identität stimmen mit den gelieferten Bytes überein. Smoke-Extraktion
+`.tmp-standalone-package-6xDJPJ` erhalten; writer_quiescence UNCONFIRMED,
+deletion NOT_ATTEMPTED. Die beiden Namens-/SVG-Topics sind damit integriert grün.
 
-**Jetzt offen:** frischer unveränderter 328er-Gesamtlauf, Dokumentationsprüfung,
-Rust/Clippy, Konverterkette, Windows-Releasebuild und neues Engineering-ZIP samt
-Quell-/Paketgrenze und Sidecar-Smoke. Noch keine Gesamtfreigabe und kein Push
-dieser lokalen Topics. Das vollständige Einzelmethodenreview R0–R9 bleibt
-offen; Inventar und begrenzte manuelle Urteile sind kein Vollständigkeitsbeweis.
-Zusätzlich wurden alle Methoden der passiven PDF-Projektion samt Caller und
-gepinntem PDF.js sowie PDF-Sichtbarkeit/-Layout begrenzt gelesen, ohne weiteren
-bestätigten erreichbaren Defekt. Details und unveränderte Gegenbelege unter
-`dist/rc177-relative-results-review-20261027`.
+### Vier anschließende eng korrigierte P3s
 
-Keine Desktopbedienung, neue Automatisierung, Mac-Actions, Mainintegration,
-Tag- oder Releaseänderung. Mac-Pakete/Zielhostabnahme bleiben getrennt offen;
-Desktoptests bleiben Nutzeraufgabe. Der veröffentlichte RC177 ist unverändert.
+| Befund | Tatsächliche Korrektur | Gegenbeleg |
+| --- | --- | --- |
+| TEXT-CONTROL-01 und TEXT-ZIP-IO-03 |`e1a8cea9`: identischer geteilter C0+DEL-Predicate; eigene SourceFormatError im Text-ZIP-Catch weiterwerfen |18/2 rot→19/1 nach DEL-only→20/0;74 Extraktionsgruppen grün; reale Einbyte-UTF16-Reads/Originalbytes |
+| SNAPSHOT-CLOSE-04 |`301428bb`: exakten Primärfehler erhalten, Fehleranwesenheit statt Truthiness; Close-only bleibt Fehler |Roter Primär-/Closefall→16/0, private Codes/frozenError/falsy/Nullung/Kollision erhalten |
+| PDF-TOKENS-02 |`6265f46e`: unveränderte Tokens lokal einmal je Binding; Kandidaten-/Paint-/Geometriegrenzen gleich |Echte PDF/Paint/Tesseract-Datei grün; isoliertes100Wort-Modell100→1split, keine native Zeitmessung |
+
+Main und drei begrenzte unabhängige tatsächliche Deltagegenreviews ohne weiteren
+bestätigten Einwand. Kein neuer Datei-/Netz-/Exportpfad, keine Privacy-/ACL-/
+Originaländerungsrechte und keine automatische Zeichenreparatur. Primär-/EIO-
+Modelle simulieren Zusatzfehler; keine Behauptung physischer Datenträgerfehler.
+**Noch ausstehend:** frischer voller328er-, Docs-, Rust/Clippy-, Konverter-,
+Windows-Build-/Paket-/Sidecarlauf am neuen gemeinsamen Stand. Kein altes FINAL
+oder Paket wird auf`6265f46e`umgeschrieben.
+
+### Methodenregister und Grenzen
+
+v14 bindet`6265f46e`:1728Gitdateien/44215JS-AST-Objekte, null Parser-/Codeblob-
+fehler. Rebound-Report`dist/rc177-method-followups-20261027/MANUAL-JUDGMENTS.json`
+führt675unveränderte,127nach vollständigem tatsächlichem Delta neu gebundene
+und37neue Testobjekturteile:839begrenzte JS-Urteile in46Dateien. Testurteile gelten
+nur für die neu gelesenen Gegenfallbereiche; Benchmarkdatei bleibt3von91Objekten.
+Keine automatische Ganzdatei-/PASS-Fortschreibung nach einem Hashwechsel.
+
+Das neue Rust-Inventar nutzt lokal gecachtes syn2.0.119/full+visit offline:
+22Quellen/8001Objekte, null Parserfehler/doppelte IDs. Es erfasst auch FFI,
+Zustandsstrukturen, Closures,`?`, Matches, Unsafe und Fehler-Methodenkandidaten.
+Makro-/Attributexpansion, Typinferenz sowie C/C++/andere Sprachen sind nicht
+dadurch geschlossen.249separat gebundene Rust-Urteile in fünf Dateien sind ein
+begrenzter Anfang. R0–R9 bleibt offen; jede Methode braucht tatsächliche Bewertung.
+Die neuen Reviews unterscheiden Parametertypen, Lebensdauer, Zustands-/Besitz-
+grenzen, Getter/Proxy-Vorbedingungen, Fehlerpriorität, Caller und fachliche
+Autorität. Reine Funktionen werden nicht nur für OOP in Klassen umgeschrieben.
+Inaktive reserveCrops/qualityNotice werden nicht als aktive Schutz-/Leistungs-
+mechanismen behauptet oder ohne Nutzen-/Kompatibilitätsprüfung entfernt.
+
+Aktuelle Rohpolicy: Standalone
+`f8940362b9b1f5eb4ebeaca46b3020b1720be4f394800446b2e82c1ec12ea88a`,
+neutral/plugin`13f16e10bda87fa85ce3b4ba847a15d46015fa8315e07d8a1ed98cbf786fac29`.
+Frühere reine Adapterhash-Kompatibilität gilt nur ihrem damaligen Schnitt.
+Keine Nutzerprofile/Policyfelder migriert. Echte versionsübergreifende
+Policyfortsetzung und neue Mac-/Zielhostbelege bleiben eigenständige Arbeit.
+
+Belegordner:`dist/rc177-method-integration-28189b27-20261027`,
+`dist/rc177-method-followups-20261027`,`dist/rc177-current-code-review-v14-20261027`,
+`dist/rc177-rust-method-inventory-20261027/SOURCE-BINDING-v3.json`.
+Keine Desktopfreigabe, Actions, neue Automatisierung, Mainintegration oder
+Veröffentlichung. Der alte RC177 bleibt unverändert. Folgende datierte Schnitte
+sind historische Einzelbelege, keine aktuelle Gesamtfreigabe.
 
 Stand: 26.10.2026 · beauftragt, in Durchführung. Dieses Review ändert den
 veröffentlichten RC177-Tag oder seine Pakete nicht. Referenz für alle

@@ -24,6 +24,12 @@
   Standalone-Drops aufgenommen, niemals aus Chat-Uploads oder durch
   Claude-Werkzeuge. Die Claude-Hostgrenze bleibt DS-078; eine Hersteller-
   Desktop-Brücke erweitert die DataSecure-Freigabe nicht automatisch.
+- Schwerpunkt des aktuellen Reviews sind die eigenständigen Windows- und
+  Mac-Apps. Standalone bindet eigene Produktadapter und paketiert keine
+  Cowork-Hostadapter, Companion-Laufzeit, MCP-Einstiege, Paketstore oder
+  Cowork-Runtime-Cache. Neutrale Fach- und Schutzregeln bleiben eine gemeinsame
+  Quellbibliothek; keine zweite unabhängig gepflegte Core-Kopie einführen.
+  Historische Kanalbegriffe im neutralen Code sind kein Host-Laufzeitbedarf.
 - Cowork anonymisiert TXT, Markdown, CSV, DOCX sowie lokal extrahiertes Markdown
   aus XLSX/PPTX (DS-093). PDF/Scan-PDF und eigenständige Bilder sind dort noch
   nicht freigegeben (BL-023.1). Standalone unterstützt beide Zwecke für TXT,

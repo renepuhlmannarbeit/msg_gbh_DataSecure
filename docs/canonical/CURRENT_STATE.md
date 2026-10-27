@@ -1,57 +1,36 @@
 # Aktueller Iststand · 3.2.0-rc177
 
-**Aktueller unveröffentlichter Reviewschnitt 27.10.2026:** Produktcommit
-`1b089367a0cb72ec62625f5e7e780459d134c4df`, Fingerprint
-`222fe82b4c40651c4ae02895fabfabe19bd129fe1c2d14207fdc4654213fe1b5` (386 Produktinputs).
-`063cfb43` korrigiert METHOD-20261027-NAMING-01: Neue vollständige
-Ergebnisgenerationen erhalten Erstnamen und Unterordner anhand der privaten
-Dokument-ID-Bindung. Aktuelle Inhalte stammen aus der privaten Revision.
-Historische `/1`–`/3`-Aufträge, bearbeitbare öffentliche Kopien und der
-separate flache KI-Export behalten ihre Verträge. Der neue `/4`-Baumvertrag
-bindet Elternidentitäten, Ordnerintents und exakte rekursive Inventuren bis
-Rust. Die etablierte Reservierung einer Quellwurzel `Vertraulich` wird bei
-betroffenen Altstapeln ausdrücklich im neuen Plan und in der Zuordnung belegt.
-Keine Adoptions-, Lösch- oder allgemeinen Pfadrechte ergänzt.
+**Unveröffentlichter Reviewstand 27.10.2026:** Produktcommit `6265f46e1bbec00b6307044d9f39c42e2e60fa08`, Fingerprint
+`4bb2b2fe40ece368de4affd2ab7c0183372828d62616fe7e29f0246e2ffe1331` /386 Inputs.
+`e1a8cea9`/`301428bb`/`6265f46e` korrigieren vier begrenzte P3s aus dem
+Methodenreview: Textkontrollkonsistenz, echte ZIP-Lesefehler, Primärfehlererhalt
+beim Quellschließen und wiederholte PDF-Wortzerlegung. Die neuen Gegenfälle waren
+zuerst rot;20 Format-/74 Extraktions-/16 Snapshotgruppen und die tatsächliche
+PDF-/Paint-/OCR-Datei danach PASS, jeweils unveränderte Testeingaben. Unabhängige
+tatsächliche Deltareviews ohne bestätigten weiteren Einwand. Frische vollständige
+Gesamt-/Build-/Paketbelege dieses gemeinsamen Standes sind noch ausstehend.
 
-Die neuen Namensgegenfälle waren zuerst rot. Danach: 125 Generationenfälle,
-83 Beilagen-/Übersichts-/Workbookfälle, echte Windows-Node→Rust-Komposition
-für drei Namensmodi sowie native Baumgegenfälle grün. Die frühere volle
-Rustsuite bestand 311 Fälle/3 ignoriert; danach ergänzte Grenzfälle bestanden
-gezielt. Eine frische volle Suite am gemeinsamen Endstand steht noch aus.
-Unabhängige Quellenreviews fanden und schlossen auch die Begleitdatei-
-Nachprüfungslücke. Rote Zwischenläufe und enge Fixture-/Schemafehler bleiben
-unverändert erhalten.
+Der vorige gemeinsame Schnitt`28189b27`/Produkt`1b089367` hat dagegen bereits
+alle sieben lokalen Gates PASS, einschließlich328/328 Headlessdateien,
+312Rustfällen/3ignoriert, Clippy, Konvertern, Windows-Build/Paket/Sidecar und
+Plugin-Erhaltung.1728 Inputs blieben unverändert. Sein Engineering-ZIP
+SHA`82465af87af03f473f4950dae63f0d4613bdcc996c812b43780e44ffb7e4ab2b`
+enthält271 exakt quellgleiche Runtime-Dateien/fünf Appadapter. Es ist **nicht**
+das Paket der anschließenden P3-Korrekturen. Beide Schnitte bleiben getrennt belegt.
 
-`1b089367` korrigiert METHOD-20261027-SVG-WS-01 (P2) und SVG-LIMIT-02
-(P3): CSS-/SVG-Whitespace wird explizit behandelt, Unicode-Klassen und Text
-werden nicht in andere Tokens normalisiert. Parserlimits greifen beim ersten
-überzähligen Teil. Ein echter Rastergegenfall wechselte für sichtbaren Text
-von 0 auf die erwarteten 629 dunklen Pixel; die vollständige Grafikdecodersuite
-bestand 64 Gruppen. Unabhängiges tatsächliches Delta-Gegenlesen ohne weiteren
-bestätigten Blocker. Schutzgrenzen und ehrliche Auslassungscodes bleiben bestehen.
+Standalone nutzt eigene Adapter ohne Cowork-Hostpayload, Companion-Laufzeit,
+MCP-Einstieg, Paketstore oder Runtime-Cache im geprüften Archiv. Der neutrale
+Fachkern bleibt eine gepflegte Quellimplementierung. R0–R9 ist nicht abgeschlossen:
+839 begrenzte JS-/249 Rust-Urteile ersetzen kein vollständiges Einzelreview.
+Aktuelle Raw-Policyhashes ändern sich legitim; ältere Adapter-Kompatibilitätsbelege
+sind keine automatische Freigabe alter Profile unter späteren Geschäftsänderungen.
+Kein Nutzerzustand wird umgeschrieben. Aktuelle Arbeit/Bindungen im
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
 
-Die zuvor lokal getrennten Policy-/Launcheradapter und die Qualitätsidentität
-entfernen Cowork-Build-/Cachekopplung aus Standalone. Der neutrale Kern bleibt
-eine gepflegte Quellimplementierung. Der Recoveryfix lässt nur eigene feste
-Busy-Codes vor Aktionseintritt überspringen. Der volle alte 16e8-Lauf war bei
-zwei veralteten Intakeassertionen rot; Testfix `6bdde433` behält alle
-Schutzassertionen. Alte Engineeringpakete und frühere Policy-Kompatibilität
-belegen ausschließlich ihren damaligen Schnitt. Die jetzigen Inhaltsänderungen
-erfordern neue Fingerprints, Gesamt-/Native-/Konverter-/Paketbelege.
-
-**Jetzt offen:** frischer unveränderter 328er-Gesamtlauf, Dokumentationsprüfung,
-Rust/Clippy, Konverterkette, Windows-Releasebuild und neues Engineering-ZIP samt
-Quell-/Paketgrenze und Sidecar-Smoke. Noch keine Gesamtfreigabe und kein Push
-dieser lokalen Topics. Das vollständige Einzelmethodenreview R0–R9 bleibt
-offen; Inventar und begrenzte manuelle Urteile sind kein Vollständigkeitsbeweis.
-Zusätzlich wurden alle Methoden der passiven PDF-Projektion samt Caller und
-gepinntem PDF.js sowie PDF-Sichtbarkeit/-Layout begrenzt gelesen, ohne weiteren
-bestätigten erreichbaren Defekt. Details und unveränderte Gegenbelege unter
-`dist/rc177-relative-results-review-20261027`.
-
-Keine Desktopbedienung, neue Automatisierung, Mac-Actions, Mainintegration,
-Tag- oder Releaseänderung. Mac-Pakete/Zielhostabnahme bleiben getrennt offen;
-Desktoptests bleiben Nutzeraufgabe. Der veröffentlichte RC177 ist unverändert.
+Keine Desktopbedienung, Mac-Actions, Mainintegration, Tag-/Releaseänderung oder
+neue Automatisierung. Die veröffentlichten RC177-Pakete bleiben unverändert.
+Mac bleibt ohne Developer-ID/Notarisierung; neue native Mac- und Nutzer-UAT-Belege
+sind offen. Keine Schutzabschaltung oder allgemeine Verarbeitungszusage.
 
 Die folgenden Schnitte belegen frühere Stände und ersetzen die aktuelle Endprüfung nicht.
 
