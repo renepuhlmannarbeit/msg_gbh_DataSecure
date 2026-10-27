@@ -73,6 +73,41 @@ testAsync('Standalone folder admission recognises bounded OS structures and repo
   assert.throws(() => enumerateSourceFolder(root, opts), error => error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES');
 });
 
+testAsync('malformed UTF-16 desktop.ini is reported instead of silently omitted', async () => {
+  const root = clean('malformed-desktop-ini');
+  fs.writeFileSync(path.join(root, 'Quelle.md'), 'Name: Anna Linden');
+  const valid = Buffer.concat([
+    Buffer.from([0xff, 0xfe]),
+    Buffer.from('[.ShellClassInfo]\nIconResource=folder.ico,0\n', 'utf16le')
+  ]);
+  const malformed = Buffer.concat([valid, Buffer.from([0x41])]);
+  fs.writeFileSync(path.join(root, 'desktop.ini'), malformed);
+  const { metadataReason } = require('../plugins/data-secure/server/local-ui/folder-metadata');
+  assert.equal(metadataReason('desktop.ini', valid), 'os_folder_metadata');
+  assert.equal(metadataReason('desktop.ini', malformed), null);
+  const bePayload = Buffer.from(valid.subarray(2));
+  bePayload.swap16();
+  const validBe = Buffer.concat([Buffer.from([0xfe, 0xff]), bePayload]);
+  assert.equal(metadataReason('desktop.ini', validBe), 'os_folder_metadata');
+  assert.equal(metadataReason('desktop.ini', Buffer.concat([validBe, Buffer.from([0x41])])), null);
+  const scalarText = '[.ShellClassInfo]\nIconResource=folder-😀.ico,0\n';
+  const loneSurrogateText = '[.ShellClassInfo]\nIconResource=folder-' + String.fromCharCode(0xd800) + '.ico,0\n';
+  for (const [bom, toBytes] of [
+    [Buffer.from([0xff, 0xfe]), text => Buffer.from(text, 'utf16le')],
+    [Buffer.from([0xfe, 0xff]), text => Buffer.from(text, 'utf16le').swap16()]
+  ]) {
+    assert.equal(metadataReason('desktop.ini', Buffer.concat([bom, toBytes(scalarText)])), 'os_folder_metadata');
+    assert.equal(metadataReason('desktop.ini', Buffer.concat([bom, toBytes(loneSurrogateText)])), null);
+  }
+  for (const operation of [
+    () => enumerateSourceFolder(root, { productChannel: 'standalone' }),
+    () => enumerateSourceFolderAsync(root, { productChannel: 'standalone' })
+  ]) {
+    await assert.rejects(async () => operation(), error =>
+      error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' && error.localUnsupportedFiles.includes('desktop.ini'));
+  }
+});
+
 test('picker commands are shell-free native folder dialogs on Windows, macOS and Linux', () => {
   const windows = sourceFolderPickerCommands('win32', { SystemRoot: 'C:\\Windows' })[0];
   // Explorer-style COM folder picker (IFileOpenDialog with FOS_PICKFOLDERS) with

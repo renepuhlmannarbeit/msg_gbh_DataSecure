@@ -9,13 +9,18 @@ function metadataName(name) { return /^(?:\.DS_Store|desktop\.ini|Thumbs\.db)$/i
 function desktopIni(buffer) {
   if (buffer.length > 8192) return false;
   let text;
-  if (buffer[0] === 0xff && buffer[1] === 0xfe) text = buffer.subarray(2).toString('utf16le');
+  if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+    if ((buffer.length - 2) % 2) return false;
+    text = buffer.subarray(2).toString('utf16le');
+  }
   else if (buffer[0] === 0xfe && buffer[1] === 0xff) {
-    const bytes = Buffer.from(buffer.subarray(2));
-    if (bytes.length % 2) return false;
-    bytes.swap16(); text = bytes.toString('utf16le'); bytes.fill(0);
+    const payload = buffer.subarray(2);
+    if (payload.length % 2) return false;
+    const bytes = Buffer.from(payload);
+    try { bytes.swap16(); text = bytes.toString('utf16le'); }
+    finally { bytes.fill(0); }
   } else text = buffer.toString('utf8').replace(/^\uFEFF/u, '');
-  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\uFFFD]/u.test(text)) return false;
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\uD800-\uDFFF\uFFFD]/u.test(text)) return false;
   const sections = {
     '.shellclassinfo': /^(?:iconresource|iconfile|iconindex|infotip|localizedresourcename|confirmfileop|nosharing|uiclsid|clsid|clsid2)$/iu,
     viewstate: /^(?:mode|vid|foldertype)$/iu,
