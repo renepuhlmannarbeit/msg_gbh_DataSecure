@@ -227,8 +227,9 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
           'repeat with selectedFile in selectedFiles',
           'set end of selectedPaths to POSIX path of selectedFile',
           'end repeat',
+          'set selectionCount to count of selectedPaths',
           "set AppleScript's text item delimiters to linefeed",
-          'return selectedPaths as text'
+          'return (selectionCount as text) & linefeed & (selectedPaths as text)'
         ].join('\n')
       : `POSIX path of (choose file with prompt "${title}" of type ${macTypeFilter})`;
     const script = ['try', selection, 'on error number -128', `return "${PICKER_CANCELLED}"`, 'end try'].join('\n');
@@ -258,6 +259,16 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
 }
 
 function stripPickerLineEnding(value) { return String(value ?? '').replace(/\r?\n$/u, ''); }
+function selectedPathLines(output, options = {}) {
+  const paths = output.split(/\r?\n/u);
+  if ((options.platform || process.platform) === 'darwin') {
+    const declared = paths.shift();
+    if (!/^[1-9][0-9]{0,2}$/u.test(declared) || Number(declared) !== paths.length) {
+      throw new SafeError('Die lokale Dateiauswahl enthält nicht eindeutig abbildbare Dateinamen.');
+    }
+  }
+  return paths;
+}
 
 // Local-only metadata: never put original filenames in an exception message,
 // public MCP response or content-free diagnostics.
@@ -405,7 +416,7 @@ function pickSources(options = {}) {
 }
 
 function validateSelectedPaths(output, options) {
-  const selectedPaths = output.split(/\r?\n/);
+  const selectedPaths = selectedPathLines(output, options);
   if(selectedPaths.some((value)=>value.length===0))throw new SafeError('Die lokale Dateiauswahl enthält einen nicht eindeutig abbildbaren Dateinamen.');
   if (!selectedPaths.length) throw new SafeError('Keine Datei ausgewählt.');
   if (selectedPaths.length > (options.maxSources ?? MAX_SELECTED_SOURCES)) {
@@ -426,7 +437,7 @@ function validateSelectedPaths(output, options) {
 }
 
 async function validateSelectedPathsAsync(output, options = {}) {
-  const selectedPaths = output.split(/\r?\n/);
+  const selectedPaths = selectedPathLines(output, options);
   if (selectedPaths.some((value) => value.length === 0)) {
     throw new SafeError('Die lokale Dateiauswahl enthält einen nicht eindeutig abbildbaren Dateinamen.');
   }

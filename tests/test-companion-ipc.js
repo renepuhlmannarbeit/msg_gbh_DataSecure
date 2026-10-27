@@ -108,15 +108,47 @@ test('batch start confirmation contains only bounded selection facts and a clear
   }
 });
 
-test('macOS picker filters the current allowlist and returns newline-delimited POSIX paths without shell interpolation', () => {
+test('macOS picker filters the allowlist and returns counted newline-delimited POSIX paths without shell interpolation', () => {
   const [spec] = pickerCommands('darwin', {}, ['txt', 'md', 'csv', 'docx'], true);
   assert.strictEqual(spec.command, '/usr/bin/osascript');
   assert.match(spec.args.join(' '), /multiple selections allowed/);
   assert.match(spec.args.join(' '), /POSIX path/);
   assert.match(spec.args.join(' '), /linefeed/);
+  assert.match(spec.args.join(' '), /selectionCount to count of selectedPaths/);
+  assert.match(spec.args.join(' '), /selectionCount as text/);
   assert.match(spec.args.join(' '), /of type \{"docx", "txt", "md", "markdown", "csv"\}/);
   const [single] = pickerCommands('darwin', {}, ['txt']);
   assert.match(single.args.join(' '), /of type \{"txt"\}/);
+});
+
+test('macOS picker rejects a selected path split into other valid files by a newline', () => {
+  const first = path.join(root, 'mac-first.txt');
+  const second = path.join(root, 'mac-second.txt');
+  fs.writeFileSync(first, 'first');
+  fs.writeFileSync(second, 'second');
+  assert.deepStrictEqual(pickSources({ platform: 'darwin', allowedTypes: ['txt'],
+    runner: () => ({ status: 0, stdout: `2\n${first}\n${second}\n` })
+  }).map(item => item.sourcePath), [first, second]);
+  assert.throws(() => pickSources({ platform: 'darwin', allowedTypes: ['txt'],
+    runner: () => ({ status: 0, stdout: `1\n${first}\n${second}\n` })
+  }), /nicht eindeutig/u);
+  for (const invalid of ['0', '3', '01', '1e0', '1.0', '']) {
+    assert.throws(() => pickSources({ platform: 'darwin', allowedTypes: ['txt'],
+      runner: () => ({ status: 0, stdout: `${invalid}\n${first}\n` })
+    }), /nicht eindeutig/u);
+  }
+});
+
+testAsync('macOS asynchronous picker checks the actual selection count before reading paths', async () => {
+  const first = path.join(root, 'mac-async-first.txt');
+  const second = path.join(root, 'mac-async-second.txt');
+  fs.writeFileSync(first, 'first');
+  fs.writeFileSync(second, 'second');
+  const valid = await pickSourcesAsync({ platform: 'darwin', allowedTypes: ['txt'],
+    runner: async () => ({ status: 0, stdout: `2\n${first}\n${second}\n` }) });
+  assert.deepStrictEqual(valid.map(item => item.sourcePath), [first, second]);
+  await assert.rejects(pickSourcesAsync({ platform: 'darwin', allowedTypes: ['txt'],
+    runner: async () => ({ status: 0, stdout: `1\n${first}\n${second}\n` }) }), /nicht eindeutig/u);
 });
 
 test('Linux multi-picker explicitly requests one path per line', () => {
