@@ -9,6 +9,146 @@ Der spätere Branch-Commit `e95f033f637b57d164d7f49b4a74547224153c45`
 enthält nur Abschlussdokumentation. Die menschlichen Windows- und Mac-Desktoptests
 bleiben Nutzeraufgabe. Es ist keine neue Veröffentlichung beauftragt.
 
+## Neubasierung 27.10.2026: veröffentlichtes RC177 und aktueller Quellstand
+
+Der erneute Nutzerauftrag umfasst jetzt **zwei getrennte Prüfstände**: den
+unveränderlichen, tatsächlich veröffentlichten RC177-Appcommit oben und den
+aktuellen Standalone-/Cowork-Trennstand
+`2ddffb40926439fa69e456409853103c4f176366` auf
+`codex/standalone-export-usability`. Zwischen beiden liegen 106 geänderte
+Dateien. Ein früheres Urteil bleibt nur für exakt dieselben geprüften
+Quellbytes, denselben Vertrag und dieselbe Produktrolle gültig. Zeilennummern
+allein sind keine dauerhafte Symbolidentität. Für aktuelle Urteile werden
+Commit, Git-Blob, Symbol-/Blocktyp, qualifizierter Besitzer, AST-Position und
+ein normalisierter Körperhash erfasst. Umbenennungen und Verschiebungen
+erfordern eine explizite Zuordnung; geänderte Körper oder Verträge wechseln
+zurück auf `PENDING`. Das alte Register und alle alten Befunde bleiben erhalten.
+
+Die Durchführung erfolgt in begrenzten, abschließbaren Quellschnitten. Ein
+maschinelles Register ist die **Arbeitsliste**, kein Review-PASS. Die
+Abschlussquote zählt separat: eigene Produktfunktionen, Tests und Skripte,
+Fehlerblöcke, native Symbole, dynamische/HTML-Handler und manuell geschlossene
+Parserlücken. Jede manuelle Entscheidung enthält den geprüften Blob, jeden
+Parameter samt Vertrauensherkunft und Grenzfall, Aufrufer, Seiteneffekte,
+Fehler-/Cleanup-Pfade, Fachvertrag, Testorakel und gegebenenfalls Finding-ID.
+Zusätzliche Reviewobjekte sind JavaScript-Top-Level-Code und Modulinitialisierung,
+Rust-Makros und `Result`-Weitergabe, C-/C++-Ressourcenbesitz,
+PowerShell-/Python-Buildhelfer, Tauri-Capabilities und Commands, CI-Workflows,
+persistierte Schemas, generierte Codeherkunft und dynamische Modulauflösung.
+Auch ein nicht erreichter oder vermeintlich toter Pfad wird begründet
+klassifiziert; Duplikate werden nur mit belegtem Nutzen refaktoriert.
+
+**Risikoreihenfolge und Gegenbelege:** Zuerst Produktgrenze Standalone↔Cowork,
+private/öffentliche Daten, Identitäts- und Policybindung, Ergebnisveröffentlichung,
+Guard/ACL und Fehlerbehandlung; danach OCR/Konverter samt ehrlicher
+Teilverarbeitung, Worker/IPC/Abbruch/Neustart und UI; anschließend übrige
+Quellen, Tests, Build und Abhängigkeiten. Pro Format und Plattform werden
+positive, negative, beschädigte, große und zeitlich ungünstige Fälle sowie
+Original↔Markdown-Inhalt, Auslassungen, Laufzeit und Peak-Speicher geprüft.
+Ein Fehler wird nur dort abgefangen, wo ein begrenztes Teilresultat sicher
+und fachlich ehrlich weiterverarbeitet werden kann. Sicherheits-,
+Ressourcen- oder Bindungsfehler dürfen nicht durch eine allgemeine
+`catch`-Fortsetzung in einen Erfolg umgedeutet werden.
+
+**Codequalitätsziel des Nutzers:** Die App soll logisch geschichtet, robust,
+wenig fehleranfällig und gut wartbar sein. Deshalb wird je Quellschnitt auch
+die Abhängigkeitsrichtung (UI/Adapter → Anwendung → neutraler Fachkern),
+Verantwortung pro Modul, Kopplung und Kohäsion, expliziter Zustand,
+Nebenwirkungsgrenze, Datenbesitz, verständliche Namen, Komplexität,
+Duplikate, tote Pfade und Versionierung der IPC-/Dateiverträge beurteilt.
+Eine gefundene Auffälligkeit führt erst nach konkretem Wirkungsbeleg zu
+Produktänderung: Ist/Soll, kleinste sichere Alternative, Rückwärtswirkung,
+Gegenfall und Kostenmessung. Bloße Stilgleichförmigkeit und das Zählen
+grüner Tests sind keine Optimierungsziele. Die Reviewreihenfolge wird durch
+Risiko bestimmt; vollständig heißt dennoch, dass auch risikoarme eigene
+Symbole einzeln einen dokumentierten Status bekommen. Objektorientierung
+wird nach ihrer Wirkung beurteilt: Zustandsobjekte müssen Invarianten,
+Besitz, Initialisierung und Lebensdauer kapseln; fachlich reine
+Transformationen dürfen einfache Funktionen bleiben. Globale Mutation,
+Scheinklassen, tiefe Vererbung und Klassen mit mehreren unabhängigen
+Verantwortungen sind Prüfkandidaten, keine automatischen Befunde. Rust-Structs,
+Traits und Eigentumsgrenzen sowie JavaScript-Closures/Module werden nach
+denselben fachlichen Zustandsverträgen geprüft, ohne Sprachparadigmen
+mechanisch anzugleichen.
+
+Die [Node-Fehlerdokumentation](https://nodejs.org/api/errors.html) verlangt
+eine zum API-Stil passende Fehlerweitergabe und unterscheidet stabile
+Fehlercodes von veränderlichen Meldungstexten. Das
+[Rust-Result-Modell](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html)
+trennt behandelte von propagierten Fehlern. Die
+[Tauri-Capability-Dokumentation](https://v2.tauri.app/security/capabilities/)
+weist ausdrücklich darauf hin, dass Fenster-Capabilities zusammenwirken und
+registrierte Rust-Commands ohne zusätzliche Einschränkung breit erreichbar
+sein können. Diese offiziellen Quellen dienen als Prüffragen, nicht als
+pauschale Behauptung eines konkreten Produktfehlers.
+
+**Abschlussregel:** `R9` bleibt offen, solange ein eigener produktiver Eintrag,
+ein Fehlerblock, ein Parserloch oder ein gebundener Plattformvertrag ungeprüft
+ist. Automatische Tests belegen nur ihren konkreten Fall. Ein produktiver Fix
+erzeugt einen neuen Prüfstand mit frischen passenden Gates; der veröffentlichte
+RC177-Stand wird nicht umetikettiert. Native Desktopbedienung ist nach
+aktuellem Nutzerwunsch nicht freigegeben und bleibt Nutzerabnahme.
+
+### Aktueller Arbeitsschnitt 27.10.2026 (unveröffentlicht)
+
+Das neue Register unter `dist/rc177-current-code-review-v2-20261027`
+klassifiziert 1719 Gitdateien und indexiert 43821 JavaScript-AST-Objekte sowie
+4350 Rust-AST-Objekte aus 21 Dateien, jeweils ohne Parsefehler. Es erfasst
+13246 produktive JavaScript-Prüfobjekte, daneben 28227 in Tests. Die
+gezählten Symbole haben **keinen** automatischen Reviewstatus. Native
+C/C++-Makros, HTML-Handler, PowerShell/Python, Workflows, dynamische
+Aufrufpfade und die einzelnen Parameter-/Fehlerurteile bleiben R1–R3.
+Das begrenzte aktuelle Urteil steht in `CURRENT-SLICE-DECISIONS.md`; die
+26 älteren manuellen Urteile beziehen sich auf seit RC177 geänderte Dateien
+und wurden nicht pauschal übernommen.
+
+Zwei eng belegte Produktbefunde sind lokal korrigiert, noch ohne neues Paket:
+Ein paketierter Standalone-Policybeleg akzeptierte zuvor einen frei ersetzten
+Aggregatfingerprint trotz richtiger Einzeldateihashes (Finding 010); die
+Prüfung berechnet den Aggregathash nun aus denselben gerade gelesenen Bytes.
+Ein Office-OCR-Teilcheckpoint nummerierte Grafiken wieder ab eins und konnte
+damit Kontakt-/Bild-Locator falsch binden (Finding 011); er übernimmt jetzt
+die bereits vergebene laufweite Ordnungszahl. Beide Gegenfälle waren vor dem
+Fix rot und danach grün; angrenzende gezielte Suites bestanden. Ein dritter
+P2-Befund im optionalen POSIX-OCR-Pilot: Linux erwartete sieben Limits,
+obwohl das native Contract-JSON auf Linux und macOS fünf ausweist. Die
+Workflow-Assertion prüft jetzt exakt diese fünf Namen. Details stehen in den
+create-only Finding-010/011/012-Belegen im aktuellen `dist`-Ordner.
+
+Der erste vollständige Headlesslauf nach den beiden Produktkorrekturen war
+**rot**: vier Paket-Staging-Fälle in
+`test-content-anonymization-operation.js` meldeten
+`PACKAGE_STAGING_CREATE_FAILED`. Die Ursprungsursache ist nicht belegt.
+Die Datei bestand danach isoliert zweimal, auch mit eng begrenzter
+Diagnoseaufladung, und im zweiten **unveränderten** Gesamtlauf 37/37.
+Dieser zweite Gesamtlauf bestand 328/328 Testdateien, Exit0; Originallog
+`dist/rc177-current-code-review-v2-20261027/headless-postfix-repeat-20261027.log`,
+SHA-256 `8d315aa6585909ed23101f3bdb874a886769608d151734e175bfadb576ed3d30`.
+Das erste rote Log bleibt erhalten und wird nicht als erledigte Ursache
+umgedeutet. `cargo test --locked` bestand 300 Tests mit drei ignorierten
+Fällen, Clippy mit `-D warnings` bestand; `npm run test:docs` und
+`git diff --check` bestanden. Die Rust-Quellen haben vorbestehende breite
+`cargo fmt --check`-Abweichungen in 20 Dateien (29185 Diffzeilen). Eine
+pauschale Formatierung in diesem sicherheitsrelevanten Fixschnitt würde
+die Reviewbindung erschweren und wurde nicht ausgeführt.
+
+Die separate unveränderte `test:standalone:conversion`-Kette bestand
+anschließend, Exit0 und `inputs_unchanged:true` in ihrem PDF-Gate;
+Originallog `dist/rc177-current-code-review-v2-20261027/conversion-suite-postfix.log`,
+SHA-256 `a51801336b0a2dc2963ff3227d6aa6e9501204f79946ae8a9480c351837f76ac`.
+Die enthaltene 100-TXT-Probe maß 27269 ms und null wiederholte schwere
+Runtime-Lesevorgänge. Der zuvor vermutete Resolver-Mehraufwand rechtfertigt
+deshalb ohne weitere vergleichbare Lastmessung keinen Cache-Refactor.
+Die drei Korrekturthemen sind getrennt lokal committed: `7e006ff5`
+(Policybeleg), `2da6179a` (Office-OCR) und `38605c95` (Pilot-Workflow).
+Sie wurden weder auf `main` übertragen noch als neuer Kandidat veröffentlicht.
+
+Auch nach diesen Gates bleiben R0–R9 als Gesamtauftrag offen: Das Inventar
+ist erst Arbeitsliste, nicht Einzelmethodenreview; der erste Stagingfehler
+ist nicht kausal erklärt; native Paket-/Windows-/Mac-Zielhostgates und
+Original↔Markdown-Fachvergleiche am neuen Branchstand sind nicht abgeschlossen.
+Der veröffentlichte RC177-Tag und seine Downloads bleiben unverändert.
+
 **Nutzerpriorität 26.10.:** Das vollständige Review richtet sich zuerst auf
 die eigenständige Standalone-App für Windows und macOS, einschließlich
 Frontend, Tauri/Rust, Sidecar, lokalem Core, Konvertern und Dateien. Der

@@ -11,6 +11,60 @@ Appcommit ist der veröffentlichte Tag `v3.2.0-rc177` auf `fc39f820…`, nicht e
 späterer Docs-HEAD. RC177-Pakete bleiben unverändert; Nutzer-Desktoptests
 werden nicht als Agentennachweis übernommen.
 
+**Neubasierung 27.10.:** Der erneute Einzelmethodenauftrag prüft zusätzlich
+den aktuellen Architekturstand `2ddffb40926439fa69e456409853103c4f176366`.
+Das veröffentlichte RC177 und dieser unveröffentlichte Branchstand sind
+getrennte Prüfstände; 106 Dateien unterscheiden sich. Alte Symbolurteile
+gelten für geänderte Bytes/Verträge nicht automatisch weiter. Das neue
+create-only Register `dist/rc177-current-code-review-v2-20261027` enthält
+1719 Gitdateien und 43821 JS-AST-Prüfobjekte ohne Parsefehler und ohne
+abweichende Codeblobs. Zwei Arbeitsbaumdateien haben lediglich CRLF statt
+der kanonischen LF-Gitbytes; die zweite Inventarversion normalisiert dies
+nach belegtem Blobvergleich. Dieses Register ist **kein** Einzelreview-PASS.
+Rust/C/C++/HTML/PowerShell/Python/Workflows und dynamische Pfade sind weiter
+einzeln zu inventarisieren. Kein Desktopzugriff durch den Agenten.
+Das vorhandene, unveränderte offline-`syn`-Werkzeug indexierte ergänzend
+21 aktuelle Rustdateien mit 4350 AST-Prüfobjekten und null Parsefehlern;
+Makroexpansion und die semantische Einzelprüfung bleiben ausdrücklich offen.
+Zwei neue Quellbefunde des aktuellen Branchstands sind bereits mit erst roten,
+dann grünen Gegenfällen eng korrigiert: ein paketierter Policy-Receipt konnte
+einen beliebigen Aggregatfingerprint melden; Office-OCR-Teilcheckpoints
+nummerierten Grafiken je Einheit statt laufweit. Einzelheiten und Grenzen:
+`dist/rc177-current-code-review-v2-20261027/FINDING-010-RECEIPT-FINGERPRINT.md`
+und `FINDING-011-OFFICE-OCR-ORDINAL.md`. Keine neue Paket- oder native
+Zielhostfreigabe aus diesen gezielten Quelltests ableiten.
+Alle 26 älteren manuellen Symbolentscheidungen in
+`dist/rc177-full-code-review-20261026/REVIEW-DECISIONS.json` betreffen
+Dateien, deren Git-Blobs sich seit dem veröffentlichten Appcommit geändert
+haben. Sie sind als historische Urteile bewahrt, aber kein aktueller
+`REVIEWED_OK`-Zähler. Die neue vollständige Prüfung bleibt daher offen.
+
+**Aktueller begrenzter Schnitt 27.10.:** Nach Fix 010/011 bestand der zweite
+unveränderte Gesamt-Headlesslauf 328/328, Exit0. Der erste Lauf war bei vier
+Paket-Staging-Fällen rot (`PACKAGE_STAGING_CREATE_FAILED`); seine Ursache ist
+nicht bewiesen und sein Originallog bleibt erhalten. Die betreffende Datei
+bestand isoliert zweimal und im zweiten Gesamtlauf 37/37. Rust: `cargo test
+--locked` 300 PASS/3 ignoriert; Clippy `-D warnings` PASS. `test:docs`,
+`git diff --check` und gezielte Policy-/Office-Tests PASS. Ein weiterer
+belegter P2-Befund im optionalen Linux-OCR-Pilot wurde eng korrigiert:
+Workflow erwartete sieben Limits, native Quelle lieferte fünf; jetzt werden
+die fünf exakten Namen geprüft. Kein GitHub-Job gestartet, kein neues Paket.
+`cargo fmt --check` meldet vorbestehende breite Stilabweichungen in 20
+Rustdateien; keine automatische Massenformatierung in diesem Fixschnitt.
+Die separate `test:standalone:conversion`-Kette bestand, Exit0. Die enthaltene
+100-TXT-Probe benötigte 27269 ms und las die schwere Runtime kein zweites Mal;
+eine Resolver-Cacheänderung bleibt ohne Vergleichsmessung offen. Die drei
+eng begrenzten Themen sind lokal als `7e006ff5`, `2da6179a`, `38605c95`
+committed; kein Push auf `main`, kein neues Paket oder Release.
+Einzelheiten und Loghashes stehen im Reviewplan und in
+`dist/rc177-current-code-review-v2-20261027/`.
+
+Offen bleiben die vollständigen Einzelurteile des JS-/Rust-/Native-/Script-
+Registers, die 1168 produktiven `catch`-Kandidaten, Fachvergleiche,
+performancegebundene Refactorings, native Paket-/Zielhostgates und die
+Erklärung des ersten Stagingfehlers. Nur die in `CURRENT-SLICE-DECISIONS.md`
+genannten eng abgegrenzten Methoden sind aktuell manuell eingeordnet.
+
 **Priorität nach Nutzerhinweis:** Zuerst alle Standalone-Pfade für Windows und
 beide Macs prüfen. `CLAUDE.md` spricht sowohl über Standalone als auch über
 Cowork und ist eine Projektregelquelle, kein Beweis für heutige
