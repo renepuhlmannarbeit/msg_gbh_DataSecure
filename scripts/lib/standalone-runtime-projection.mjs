@@ -25,6 +25,13 @@ const PLATFORM_ASSETS = Object.freeze({
   'macos-arm64': Object.freeze(['native/macos-arm64/datasecure-sandbox', 'native/macos-arm64/datasecure-sandbox.sha256']),
   'linux-x64-glibc': Object.freeze(['native/linux-x64/datasecure-sandbox', 'native/linux-x64/datasecure-sandbox.sha256'])
 });
+// Keep the shared gateway import names stable for existing journals and worker
+// entrypoints, while sourcing these three adapters only from the app tree.
+const ADAPTER_SOURCES = Object.freeze({
+  'gateway/local-review-adapter.js': 'gateway/local-review-adapter.js',
+  'gateway/product-read-capability.js': 'gateway/product-read-capability.js',
+  'gateway/product-terminal-notice.js': 'gateway/product-terminal-notice.js'
+});
 const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)|^companion\/|^gateway\/(?:worker-terminal-presentation|package-store)\.js$/iu;
 
 function regular(file) {
@@ -37,6 +44,8 @@ function resolveRelative(source, request, serverRoot) {
   const base = path.resolve(path.dirname(source), request);
   const candidates = [base, `${base}.js`, `${base}.cjs`, `${base}.json`, path.join(base, 'index.js')];
   const resolved = candidates.find((candidate) => {
+    const relative = path.relative(serverRoot, candidate).split(path.sep).join('/');
+    if (Object.hasOwn(ADAPTER_SOURCES, relative)) return true;
     try { return regular(candidate).isFile(); } catch { return false; }
   });
   if (!resolved) throw new Error(`STANDALONE_PROJECTION_DEPENDENCY_MISSING:${request}`);
@@ -49,6 +58,7 @@ function resolveRelative(source, request, serverRoot) {
 
 export function collectStandaloneRuntime(serverRoot, productTarget) {
   const root = path.resolve(serverRoot);
+  const adapterRoot = path.resolve(root, '../../../apps/datasecure-standalone/runtime-adapters');
   const platformAssets = PLATFORM_ASSETS[productTarget] || [];
   const pending = [...ENTRYPOINTS, ...platformAssets].map((relative) => ({
     relative,
@@ -58,10 +68,12 @@ export function collectStandaloneRuntime(serverRoot, productTarget) {
   while (pending.length) {
     const current = pending.pop();
     if (files.has(current.relative)) continue;
-    regular(current.resolved);
     if (FORBIDDEN.test(current.relative)) throw new Error(`STANDALONE_PROJECTION_ENTRY_FORBIDDEN:${current.relative}`);
-    const bytes = boundFileIo.readBoundFile(current.resolved, { maximum: 128 * 1024 * 1024, checkCtime: true });
-    files.set(current.relative, { relative: current.relative, source: current.resolved, bytes });
+    const sourceFile = ADAPTER_SOURCES[current.relative]
+      ? path.join(adapterRoot, ...ADAPTER_SOURCES[current.relative].split('/')) : current.resolved;
+    regular(sourceFile);
+    const bytes = boundFileIo.readBoundFile(sourceFile, { maximum: 128 * 1024 * 1024, checkCtime: true });
+    files.set(current.relative, { relative: current.relative, source: sourceFile, bytes });
     if (!/\.(?:c?js)$/iu.test(current.relative)) continue;
     const source = bytes.toString('utf8');
     const literal = /\brequire\(\s*(['"])([^'"\r\n]+)\1\s*\)/gu;
@@ -114,5 +126,6 @@ export function writeStandaloneRuntime(serverRoot, destination, productTarget) {
 export const standaloneProjectionContract = Object.freeze({
   entrypoints: ENTRYPOINTS,
   platformAssets: PLATFORM_ASSETS,
+  adapterSources: ADAPTER_SOURCES,
   forbidden: FORBIDDEN
 });

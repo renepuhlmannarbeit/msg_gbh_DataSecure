@@ -62,6 +62,61 @@ test('Standalone review adapter accepts only an explicit app reviewer and never 
   });
   assert.equal(result.status, 0, result.stderr);
 });
+test('projected Standalone adapters contain only Standalone behavior even without a channel flag', () => {
+  const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-build-fingerprint-'));
+  try {
+    const projected = collectStandaloneRuntime(path.join(repository, 'plugins/data-secure/server'), null);
+    for (const file of projected) write(scope, `server/${file.relative}`, file.bytes);
+    const adapters = ['local-review-adapter', 'product-read-capability', 'product-terminal-notice'];
+    for (const name of adapters) {
+      const file = projected.find(item => item.relative === `gateway/${name}.js`);
+      assert.ok(file, `${name} must be projected`);
+      assert.match(file.source, /apps[\\/]datasecure-standalone[\\/]runtime-adapters[\\/]gateway[\\/]/u);
+      assert.doesNotMatch(file.bytes.toString('utf8'), /cowork|companion|package-store|worker-terminal-presentation/iu);
+    }
+    const source = `
+      const assert = require('node:assert/strict');
+      const path = require('node:path');
+      const gateway = process.argv[1];
+      const review = require(path.join(gateway, 'local-review-adapter.js'));
+      const read = require(path.join(gateway, 'product-read-capability.js'));
+      const notice = require(path.join(gateway, 'product-terminal-notice.js'));
+      const document = { original_text: 'Microsoft Zertifikat', anonymized_text: 'Microsoft Zertifikat',
+        profile: 'personnel_profile', ambiguities: [{ ambiguity_id: 'credential:v2:000001',
+          type: 'credential_issuer_ambiguous', original_start: 0, original_end: 9,
+          anonymized_start: 0, anonymized_end: 9 }] };
+      (async () => {
+        assert.deepEqual(await review.reviewBatchTextLocally([document],
+          { reviewTextLocally: () => ({ action: 'cancelled' }) }), { action: 'cancelled', documents: [] });
+        await assert.rejects(review.reviewBatchTextLocally([document]), /STANDALONE_REVIEWER_REQUIRED/);
+        assert.throws(() => review.reviewTextLocally(), /STANDALONE_REVIEWER_REQUIRED/);
+        assert.deepEqual(read.issueReadCapability('package'), {});
+        for (const action of ['showBatchStateNoticeConfirmed', 'showLocalIntakeNoticeConfirmed',
+          'presentTerminalEnvelope']) assert.throws(() => notice[action](), /STANDALONE_PRESENTER_UNAVAILABLE/);
+        assert.equal(Object.keys(require.cache).some(name => /[\\/]companion[\\/]/u.test(name)), false);
+      })().catch(error => { process.stderr.write(String(error.stack || error)); process.exitCode = 1; });`;
+    const result = spawnSync(process.execPath, ['-e', source, path.join(scope, 'server/gateway')], {
+      cwd: scope, encoding: 'utf8', windowsHide: true, timeout: 10000,
+      env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: 'plugin', NODE_OPTIONS: '' }
+    });
+    assert.equal(result.status, 0, result.stderr);
+  } finally { cleanup(scope); }
+});
+test('Standalone adapter projection does not depend on the legacy adapter files', () => {
+  const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-build-fingerprint-'));
+  try {
+    const root = path.join(scope, 'plugins/data-secure/server');
+    for (const relative of standaloneProjectionContract.entrypoints)
+      write(root, relative, "'use strict';\nmodule.exports = {};\n");
+    write(root, 'standalone/desktop-sidecar.js',
+      "require('../gateway/local-review-adapter'); require('../gateway/product-read-capability'); require('../gateway/product-terminal-notice');\n");
+    for (const relative of Object.values(standaloneProjectionContract.adapterSources))
+      write(scope, `apps/datasecure-standalone/runtime-adapters/${relative}`, "module.exports = {};\n");
+    const projected = collectStandaloneRuntime(root, null);
+    for (const name of Object.keys(standaloneProjectionContract.adapterSources))
+      assert.ok(projected.some(file => file.relative === name));
+  } finally { cleanup(scope); }
+});
 function write(scope, relative, bytes) {
   const target = path.join(scope, ...relative.split('/'));
   fs.mkdirSync(path.dirname(target), { recursive: true });

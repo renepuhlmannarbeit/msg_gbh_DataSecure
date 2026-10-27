@@ -63,6 +63,7 @@ export const SOURCE_INPUT_FILES = Object.freeze([
   'plugins/data-secure/server/companion/text-review.js'
 ]);
 export const SOURCE_INPUT_TREES = Object.freeze([
+  'apps/datasecure-standalone/runtime-adapters',
   'apps/datasecure-standalone/frontend',
   'apps/datasecure-standalone/tauri-contract/src',
   'apps/datasecure-standalone/tauri-contract/capabilities',
