@@ -344,6 +344,7 @@
   let receiveConnectionState = null;
   let connectionRetryChecking = false;
   let resultFolderUnavailable = false;
+  let resultPreparationPending = false;
   let busyGeneration = 0, dropOwnership = null;
   // Webview runtimes do not uniformly inject their API into child frames.
   // The same-origin review uses this closed facade instead of depending on
@@ -670,7 +671,8 @@
       : ['preparing', 'processing'].includes(current?.state) || current?.intake_failure?.worker_active === true ? 'Ein Lauf ist noch nicht abgeschlossen. Öffne seine Laufdetails und warte auf den Abschluss oder pausiere ihn ausdrücklich.'
       : !mode && !chosen.length ? 'Bitte Aufgabe und Dateien auswählen.'
       : !mode ? 'Bitte zuerst eine Aufgabe auswählen.' : !chosen.length ? 'Bitte mindestens eine geeignete Datei anhaken.'
-      : tooLarge ? 'Auswahl zu groß.' : resultFolderUnavailable ? 'Der bisherige Ergebnisordner ist nicht verfügbar. Stelle ihn wieder bereit oder wähle unten „Ordner ändern“.' : '';
+      : tooLarge ? 'Auswahl zu groß.' : resultFolderUnavailable ? 'Der bisherige Ergebnisordner ist nicht verfügbar. Stelle ihn wieder bereit oder wähle unten „Ordner ändern“.'
+        : resultPreparationPending ? 'Der Ergebnisordner wurde gespeichert, aber die Ausgabevorbereitung nicht bestätigt. Bitte „Ordner ändern“ wählen und die Vorbereitung erneut ausdrücklich bestätigen.' : '';
     $('start').setAttribute('aria-disabled', String(Boolean(hint)));
     $('start').setAttribute('aria-describedby', tooLarge ? 'start-hint selection-limit' : 'start-hint');
     $('start-hint').textContent = hint || `${chosen.length} Datei${chosen.length === 1 ? '' : 'en'} ${chosen.length === 1 ? 'wird' : 'werden'} lokal verarbeitet.`;
@@ -2020,16 +2022,25 @@
     finally { refreshing = false; schedule(['processing', 'preparing'].includes(current?.state) ? 1200 : 5000); }
   }
   async function configure() { const result = await perform('configure_results'); if (!result || result.cancelled) return;
+    if (result.ok === false && result.configuration_changed === true && result.preparation_pending === true &&
+        result.local_ui_only === true && result.external_disclosure === false &&
+        typeof result.result_folder === 'string' && result.result_folder.length > 0) {
+      resultFolderUnavailable = false; resultPreparationPending = true;
+      $('destination').textContent = result.result_folder; $('settings-destination').textContent = result.result_folder;
+      updateStart(); feedback('Ergebnisordner gespeichert, Ausgabevorbereitung nicht bestätigt. Bitte „Ordner ändern“ wählen und die Vorbereitung erneut ausdrücklich bestätigen. Es wurde kein Lauf oder Export gestartet.', true);
+      return;
+    }
     if (result.ok !== true || result.local_ui_only !== true || result.external_disclosure !== false ||
         typeof result.result_folder !== 'string' || !result.result_folder) {
       showError(new Error('STANDALONE_IPC_FAILED'), 'configure_results'); return;
     }
-    resultFolderUnavailable = false; $('retry-destination').hidden = true; $('retry-results').hidden = true;
+    resultFolderUnavailable = false; resultPreparationPending = false; $('retry-destination').hidden = true; $('retry-results').hidden = true;
     $('destination').textContent = result.result_folder; $('settings-destination').textContent = result.result_folder;
     updateStart(); feedback('Ergebnisordner gespeichert. Vorhandene Läufe bleiben an ihrem bisherigen Speicherort.'); }
   async function recheckDestination() {
     const context = await perform('get_ui_context'); if (!context) return;
-    try { applyContext(context); updateStart(); feedback(resultFolderUnavailable
+    try { applyContext(context); updateStart(); feedback(resultPreparationPending
+      ? 'Der gespeicherte Ergebnisordner ist noch nicht für die Ausgabe vorbereitet. Bitte „Ordner ändern“ wählen und die Vorbereitung erneut bestätigen.' : resultFolderUnavailable
       ? 'Der bisherige Ergebnisordner ist weiterhin nicht verfügbar. Stelle ihn wieder bereit oder wähle einen anderen Ordner.'
       : 'Der Ergebnisordner ist wieder verfügbar. Du kannst die ausgewählten Dateien jetzt starten.'); }
     catch (error) { showError(error); }

@@ -3509,6 +3509,30 @@ testAsync('configure result without confirmed local response never reports a sav
   assert.match(h.el('feedback').textContent, /STANDALONE_IPC_FAILED/u);
 });
 
+testAsync('saved result folder with unconfirmed native preparation blocks Start until explicit reconfirmation', async () => {
+  let confirmed = false;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') return confirmed
+      ? { ok: true, configuration_changed: true, result_folder: 'Bound results', local_ui_only: true, external_disclosure: false }
+      : { ok: false, configuration_changed: true, result_folder: 'Bound results', preparation_pending: true,
+        local_ui_only: true, external_disclosure: false };
+    return fallback();
+  } });
+  await tick(); await h.act('select-folder');
+  h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
+  await h.act('configure-results');
+  assert.equal(h.el('destination').textContent, 'Bound results');
+  assert.match(h.el('feedback').textContent, /Ausgabevorbereitung nicht bestätigt/u);
+  assert.match(h.el('start-hint').textContent, /Ausgabevorbereitung nicht bestätigt/u);
+  await h.act('retry-destination');
+  assert.match(h.el('start-hint').textContent, /Ausgabevorbereitung nicht bestätigt/u);
+  await h.act('start');
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+  confirmed = true; await h.act('configure-results');
+  assert.equal(h.el('start').attrs['aria-disabled'], 'false');
+  assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 2);
+});
+
 /* Historical bootstrap resolution regressions: actual native snapshot/event DTOs. */
 for (const delivery of ['event', 'lost'])
 for (const failedRead of ['get_public_state', 'get_ui_context'])

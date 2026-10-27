@@ -1131,6 +1131,45 @@ testAsync('missing native export binding offers a direct folder picker and retri
   assert.match(h.el('documents-status').textContent, /2 Dateien exportiert/u);
 });
 
+testAsync('saved folder without confirmed preparation retains the explicit picker and never copies automatically', async () => {
+  let confirmed = false, selections = 0;
+  const h = harness({ invoke(command) {
+    if (command === 'configure_results') {
+      selections++;
+      if (selections === 1) return { ok: false, configuration_changed: true, preparation_pending: true,
+        result_folder: 'C:\\synthetic-results', local_ui_only: true, external_disclosure: false };
+      confirmed = true;
+      return { ok: true, configuration_changed: true, result_folder: 'C:\\synthetic-results',
+        local_ui_only: true, external_disclosure: false };
+    }
+    if (command === 'export_approved_documents' && !confirmed) throw Error('AI_EXPORT_CONFIGURATION_REQUIRED');
+  } });
+  await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve'); await h.export();
+  const attempts = () => h.calls.filter(call => call.command === 'export_approved_documents').length;
+  assert.equal(attempts(), 1);
+  await h.act('document-export-configure');
+  assert.equal(selections, 1); assert.equal(attempts(), 1);
+  assert.equal(h.el('document-export-configure').hidden, false);
+  assert.equal(h.el('document-export-confirm').disabled, true);
+  assert.match(h.el('document-export-result').textContent, /Ausgabevorbereitung wurde nicht bestätigt/u);
+  const approvals = h.calls.filter(call => ['decide_document_review', 'decide_document_review_batch'].includes(call.command)).length;
+  await h.act('document-export-confirm');
+  assert.equal(attempts(), 1);
+  assert.equal(h.calls.filter(call => ['decide_document_review', 'decide_document_review_batch'].includes(call.command)).length, approvals);
+  await h.act('document-export-close');
+  assert.equal(await h.api.close(), true);
+  await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-export');
+  assert.equal(h.el('document-export-confirm').disabled, true, 'closing and reopening cannot forget unconfirmed native preparation');
+  assert.equal(h.el('document-export-configure').hidden, false);
+  await h.act('document-export-confirm');
+  assert.equal(attempts(), 1);
+  assert.equal(h.calls.filter(call => ['decide_document_review', 'decide_document_review_batch'].includes(call.command)).length, approvals);
+  await h.act('document-export-configure');
+  assert.equal(selections, 2); assert.equal(attempts(), 1);
+  assert.match(h.el('document-export-result').textContent, /sicher gewählt/u);
+  assert.equal(h.el('document-export-confirm').disabled, false);
+});
+
 testAsync('a fresh renderer discovers an unconfirmed export and reconciles its original revisions after revocation', async () => {
   let pending = [], loseReply = true;
   const backend = async (command, args) => {

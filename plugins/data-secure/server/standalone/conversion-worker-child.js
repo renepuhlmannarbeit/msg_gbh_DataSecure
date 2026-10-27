@@ -97,7 +97,7 @@ async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = fals
   const read = async raster => {
     let value;
     try { value = await conversionTimings.measureAsync('ocr', () => ocr.recognize(raster.toBuffer('image/png'), {}, { text: true, blocks: true })); }
-    catch (cause) { if (errors.has(cause?.code)) throw cause; fail('CONVERSION_OCR_FAILED'); }
+    catch (cause) { if (cause?.code !== undefined) throw cause; fail('CONVERSION_OCR_FAILED'); }
     if (typeof value?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
     if (value.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
     return value;
@@ -190,7 +190,7 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
       }
       canvas.getContext('2d').putImageData(new ImageData(rgba, decoded.width, decoded.height), 0, 0);
     }
-  } catch (cause) { if (errors.has(cause?.code)) throw cause; fail('CONVERSION_IMAGE_INVALID'); }
+  } catch (cause) { if (cause?.code !== undefined) throw cause; fail('CONVERSION_IMAGE_INVALID'); }
   finally { decoded(); }
   let downsampled=false, sourceCanvas;
   let ocr;
@@ -490,7 +490,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
     async function passiveRead(operation, fallback) {
       try { return await operation(); }
       catch (cause) {
-        if (!contentOptions || !passiveObjects || errors.has(cause?.code)) throw cause;
+        if (!contentOptions || !passiveObjects || cause?.code !== undefined) throw cause;
         optionalReasons.add('DOCUMENT_PARTS_DAMAGED'); return fallback;
       }
     }
@@ -766,7 +766,9 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         if (readingOptionalStructure && (cause?.code !== undefined ||
             !['Error','UnknownErrorException'].includes(cause?.name))) throw cause;
         const omission = imageOmission(cause);
-        if (!contentOptions || (errors.has(cause?.code) && !omission && cause.code !== 'PDF_EXTRACTION_FAILED')) throw cause;
+        const uncodedParserFailure = cause?.code === undefined &&
+          ['Error', 'UnknownErrorException'].includes(cause?.name);
+        if (!contentOptions || (!uncodedParserFailure && !omission && cause?.code !== 'PDF_EXTRACTION_FAILED')) throw cause;
         reasons.add(readingOptionalStructure ? 'DOCUMENT_PARTS_DAMAGED' : nativeUnit ? 'PDF_IMAGE_NOT_READ' : 'PDF_PAGE_NOT_READ');
         if (omission) reasons.add(omission);
         finalUnit = pageUnit(number, nativeUnit?.markdown || (passivePage?.meaningful ? passivePage.markdown : ''));

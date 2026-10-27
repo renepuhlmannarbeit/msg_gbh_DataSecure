@@ -99,6 +99,7 @@
     return 'DataSecure gleicht die Kopie mit dem gespeicherten Abschlussbeleg ab.';
   }
   let exportFolderNeeded = false;
+  let exportPreparationPending = false;
   let documentProblemCount = 0, documentOmissionCount = 0, processingComplete = false, confirmedCopy = null, completedCopyCount = 0, loading = false;
   let contentNotices = null, filterMode = 'notices';
   let sourceNoticeFacts = null;
@@ -502,7 +503,7 @@
       : `${entitySelected.size} erkannte Werte ausgewählt, noch nicht gespeichert. Behandlung wählen und speichern oder die Auswahl bewusst verwerfen. Die Auswahl bleibt beim Fundstellenseitenwechsel erhalten.`);
     $('document-navigation-reason').hidden = !hasDraft;
     quietText('document-navigation-reason', hasDraft ? 'Ungespeicherter Entwurf: zuerst speichern oder ausdrücklich verwerfen, bevor du die Datei wechselst, neu lädst oder die Ansicht verlässt.' : '');
-    $('document-export-confirm').disabled = blocked || directoryUnavailable || needsRepair;
+    $('document-export-confirm').disabled = blocked || directoryUnavailable || needsRepair || exportPreparationPending;
     $('document-export-abandon').disabled = blocked || directoryUnavailable || needsRepair || !$('document-export-abandon-check').checked;
     $('document-recovery-draft').hidden = !recoveryDraft;
     $('document-recovery-text').value = recoveryDraft?.text || '';
@@ -1071,7 +1072,7 @@
       dialogResultFolder = plan.result_folder || null;
     } catch (error) { if (expected === batchId && connection === connectionGeneration) showError(error, rows.map(row => row.name).join(', ')); return; }
     finally { if (ownership === busyGeneration && expected === batchId) { busy = false; render(); } }
-    if (!exportRequest) exportFolderNeeded = false;
+    if (!exportRequest && !exportPreparationPending) exportFolderNeeded = false;
     $('document-export-preview').hidden = false; $('document-export-result').hidden = true;
     $('document-export-confirm').hidden = false;
     $('document-export-close').textContent = 'Abbrechen';
@@ -1083,7 +1084,8 @@
     dialogFocus = document.activeElement; $('document-export-dialog').showModal(); $('document-export-close').focus();
   }
   async function exportRows() {
-    if (!stateFresh || publicDirectoryUnavailable() || repairRequired() || dirty() || !validSelection(dialogSelection)) return;
+    if (!stateFresh || publicDirectoryUnavailable() || repairRequired() || exportPreparationPending ||
+        dirty() || !validSelection(dialogSelection)) return;
     const rows = documents.filter(row => selected.has(row.document_id));
     if (busy || !batchId || !exportRequest && !rows.length) return;
     const connection = connectionGeneration;
@@ -1246,9 +1248,17 @@
       if (expected !== batchId || connection !== connectionGeneration) return;
       if (result?.cancelled === true) {
         $('document-export-result').textContent = 'Ordnerwahl abgebrochen. Der Export wurde nicht gestartet; die Freigabe bleibt erhalten.';
+      } else if (result?.ok === false && result.configuration_changed === true && result.preparation_pending === true &&
+          result.local_ui_only === true && result.external_disclosure === false &&
+          typeof result.result_folder === 'string' && result.result_folder.length > 0) {
+        exportFolderNeeded = true;
+        exportPreparationPending = true;
+        dialogResultFolder = result.result_folder;
+        $('document-export-result').textContent = 'Ergebnisordner gespeichert, aber die Ausgabevorbereitung wurde nicht bestätigt. Bitte „Ergebnisordner wählen/ändern“ erneut ausdrücklich wählen. Es wurde keine Datei kopiert oder exportiert.';
       } else if (result?.ok === true && result.configuration_changed === true && result.local_ui_only === true && result.external_disclosure === false &&
           typeof result.result_folder === 'string' && result.result_folder.length > 0) {
         exportFolderNeeded = false;
+        exportPreparationPending = false;
         dialogResultFolder = result.result_folder;
         $('document-export-result').textContent = `Ergebnisordner sicher gewählt. Die Einstellung gilt auch für künftige Läufe; vorhandene Exporte bleiben am bisherigen Ort. Der bestehende Lauf und die Freigabe bleiben erhalten. Wähle „${exportRequest ? 'Export erneut versuchen' : dialogMode === 'markdown-only' ? 'Kopie speichern' : 'Freigeben und exportieren'}“; es startet kein automatischer Export.`;
       } else throw Error('AI_EXPORT_CONFIGURATION_REQUIRED');
@@ -1292,7 +1302,7 @@
       // post-ACK callback from the previous view cannot invalidate fresh state.
       const ownership = ++busyGeneration;
       completedExportReceipt = null; directResultsSupported = false;
-      batchId = id; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); confirmedCopy = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; processingComplete = false; stateFresh = false; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false; clearText(); renderUnavailable({}); renderReceipts(); render();
+      batchId = id; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); confirmedCopy = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; processingComplete = false; stateFresh = false; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = exportPreparationPending; clearText(); renderUnavailable({}); renderReceipts(); render();
       $('documents-run').textContent = `Lauf-ID: ${id}`; status('Private Dokumentprüfstände werden geladen …');
       try {
         if (!await reload() || batchId !== id || options.exportPreview !== true) return;
@@ -1310,7 +1320,7 @@
       } catch (error) {
         busy = false; controls(); showError(error, '', false, 'close_document_reviews'); return false;
       }
-      busy = false; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
+      busy = false; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
       directResultsSupported = false;
       if ($('document-export-dialog').open) $('document-export-dialog').close();
       clearText(); renderReceipts(); render(); return true;

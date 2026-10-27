@@ -385,6 +385,30 @@ test('configure saves selected root, confirms initial binding, then replays unde
   assert.ok(f.effects.indexOf('save') < f.effects.indexOf('prepare'));
   assert.ok(f.effects.lastIndexOf('recheck') < f.effects.indexOf('replay'));
 });
+for (const observed of ['saved', 'replaced', 'unavailable', 'read-failed'])
+test(`configure after a failed native preparation reports only a verified saved binding: ${observed}`, async () => {
+  const f = resumeFixture({ prepare: async () => { throw Object.assign(Error('AI_EXPORT_CONFLICT'), { code: 'AI_EXPORT_CONFLICT' }); } });
+  const selected = path.join(base, `selected-${observed}`);
+  let reads = 0;
+  f.deps.readConfiguredResultRootStatus = () => {
+    if (++reads === 1) return { status: 'available', root: selected };
+    if (observed === 'read-failed') throw Error('read failed');
+    return observed === 'saved' ? { status: 'available', root: selected }
+      : observed === 'replaced' ? { status: 'available', root: path.join(base, 'another-result-root') }
+        : { status: 'unavailable', root: '' };
+  };
+  f.deps.replayPendingResultExports = () => { f.effects.push('replay'); return {}; };
+  if (observed === 'saved') {
+    assert.deepEqual(await f.service.configureResults({ path: selected }), {
+      ok: false, configuration_changed: true, result_folder: selected,
+      preparation_pending: true, local_ui_only: true, external_disclosure: false
+    });
+  } else await assert.rejects(f.service.configureResults({ path: selected }));
+  assert.ok(f.effects.indexOf('save') < f.effects.indexOf('prepare'));
+  assert.equal(reads, 2);
+  assert.equal(f.effects.includes('replay'), false);
+  assert.equal(f.service.interactionActive, false);
+});
 function recoveryHistoryFixture({ live = false, stopped = false, markdown = false, completed = false, failure } = {}) {
   const token = crypto.randomBytes(32).toString('hex'), exportId = `re_${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
   const state = { schema: 'datasecure-batch/7', product_channel: 'standalone', token, profile: 'general',

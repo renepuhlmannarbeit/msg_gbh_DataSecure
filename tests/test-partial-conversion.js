@@ -280,6 +280,42 @@ async function main() {
     await assert.rejects(run([page('native',{getOperatorList:async()=>({fnArray:[1]})})],{...options,scanOcr:false}),{code:'PDF_OCR_SCOPE_REQUIRED'});
     await assert.rejects(run([page('native',{getOperatorList:async()=>{throw new Error('broken');}})],null),{code:'PDF_EXTRACTION_FAILED'});
   });
+  await check('PDF unknown coded resource failures never become image or passive-object omissions',async()=> {
+    const resource = code => Object.assign(new Error('synthetic resource failure'),{code});
+    await assert.rejects(run([page('valid native text',{getOperatorList:async()=>{throw resource('ENOMEM');}})]),
+      {code:'PDF_EXTRACTION_FAILED'});
+    await assert.rejects(run([page('valid native text')],options,
+      {document:{getMetadata:async()=>{throw resource('EACCES');}}}),{code:'PDF_EXTRACTION_FAILED'});
+  });
+  await check('actual OCR recognition keeps unknown coded resource failure hard through PDF page handling',async()=> {
+    const start = source.indexOf('async function recognize('), end = source.indexOf('\nfunction hasRasterContrast(',start);
+    assert.ok(start > 0 && end > start);
+    let recognitionCalls = 0;
+    const actualRecognize = vm.runInNewContext(`(${source.slice(start,end)})`,{
+      conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
+      errors,fail,MAX_MARKDOWN_CHARS:8_000_000
+    });
+    await assert.rejects(run([page('native text',{getOperatorList:async()=>({fnArray:[1]}),
+      render:()=>({promise:Promise.resolve()})})],options,{context:{recognize:actualRecognize,
+      canvasApi:()=>({createCanvas:()=>({width:400,height:300,toBuffer:()=>Buffer.from('synthetic raster'),getContext:()=>({})})}),
+      createOcr:async()=>({terminate:async()=>{},setParameters:async()=>{},
+        recognize:async()=>{recognitionCalls++;throw Object.assign(new Error('resource unavailable'),{code:'ENOMEM'});}})
+    }}),{code:'PDF_EXTRACTION_FAILED'});
+    assert.equal(recognitionCalls,1);
+  });
+  await check('actual raster decoder does not relabel unknown coded resource failure as damaged image',async()=> {
+    const start = source.indexOf('async function imageMarkdown('), end = source.indexOf('\nfunction imageOmission(',start);
+    assert.ok(start > 0 && end > start);
+    const actualImageMarkdown = vm.runInNewContext(`(${source.slice(start,end)})`,{
+      MAX_IMAGE_BYTES:32_000_000,errors,fail,
+      conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
+      canvasApi:()=>({createCanvas:()=>({}),ImageData:class {},loadImage:async()=>{
+        throw Object.assign(new Error('resource unavailable'),{code:'ENOMEM'});
+      }})
+    });
+    await assert.rejects(actualImageMarkdown(Buffer.from([0xff,0xd8,0xff,0x00]),'jpeg','content-v1',options),
+      {code:'ENOMEM'});
+  });
   await check('PDF OCR failure keeps native text without inventing contact verification',async()=> {
     const output = await run([page('Kontakt nativ',{getOperatorList:async()=>({fnArray:[1]}),render:()=>({promise:Promise.resolve()})})]);
     assert.match(output.result.markdown,/Kontakt nativ/u); assert.ok(output.result.coverage.reason_codes.includes('IMAGE_OCR_FAILED'));

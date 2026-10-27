@@ -1531,8 +1531,22 @@ class StandaloneApplicationService {
       }
       if (!this.nativeInitialOutputRequired) this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected, { nativeIdentity: options.nativeIdentity, nativeExport });
-      const recheck = this.nativeInitialOutputRequired ? await this.prepareInitialOutputForMutation(options.signal) : null;
-      recheck?.();
+      try {
+        const recheck = this.nativeInitialOutputRequired ? await this.prepareInitialOutputForMutation(options.signal) : null;
+        recheck?.();
+      } catch (error) {
+        // The setting is already durable before native preparation can read
+        // its hash. A failed preparation cannot roll it back: another writer
+        // may have changed it. Report only a freshly verified saved binding,
+        // without implying that output is ready or replaying any work.
+        let current = null;
+        try { current = this.resultRootStatus(); } catch { /* Uncertain state remains a refusal. */ }
+        if (current?.status === 'available' && current.root === selected) {
+          return { ok: false, configuration_changed: true, result_folder: selected,
+            preparation_pending: true, local_ui_only: true, external_disclosure: false };
+        }
+        throw error;
+      }
       let replay = null;
       try { replay = this.deps.replayPendingResultExports?.() || null; }
       catch { replay = { pending: true }; }
