@@ -88,6 +88,39 @@ bleibt als fehlender Vorzustand dokumentiert. Der Smoke belegt keine native
 Desktopbedienung und keinen vollständigen Writer-Stillstand. Beide Macs und
 eine neue Version sind nicht gebaut oder veröffentlicht.
 
+**Finding 015, 27.10.:** Der LF-getrennte macOS-Mehrfachdateidialog konnte
+einen einzelnen gewählten POSIX-Pfad mit Zeilenumbruch als zwei andere
+existierende Dateien deuten (synthetischer Vorher-Gegenfall). Der Dialog
+liefert nun die echte Auswahlzahl; synchrone und asynchrone Leser verweigern
+eine abweichende Pfadzahl vor dem Intake. Gezielte Quelltests sind grün;
+vollständige Regression, aktueller Paketnachweis und echte Finder-Bedienung
+sind davon getrennte Gates. Linux-Zenity/KDialog bleiben für eingebettete
+Zeilenumbrüche noch mehrdeutig. Keine allgemeine POSIX-Freigabe und keine
+Änderung der veröffentlichten RC177-Downloads.
+
+**Finding 016, 27.10.:** Eine beschädigte UTF-16LE-`desktop.ini` mit einem
+überzähligen Byte wurde bei der Standalone-Ordneraufnahme fälschlich als
+OS-Metadatei übersprungen. Eng korrigiert: ungerade UTF-16LE-Nutzdaten
+werden nicht als Metadaten anerkannt; die Quelle erscheint als nicht
+unterstützte Datei. Der Gegenfall war vorher rot, danach 32/32 mit gültiger
+UTF-16LE-Kontrolle sowie synchronem/asynchronem Intake grün. Frisches
+unabhängiges Gegenlesen fand außerdem im UTF-16BE-Zweig eine Kopie vor der
+Paritätsprüfung mit frühem Rücksprung ohne Pufferleerung; die Prüfung steht
+jetzt vor der Kopie und diese wird auch bei Fehlern geleert. BE-Kontrollen
+bestanden gezielt; kein belegter Datenabfluss.
+Die vertiefte Prüfung ergab danach auch einen ungepaarten UTF-16-Surrogatwert,
+den beide BOM-Zweige zuvor als Metadaten akzeptierten. Ein neuer roter
+Gegenfall wurde eng korrigiert; gültige astrale Zeichen bleiben zulässig,
+gezielter Test erneut 32/32 PASS. Das zuvor grüne 328er-Headless-Gate liegt
+vor dieser Ergänzung und ersetzt keinen neuen Gesamtnachweis.
+Der neue unveränderte Headlesslauf bestand danach 328/328, Exit0.
+Windows-Native-Build und ein neues unveröffentlichtes Standalone-Engineering-
+ZIP bestanden Struktur- und paketierte Smoke-Gates; ein getrenntes Cowork-
+Engineering-ZIP aus denselben korrigierten gemeinsamen Modulen bestand die
+Paketverifikation. Exakte Hashes und Grenzen stehen im RC177-Reviewplan.
+Native Mac-/Windows-Desktopabnahme, R0–R9 und der erste ungeklärte
+Paket-Stagingfehler bleiben offen. Kein neuer RC177-Release oder Main-Merge.
+
 Offen bleiben die vollständigen Einzelurteile des JS-/Rust-/Native-/Script-
 Registers, die 1168 produktiven `catch`-Kandidaten, Fachvergleiche,
 performancegebundene Refactorings, native Paket-/Zielhostgates und die

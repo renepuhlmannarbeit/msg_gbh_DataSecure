@@ -1,5 +1,17 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+**Unveröffentlichter Review-Branch, 27.10.2026:** Das vollständige
+Einzelmethoden-/Architekturreview ist weiterhin in Durchführung, siehe
+`docs/acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md`. Zwei eng
+belegte Quellbefunde zum macOS-Mehrfachdateipicker und zur Erkennung
+beschädigter UTF-16-Ordner-Metadaten wurden auf
+`codex/standalone-export-usability` getrennt committed. Der neue 328er-
+Headlesslauf sowie ein neues Windows-Engineering-ZIP mit paketiertem Smoke
+bestanden; ein getrenntes Cowork-Engineering-ZIP bestand seine
+Paketverifikation. Die umfassenden Registerurteile, Mac-/Desktop-Gates und
+ein ungeklärter älterer Stagingfehler bleiben offen. Der veröffentlichte
+RC177-Tag und `main` wurden dadurch nicht geändert.
+
 **Abschluss 26.10.2026:** RC177 ist als Test-Pre-Release mit Windows x64 und
 macOS ARM64/Intel aus Appcommit `fc39f820bd6e3c9528ffad911eada5aee20c56cb`
 und Produktfingerprint `1df160c305aa7b2740e6261075ce7fa5a09ade3f3ee75f48debe65db3c82b5a4`

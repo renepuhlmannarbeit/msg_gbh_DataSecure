@@ -263,6 +263,89 @@ ist nicht kausal erklärt; native Paket-/Windows-/Mac-Zielhostgates und
 Original↔Markdown-Fachvergleiche am neuen Branchstand sind nicht abgeschlossen.
 Der veröffentlichte RC177-Tag und seine Downloads bleiben unverändert.
 
+**Finding 015 · macOS-Mehrfachauswahl (27.10., unveröffentlicht):** Ein
+Quellmodell mit genau einem gewählten POSIX-Pfad, dessen Verzeichnisname einen
+Zeilenumbruch enthält, ließ die bisherige LF-Serialisierung als zwei andere,
+ebenfalls vorhandene Dateien erscheinen. Der gültige Vorher-Gegenfall war rot.
+Der macOS-Dialog gibt nun vor der Pfadliste die Zahl der tatsächlich gewählten
+Dateien aus; synchrone und asynchrone Leser verweigern jede abweichende Zahl,
+bevor ein Pfad geprüft oder verarbeitet wird. Gezielte Tests für beide Leser
+und der unveränderte Gegenfall sind grün. Einzelheiten und Originalausgaben:
+`dist/rc177-current-code-review-v2-20261027/FINDING-015-POSIX-PICKER-BOUNDARY.md`.
+Das ist ein Quell-/Runnernachweis, **kein** nativer Finder-PASS. Linux-Zenity
+und KDialog liefern weiter LF-getrennte Mehrfachausgaben ohne vertrauenswürdige
+Anzahl; diese Ambiguität bleibt dort offen. Vor einem neuen Paket müssen
+Gesamt- und Paketevidenzen zum neuen Quellstand erneut erzeugt werden.
+
+**Finding 016 · Ordner-Metadaten (27.10., unveröffentlicht):** Ein einzelnes
+überzähliges Byte nach einem sonst gültigen UTF-16LE-`desktop.ini`-Inhalt
+wurde von Node beim Dekodieren übergangen. Der Ordner-Intake klassifizierte
+die beschädigte Datei deshalb fälschlich als ignorierebare OS-Metadatei,
+obwohl der Vertrag eine namentliche Meldung als nicht unterstützt verlangt.
+Ein neuer Test war davor rot; eine gerade UTF-16LE-Kontrolle und die
+synchrone/asynchrone Fehlermeldung sind nach enger Längenprüfung 32/32 grün.
+Ein unabhängiges Codegegenlesen fand zusätzlich, dass der UTF-16BE-Zweig bei
+ungerader Länge eine Kopie vor der Ablehnung anlegte und sie nicht leerte.
+Die Parität wird nun vor der Kopie geprüft; deren Nutzungsweg leert den
+Puffer auch bei Dekodierfehlern. Gültige und ungerade BE-Kontrollen sind im
+gleichen gezielten Test grün. Dies ist Speicherhygiene, kein belegter
+Datenabfluss; native Plattformausführung bleibt offen.
+Die nachfolgende Methodenprüfung fand zusätzlich einen ungepaarten
+UTF-16-Surrogatwert in `IconResource`, den beide BOM-Zweige zuvor als
+OS-Metadatei akzeptierten. Der neue Gegenfall war rot; die enge Unicode-
+Prüfung weist ihn zurück und lässt ein gültiges astrales Zeichen in LE/BE
+weiter zu. Der gezielte Test ist wieder 32/32 grün. Das vor dieser
+Ergänzung abgeschlossene Headless-Gate war 328/328, Exit 0, Log-SHA-256
+`cbb254c266c5af8c013494dc33fa38fcf08bd133a989919577cf97a9e0f2438b`;
+es bindet die neue Surrogat-Korrektur ausdrücklich nicht. Ein weiterer
+frischer Gesamt- und Paketnachweis folgt.
+
+**Abgeschlossener Quell-/Paketcheckpoint 27.10. nach Finding 016:**
+Beide Fixes sind getrennt committed: `66647390` (Mac-Mehrfachauswahl) und
+`04ed1e85ba6f181b595cdae7f230fdd0f4a0ebd7` (UTF-16-Metadaten).
+Die vier Produkt-/Testdateien blieben während des neuen vollständigen Laufs
+bytegleich. `tests/run-product-suite.js headless` bestand 328/328 mit
+Exit 0, Original-Log 884044 Bytes/SHA-256
+`d991014e57ea59ee66ee072acde8a100b19610b8133aff6a6d8cf19becef6df8`.
+`test-companion-ipc.js` 33/33 und `test-source-folder.js` 32/32 bestanden
+gezielt; `npm run test:docs` und `git diff --check` ebenfalls. Die vorigen
+unvollständigen bzw. roten Läufe bleiben separat erhalten.
+
+Der native Windows-Release-Build bestand mit gepinntem Node22.23.2.
+Create-only Engineering-Archiv
+`dist/engineering-rc177-review-picker-metadata-20261027/DataSecure-Standalone-3.2.0-rc177-windows-x64.zip`
+hat 113534040 Bytes/SHA-256
+`9ac34a85f0a4134091c6b9235aa4f7c0be973e3573a822a22f681be886557198`.
+Strukturverifikation und tatsächlich paketierter Sidecar-/OCR-/Ergebnis-Smoke
+bestanden, jeweils Exit 0. Der Smoke bewahrte seine Extraktion mit
+`writer_quiescence=UNCONFIRMED` und `deletion=NOT_ATTEMPTED`.
+Beide korrigierten Module im ZIP sind bytegleich zu den feststehenden
+Quellhashes; das Paketmanifest trägt Produktfingerprint
+`fd1e2c7e5f770fcece696a761e61e1b1f39d0f0c7de0da23877ebcda3ea0a8bd`.
+Es enthält keinen separaten Git-Commitwert; eine Commit-Bindung wird dafür
+nicht erfunden.
+
+Weil der neutrale Dateipicker auch im Cowork-Plugin verwendet wird, wurde
+zusätzlich ein getrenntes unveröffentlichtes Windows-Engineering-Plugin-ZIP
+create-only gebaut. Es bindet den Commit `04ed1e85…`, enthält beide Module
+bytegleich und bestand die Paketverifikation samt 150 Vertragsfällen.
+SHA-256 des Archivs:
+`c62f89ba2c5477770fe95ab428781187626d4550bc5d45bd7ef8ddc3cbcffb86`.
+Plugin und Marketplace bestanden mit installierter Claude-CLI `--strict`.
+Ein erster eigener Zusatzabgleich verwendete fälschlich nur ZIP-Pfade mit
+Wurzelordner und war rot; der korrigierte create-only Beleg bestätigt die
+direkten `server/`-Pfade. Das ist kein Cowork-Zielhosttest und kein neues
+Standalones Paket für macOS. Veröffentlichtes RC177, `main` und Nutzerläufe
+blieben unverändert. R0–R9, Mac-/Desktop-Gates und der ungeklärte erste
+Stagingfehler bleiben offen.
+`dist/rc177-current-code-review-v2-20261027/FINDING-016-MALFORMED-FOLDER-METADATA.md`
+enthält Loghashes und Grenzen. Die zuvor gestartete Gesamtregression wurde
+wegen dieses neuen Fixes kontrolliert beendet; ihr unvollständiges Log ist
+kein PASS. Ein zweiter Zwischenlauf wurde nach dem unabhängigen BE-Befund
+ebenso vor Quelländerung kontrolliert beendet. Für den nun geänderten Stand
+folgt ein frischer Gesamt- und
+Paketnachweis.
+
 **Nutzerpriorität 26.10.:** Das vollständige Review richtet sich zuerst auf
 die eigenständige Standalone-App für Windows und macOS, einschließlich
 Frontend, Tauri/Rust, Sidecar, lokalem Core, Konvertern und Dateien. Der
