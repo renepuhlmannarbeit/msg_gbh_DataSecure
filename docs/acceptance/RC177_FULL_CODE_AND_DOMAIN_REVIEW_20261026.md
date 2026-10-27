@@ -37,6 +37,11 @@ Originallog hat SHA-256
 `af1cf6cef79ad5555896f45577dbf21c8f9a5c0e7e3794325e29c387a919361e`.
 Die Einzelmethodenprüfung dieses Schnitts steht in
 `dist/rc177-standalone-adapter-review-4186fcb0-20261027/ADAPTER-METHOD-REVIEW.md`.
+Das create-only AST-Arbeitsregister v9 unter
+`dist/rc177-current-code-review-v9-20261027` bindet den Codecommit
+`4186fcb0`: 1722 Gitdateien, 44028 JavaScript-Prüfobjekte, null
+Parserfehler und null gegenüber dem gebundenen Code veränderte Dateien.
+Es ist eine neue Bestandsaufnahme, kein manuelles Urteil über alle Symbole.
 Der Smoke bewahrt sein eigenes Tempverzeichnis; `writer_quiescence` ist
 `UNCONFIRMED`, Löschung `NOT_ATTEMPTED`. Native GUI-/Zielhostabnahmen sind
 damit nicht belegt.

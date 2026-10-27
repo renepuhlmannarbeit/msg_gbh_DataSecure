@@ -8,6 +8,9 @@ Quellfingerprint `9d1c54a7185dd1144472d02f346954be0fb9e5d8cd47ec1aa7ca6105fd29ce
 ZIP-SHA-256 `d6406771b9e6177326e1672935eba70e38473fe371cc6f9e1fbbc6fd6a354829`.
 Gezielte Projektions-, Policy- und Isolationsfälle sowie 328/328 Headlessdateien,
 Rust-Releasebuild, Paketverifikation und paketierter Sidecar-Smoke bestanden.
+Das neue AST-Arbeitsregister v9 bindet den Codecommit mit 1722 Gitdateien,
+44028 JavaScript-Prüfobjekten und null Parserfehlern; die manuelle
+Gesamtprüfung bleibt offen.
 Die drei Adapter enthalten keine Cowork-Zweige, das Archiv keine
 `companion/`-Dateien und keinen Cowork-Paketstore. Andere gemeinsame
 Produktkanalzweige und zwei historische Cowork-Buildinputs bleiben als

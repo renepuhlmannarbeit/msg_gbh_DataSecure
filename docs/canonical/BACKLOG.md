@@ -10,6 +10,9 @@ Engineering-ZIP mit paketiertem Sidecar-Smoke sind grün. Die drei Adapter
 im ZIP enthalten keine Cowork-Zweige; `companion/` und Cowork-Paketstore
 fehlen. Der genaue Beleg steht im
 [Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+Das neue AST-Arbeitsregister v9 bindet `4186fcb0` mit 44028
+JavaScript-Prüfobjekten ohne Parserfehler; es ist noch keine vollständige
+Einzelmethodenfreigabe.
 **Weiter offen:** übrige gemeinsame Produktkanalzweige und die historische
 Cowork-Quellbindung der Buildinputs risikobasiert prüfen, vollständiges
 Einzelmethodenreview R0–R9 fortführen, frische Mac-Zielhost- und
