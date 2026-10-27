@@ -2048,9 +2048,19 @@ async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> 
 #[tauri::command]
 async fn cancel_admission(state: State<'_, DesktopState>) -> Result<Value, String> {
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
-    let result = blocking_rpc(state.inner().capture_connection(), "cancel_admission").await;
-    state.admission_present.store(false, Ordering::Release);
+    let result = blocking_rpc(state.inner().capture_connection(), "cancel_admission").await
+        .and_then(|value| if value.get("ok").and_then(Value::as_bool) == Some(true) { Ok(value) }
+            else { Err("STANDALONE_IPC_FAILED".to_string()) });
+    apply_cancel_admission_result(&state.admission_present, &result);
     result
+}
+
+fn apply_cancel_admission_result(admitted: &AtomicBool, result: &Result<Value, String>) {
+    // A transport error may occur before dispatch, or after the sidecar has
+    // changed state. Only its confirmed success releases this native gate.
+    if result.as_ref().is_ok_and(|value| value.get("ok").and_then(Value::as_bool) == Some(true)) {
+        admitted.store(false, Ordering::Release);
+    }
 }
 #[tauri::command(rename_all = "camelCase")]
 async fn remove_admitted_source(
@@ -3102,6 +3112,16 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cancel_admission_keeps_native_gate_on_unconfirmed_sidecar_result() {
+        let admitted = AtomicBool::new(true);
+        for response in [Err("STANDALONE_IPC_BUSY".to_string()), Ok(json!({ "ok": false }))] {
+            apply_cancel_admission_result(&admitted, &response);
+            assert!(admitted.load(Ordering::Acquire));
+        }
+        apply_cancel_admission_result(&admitted, &Ok(json!({ "ok": true })));
+        assert!(!admitted.load(Ordering::Acquire));
+    }
 
     #[test]
     fn sidecar_stderr_is_reduced_to_fixed_codes_without_private_text() {
