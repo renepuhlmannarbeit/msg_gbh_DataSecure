@@ -294,7 +294,7 @@ for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) test(`$
   } finally { item.cleanup(); }
 });
 
-for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) test(`${method}: the real live or unreadable global lease prevents orphan cleanup`, () => {
+for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) test(`${method}: live contention skips but a malformed global lease refuses orphan cleanup`, () => {
   const item = orphanFixture();
   try {
     const ownerToken = 'b'.repeat(64);
@@ -303,7 +303,7 @@ for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) test(`$
     assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
     item.locks.releaseActiveLock(ownerToken);
     fs.writeFileSync(item.locks.activeLockPath(), '{');
-    assert.strictEqual(item.recovery[method]().skipped_active, true);
+    assert.throws(() => item.recovery[method](), error => error.code === 'BATCH_ACTIVE_LOCK_RECORD_INVALID');
     assert.strictEqual(fs.readFileSync(item.locks.activeLockPath(), 'utf8'), '{');
     assert.ok(fs.existsSync(item.copy) && fs.existsSync(item.target));
     item.assertExternalFiles();
