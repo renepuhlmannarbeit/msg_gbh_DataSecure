@@ -9,6 +9,64 @@ Der spätere Branch-Commit `e95f033f637b57d164d7f49b4a74547224153c45`
 enthält nur Abschlussdokumentation. Die menschlichen Windows- und Mac-Desktoptests
 bleiben Nutzeraufgabe. Es ist keine neue Veröffentlichung beauftragt.
 
+## Aktueller Review-Schnitt 27.10.2026, nach 12:00 UTC
+
+Der unveröffentlichte Branch steht für diesen Schnitt auf
+`d2a054c236caf1d4467032fe2a539590a06a7a22`; RC177-Tag, `main` und
+veröffentlichte Pakete sind unverändert. Drei eng begrenzte, getrennte
+Ressourcenkorrekturen wurden nach roten Gegenfällen aufgenommen: begrenzte
+Canvas-Kontrastkacheln (`a9958dad`), Freigabe und Wischen des dekodierten
+Bildpuffers auch bei nativen Transferfehlern (`e6b73ab2`) sowie Prüfung der
+vollständigen BMP-Pixeldaten **vor** einer großen RGBA-Allokation (`d2a054c2`).
+Die letzte BMP-Probe simuliert einen 54-Byte-Header für 30 Millionen Pixel und
+fängt die Allokation ab; vor dem Fix war sie rot, danach grün. Die Kontrastprobe
+belegt eine Obergrenze pro Canvas-Leseaufruf, keine gemessene RSS- oder
+Laufzeitverbesserung. Der Ressourcenschnitt beweist keine Vollständigkeit für
+beliebige Dokumente.
+Der abgegrenzte Methoden- und Fehlerpfadbefund liegt unter
+`dist/rc177-current-code-review-v2-20261027/RASTER-RESOURCE-REVIEW.md`.
+
+Der vollständige unveränderte Headlessplan auf `d2a054c2` bestand mit
+328/328 Dateien, Exit 0; Log
+`dist/rc177-current-code-review-v2-20261027/headless-d2a054c2-20261027.log`,
+SHA-256 `26b6b6f62e964cba5f3ed014a72c7797037f2be3aaac3e89dbae6428f84b698c`.
+Die separate Konverterkette bestand mit Exit 0; Log `conversion-d2a054c2-20261027.log`,
+SHA-256 `ce376415769dee0b78900d2e27d480c96b86a104402d7aa7f9a574f20e749f24`.
+Ein neues lokales **Engineering-ZIP** wurde aus demselben Quellstand gebaut:
+`dist/engineering-rc177-review-d2a054c2-20261027/DataSecure-Standalone-3.2.0-rc177-windows-x64.zip`,
+113535651 Byte, SHA-256
+`fa56819f280027ec668c2354a68f311ff6ab2a663cc571fce6b1b2b73b1268bc`.
+Vorbereitung, Rust-Releasebuild, Archivprüfung und paketierter Sidecar-Smoke
+endeten mit Exit 0; das Smoke-Log `package-smoke-d2a054c2-20261027.log`
+hat SHA-256 `59c4bdf0c638cf37f1eebe3ae8374baac50def2dbcc1d246ed4494ae33f71ee4`.
+Der Smoke bewahrt seinen eigenen temporären Laufordner; `writer_quiescence`
+bleibt `UNCONFIRMED`, Löschung `NOT_ATTEMPTED`. Das ist kein nativer
+Fenster-/Desktop-PASS und keine neue Windows- oder Mac-Veröffentlichung.
+
+Das neue create-only AST-Arbeitsregister
+`dist/rc177-current-code-review-v8-20261027` bindet genau `d2a054c2`:
+1719 Gitdateien, 44016 JavaScript-Prüfobjekte, null Parsefehler und null
+abweichende Codeblobs. Die Rust-Quellblobs sind gegenüber v7 unverändert;
+deren bisheriges Inventar bleibt eine Arbeitsliste. Es gibt weiterhin **keinen**
+vollständigen Einzelmethoden-PASS.
+
+**Produktgrenze:** Das tatsächliche Engineering-ZIP enthält 0
+`server/companion/`-Dateien und 0 `gateway/package-store.js`; sein Manifest
+setzt `requires_cowork=false`. Es enthält jedoch die drei Gateway-Dateien
+`local-review-adapter.js`, `product-read-capability.js` und
+`product-terminal-notice.js` mit gesperrten Cowork-Zweigen. Die engere
+Behauptung „keine Cowork-Module paketiert“ ist belegt; „keine
+Cowork-spezifische Codezeile im Archiv“ ist offen. Standalone erhält eigene
+Anwendungsadapter und Paketgrenzen; den neutralen Datenschutz-/Sicherheitskern
+jetzt komplett zu kopieren würde identische Sicherheitskorrekturen an zwei
+Stellen verlangen. Die konkrete Quellbewertung steht in
+`dist/rc177-current-code-review-v2-20261027/STANDALONE-CORE-BOUNDARY-ASSESSMENT.md`.
+Nächster Architekturschnitt: die drei Adapterdateien produktgetrennt binden,
+Importgraph, Policy-/Buildfingerprint, Rückwärtszustände und frische
+Windows-/Mac-Pakete prüfen. Cowork-Altquellen bleiben erhalten; die
+Standalone-App hat Priorität. Weitere Einzelmethoden, echte Dokumentvergleiche,
+Mac-Build-/Zielhost- und Nutzer-Desktoptests bleiben offen.
+
 ## Aktueller Zwischenstand 27.10.2026, 09:10 UTC
 
 Der unveröffentlichte Review-Branch steht für die letzte vollständige

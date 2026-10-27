@@ -1,5 +1,30 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+**Fortsetzung 27.10.2026:** Der neue unveröffentlichte Reviewcommit
+`d2a054c236caf1d4467032fe2a539590a06a7a22` enthält nach begrenzter
+roter Gegenprobe die Vorprüfung großer BMP-Nutzdaten vor der Pixelausgabe;
+die vorigen zwei Commits begrenzen Canvas-Lesekacheln und schließen einen
+Rasterpuffer-Cleanupfehler. Konverterkette, 328/328 Headlessfälle und ein
+frisches, unveröffentlichtes Windows-Engineering-ZIP mit Strukturprüfung und
+paketiertem Sidecar-Smoke bestanden. Das neue AST-Arbeitsregister v8 enthält
+44016 JavaScript-Prüfobjekte, null Parsefehler und null abweichende Codeblobs;
+manuelle Einzelurteile fehlen weiterhin für den Großteil.
+
+**Nächste Standalone-Architekturarbeit:** Die Standalone-Paketprojektion
+schließt `companion/` und Coworks `package-store.js` aus, enthält aber noch
+drei Gateway-Adapter mit gesperrten Cowork-Zweigen. Diese Adapter in eigene
+Produktquellen entflechten und das tatsächliche Archiv, den Importgraphen,
+Fingerprints, alte gespeicherte Zustände sowie Windows-/Mac-Pakete erneut
+prüfen. Den neutralen Datenschutz-/Sicherheitskern nicht pauschal kopieren:
+eine zweite Pflegefassung würde gleiche Schutzkorrekturen divergieren lassen.
+Cowork ist aus Nutzersicht Altbestand; Änderungen daran nur zur Erhaltung
+notwendiger gemeinsamer Verträge, Standalone hat Priorität. R0–R9 umfasst
+danach weiterhin die übrigen Methoden, Parameter, Fehlerpfade und
+Original-↔Markdown-Gegenproben. Mac-Build-/Zielhost- und Nutzer-Desktoptests
+sind auf diesem Reviewcommit offen. RC177-Tag, `main` und veröffentlichte
+Pakete bleiben unverändert. Belege: aktueller
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
 **Aktuelle Fortsetzung 27.10.2026:** Der unveröffentlichte Branchcommit
 `47d4a717a2fff2a597567e1251028eb5abf8d491` hat nach zwei eng korrigierten
 Produktpfaden und einer veralteten Sidecar-Testannahme den vollständigen

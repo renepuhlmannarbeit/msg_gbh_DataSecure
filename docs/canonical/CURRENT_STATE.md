@@ -1,5 +1,26 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+**Unveröffentlichter Review-Schnitt 27.10.2026:** Auf
+`codex/standalone-export-usability` ist `d2a054c236caf1d4467032fe2a539590a06a7a22`
+der neue gebundene Appstand. Drei eng belegte Rasterressourcen-Fixes begrenzen
+den Canvas-Kontrastleseaufruf, geben dekodierte Bildpuffer auch bei einem
+nativen Transferfehler frei und verweigern unvollständige große BMP-Daten vor
+der RGBA-Allokation. Der letzte Gegenfall war erst rot, danach grün. Die
+Konverterkette und der vollständige Headlessplan (328/328, Exit 0) bestanden;
+ein frisches Windows-Engineering-ZIP (SHA-256
+`fa56819f280027ec668c2354a68f311ff6ab2a663cc571fce6b1b2b73b1268bc`)
+bestand Strukturprüfung und paketierten Sidecar-Smoke. Es wurde nicht
+veröffentlicht und nicht nativ am Desktop abgenommen. Das aktuelle
+AST-Arbeitsregister v8 hat 44016 JavaScript-Prüfobjekte ohne Parsefehler,
+aber weiterhin keine vollständige manuelle Einzelmethodenabdeckung.
+Im konkreten ZIP fehlen Cowork-`companion`-Module und `package-store`; drei
+Gateway-Adapterdateien enthalten noch gesperrte Cowork-Zweige. Die strenge
+Quellentflechtung ist offen. Der neutrale Datenschutzkern wurde nicht
+dupliziert. Mac-Pakete und Zielhost-/Nutzer-Desktoptests sind auf diesem
+Reviewcommit nicht neu geprüft. Der veröffentlichte RC177-Tag und `main`
+bleiben unverändert. Exakte Logs, Hashes und Grenzen stehen im
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
 **Review-Zwischenstand 27.10.2026:** Der unveröffentlichte Standalone-Branch
 `codex/standalone-export-usability` hat auf Commit `47d4a717a2fff2a597567e1251028eb5abf8d491`
 einen vollständigen Headlesslauf mit 328/328 Testdateien und Exit 0 bestanden.

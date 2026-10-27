@@ -95,6 +95,15 @@ Entflechtung jeder Codezeile. Noch kein neu
 gebautes Windows-/Mac-Paket und keine Freigabe für alte angefangene Zustände;
 siehe [Reviewstand](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
 
+**Review-Ergänzung 27.10.2026:** Das lokale, unveröffentlichte Windows-
+Engineering-ZIP auf `d2a054c2` wurde inzwischen tatsächlich gebaut und
+paketiert geprüft. Es hat null `server/companion/`-Dateien und keinen
+`gateway/package-store.js`, enthält aber drei geteilte Gateway-Adapter mit
+gesperrten Cowork-Zweigen. Die vollständige Quellentflechtung dieser Adapter
+ist eine offene Architekturarbeit; ein zweiter vollständiger Privacy-Core
+wurde nicht geschaffen. Der konkrete Nachweis ersetzt keine Mac-Paket- oder
+Desktopabnahme.
+
 **Verbindliches Zielbild:** Beide Produkte verwenden denselben neutralen
 DataSecure-Core: sichere Aufnahme, versiegelte Arbeitskopie, Format- und
 Coverage-Gates, Parser/Konverter, Journal/Fortsetzung, Mapping, Export und
