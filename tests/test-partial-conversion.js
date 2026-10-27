@@ -181,6 +181,16 @@ async function main() {
       async(result,index)=>{ contract.validateMarkdownExtractionForOptions(result,contentOptions); frames.push({result,index}); }),frames }; }
     finally { assert.equal(destroyed,1); }
   }
+  await check('PDF destroys its parser task after OCR termination fails and keeps the primary extraction error', async () => {
+    let terminations = 0;
+    await assert.rejects(run([page('')], options, { context: { renderPdfOcrLayer: async () => {}, createOcr: async () => ({
+      setParameters: async () => {}, terminate: async () => {
+        terminations++;
+        throw Object.assign(new Error('synthetic OCR teardown failure'), { code: 'OCR_TEARDOWN_INJECTED' });
+      }
+    }) } }), { code: 'CONVERSION_OCR_TEXT_EMPTY' });
+    assert.equal(terminations, 1);
+  });
   await check('actual PDF VM binds optional tags without changing untagged fallback or masking missing API methods',async()=> {
     let lookups=0;
     const marked=(id,str,x)=>[{type:'beginMarkedContentProps',id:`p3R_mc${id}`},

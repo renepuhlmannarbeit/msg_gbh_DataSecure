@@ -478,6 +478,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
     useSystemFonts: false, enableXfa: false, verbosity: 0, cMapUrl: resource('cmaps'), cMapPacked: true,
     standardFontDataUrl: resource('standard_fonts'), iccUrl: resource('iccs'), wasmUrl: resource('wasm') });
   let ocr;
+  let extractionFailed = false;
   try {
     const document = await conversionTimings.measureAsync('native_extract', () => task.promise);
     if (await document.getPermissions() !== null) fail('SOURCE_ENCRYPTED_UNSUPPORTED');
@@ -804,12 +805,17 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
       ...(contacts.length ? { ocr_contacts: contacts } : {}),
       coverage: { status: 'incomplete', reason_codes: [...reasons].sort() } });
   } catch (cause) {
+    extractionFailed = true;
     if (cause?.name === 'PasswordException') fail('SOURCE_ENCRYPTED_UNSUPPORTED');
     if (errors.has(cause?.code)) throw cause;
     fail('PDF_EXTRACTION_FAILED');
   } finally {
-    if (ocr) await ocr.terminate();
-    await task.destroy(); // Outer supervisor owns a bounded exit even during teardown.
+    let cleanupError;
+    try { if (ocr) await ocr.terminate(); }
+    catch (error) { cleanupError = error; }
+    try { await task.destroy(); } // Outer supervisor owns a bounded exit even during teardown.
+    catch (error) { cleanupError ||= error; }
+    if (!extractionFailed && cleanupError) throw cleanupError;
   }
 }
 
