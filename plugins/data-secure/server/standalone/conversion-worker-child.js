@@ -695,10 +695,21 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
             // Use the existing SINGLE_BLOCK reading, without altering pixels,
             // removing native/search text or inventing column semantics. Exact
             // geometry/text dedup still runs only after independent recognition.
-            await ocr.setParameters({ tessedit_pageseg_mode: markdownOutput === 'content-v1' ? pdfOcrLayoutMode({ hasRawNativeText,
-              hasPaintedImage: Boolean(hasPaintedImage), hasNonTextGraphicPaint: Boolean(hasNonTextGraphicPaint) }) : '6' });
+            try { await ocr.setParameters({ tessedit_pageseg_mode: markdownOutput === 'content-v1' ? pdfOcrLayoutMode({ hasRawNativeText,
+              hasPaintedImage: Boolean(hasPaintedImage), hasNonTextGraphicPaint: Boolean(hasNonTextGraphicPaint) }) : '6' }); }
+            catch (cause) { if (errors.has(cause?.code) && !imageOmission(cause)) throw cause; fail('CONVERSION_POLICY_FAILED'); }
+            let recognitionFailed = false, recognitionError;
             try { recognized = await recognize(canvas, ocr, regions, true); }
-            finally { await ocr.setParameters({ tessedit_pageseg_mode: '6' }); }
+            catch (cause) { recognitionFailed = true; recognitionError = cause; }
+            try { await ocr.setParameters({ tessedit_pageseg_mode: '6' }); }
+            catch (cause) {
+              // A failed reset leaves this document's OCR session uncertain. It
+              // must not turn a hard recognition failure into an optional page.
+              if (recognitionFailed && errors.has(recognitionError?.code) && !imageOmission(recognitionError)) throw recognitionError;
+              if (errors.has(cause?.code) && !imageOmission(cause)) throw cause;
+              fail('CONVERSION_POLICY_FAILED');
+            }
+            if (recognitionFailed) throw recognitionError;
           } else recognized = await recognize(canvas, ocr, regions, false);
           omittedSymbols ||= recognized.omitted;
           // New contracts require visible geometric/exact duplication evidence.

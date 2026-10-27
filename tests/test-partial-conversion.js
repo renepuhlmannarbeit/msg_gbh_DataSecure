@@ -285,6 +285,22 @@ async function main() {
     assert.match(output.result.markdown,/Kontakt nativ/u); assert.ok(output.result.coverage.reason_codes.includes('IMAGE_OCR_FAILED'));
     assert.equal(output.result.ocr_contacts,undefined);
   });
+  await check('PDF OCR parameter reset cannot replace a hard recognition failure with partial success', async () => {
+    let calls = 0;
+    await assert.rejects(run([page('Kontakt nativ',{getOperatorList:async()=>({fnArray:[1]}),render:()=>({promise:Promise.resolve()})})],
+      options, { context: { createOcr: async () => ({ terminate: async () => {}, setParameters: async () => {
+        if (++calls === 2) throw new Error('synthetic reset failure');
+      } }), recognize: async () => fail('CONVERSION_POLICY_FAILED') } }), { code: 'CONVERSION_POLICY_FAILED' });
+    assert.equal(calls, 2);
+  });
+  await check('PDF OCR parameter reset failure remains hard after an otherwise optional OCR omission', async () => {
+    let calls = 0;
+    await assert.rejects(run([page('Kontakt nativ',{getOperatorList:async()=>({fnArray:[1]}),render:()=>({promise:Promise.resolve()})})],
+      options, { context: { createOcr: async () => ({ terminate: async () => {}, setParameters: async () => {
+        if (++calls === 2) throw new Error('synthetic reset failure');
+      } }), recognize: async () => fail('CONVERSION_OCR_FAILED') } }), { code: 'CONVERSION_POLICY_FAILED' });
+    assert.equal(calls, 2);
+  });
   await check('PDF page header cannot discard earlier validated pages at the unchanged text limit',async()=> {
     const output = await run([page('a'.repeat(7_999_980)),page('abc')],off);
     assert.equal(output.result.markdown,output.frames[0].result.markdown);
