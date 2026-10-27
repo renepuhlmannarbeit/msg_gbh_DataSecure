@@ -34,6 +34,20 @@ test('Standalone UTF-16 BOM inputs produce the same literal TXT/Markdown/CSV as 
   }
 });
 
+test('the final text decoder retains C0 and DEL refusal for every declared text encoding', () => {
+  for (const control of [0, 1, 8, 11, 12, 14, 31, 127]) for (const encoding of ['utf8', 'le', 'be']) {
+    const text = `ÄÖÜß 😀\tA${String.fromCharCode(control)}B\r\nEnde`;
+    const body = Buffer.from(text, encoding === 'utf8' ? 'utf8' : 'utf16le');
+    if (encoding === 'be') body.swap16();
+    const bytes = encoding === 'utf8' ? body : Buffer.concat([Buffer.from(encoding === 'le' ? [255, 254] : [254, 255]), body]);
+    const original = Buffer.from(bytes);
+    for (const extension of ['.txt', '.md', '.csv']) {
+      assert.throws(() => extractMarkdownBuffer(bytes, extension), error => error.code === 'TEXT_CONTROL_INVALID');
+      assert.deepStrictEqual(bytes, original);
+    }
+  }
+});
+
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';

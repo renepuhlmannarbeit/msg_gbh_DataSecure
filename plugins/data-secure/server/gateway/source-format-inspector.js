@@ -5,7 +5,7 @@ const path = require('path');
 const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
 const { validateOpcControls, OpcValidationError } = require('./opc-source-validator');
 const { cfbHasProtectedPackage } = require('./cfb-protection');
-const { sourceTextEncoding } = require('../core/source-text-codec');
+const { sourceTextEncoding, hasUnsupportedTextControls } = require('../core/source-text-codec');
 
 const PILOT_TYPES = new Set(['txt', 'md', 'csv', 'docx']);
 const EXTENSION_TYPES = Object.freeze({
@@ -61,7 +61,7 @@ function validateTextFromFd(fd, size, readSync, encoding = 'utf-8') {
         throw new SourceFormatError('SOURCE_READ_FAILED');
       }
       const decoded = decoder.decode(buffer.subarray(0, read), { stream: position + read < size });
-      if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u.test(decoded)) {
+      if (hasUnsupportedTextControls(decoded)) {
         return false;
       }
       position += read;
@@ -217,6 +217,7 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
           inspectZipDirectoryFromFd(fd, size, { requireExactEnd: true }, safeRead);
           return false;
         } catch (error) {
+          if (error instanceof SourceFormatError) throw error;
           return error instanceof ZipError && error.code === 'ZIP_ENCRYPTED_ENTRY';
         }
       })();

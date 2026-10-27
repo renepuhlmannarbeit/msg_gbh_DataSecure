@@ -75,6 +75,42 @@ test('Standalone admits explicit UTF-16 BOMs for text formats without widening C
   }
 });
 
+test('text preflight rejects the same C0 and DEL controls across real streamed encodings', () => {
+  for (const control of [0, 1, 8, 11, 12, 14, 31, 127]) for (const encoding of ['utf8', 'le', 'be']) {
+    const text = `ÄÖÜß 😀\tA${String.fromCharCode(control)}B\r\nEnde`;
+    const body = Buffer.from(text, encoding === 'utf8' ? 'utf8' : 'utf16le');
+    if (encoding === 'be') body.swap16();
+    const bytes = encoding === 'utf8' ? body : Buffer.concat([Buffer.from(encoding === 'le' ? [255, 254] : [254, 255]), body]);
+    for (const extension of ['txt', 'md', 'csv']) for (const processingMode of ['markdown-only', 'markdown-and-anonymize']) {
+      for (const short of [false, true]) {
+        const name = `control-${control}-${encoding}-${extension}-${processingMode}-${short}.${extension}`;
+        const result = inspectBuffer(name, bytes, { productChannel: 'standalone', processingMode,
+          ...(short ? { readSync(fd, buffer, offset, length, position) {
+            return fs.readSync(fd, buffer, offset, Math.min(length, 1), position);
+          } } : {}) });
+        assert.strictEqual(result.code, 'SOURCE_TEXT_INVALID', name);
+        assert.deepStrictEqual(fs.readFileSync(path.join(base, name)), bytes);
+      }
+    }
+  }
+});
+
+test('a text-extension ZIP preserves its actual post-magic read failure', () => {
+  const bytes = zipStore([['neutral.txt', 'synthetic content']]);
+  for (const extension of ['txt', 'md', 'csv']) {
+    let reads = 0;
+    assert.throws(() => inspectBuffer(`zip-read.${extension}`, bytes, {
+      readSync(...args) {
+        if (++reads > 1) throw Object.assign(new Error('synthetic EIO'), { code: 'EIO' });
+        return fs.readSync(...args);
+      }
+    }), error => error instanceof SourceFormatError && error.code === 'SOURCE_READ_FAILED');
+    assert.strictEqual(reads, 2);
+    assert.deepStrictEqual(fs.readFileSync(path.join(base, `zip-read.${extension}`)), bytes);
+    assert.strictEqual(inspectBuffer(`zip-type.${extension}`, bytes).code, 'SOURCE_TYPE_MISMATCH');
+  }
+});
+
 test('wide formats require an explicit product/mode and Cowork admits only XLSX/PPTX privacy extraction', () => {
   const samples = [['sheet.xlsx', officeZip('xlsx')], ['slides.pptx', officeZip('pptx')],
     ['source.pdf', Buffer.from('%PDF-1.7\n')],
