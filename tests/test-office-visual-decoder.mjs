@@ -777,4 +777,51 @@ await test('actual worker raster slice consumes validated PNG fallback and compo
   }finally{for(const c of created){c.width=1;c.height=1;}if(prior===undefined)delete process.env.DISABLE_SYSTEM_FONTS_LOAD;else process.env.DISABLE_SYSTEM_FONTS_LOAD=prior;}
 });
 
+await test('real Canvas contrast scan preserves edge pixels while bounding each native read', () => {
+  const hasContrast = vm.runInNewContext(`(function(){${workerSlice('function hasRasterContrast(', 'async function imageMarkdown(')};return hasRasterContrast;})()`);
+  const canvas = api.createCanvas(2050, 1025);
+  try {
+    const actual = canvas.getContext('2d');
+    actual.fillStyle = 'white'; actual.fillRect(0, 0, canvas.width, canvas.height);
+    const reads = [];
+    const observed = { width: canvas.width, height: canvas.height, getContext(kind) {
+      assert.equal(kind, '2d');
+      return { getImageData(...args) {
+        const pixels = actual.getImageData(...args);
+        reads.push(pixels.data);
+        return pixels;
+      } };
+    } };
+    assert.equal(hasContrast(observed), false, 'uniform raster remains an OCR skip');
+    assert.ok(reads.length > 1, 'large input must not allocate one whole-image RGBA copy');
+    assert.ok(reads.every(data => data.byteLength <= 4 * 1_048_576 && data.every(value => value === 0)),
+      'every bounded native read is wiped after comparison');
+    reads.length = 0;
+    actual.fillStyle = 'black'; actual.fillRect(canvas.width - 1, canvas.height - 1, 1, 1);
+    assert.equal(hasContrast(observed), true, 'last pixel across a tile boundary is still seen');
+    assert.ok(reads.every(data => data.byteLength <= 4 * 1_048_576 && data.every(value => value === 0)));
+  } finally { canvas.width = 1; canvas.height = 1; }
+});
+
+await test('contrast scan covers a one-pixel-high raster beyond the first tile', () => {
+  const hasContrast = vm.runInNewContext(`(function(){${workerSlice('function hasRasterContrast(', 'async function imageMarkdown(')};return hasRasterContrast;})()`);
+  const width = 1_048_577;
+  const reads = [];
+  const canvas = { width, height: 1, getContext(kind) {
+    assert.equal(kind, '2d');
+    return { getImageData(x, y, readWidth, readHeight) {
+      assert.equal(y, 0); assert.equal(readHeight, 1);
+      assert.ok(readWidth <= 1_048_576);
+      const data = new Uint8ClampedArray(readWidth * 4);
+      data.fill(255);
+      if (x + readWidth === width) data[(readWidth - 1) * 4] = 0;
+      reads.push(data);
+      return { data };
+    } };
+  } };
+  assert.equal(hasContrast(canvas), true);
+  assert.equal(reads.length, 2);
+  assert.ok(reads.every(data => data.every(value => value === 0)));
+});
+
 console.log(`passed ${passed} bounded Office visual decoder groups; no desktop/native-target UAT claim`);

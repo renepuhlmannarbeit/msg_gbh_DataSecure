@@ -148,17 +148,29 @@ async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = fals
 }
 
 function hasRasterContrast(canvas) {
-  const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-  try {
-    // Exact pixel fact, not a confidence/size heuristic: a uniformly colored
-    // raster has no contrasting visible glyphs. In particular, avoid OCR
-    // inventing a character from a one-pixel decorative image.
-    const rgba = pixels.data;
-    for (let index = 4; index < rgba.length; index += 4) {
-      if (rgba[index] !== rgba[0] || rgba[index + 1] !== rgba[1] || rgba[index + 2] !== rgba[2] || rgba[index + 3] !== rgba[3]) return true;
+  const context = canvas.getContext('2d');
+  const maximumPixelsPerRead = 1_048_576;
+  const tileWidth = Math.min(canvas.width, maximumPixelsPerRead);
+  const tileHeight = Math.min(canvas.height, Math.floor(maximumPixelsPerRead / tileWidth));
+  let first;
+  // Exact pixel fact, not a confidence/size heuristic: a uniformly colored
+  // raster has no contrasting visible glyphs. Bounded reads also cover very
+  // thin images without materializing a second whole-image RGBA buffer.
+  for (let y = 0; y < canvas.height; y += tileHeight) {
+    for (let x = 0; x < canvas.width; x += tileWidth) {
+      const pixels = context.getImageData(x, y, Math.min(tileWidth, canvas.width - x),
+        Math.min(tileHeight, canvas.height - y));
+      try {
+        const rgba = pixels.data;
+        first ||= [rgba[0], rgba[1], rgba[2], rgba[3]];
+        for (let index = 0; index < rgba.length; index += 4) {
+          if (rgba[index] !== first[0] || rgba[index + 1] !== first[1] ||
+              rgba[index + 2] !== first[2] || rgba[index + 3] !== first[3]) return true;
+        }
+      } finally { pixels.data.fill(0); }
     }
-    return false;
-  } finally { pixels.data.fill(0); }
+  }
+  return false;
 }
 
 async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedOfficeSession) {
