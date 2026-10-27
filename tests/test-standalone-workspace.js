@@ -568,7 +568,7 @@ testAsync('a missing configured destination stays visible and blocks Start until
   const h = harness({ invoke(command, args, fallback) {
     if (command === 'get_ui_context') return { ...fallback(), result_folder: '', result_folder_status: 'unavailable' };
     if (command === 'select_folder') { const result = fallback(); result.ui_context.result_folder_status = 'unavailable'; return result; }
-    if (command === 'configure_results') { unavailable = false; return { local_ui_only: true, external_disclosure: false, result_folder: 'New local results' }; }
+    if (command === 'configure_results') { unavailable = false; return { ok: true, local_ui_only: true, external_disclosure: false, result_folder: 'New local results' }; }
     return fallback();
   } });
   await tick(); await tick(); await h.act('select-folder'); h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
@@ -3478,6 +3478,19 @@ testAsync('result folder conflict: ' + (cancelled ? 'cancelled' : 'successful') 
   if (!cancelled) assert.match(h.el('feedback').textContent, /Ergebnisordner gespeichert/u);
   assert.doesNotMatch(h.el('feedback').textContent, /AI_EXPORT_CONFLICT|konnte nicht sicher vorbereitet werden/u);
   assert.equal(h.calls.some(call => ['start_admitted_batch', 'export_approved_documents'].includes(call.command)), false);
+});
+
+testAsync('configure result without confirmed local response never reports a saved destination', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') return { ok: false, local_ui_only: false, result_folder: 'Unconfirmed folder' };
+    return fallback();
+  } });
+  await tick();
+  const previous = h.el('destination').textContent;
+  await h.act('configure-results');
+  assert.equal(h.el('destination').textContent, previous);
+  assert.doesNotMatch(h.el('feedback').textContent, /Ergebnisordner gespeichert/u);
+  assert.match(h.el('feedback').textContent, /STANDALONE_IPC_FAILED/u);
 });
 
 /* Historical bootstrap resolution regressions: actual native snapshot/event DTOs. */

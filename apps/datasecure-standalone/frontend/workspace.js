@@ -2020,8 +2020,13 @@
     finally { refreshing = false; schedule(['processing', 'preparing'].includes(current?.state) ? 1200 : 5000); }
   }
   async function configure() { const result = await perform('configure_results'); if (!result || result.cancelled) return;
-    if (result.local_ui_only && result.external_disclosure === false) { resultFolderUnavailable = false; $('retry-destination').hidden = true; $('retry-results').hidden = true; $('destination').textContent = result.result_folder; $('settings-destination').textContent = result.result_folder; updateStart(); }
-    feedback('Ergebnisordner gespeichert. Vorhandene Läufe bleiben an ihrem bisherigen Speicherort.'); }
+    if (result.ok !== true || result.local_ui_only !== true || result.external_disclosure !== false ||
+        typeof result.result_folder !== 'string' || !result.result_folder) {
+      showError(new Error('STANDALONE_IPC_FAILED'), 'configure_results'); return;
+    }
+    resultFolderUnavailable = false; $('retry-destination').hidden = true; $('retry-results').hidden = true;
+    $('destination').textContent = result.result_folder; $('settings-destination').textContent = result.result_folder;
+    updateStart(); feedback('Ergebnisordner gespeichert. Vorhandene Läufe bleiben an ihrem bisherigen Speicherort.'); }
   async function recheckDestination() {
     const context = await perform('get_ui_context'); if (!context) return;
     try { applyContext(context); updateStart(); feedback(resultFolderUnavailable
