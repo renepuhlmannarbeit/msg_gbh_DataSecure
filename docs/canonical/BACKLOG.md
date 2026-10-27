@@ -1,5 +1,20 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+**Fortsetzung 27.10.2026, Adaptergrenze:** Der unveröffentlichte
+Branchcommit `4186fcb0` bindet drei Standalone-Adapter aus eigenen Appquellen
+unter unveränderten Gateway-Modulnamen. Ihre alten Cowork-Dateien sind für
+die Standalone-Projektion nicht mehr erforderlich. 12/12 gezielte
+Projektions-/Fingerprintfälle, 4/4 Produktisolation, 9/9 Policybindung,
+328/328 Headlessdateien, Windows-Rust-Releasebuild und ein neues geprüftes
+Engineering-ZIP mit paketiertem Sidecar-Smoke sind grün. Die drei Adapter
+im ZIP enthalten keine Cowork-Zweige; `companion/` und Cowork-Paketstore
+fehlen. Der genaue Beleg steht im
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+**Weiter offen:** übrige gemeinsame Produktkanalzweige und die historische
+Cowork-Quellbindung der Buildinputs risikobasiert prüfen, vollständiges
+Einzelmethodenreview R0–R9 fortführen, frische Mac-Zielhost- und
+Nutzer-Desktopprüfungen einholen. Kein neues Release und keine Mainintegration.
+
 **Fortsetzung 27.10.2026:** Der neue unveröffentlichte Reviewcommit
 `d2a054c236caf1d4467032fe2a539590a06a7a22` enthält nach begrenzter
 roter Gegenprobe die Vorprüfung großer BMP-Nutzdaten vor der Pixelausgabe;

@@ -9,6 +9,45 @@ Der spätere Branch-Commit `e95f033f637b57d164d7f49b4a74547224153c45`
 enthält nur Abschlussdokumentation. Die menschlichen Windows- und Mac-Desktoptests
 bleiben Nutzeraufgabe. Es ist keine neue Veröffentlichung beauftragt.
 
+## Adaptertrennung 27.10.2026
+
+Der unveröffentlichte Branchcommit `4186fcb07ff0640616bd8815a99261d49b0b6113`
+hat drei Standalone-Gatewayadapter in eigene Appquellen ausgelagert. Die
+Paketprojektion bindet sie unter den bestehenden logischen Modulnamen, ohne
+die drei alten Cowork-Adapterdateien zu benötigen. Der neutrale Datenschutzkern
+ist weiterhin eine einzige geprüfte Quellimplementierung. Das neue lokale
+Engineering-ZIP ist **keine** aktualisierte RC177-Veröffentlichung.
+
+Die gebundene Windows-Buildidentität lautet
+`9d1c54a7185dd1144472d02f346954be0fb9e5d8cd47ec1aa7ca6105fd29cec1`.
+Das neue ZIP unter
+`dist/engineering-rc177-adapter-review-4186fcb0-20261027/DataSecure-Standalone-3.2.0-rc177-windows-x64.zip`
+hat 113535039 Byte und SHA-256
+`d6406771b9e6177326e1672935eba70e38473fe371cc6f9e1fbbc6fd6a354829`.
+Es enthält weder `server/companion/` noch den Cowork-Paketstore; alle drei
+projizierten Adapterbytes enthalten keine Cowork-/Companion-Verweise. Das
+Beleginventar liegt unter
+`dist/rc177-standalone-adapter-review-4186fcb0-20261027/PACKAGE-ADAPTERS.json`.
+
+Gezielte Projektions- und Fingerprintfälle 12/12, echte parallele
+Produktisolation 4/4, gemeinsame Policybindung 9/9, Dokumentationsprüfung,
+Windows-Rust-Releasebuild, Paketstruktur und paketierter Sidecar-Smoke
+bestanden. Der vollständige Headlessplan bestand 328/328, Exit 0; sein
+Originallog hat SHA-256
+`af1cf6cef79ad5555896f45577dbf21c8f9a5c0e7e3794325e29c387a919361e`.
+Die Einzelmethodenprüfung dieses Schnitts steht in
+`dist/rc177-standalone-adapter-review-4186fcb0-20261027/ADAPTER-METHOD-REVIEW.md`.
+Der Smoke bewahrt sein eigenes Tempverzeichnis; `writer_quiescence` ist
+`UNCONFIRMED`, Löschung `NOT_ATTEMPTED`. Native GUI-/Zielhostabnahmen sind
+damit nicht belegt.
+
+**Restgrenze:** Weitere gemeinsame Module enthalten Cowork-Texte und teils
+Produktkanalzweige; die historische Buildinputliste nennt noch zwei
+Cowork-Quelldateien. Vollständige Quellunabhängigkeit ist daher nicht
+behauptet. Die übrigen Einzelmethoden aus R0–R9, neue Mac-Pakete und
+Windows-/Mac-Desktoptests bleiben offen. `main`, der veröffentlichte
+RC177-Tag und dessen Assets sind unverändert.
+
 ## Aktueller Review-Schnitt 27.10.2026, nach 12:00 UTC
 
 Der unveröffentlichte Branch steht für diesen Schnitt auf

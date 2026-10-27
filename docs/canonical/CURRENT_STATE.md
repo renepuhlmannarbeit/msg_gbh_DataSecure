@@ -1,5 +1,21 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+**Unveröffentlichter Adapter-Reviewschnitt 27.10.2026:** Commit
+`4186fcb07ff0640616bd8815a99261d49b0b6113` trennt drei zuvor
+gemischte Gatewayadapter als Standalone-Appquellen. Das neue, unveröffentlichte
+Windows-Engineering-ZIP bindet sie unter den bisherigen Modulnamen an
+Quellfingerprint `9d1c54a7185dd1144472d02f346954be0fb9e5d8cd47ec1aa7ca6105fd29cec1`;
+ZIP-SHA-256 `d6406771b9e6177326e1672935eba70e38473fe371cc6f9e1fbbc6fd6a354829`.
+Gezielte Projektions-, Policy- und Isolationsfälle sowie 328/328 Headlessdateien,
+Rust-Releasebuild, Paketverifikation und paketierter Sidecar-Smoke bestanden.
+Die drei Adapter enthalten keine Cowork-Zweige, das Archiv keine
+`companion/`-Dateien und keinen Cowork-Paketstore. Andere gemeinsame
+Produktkanalzweige und zwei historische Cowork-Buildinputs bleiben als
+Quellkopplung offen. Das vollständige Einzelmethodenreview, neue Mac-Pakete
+und native Desktoptests sind nicht abgeschlossen. Veröffentlichter RC177,
+`main` und dessen Assets sind unverändert; Details stehen im
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
 **Unveröffentlichter Review-Schnitt 27.10.2026:** Auf
 `codex/standalone-export-usability` ist `d2a054c236caf1d4467032fe2a539590a06a7a22`
 der neue gebundene Appstand. Drei eng belegte Rasterressourcen-Fixes begrenzen
