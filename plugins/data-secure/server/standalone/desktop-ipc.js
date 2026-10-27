@@ -282,7 +282,7 @@ function encodeFrame(message) {
 
 class FrameDecoder {
   constructor({ validate = validatePrivateMessage } = {}) {
-    this.buffer = Buffer.alloc(4);
+    this.buffer = Buffer.alloc(0);
     this.used = 0;
     this.frameSize = 0;
     this.validate = validate;
@@ -294,6 +294,7 @@ class FrameDecoder {
     let offset = 0;
     while (offset < chunk.length) {
       if (this.used < 4) {
+        if (this.buffer.length === 0) this.buffer = Buffer.alloc(4);
         const take = Math.min(4 - this.used, chunk.length - offset);
         chunk.copy(this.buffer, this.used, offset, offset + take);
         this.used += take;
@@ -316,7 +317,7 @@ class FrameDecoder {
         if (this.used < this.frameSize) continue;
       }
       const payload = this.buffer.subarray(4, this.frameSize);
-      this.buffer = Buffer.alloc(4);
+      this.buffer = Buffer.alloc(0);
       this.used = 0;
       this.frameSize = 0;
       let message;
