@@ -249,6 +249,56 @@ await test('static CSS never suppresses existing XML, reference, path or active-
     assert.throws(() => inspectOfficeVisual(svg(body), 'svg'), error => error.code?.startsWith('VISUAL_'));
   }
 });
+await test('SVG class tokens preserve non-ASCII whitespace and do not acquire another class paint', async () => {
+  const source = name => svg(`<style>.a{display:none}</style><text x="2" y="25" font-size="20" class="${name}">ÄÖÜß Anna Berger</text>`);
+  const [reference] = await collect(source('other'), 'svg'), [hidden] = await collect(source('a'), 'svg');
+  const referencePixels = rgba(reference), hiddenPixels = rgba(hidden);
+  assert.ok(referencePixels.some((value, index) => index % 4 !== 3 && value < 200));
+  assert.ok(hiddenPixels.every((value, index) => index % 4 === 3 || value === 255));
+  for (const character of ['&#160;', '&#x202f;', '&#x3000;', '&#xfeff;']) for (const name of [`a${character}`, `${character}a`]) {
+    const input = source(name), before = sha(input), [unit] = await collect(input, 'svg');
+    assert.deepEqual(rgba(unit), referencePixels, `non-ASCII whitespace is part of the real class: ${name}`);
+    assert.equal(sha(input), before);
+  }
+  const [ascii] = await collect(source('&#x9;a&#xD;&#xA;'), 'svg');
+  assert.deepEqual(rgba(ascii), hiddenPixels, 'actual XML whitespace still separates class tokens');
+});
+await test('non-CSS whitespace in selectors or paint declarations is not silently reinterpreted', async () => {
+  let calls = 0; const fake = { ...api, loadImage() { calls++; throw Error('UNSUPPORTED_CSS_MUST_NOT_RENDER'); } };
+  for (const body of ['<style>.a&#160;{fill:red}</style>', '<style>&#160;.a{fill:red}</style>',
+    '<style>.a{&#160;fill:red}</style>', '<style>.a{display:none&#160;}</style>',
+    '<style>.a{fill:red}</style><rect class="a" style="&#160;display:none"/>',
+    '<g opacity="&#160;inherit"><rect/></g>', '<g style="opacity:&#160;inherit"><rect/></g>',
+    '<rect style="&#160;display:none"/>', '<rect fill="&#160;none"/>',
+    '<style>.a{fill:blacK}</style>', '<g fill="blue"><rect fill="blacK"/></g>'])
+    await assert.rejects(collect(svg(body), 'svg', { canvasApi: fake }), { code: 'VISUAL_FEATURE_UNSUPPORTED' });
+  assert.equal(calls, 0);
+  const [ordinary] = await collect(svg('<style> \n .a\t{\n fill : blue ;\n}\n </style><rect class="a" width="20" height="20"/>'), 'svg');
+  assert.deepEqual(at(ordinary, 10, 10), [0, 0, 255, 255]);
+  const [unicodeFont] = await collect(svg('<text x="2" y="25" style="font-family:\'Private&#160;Font\';font-size:20px">ÄÖÜß</text>'), 'svg');
+  assert.ok(rgba(unicodeFont).some((value, index) => index % 4 !== 3 && value < 200), 'Unicode font labels still use only the bundled font');
+});
+await test('selector budgets stop actual parser iteration before excess materialization', () => {
+  const filename = path.join(root, 'plugins/data-secure/server/standalone/office-svg-style.js');
+  const source = fs.readFileSync(filename, 'utf8'), marker = 'function selector(source) {';
+  assert.equal(source.split(marker).length - 1, 1);
+  // Actual production code, with observational counters only. No alternate
+  // selector grammar, budget, error or algorithm is substituted by this model.
+  const model = { module: { exports: {} }, Buffer, selectorVisits: 0, partVisits: 0 };
+  vm.runInNewContext(`const original = String.prototype.matchAll;
+    String.prototype.matchAll = function(expression) { const iterator = Reflect.apply(original, this, [expression]);
+      return { next() { const result = iterator.next(); if (!result.done) globalThis.partVisits++; return result; },
+        [Symbol.iterator]() { return this; } }; };\n${source.replace(marker, marker + ' globalThis.selectorVisits++;')}`, model);
+  const { readXml } = require('../plugins/data-secure/server/xml-reader');
+  const options = { readXml, decode: value => value, error: () => Error('unexpected synthetic XML error') };
+  assert.throws(() => model.module.exports.flattenStaticSvgStyles(svg(`<style>${'.a'.repeat(10000)}{fill:red}</style>`).toString(), options),
+    { code: 'VISUAL_PROCESSING_LIMIT' });
+  assert.equal(model.partVisits, 17, 'only the first over-budget part is visited');
+  model.selectorVisits = 0; model.partVisits = 0;
+  assert.throws(() => model.module.exports.flattenStaticSvgStyles(svg(`<style>${Array.from({ length: 4097 }, (_, i) => `.a${i}`).join(',')}{fill:red}</style>`).toString(), options),
+    { code: 'VISUAL_PROCESSING_LIMIT' });
+  assert.equal(model.selectorVisits, 4096, 'do not construct the excess selector object');
+});
 await test('static stylesheet byte, rule, selector, declaration and evaluation budgets are explicit refusals', () => {
   const refused = body => assert.throws(() => inspectOfficeVisual(svg(body), 'svg'), { code: 'VISUAL_PROCESSING_LIMIT' });
   refused(`<style>/*${' '.repeat(262144)}*/</style>`);

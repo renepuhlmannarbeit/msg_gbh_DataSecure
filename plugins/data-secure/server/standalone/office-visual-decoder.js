@@ -12,7 +12,7 @@ const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../images/common');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { decodeTiffLzw, decodeTiffFax } = require('./tiff-scan-codecs');
 const { createEmfPlusPreflight } = require('./emfplus-preflight');
-const { flattenStaticSvgStyles, assertStaticSvgPaintSemantics } = require('./office-svg-style');
+const { flattenStaticSvgStyles, assertStaticSvgPaintSemantics, needsSvgPaintLexemeCheck } = require('./office-svg-style');
 const MAX_UNITS = RESOURCE_LIMITS.MAX_VISUAL_ASSETS;
 const MAX_RECORDS = 10000, MAX_SVG_BYTES = 4 * 1024 * 1024;
 const SVG = 'http://www.w3.org/2000/svg';
@@ -102,7 +102,7 @@ function inspectSvg(bytes) {
   const elements = new Set(['svg', 'g', 'defs', 'style', 'title', 'desc', 'path', 'rect', 'circle', 'ellipse', 'line',
     'polyline', 'polygon', 'text', 'tspan', 'textPath', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'mask', 'pattern', 'use']);
   const ids = new Set(), refs = [], edges = new Map(), sizes = new Map();
-  let width, height, nodes = 0, hasText = false, hasStylesheet = false, drawingTokens = 0;
+  let width, height, nodes = 0, hasText = false, hasStylesheet = false, inspectPaintLexemes = false, drawingTokens = 0;
   const xmlError = limit => Object.assign(new Error(limit ? 'VISUAL_PROCESSING_LIMIT' : 'VISUAL_CONTENT_DAMAGED'),
     { code: limit ? 'VISUAL_PROCESSING_LIMIT' : 'VISUAL_CONTENT_DAMAGED' });
   const root = readXml(source, { decode: xmlDecode, error: xmlError, start(node) {
@@ -111,6 +111,7 @@ function inspectSvg(bytes) {
     if (!node.parent && node.localName !== 'svg') damaged();
     if (node.localName === 'style') hasStylesheet = true;
     const get = name => node.attributes.get(`{}${name}`);
+    inspectPaintLexemes ||= needsSvgPaintLexemeCheck(node.attributes);
     const id = get('id');
     if (id !== undefined) {
       if (!/^[A-Za-z_][A-Za-z0-9_.:-]{0,127}$/u.test(id) || ids.has(id)) damaged();
@@ -189,7 +190,7 @@ function inspectSvg(bytes) {
   // Canvas call. No stylesheet or source-selected font is newly delegated to
   // the native renderer. SVGs without a sheet retain their existing contract.
   if (hasStylesheet) source = flattenStaticSvgStyles(source, { readXml, decode: xmlDecode, error: xmlError });
-  assertStaticSvgPaintSemantics(source, { readXml, decode: xmlDecode, error: xmlError });
+  assertStaticSvgPaintSemantics(source, { readXml, decode: xmlDecode, error: xmlError, inspectLexemes: inspectPaintLexemes });
   // Actual text nodes are collected by the same strict XML parser, not a tag
   // regex that could confuse XML entities, escaped text and attributes.
   let visibleText = '';

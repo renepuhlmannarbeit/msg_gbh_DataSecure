@@ -16,6 +16,10 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 const unsupported = () => fail('VISUAL_FEATURE_UNSUPPORTED');
 const limit = () => fail('VISUAL_PROCESSING_LIMIT');
 const SPACE = /[ \t\r\n]+/u;
+const cssTrim = value => value.replace(/^[ \t\n\f\r]+|[ \t\n\f\r]+$/gu, '');
+const svgTrim = value => value.replace(/^[ \t\r\n]+|[ \t\r\n]+$/gu, '');
+const asciiLower = value => value.replace(/[A-Z]/gu, character => character.toLowerCase());
+const NON_ASCII = /[^\t\n\f\r\x20-\x7e]/u;
 const IDENT = '[A-Za-z_-][A-Za-z0-9_-]{0,127}';
 const BASIC_COLORS = new Set(['black', 'silver', 'gray', 'white', 'maroon', 'red', 'purple', 'fuchsia',
   'green', 'lime', 'olive', 'yellow', 'navy', 'blue', 'teal', 'aqua', 'transparent', 'currentcolor']);
@@ -23,6 +27,8 @@ const ENUMS = Object.freeze({ 'fill-rule': ['nonzero', 'evenodd'], 'clip-rule': 
   'stroke-linecap': ['butt', 'round', 'square'], 'stroke-linejoin': ['miter', 'round', 'bevel'],
   display: ['inline', 'none'], visibility: ['visible', 'hidden', 'collapse'] });
 const NUMBER = /^[-+]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][-+]?[0-9]+)?$/u;
+const PAINT = new Set(['fill', 'stroke', 'color', 'opacity', 'fill-opacity', 'stroke-opacity', 'stroke-width',
+  'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', ...Object.keys(ENUMS)]);
 function scalar(value, minimum, maximum, suffixes = []) {
   let number = value;
   for (const suffix of suffixes) if (value.endsWith(suffix)) { number = value.slice(0, -suffix.length); break; }
@@ -31,11 +37,11 @@ function scalar(value, minimum, maximum, suffixes = []) {
   return Number.isFinite(n) && n >= minimum && n <= maximum;
 }
 function color(value) {
-  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iu.test(value) || BASIC_COLORS.has(value.toLowerCase())) return true;
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/iu.test(value) || BASIC_COLORS.has(asciiLower(value))) return true;
   const match = /^(rgb|rgba)\(([ \t\r\n0-9.,%+-]+)\)$/iu.exec(value);
   if (!match) return false;
-  const components = match[2].split(',').map(component => component.trim());
-  if (components.length !== (match[1].toLowerCase() === 'rgba' ? 4 : 3)) return false;
+  const components = match[2].split(',').map(cssTrim);
+  if (components.length !== (asciiLower(match[1]) === 'rgba' ? 4 : 3)) return false;
   // The supported legacy comma grammar has either three number channels or
   // three percentage channels; mixed modern color syntax is a separate model.
   const percentages = components.slice(0, 3).map(component => component.endsWith('%'));
@@ -48,10 +54,8 @@ function validValue(property, value) {
   // The fixed renderer supports ordinary inherited paint, but not explicit
   // opacity inheritance (it loses the child opacity before group compositing).
   // initial/unset/revert likewise cannot safely enter this closed subset.
-  const keyword = value.toLowerCase();
-  const supported = ['fill', 'stroke', 'color', 'opacity', 'fill-opacity', 'stroke-opacity', 'stroke-width',
-    'stroke-miterlimit', 'stroke-dasharray', 'stroke-dashoffset', ...Object.keys(ENUMS)];
-  if (!supported.includes(property)) return false;
+  const keyword = asciiLower(value);
+  if (!PAINT.has(property)) return false;
   if (keyword === 'inherit') return property !== 'opacity';
   if (['fill', 'stroke'].includes(property)) return keyword === 'none' || color(value);
   if (property === 'color') return color(value);
@@ -78,21 +82,24 @@ function cssText(value) {
 function declarations(source, budget) {
   const result = new Map();
   for (const entry of source.split(';')) {
-    if (!entry.trim()) continue;
+    if (!cssTrim(entry)) continue;
     if (++budget.declarations > LIMITS.declarations) limit();
-    const match = /^\s*([A-Za-z-]+)\s*:\s*(.*?)\s*$/su.exec(entry);
-    if (!match || !validValue(match[1].toLowerCase(), match[2].toLowerCase())) unsupported();
-    const value = match[2].toLowerCase();
+    const match = /^[ \t\n\f\r]*([A-Za-z-]+)[ \t\n\f\r]*:[ \t\n\f\r]*(.*?)[ \t\n\f\r]*$/su.exec(entry);
+    if (!match || !validValue(asciiLower(match[1]), asciiLower(match[2]))) unsupported();
+    const value = asciiLower(match[2]);
     // The fixed SVG backend uses SVG's canonical currentColor spelling.
-    result.set(match[1].toLowerCase(), value === 'currentcolor' ? 'currentColor' : value); // repeated property: last wins
+    result.set(asciiLower(match[1]), value === 'currentcolor' ? 'currentColor' : value); // repeated property: last wins
   }
   return result;
 }
 function selector(source) {
   const match = new RegExp(`^(\\*|${IDENT})?((?:[.#]${IDENT})*)$`, 'u').exec(source);
   if (!match || !match[0]) unsupported();
-  const parts = [...match[2].matchAll(new RegExp(`([.#])(${IDENT})`, 'gu'))];
-  if (parts.length > LIMITS.selector_parts) limit();
+  const parts = [];
+  for (const part of match[2].matchAll(new RegExp(`([.#])(${IDENT})`, 'gu'))) {
+    if (parts.length === LIMITS.selector_parts) limit();
+    parts.push(part);
+  }
   return { type: match[1] && match[1] !== '*' ? match[1] : null,
     ids: parts.filter(part => part[1] === '#').map(part => part[2]),
     classes: parts.filter(part => part[1] === '.').map(part => part[2]),
@@ -103,13 +110,17 @@ function stylesheet(source, rules, budget) {
   const text = cssText(source);
   let cursor = 0;
   while (cursor < text.length) {
-    while (/[ \t\r\n]/u.test(text[cursor] || '') && cursor < text.length) cursor++;
+    while (/[ \t\n\f\r]/u.test(text[cursor] || '') && cursor < text.length) cursor++;
     if (cursor === text.length) break;
     if (++budget.rules > LIMITS.rules) limit();
     const open = text.indexOf('{', cursor), close = text.indexOf('}', open + 1);
     if (open < 0 || close < 0 || /[{}]/u.test(text.slice(open + 1, close))) unsupported();
-    const selectors = text.slice(cursor, open).split(',').map(value => selector(value.trim()));
-    budget.selectors += selectors.length; if (budget.selectors > LIMITS.selectors) limit();
+    const selectors = [];
+    let start = cursor;
+    for (let index = cursor; index <= open; index++) if (index === open || text[index] === ',') {
+      if (++budget.selectors > LIMITS.selectors) limit();
+      selectors.push(selector(cssTrim(text.slice(start, index)))); start = index + 1;
+    }
     rules.push({ selectors, values: declarations(text.slice(open + 1, close), budget) });
     cursor = close + 1;
   }
@@ -124,7 +135,7 @@ function flattenStaticSvgStyles(source, { readXml, decode, error }) {
     if (node.namespaceURI !== SVG || node.parent?.localName === 'style') unsupported();
     if (node.localName === 'style') {
       for (const [key, value] of node.attributes) {
-        if (!((key === '{}type' && value.toLowerCase() === 'text/css') || (key === '{}media' && value === 'all'))) unsupported();
+        if (!((key === '{}type' && asciiLower(value) === 'text/css') || (key === '{}media' && value === 'all'))) unsupported();
       }
       node.staticCss = ''; styles.push(node);
     }
@@ -145,7 +156,7 @@ function flattenStaticSvgStyles(source, { readXml, decode, error }) {
     if (node?.localName === 'style') continue;
     if (record.kind === 'text') { add(encode(record.value)); continue; }
     if (record.kind === 'end') { add(`</${node.localName}>`); continue; }
-    const winners = new Map(), classes = new Set((node.attributes.get('{}class') || '').trim().split(SPACE));
+    const winners = new Map(), classes = new Set(svgTrim(node.attributes.get('{}class') || '').split(SPACE));
     const id = node.attributes.get('{}id');
     for (const rule of rules) for (const selected of rule.selectors) {
       if (++budget.operations > LIMITS.operations) limit();
@@ -180,13 +191,18 @@ function flattenStaticSvgStyles(source, { readXml, decode, error }) {
 // been materialized. Never replace group opacity with copied child values.
 // These checks also cover equivalent presentation/inline syntax without an
 // embedded sheet; the strict XML/reference preflight has already completed.
-function assertStaticSvgPaintSemantics(source, { readXml, decode, error }) {
+function needsSvgPaintLexemeCheck(attributes) {
+  for (const [key, value] of attributes) if ((key === '{}style' || key.startsWith('{}') && PAINT.has(key.slice(2))) && NON_ASCII.test(value)) return true;
+  return false;
+}
+function assertStaticSvgPaintSemantics(source, { readXml, decode, error, inspectLexemes = false }) {
   // XML character references may spell a CSS property name inside style="".
   // Only skip this bounded pass when neither literal names nor entities occur.
-  if (!/opacity|visibility|&/iu.test(source)) return;
+  if (!/opacity|visibility|&/iu.test(source) && !inspectLexemes) return;
   const nodes = [], ids = new Map();
   const relevant = (property, value) => {
-    const keyword = value.trim().toLowerCase();
+    if (NON_ASCII.test(value)) unsupported();
+    const keyword = asciiLower(cssTrim(value));
     if (['initial', 'unset', 'revert', 'revert-layer'].includes(keyword)) unsupported();
     if (keyword === 'inherit') return keyword;
     if (property === 'visibility') return ['visible', 'hidden', 'collapse'].includes(keyword) ? keyword : undefined;
@@ -199,8 +215,16 @@ function assertStaticSvgPaintSemantics(source, { readXml, decode, error }) {
     const inline = node.attributes.get('{}style') || '';
     let quote = null, depth = 0, start = 0;
     const entry = text => {
-      const match = /^\s*(opacity|visibility)\s*:\s*(.*?)\s*$/isu.exec(text);
-      if (match && match[1].toLowerCase() === property) {
+      const colon = text.indexOf(':');
+      if (colon >= 0) {
+        const name = asciiLower(cssTrim(text.slice(0, colon))), value = text.slice(colon + 1);
+        // Do not delegate Unicode normalization of known paint grammar to a
+        // backend. It must never reinterpret another property or keyword.
+        // Font-family values, classes and actual Unicode text stay untouched.
+        if (NON_ASCII.test(name) || PAINT.has(name) && NON_ASCII.test(value)) unsupported();
+      }
+      const match = /^[ \t\n\f\r]*(opacity|visibility)[ \t\n\f\r]*:[ \t\n\f\r]*(.*?)[ \t\n\f\r]*$/su.exec(asciiLower(text));
+      if (match && match[1] === property) {
         const selected = relevant(property, match[2]);
         if (selected !== undefined) value = selected; // invalid declarations do not win
       }
@@ -219,6 +243,7 @@ function assertStaticSvgPaintSemantics(source, { readXml, decode, error }) {
   };
   readXml(source, { decode, error, start(node) {
     if (nodes.length >= LIMITS.records) limit();
+    for (const [key, value] of node.attributes) if (key.startsWith('{}') && PAINT.has(key.slice(2)) && NON_ASCII.test(value)) unsupported();
     node.paintChildren = [];
     node.paintVisibility = declared(node, 'visibility');
     if (declared(node, 'opacity') === 'inherit') unsupported();
@@ -245,4 +270,4 @@ function assertStaticSvgPaintSemantics(source, { readXml, decode, error }) {
   }
 }
 
-module.exports = Object.freeze({ flattenStaticSvgStyles, assertStaticSvgPaintSemantics, staticSvgStyleLimits: LIMITS });
+module.exports = Object.freeze({ flattenStaticSvgStyles, assertStaticSvgPaintSemantics, needsSvgPaintLexemeCheck, staticSvgStyleLimits: LIMITS });
