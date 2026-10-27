@@ -148,6 +148,21 @@ Initialisierungsbezügen. Die 23 Gatewaymodule im größeren Bereich und die
 große Dokumentprüfungs-Factory sind Wartbarkeits-Prüfspuren; daraus folgt
 ohne Vertrags-/Zustandsreview noch kein sicherer Refactor.
 
+Weitere unabhängige begrenzte Quellgegenreviews am aktuellen Stand fanden
+in der Ergebnisgeneration/-öffnung sowie in den Office-/PDF-Teilresultatpfaden
+keinen neuen bestätigten Sicherheits- oder Inhaltsfehler. Sie schließen
+keinen ganzen Modulbereich ab. Die `listLocked`-/Projektions-`catch`-Pfade
+verlieren teilweise sichere Detailcodes, blockieren aber die Veröffentlichung
+als `unavailable`/`conflict`; eine engere Diagnose ist ein P3-Prüfpunkt und
+braucht negative Fälle ohne private Pfade in der UI. Doppeltes Nachlesen vor
+einer nativen Ergebnisveröffentlichung hat eine Identitätsfunktion und wird
+ohne Lastmessung nicht gecacht. Eine synthetische Quellmessung der echten
+Office-OCR-Platzierung ergab bei den Obergrenzen 1.000 Positionen und 5.000
+Kontakten über vier Prozesse 112,72–120,05 ms. Daraus folgt derzeit kein
+prioritärer Produktfix. Vollbild-RGBA für die Kontrastprüfung und die
+großen Ergebnisgenerationen bleiben Zielhost-RAM-/Zeitmessungen offen.
+Einzelheiten: `dist/rc177-current-code-review-v2-20261027/`.
+
 Auch nach diesen Gates bleiben R0–R9 als Gesamtauftrag offen: Das Inventar
 ist erst Arbeitsliste, nicht Einzelmethodenreview; der erste Stagingfehler
 ist nicht kausal erklärt; native Paket-/Windows-/Mac-Zielhostgates und

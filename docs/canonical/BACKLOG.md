@@ -71,6 +71,16 @@ Diese Zahlen sind eine Pflege-Prüfspur, kein Beweis eines Ladefehlers oder
 einer vollständigen Standalone-Isolation. Die große Dokumentprüfungs-Factory
 und Gateway↔Standalone-Kopplung bleiben für begrenzte, vertragserhaltende
 Refactor-Entscheidungen offen (`ARCHITECTURE-GRAPH-REVIEW.md`).
+Neu gemessene Kostenprüfung: Die echte Office-OCR-Platzierung benötigte in
+einer bildlosen synthetischen Obergrenzenprobe (1.000 Positionen, 5.000
+Kontakte) 112,72–120,05 ms. Deshalb keine ungeprüfte Änderung an
+Kontaktbudget oder Platzierungsreihenfolge. Offen bleiben repräsentative
+PNG-/Peak-RAM-Messung, die bis zu ~120 MB zusätzliche Vollbild-RGBA-Allokation
+in `hasRasterContrast` und die Kosten großer Ergebnisgenerationen.
+Ein unabhängiger Review von Veröffentlichung und Öffnung fand keinen neuen
+bestätigten Bypass; breite `catch`-Zuordnungen in `listLocked` und
+`resultPublicationProjection` sind P3-Diagnosespuren. Vor Änderung sichere
+Fehlercodetaxonomie und negative Pfad-/Privatdaten-Gegenfälle festlegen.
 
 **Priorität nach Nutzerhinweis:** Zuerst alle Standalone-Pfade für Windows und
 beide Macs prüfen. `CLAUDE.md` spricht sowohl über Standalone als auch über
