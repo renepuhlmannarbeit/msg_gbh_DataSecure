@@ -176,6 +176,21 @@ UI-Methodenschnitt manuell dokumentiert; die bestehende Frontend-Suite prüft
 Rundläufe, Astralzeichen, Stale-Werte und unpaarige Surrogate. Eine native
 WebView-Bedienung wurde dafür nicht behauptet.
 
+Als zweiter enger Frontend-Schnitt wurden alle acht eigenen Funktionen in
+`workflow-presentation.js` bei Git-Blob
+`f6270f109f51fbae51917e60fd52afa82b4a23a1` einzeln nach Parametern,
+Zähler-/Zweckgrenzen, Rückgaben, Seiteneffekten und Fehlerpfaden gelesen.
+Die Datei projiziert nur lokale Zustände und besitzt keine Datei-, IPC- oder
+Freigabeautorität. Ihre aktuelle Suite bestand 53/53 mit Node 22.23.2;
+alte und widersprüchliche Ergebnis-/Reviewmetadaten werden nicht in eine
+aktuelle Freigabebehauptung umgewandelt. Die acht **begrenzten**
+`REVIEWED_OK`-Entscheidungen und Vertragsgrenzen stehen in
+`dist/rc177-current-code-review-v2-20261027/WORKFLOW-PRESENTATION-METHOD-REVIEW.md`
+und im Methodenregister. Der aufrufende große `workspace.js`-History-/IPC-
+Kontrollfluss und native WebView-Wirkung erhalten dadurch keinen Gesamt-PASS.
+Die Statusverzweigung ist wartungsintensiv, aber ohne belegte Fehlwirkung
+kein Anlass für einen riskanten Stilrefactor.
+
 Auch nach diesen Gates bleiben R0–R9 als Gesamtauftrag offen: Das Inventar
 ist erst Arbeitsliste, nicht Einzelmethodenreview; der erste Stagingfehler
 ist nicht kausal erklärt; native Paket-/Windows-/Mac-Zielhostgates und
