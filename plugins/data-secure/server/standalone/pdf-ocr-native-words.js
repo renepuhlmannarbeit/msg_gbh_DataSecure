@@ -45,10 +45,12 @@ async function renderPdfNativeWordEvidence({ page, canvas, viewport, annotationM
     if (!colors[binding.run] || !style || style.vertical || !Number.isFinite(style.ascent) || !Number.isFinite(style.descent) ||
       style.ascent < 0.5 || style.ascent > 1.5 || style.descent < -0.5 || style.descent > 0) continue;
     const words = wordCandidates(run);
+    if (!words.length) continue;
+    const itemTokens = new Set(item.str.split(/\s+/u));
     for (const [index, word] of words.entries()) {
       const key = `${binding.run}:${index}`;
       if (used.has(key) || (binding.wordIndex !== null && binding.wordIndex !== index) ||
-        !item.str.split(/\s+/u).includes(word.text)) continue;
+        !itemTokens.has(word.text)) continue;
       used.add(key);
       const box = { text: word.text, x0: word.x0, x1: word.x1,
         y0: word.baseline - word.height * style.ascent, y1: word.baseline - word.height * style.descent };

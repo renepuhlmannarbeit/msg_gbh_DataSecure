@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import vm from 'node:vm';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { derivePdfjsTextPaintModule, PDFJS_TEXT_PAINT_HOOK } from '../scripts/lib/pdfjs-text-paint-hook.mjs';
@@ -374,3 +375,29 @@ const patternRegions = await directWordEvidence('/Pattern cs /Pat scn BT /F1 20 
   onEvent(event) { patternEvents++; assert.equal(event.solidFillColor,null,'pattern paint is never a solid-color proof'); }});
 assert.ok(patternEvents>0); assert.deepEqual(patternRegions,[]);
 console.log('PASS real internal-page-composition color binding, immutable events, pattern refusal and unchanged normal raster');
+
+// Observe actual production tokenization, with modeled paint events only.
+// Real raster/paint authority is exercised above, not claimed by this model.
+{
+  const filename = path.join(root, 'plugins/data-secure/server/standalone/pdf-ocr-native-words.js');
+  const words = Array.from({ length: 100 }, (_, index) => `Word${index}`), targetText = words.join(' ');
+  const model = { module: { exports: {} }, require: createRequire(filename), targetText, tokenizations: 0 };
+  vm.runInNewContext(`const originalSplit = String.prototype.split;
+    String.prototype.split = function(...args) { if (String(this) === targetText) globalThis.tokenizations++;
+      return Reflect.apply(originalSplit, this, args); };\n${fs.readFileSync(filename, 'utf8')}`, model);
+  let observer;
+  const glyphs = [...targetText].map((text, index) => ({ index, text, space: text === ' ', supported: true,
+    x0: index * 8, x1: index * 8 + 8, baseline: 20, height: 12 }));
+  const event = { text: targetText, fontName: 'F', baseline: [0, 20], eligible: true, geometryEligible: true,
+    glyphCount: glyphs.length, glyphs, contentVisible: true, renderMode: 0, fillAlpha: 1, solidFillColor: '#000000' };
+  const item = { str: targetText, fontName: 'F', dir: 'ltr', transform: [12, 0, 0, 12, 0, 20], width: targetText.length * 8 };
+  const page = { render() { observer(event); return { promise: Promise.resolve() }; } };
+  const actual = await model.module.exports.renderPdfNativeWordEvidence({ page, canvas: { getContext() { return {}; } },
+    viewport: { width: 10000, height: 100, convertToViewportPoint(x, y) { return [x, y]; } },
+    annotationMode: 0, textItems: [item], styles: { F: { ascent: 1, descent: 0 } },
+    operators: { fnArray: [1], argsArray: [[]] }, ops: { showText: 1 }, setTextPaintObserver(value) { observer = value; } });
+  assert.deepEqual(Array.from(actual, word => word.text), words);
+  assert.equal(observer, null);
+  assert.ok(model.tokenizations <= 1, 'the identical text item is tokenized at most once per bound run');
+}
+console.log('PASS actual word-helper tokenization observation with modeled paint input; no native timing claim');

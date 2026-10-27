@@ -193,11 +193,13 @@ async function classifyPdfTextVisibility({ page, textItems, viewport, createCanv
     for (const binding of bindings) {
       if (!visibleIndices.has(binding.item)) continue;
       const candidates = wordCandidates(runs[binding.run]);
+      if (!candidates.length) continue;
+      const itemTokens = new Set(textItems[binding.item].str.split(/\s+/u));
       for (const [wordIndex, word] of candidates.entries()) {
         // TextContent may insert a real word boundary for a numeric TJ gap
         // even though the renderer's Unicode glyphs concatenate. Only the
         // actually retained native token can authorize OCR suppression.
-        if (!textItems[binding.item].str.split(/\s+/u).includes(word.text)) continue;
+        if (!itemTokens.has(word.text)) continue;
         const key = `${binding.run}:${wordIndex}`;
         if (processedWords.has(key) || (binding.wordIndex !== null && binding.wordIndex !== wordIndex)) continue;
         processedWords.add(key);
