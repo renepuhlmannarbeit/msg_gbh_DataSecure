@@ -68,14 +68,14 @@ function createRunHistory(deps) {
     // supplies the bound, read-only one-journal reader below.
     return deps.readStates().find(state => state.token === batchId && state.product_channel === 'standalone');
   }
-  function captureExistingExportBindings() {
+  function captureExistingExportBindings({ requireCurrentBindings = false } = {}) {
     // Interactive folder changes preserve original destinations, not journal
     // snapshots. A worker may publish a newer summary while the picker is open.
     // Only the pre-retention bootstrap may capture those journal summaries.
     const recent = typeof deps.recentHistory === 'function' ? deps.recentHistory() : null;
     return captureStandaloneExports(() => deps.readExports(recent ? { batchIds: recent.map(row => row.batch_id),
       legacyExportIds: Object.fromEntries(recent.filter(row => row.legacy_export_id).map(row => [row.batch_id, row.legacy_export_id])) } : {}),
-      { useIndex: recent === null && deps.captureExportIndex === true });
+      { useIndex: recent === null && deps.captureExportIndex === true, requireCurrentBindings });
   }
   function captureDurableHistory() {
     // Retention may retire the source journals during product bootstrap. Keep

@@ -510,8 +510,8 @@ function captureIndexPin(record) {
     sha256: crypto.createHash('sha256').update(record.bytes).digest('hex'),
     dev: String(record.stat.dev), ino: String(record.stat.ino), birthtime: String(record.stat.birthtimeNs) };
 }
-function captureStandaloneExports(readExports, { useIndex = false } = {}) {
-  const before = useIndex ? exportCaptureSnapshot() : null;
+function captureStandaloneExports(readExports, { useIndex = false, requireCurrentBindings = false } = {}) {
+  const before = useIndex && !requireCurrentBindings ? exportCaptureSnapshot() : null;
   let index;
   try {
     if (before) {
@@ -534,6 +534,18 @@ function captureStandaloneExports(readExports, { useIndex = false } = {}) {
     if (record.directory) {
       try { recordStandaloneExport(record.target, { product_channel: 'standalone', complete: record.complete }, record.directory); }
       catch { cacheable = false; }
+    }
+    // Changing the configured root can remove the only way to rediscover an
+    // older result directory. For an interactive change, verify the durable
+    // binding while the old root still resolves that completed export.
+    if (requireCurrentBindings && record.directory && record.complete === true && record.summary?.result_count > 0) {
+      if (!EXPORT_RE.test(record.export_id) || typeof record.run_directory !== 'string' ||
+          typeof record.directory !== 'string' || !path.isAbsolute(record.directory))
+        throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+      const bound = inspectBoundRun(record.export_id, record.run_directory);
+      const comparable = value => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value);
+      if (bound.availability !== 'available' || comparable(bound.path) !== comparable(record.directory))
+        throw failure('STANDALONE_HISTORY_UNAVAILABLE');
     }
     if (cacheable && record.complete === true && record.summary?.result_count > 0) {
       try {

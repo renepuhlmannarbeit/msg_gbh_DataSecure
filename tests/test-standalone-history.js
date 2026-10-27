@@ -190,6 +190,15 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(bindingOnly.captureExistingExportBindings().export_count, 0);
     assert.equal(journalCaptureReads, 0, 'interactive capture never reads stale journal snapshots');
     assert.deepEqual(fs.readFileSync(newerSummaryPath), publishedSummary, 'a newer worker summary survives unchanged');
+    const missingRun = path.join(base, 'missing-old-results', 'DataSecure-Output', 'Lauf-20261027-120000-abcdef12');
+    const uncapturedExport = {
+      target: path.join(base, `re_${'f'.repeat(32)}.json`), export_id: `re_${'f'.repeat(32)}`,
+      product_channel: 'standalone', complete: true, directory: missingRun,
+      run_directory: path.basename(missingRun), summary: { result_count: 1 }
+    };
+    assert.throws(() => historyStore.captureStandaloneExports(() => [uncapturedExport],
+      { requireCurrentBindings: true }), { code: 'STANDALONE_HISTORY_UNAVAILABLE' },
+    'an interactive folder change must not count an uncaptured completed export as preserved');
     historyStore.recordStandaloneState(newer);
     let snapshot = history.history();
     // Startup/history projection must not begin a potentially long visible
@@ -365,6 +374,8 @@ function code(expected) { return (error) => error?.code === expected; }
     const originalRun = exportsApi.visibleExportDirectory(completed.token);
     const completedTwo = completeFixture('e', 3000);
     const secondRun = exportsApi.visibleExportDirectory(completedTwo.token);
+    assert.ok(history.captureExistingExportBindings({ requireCurrentBindings: true }).export_count >= 2,
+      'a valid completed export stays bound before an interactive result-folder change');
     assert.notEqual(originalRun, secondRun);
     assert.equal(history.resolveResults(completed.token).local_path, originalRun);
     assert.equal(history.resolveLedger(completed.token).local_path, path.join(originalRun, 'DataSecure-Zuordnung.csv'));

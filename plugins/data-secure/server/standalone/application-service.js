@@ -1522,9 +1522,13 @@ class StandaloneApplicationService {
         ? await options.prepareNativeExport() : options.nativeExport;
       assertIdle();
       try {
-        if (typeof this.deps.runHistory?.captureExistingExportBindings === 'function') this.deps.runHistory.captureExistingExportBindings();
+        if (typeof this.deps.runHistory?.captureExistingExportBindings === 'function')
+          this.deps.runHistory.captureExistingExportBindings({ requireCurrentBindings: true });
         else this.deps.runHistory?.history(); // Legacy adapter, not production.
-      } catch { /* retain every safely readable prior export binding */ }
+      } catch {
+        throw fixedFailure('STANDALONE_RESULT_BINDING_UNAVAILABLE',
+          'Die bisherigen Ergebniszuordnungen konnten nicht sicher geprüft werden. Der Ergebnisordner wurde nicht geändert.');
+      }
       if (!this.nativeInitialOutputRequired) this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected, { nativeIdentity: options.nativeIdentity, nativeExport });
       const recheck = this.nativeInitialOutputRequired ? await this.prepareInitialOutputForMutation(options.signal) : null;

@@ -1879,5 +1879,20 @@ async function missingLedgerCase() {
     assert.strictEqual(result.configuration_changed, true);
     assert.deepStrictEqual(calls, ['capture', 'save', 'pending']);
   });
+  await testAsync('a failed historical result binding preserves the configured folder and releases the interaction', async () => {
+    const calls = [];
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      runHistory: { captureExistingExportBindings(options) {
+        assert.deepEqual(options, { requireCurrentBindings: true });
+        calls.push('capture'); throw Object.assign(new Error('synthetic private storage refusal'), { code: 'EACCES' });
+      } },
+      saveConfiguredResultRoot() { calls.push('save'); },
+      resultOutputDirectory() { calls.push('mkdir'); }
+    }) });
+    await assert.rejects(service.configureResults({ path: FIXTURE_RESULT_ROOT }),
+      { code: 'STANDALONE_RESULT_BINDING_UNAVAILABLE' });
+    assert.deepEqual(calls, ['capture']);
+    assert.equal(service.interactionActive, false);
+  });
   done();
 })();

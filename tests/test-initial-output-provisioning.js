@@ -319,7 +319,11 @@ test('configure sequence2 retains nativeId and root only after its own successfu
 });
 function resumeFixture(options = {}) {
   const f = serviceFixture(options), token = 'f'.repeat(64); f.service.admittedQueue = null;
-  f.deps.runHistory = { find: () => ({ resumable: true, processing_mode: 'markdown-only' }) };
+  f.deps.runHistory = { find: () => ({ resumable: true, processing_mode: 'markdown-only' }),
+    captureExistingExportBindings(options) {
+      assert.deepEqual(options, { requireCurrentBindings: true });
+      f.effects.push('capture'); return { export_count: 0 };
+    } };
   f.deps.continueStandaloneBatch = batchId => { f.effects.push('continue-mutation'); return { ok: true, batch_token: batchId, complete: false }; };
   f.deps.startLocalBatchExecutor = () => { f.effects.push('resume-worker'); return { ok: true, local_processing_started: true, ipcAcknowledgement: Promise.resolve() }; };
   f.deps.skipStandaloneOcrContactReview = () => f.effects.push('skip-mutation');
@@ -377,6 +381,7 @@ test('configure saves selected root, confirms initial binding, then replays unde
   const f = resumeFixture();
   f.deps.replayPendingResultExports = () => { assert.equal(f.service.interactionActive, true); f.effects.push('replay'); return {}; };
   await f.service.configureResults({ path: path.join(base, 'configured-root') });
+  assert.ok(f.effects.indexOf('capture') < f.effects.indexOf('save'));
   assert.ok(f.effects.indexOf('save') < f.effects.indexOf('prepare'));
   assert.ok(f.effects.lastIndexOf('recheck') < f.effects.indexOf('replay'));
 });

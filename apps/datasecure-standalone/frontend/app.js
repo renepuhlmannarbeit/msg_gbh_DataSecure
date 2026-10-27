@@ -58,6 +58,7 @@ const messages = {
   STANDALONE_IPC_BUSY: 'DataSecure bearbeitet noch einen anderen lokalen Vorgang. Diese Aktion wurde noch nicht an den Core gesendet. Bitte nach dessen Abschluss erneut wählen.',
   STANDALONE_ADMISSION_TIMEOUT: 'Die Aufnahme der Auswahl wurde nach fünf Minuten ohne Bestätigung beendet. Es wurde kein Stapel gestartet. Die vorbereitete Auswahl ist nicht mehr verfügbar; bitte Dateien oder Ordner erneut auswählen. Bei erneutem Fehler die lokalen Zugriffsrechte und „Diagnose öffnen“ prüfen.',
   STANDALONE_RESULT_ROOT_UNSAFE: 'Der Ergebnisordner darf nicht im privaten DataSecure-Bereich liegen.',
+  STANDALONE_RESULT_BINDING_UNAVAILABLE: 'Die bisherigen Ergebniszuordnungen konnten nicht sicher geprüft werden. Der Ergebnisordner blieb unverändert; bitte den lokalen Verlauf und die Diagnose prüfen.',
   STANDALONE_RESULT_OPEN_FAILED: 'Der Ergebnisordner konnte nicht geöffnet werden.',
   STANDALONE_RESULTS_MISSING: 'Es ist noch kein vollständiger Ergebnislauf verfügbar.',
   STANDALONE_LEDGER_MISSING: 'Es ist noch keine lokale Zuordnung vorhanden.',

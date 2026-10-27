@@ -60,7 +60,8 @@ test('closed desktop errors preserve identity and capacity facts and their rende
   assert.equal(new Set(DESKTOP_ERROR_CODES).size, DESKTOP_ERROR_CODES.length);
   assert.ok(Object.isFrozen(DESKTOP_ERROR_CODES));
   for (const code of ['STANDALONE_IDENTITY_MAPPING_MISSING', 'STANDALONE_IDENTITY_MAPPING_INVALID',
-    'STANDALONE_IDENTITY_PUBLICATION_FAILED', 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED']) {
+    'STANDALONE_IDENTITY_PUBLICATION_FAILED', 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED',
+    'STANDALONE_RESULT_BINDING_UNAVAILABLE']) {
     assert.equal(desktopErrorCode(code), code);
     assert.match(frontend, new RegExp(`${code}: '[^']{20,}'`, 'u'));
   }
