@@ -824,4 +824,55 @@ await test('contrast scan covers a one-pixel-high raster beyond the first tile',
   assert.ok(reads.every(data => data.every(value => value === 0)));
 });
 
+await test('failed native image transfer releases its Canvas and decoded pixels', async () => {
+  const imageSource = workerSlice('function dimensions(', 'function checkedModels(') +
+    workerSlice('function hasRasterContrast(', 'function imageOmission(');
+  for (const type of ['png', 'bmp', 'jpeg']) {
+    const rgba = type === 'bmp' ? Buffer.from([21, 42, 63, 255, 10, 20, 30, 255])
+      : new Uint8ClampedArray([21, 42, 63, 255, 10, 20, 30, 255]);
+    const created = [], received = [];
+    const canvasApi = { createCanvas(width, height) {
+      const canvas = { width, height, getContext() {
+        return { fillRect() {}, putImageData() { throw Error('native transfer failed'); },
+          drawImage() { throw Error('native transfer failed'); } };
+      } };
+      created.push(canvas); return canvas;
+    }, ImageData: class {
+      constructor(data) { received.push(data); }
+    }, loadImage: async () => ({ width: 2, height: 1 }) };
+    const operation = vm.runInNewContext(`(function(){${imageSource};return imageMarkdown;})()`, {
+      Buffer, Uint8ClampedArray, MAX_PIXELS, MAX_IMAGE_BYTES,
+      canvasApi: () => canvasApi,
+      conversionTimings: { begin: () => () => {} },
+      decodeRasterPng: async () => ({ width: 2, height: 1, rgba }),
+      decodeBmp: () => ({ width: 2, height: 1, rgba }),
+      fail: code => { throw Object.assign(new Error(code), { code }); }
+    });
+    const bytes = type === 'jpeg' ? Buffer.from([255, 216, 255, 0]) : Buffer.from([1]);
+    try {
+      await assert.rejects(operation(bytes, type), { code: 'CONVERSION_IMAGE_INVALID' });
+      assert.ok(created.length === 1 && created[0].width === 1 && created[0].height === 1,
+        `${type}: failed native transfer must release its owned Canvas`);
+      if (type !== 'jpeg') {
+        assert.equal(received.length, 1);
+        assert.equal(received[0].buffer, rgba.buffer, `${type}: no second whole-raster RGBA copy`);
+        assert.ok(rgba.every(value => value === 0), `${type}: decoded pixels must be wiped`);
+      }
+    } finally { bytes.fill(0); rgba.fill(0); }
+  }
+  const rgba = Buffer.from([21, 42, 63, 255, 10, 20, 30, 255]);
+  const operation = vm.runInNewContext(`(function(){${imageSource};return imageMarkdown;})()`, {
+    Buffer, Uint8ClampedArray, MAX_PIXELS, MAX_IMAGE_BYTES,
+    canvasApi: () => ({ createCanvas() { throw Error('native allocation failed'); } }),
+    conversionTimings: { begin: () => () => {} },
+    decodeBmp: () => ({ width: 2, height: 1, rgba }),
+    fail: code => { throw Object.assign(new Error(code), { code }); }
+  });
+  const bytes = Buffer.from([1]);
+  try {
+    await assert.rejects(operation(bytes, 'bmp'), { code: 'CONVERSION_IMAGE_INVALID' });
+    assert.ok(rgba.every(value => value === 0), 'decoded pixels are wiped even if native Canvas allocation fails');
+  } finally { bytes.fill(0); rgba.fill(0); }
+});
+
 console.log(`passed ${passed} bounded Office visual decoder groups; no desktop/native-target UAT claim`);

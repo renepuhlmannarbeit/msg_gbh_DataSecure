@@ -191,18 +191,26 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
       context.drawImage(image, 0, 0);
     } else {
       const decoded = type === 'png' ? await decodeRasterPng(bytes, { createCanvas, loadImage }) : decodeBmp(bytes);
-      dimensions(decoded.width, decoded.height);
-      canvas = createCanvas(decoded.width, decoded.height);
-      // Composite transparency against white before OCR (not black text loss).
-      const rgba = Uint8ClampedArray.from(decoded.rgba);
-      for (let i = 0; i < rgba.length; i += 4) {
-        const alpha = rgba[i + 3];
-        for (let channel = 0; channel < 3; channel++) rgba[i + channel] = Math.round((rgba[i + channel] * alpha + 255 * (255 - alpha)) / 255);
-        rgba[i + 3] = 255;
-      }
-      canvas.getContext('2d').putImageData(new ImageData(rgba, decoded.width, decoded.height), 0, 0);
+      try {
+        dimensions(decoded.width, decoded.height);
+        canvas = createCanvas(decoded.width, decoded.height);
+        // Composite transparency against white before OCR (not black text loss).
+        // Both approved decoders return an owned Buffer/Uint8ClampedArray. Use
+        // a view of those pixels, not a second full-size RGBA allocation.
+        const rgba = new Uint8ClampedArray(decoded.rgba.buffer, decoded.rgba.byteOffset, decoded.rgba.byteLength);
+        for (let i = 0; i < rgba.length; i += 4) {
+          const alpha = rgba[i + 3];
+          for (let channel = 0; channel < 3; channel++) rgba[i + channel] = Math.round((rgba[i + channel] * alpha + 255 * (255 - alpha)) / 255);
+          rgba[i + 3] = 255;
+        }
+        canvas.getContext('2d').putImageData(new ImageData(rgba, decoded.width, decoded.height), 0, 0);
+      } finally { decoded.rgba.fill(0); }
     }
-  } catch (cause) { if (cause?.code !== undefined) throw cause; fail('CONVERSION_IMAGE_INVALID'); }
+  } catch (cause) {
+    // The later OCR finally is not entered if the native image transfer fails.
+    try { if (canvas) { canvas.width = 1; canvas.height = 1; } }
+    finally { if (cause?.code !== undefined) throw cause; fail('CONVERSION_IMAGE_INVALID'); }
+  }
   finally { decoded(); }
   let downsampled=false, sourceCanvas;
   let ocr;
