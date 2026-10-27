@@ -129,6 +129,47 @@ test('read, write and close failures remove the exact private copy', () => {
   }
 });
 
+test('a real source close never replaces the primary private writer failure', () => {
+  for (const code of ['PRIVATE_ARTIFACT_PATH_INVALID', 'PRIVATE_ARTIFACT_DURABILITY_UNCERTAIN']) {
+    const { source, expected } = sourceFixture(`${code}.txt`), destination = path.join(base, `${code}.copy`);
+    const primary = Object.freeze(Object.assign(new Error('synthetic private writer failure'), { code }));
+    let buffer, closes = 0;
+    const io = ioWith({
+      readSync(fd, bytes, ...args) { buffer = bytes; return fs.readSync(fd, bytes, ...args); },
+      closeSync(fd) { closes++; fs.closeSync(fd); throw Object.assign(new Error('synthetic close failure'), { code: 'EIO' }); }
+    });
+    assert.throws(() => copySnapshotFile(source, destination, expected,
+      plainDeps({ fs: io, privateWorkStore: { writeFile() { throw primary; } } })), error => error === primary);
+    assert.strictEqual(closes, 1); assert.ok(buffer.every(byte => byte === 0));
+    assert.strictEqual(fs.existsSync(destination), false);
+    assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
+  }
+});
+
+test('injected falsy primary failures survive close failure and falsy close-only errors cannot succeed', () => {
+  for (const [index, primary] of [undefined, null, false, 0, ''].entries()) {
+    const { source, expected } = sourceFixture(`falsy-primary-${index}.txt`);
+    let caught = false, observed;
+    try {
+      copySnapshotFile(source, path.join(base, `falsy-primary-${index}.copy`), expected, plainDeps({
+        fs: ioWith({ closeSync(fd) { fs.closeSync(fd); throw new Error('synthetic secondary close'); } }),
+        privateWorkStore: { writeFile() { throw primary; } }
+      }));
+    } catch (error) { caught = true; observed = error; }
+    assert.strictEqual(caught, true); assert.strictEqual(observed, primary);
+  }
+  for (const [index, failure] of [undefined, null, false, 0, ''].entries()) {
+    const { source, expected } = sourceFixture(`falsy-close-${index}.txt`), destination = path.join(base, `falsy-close-${index}.copy`);
+    let caught = false, observed;
+    try { copySnapshotFile(source, destination, expected,
+      plainDeps({ fs: ioWith({ closeSync(fd) { fs.closeSync(fd); throw failure; } }) })); }
+    catch (error) { caught = true; observed = error; }
+    assert.strictEqual(caught, true); assert.strictEqual(observed, failure);
+    assert.strictEqual(fs.existsSync(destination), false);
+    assert.strictEqual(fs.readFileSync(source, 'utf8'), 'snapshot payload');
+  }
+});
+
 test('a destination collision combined with source-close failure never deletes the existing file', () => {
   const { source, expected } = sourceFixture('collision-source.txt');
   const destination = path.join(base, 'existing.copy');

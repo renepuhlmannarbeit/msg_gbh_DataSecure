@@ -137,6 +137,7 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
   let input;
   let plaintext;
   let destinationCreated = false;
+  let primaryFailed = false;
   // DS-070: the preflight hash is the authoritative content gate of the copy.
   // Identity is bound by device, inode, size and mtime; the file system change
   // time (ctime) is deliberately no identity feature because scanners alter it
@@ -180,15 +181,21 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
     privateWorkStore.writeFile(destination, plaintext);
     destinationCreated = true;
     return { size: position, sha256: copiedSha256 };
+  } catch (error) {
+    primaryFailed = true;
+    throw error;
   } finally {
     let closeError;
+    let closeFailed = false;
     if (input !== undefined) {
-      try { io.closeSync(input); } catch (error) { closeError ||= error; }
+      try { io.closeSync(input); } catch (error) { closeFailed = true; closeError = error; }
     }
     if (plaintext) plaintext.fill(0);
-    if (closeError) {
+    if (closeFailed) {
       try { if (destinationCreated && io.existsSync(destination)) io.unlinkSync(destination); } catch { /* outer cleanup remains the guard */ }
-      throw closeError;
+      // Preserve the writer's exact private-error channel, including a
+      // durability refusal. A close-only failure still cannot report success.
+      if (!primaryFailed) throw closeError;
     }
   }
 }
