@@ -1,41 +1,59 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
-**Fortsetzung 27.10.2026, Produktgrenze und Recovery:** Die lokalen Commits
-`307a8292`, `1e97535f`, `ef6cb05a` und `16e8f6ca` trennen Policyadapter,
-Hintergrundrollen und Qualitätsidentität von Cowork-Buildinputs beziehungsweise
-Runtime-Cache. Fünf eigene Appadapter und alle 270 projizierten Windowsdateien
-sind am neuen Engineering-ZIP gegengeprüft; kein Companion, Paketstore oder
-Cowork-Cache darin. Die bisherigen Policyhashes und ein älterer synthetischer
-Zustand bleiben exakt gültig. Ein bestätigter Recoveryfehler wurde eng behoben:
-nur eigene feste Busy-Codes dürfen vor Eintritt überspringen; Schreib- und
-Sperrrecordfehler bleiben Fehler. Windows-Build, Paket/Sidecar und Plugin-
-Erhaltungsprüfung sind grün. Der volle 328er-Lauf auf `16e8f6ca` endete dagegen
-bei Datei 305 rot: zwei Intakefälle erwarteten für absichtlich beschädigtes
-Lock-JSON noch Busy. Reiner Testfix `6bdde433` erhält alle Schutzassertionen;
-30 Intake-, 35 Recovery-, 38 Lock- und sechs Bootstrapfälle danach grün.
-Noch kein neuer voller grüner Gesamtlauf; keine Veröffentlichung/Mainintegration.
-Exakte Bindungen und Grenzen: [Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+**Aktueller unveröffentlichter Reviewschnitt 27.10.2026:** Produktcommit
+`1b089367a0cb72ec62625f5e7e780459d134c4df`, Fingerprint
+`222fe82b4c40651c4ae02895fabfabe19bd129fe1c2d14207fdc4654213fe1b5` (386 Produktinputs).
+`063cfb43` korrigiert METHOD-20261027-NAMING-01: Neue vollständige
+Ergebnisgenerationen erhalten Erstnamen und Unterordner anhand der privaten
+Dokument-ID-Bindung. Aktuelle Inhalte stammen aus der privaten Revision.
+Historische `/1`–`/3`-Aufträge, bearbeitbare öffentliche Kopien und der
+separate flache KI-Export behalten ihre Verträge. Der neue `/4`-Baumvertrag
+bindet Elternidentitäten, Ordnerintents und exakte rekursive Inventuren bis
+Rust. Die etablierte Reservierung einer Quellwurzel `Vertraulich` wird bei
+betroffenen Altstapeln ausdrücklich im neuen Plan und in der Zuordnung belegt.
+Keine Adoptions-, Lösch- oder allgemeinen Pfadrechte ergänzt.
 
-**Nächster bestätigter P2 – METHOD-20261027-NAMING-01:** Automatische vollständige
-Korrekturgenerationen verlieren Unterordner und die gebundene Namensvariante,
-obwohl DS-089/091 beides verlangen. Der aktuelle Ergebnisöffner folgt dieser
-Generation; der bewusst separate KI-Export darf weiterhin flach bleiben.
-Umsetzung beauftragt und nach drei unabhängigen begrenzten Quellen-/Designreviews
-konkret geplant: neue Ergebnisgeneration `/4`, Namen ausschließlich aus der
-privaten Erstbindung je Dokument-ID, aktueller Inhaltshash aus der privaten
-Revision; eigener geschlossener Results-Baumvertrag bis Rust, gehaltene Eltern,
-Erstellungsintents/Identitätsbelege und exakte rekursive Inventur. Alte komplette
-und angefangene `/1`–`/3`-Aufträge unverändert lesen/fortsetzen; keine automatische
-Verschiebung, Adoptions-/Löschrechte oder generische Pfadfreigabe. Erst rote
-Gegenfälle für beide Zwecke/Namensmodi/Unterordner und echte Node→Rust-Probe,
-danach unabhängiges Gegenlesen und frische Gesamt-/Rust-/Paketgates. Noch nicht
-implementiert. Der lokale Detailplan liegt unter
-`dist/rc177-recovery-final-16e8f6ca-20261027/RESULTS-NAME-CONTINUITY-FINDING-AND-PLAN.md`.
-Das vollständige R0–R9-Review bleibt offen: v12 inventarisiert 44075 JS-Objekte;
-274 gebundene manuelle Urteile in 18 Dateien und fünf Adapterdateiurteile sind
-ein begrenzter Fortschritt, keine Gesamtfreigabe. Desktoptests bleiben beim
-Nutzer; keine neue automatische Aufgabe und keine Mac-Actions unter dem
-aktuellen Reviewauftrag.
+Die neuen Namensgegenfälle waren zuerst rot. Danach: 125 Generationenfälle,
+83 Beilagen-/Übersichts-/Workbookfälle, echte Windows-Node→Rust-Komposition
+für drei Namensmodi sowie native Baumgegenfälle grün. Die frühere volle
+Rustsuite bestand 311 Fälle/3 ignoriert; danach ergänzte Grenzfälle bestanden
+gezielt. Eine frische volle Suite am gemeinsamen Endstand steht noch aus.
+Unabhängige Quellenreviews fanden und schlossen auch die Begleitdatei-
+Nachprüfungslücke. Rote Zwischenläufe und enge Fixture-/Schemafehler bleiben
+unverändert erhalten.
+
+`1b089367` korrigiert METHOD-20261027-SVG-WS-01 (P2) und SVG-LIMIT-02
+(P3): CSS-/SVG-Whitespace wird explizit behandelt, Unicode-Klassen und Text
+werden nicht in andere Tokens normalisiert. Parserlimits greifen beim ersten
+überzähligen Teil. Ein echter Rastergegenfall wechselte für sichtbaren Text
+von 0 auf die erwarteten 629 dunklen Pixel; die vollständige Grafikdecodersuite
+bestand 64 Gruppen. Unabhängiges tatsächliches Delta-Gegenlesen ohne weiteren
+bestätigten Blocker. Schutzgrenzen und ehrliche Auslassungscodes bleiben bestehen.
+
+Die zuvor lokal getrennten Policy-/Launcheradapter und die Qualitätsidentität
+entfernen Cowork-Build-/Cachekopplung aus Standalone. Der neutrale Kern bleibt
+eine gepflegte Quellimplementierung. Der Recoveryfix lässt nur eigene feste
+Busy-Codes vor Aktionseintritt überspringen. Der volle alte 16e8-Lauf war bei
+zwei veralteten Intakeassertionen rot; Testfix `6bdde433` behält alle
+Schutzassertionen. Alte Engineeringpakete und frühere Policy-Kompatibilität
+belegen ausschließlich ihren damaligen Schnitt. Die jetzigen Inhaltsänderungen
+erfordern neue Fingerprints, Gesamt-/Native-/Konverter-/Paketbelege.
+
+**Jetzt offen:** frischer unveränderter 328er-Gesamtlauf, Dokumentationsprüfung,
+Rust/Clippy, Konverterkette, Windows-Releasebuild und neues Engineering-ZIP samt
+Quell-/Paketgrenze und Sidecar-Smoke. Noch keine Gesamtfreigabe und kein Push
+dieser lokalen Topics. Das vollständige Einzelmethodenreview R0–R9 bleibt
+offen; Inventar und begrenzte manuelle Urteile sind kein Vollständigkeitsbeweis.
+Zusätzlich wurden alle Methoden der passiven PDF-Projektion samt Caller und
+gepinntem PDF.js sowie PDF-Sichtbarkeit/-Layout begrenzt gelesen, ohne weiteren
+bestätigten erreichbaren Defekt. Details und unveränderte Gegenbelege unter
+`dist/rc177-relative-results-review-20261027`.
+
+Keine Desktopbedienung, neue Automatisierung, Mac-Actions, Mainintegration,
+Tag- oder Releaseänderung. Mac-Pakete/Zielhostabnahme bleiben getrennt offen;
+Desktoptests bleiben Nutzeraufgabe. Der veröffentlichte RC177 ist unverändert.
+
+Die folgenden datierten Schnitte sind historische Fortschrittsbelege; offene Arbeit folgt dem aktuellen Kopf und dem Reviewplan.
 
 **Fortsetzung 27.10.2026, Adaptergrenze:** Der unveröffentlichte
 Branchcommit `4186fcb0` bindet drei Standalone-Adapter aus eigenen Appquellen

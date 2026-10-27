@@ -1,110 +1,57 @@
-# RC177: vollständiges Code- und Fachreview
+# Vollständiges Code- und Fachreview · RC177 / Standalone
 
-## Aktuelle Fortsetzung 27.10.2026: Produktgrenze, Recovery und Namenskontinuität
+**Aktueller unveröffentlichter Reviewschnitt 27.10.2026:** Produktcommit
+`1b089367a0cb72ec62625f5e7e780459d134c4df`, Fingerprint
+`222fe82b4c40651c4ae02895fabfabe19bd129fe1c2d14207fdc4654213fe1b5` (386 Produktinputs).
+`063cfb43` korrigiert METHOD-20261027-NAMING-01: Neue vollständige
+Ergebnisgenerationen erhalten Erstnamen und Unterordner anhand der privaten
+Dokument-ID-Bindung. Aktuelle Inhalte stammen aus der privaten Revision.
+Historische `/1`–`/3`-Aufträge, bearbeitbare öffentliche Kopien und der
+separate flache KI-Export behalten ihre Verträge. Der neue `/4`-Baumvertrag
+bindet Elternidentitäten, Ordnerintents und exakte rekursive Inventuren bis
+Rust. Die etablierte Reservierung einer Quellwurzel `Vertraulich` wird bei
+betroffenen Altstapeln ausdrücklich im neuen Plan und in der Zuordnung belegt.
+Keine Adoptions-, Lösch- oder allgemeinen Pfadrechte ergänzt.
 
-Der lokale unveröffentlichte Produktcommit ist
-`16e8f6ca7e919fa15835c7957bd163e6e14391bf`, Fingerprint
-`c4947ae735f453d6fb2de9ca079770ca6af4d71ad4e06fd8c99b7c625b10ed58`.
-Danach ändert `6bdde4337fbb8bf77bb4aeb2fc76f9a9e92abf8e` ausschließlich eine
-veraltete Intake-Testannahme. Die folgenden älteren Schnitte sind historische
-Einzelbelege; sie sind keine aktuelle Gesamtfreigabe.
+Die neuen Namensgegenfälle waren zuerst rot. Danach: 125 Generationenfälle,
+83 Beilagen-/Übersichts-/Workbookfälle, echte Windows-Node→Rust-Komposition
+für drei Namensmodi sowie native Baumgegenfälle grün. Die frühere volle
+Rustsuite bestand 311 Fälle/3 ignoriert; danach ergänzte Grenzfälle bestanden
+gezielt. Eine frische volle Suite am gemeinsamen Endstand steht noch aus.
+Unabhängige Quellenreviews fanden und schlossen auch die Begleitdatei-
+Nachprüfungslücke. Rote Zwischenläufe und enge Fixture-/Schemafehler bleiben
+unverändert erhalten.
 
-`307a8292` trennt die einzige neutrale Standalone-Policyimplementierung vom
-Cowork-Quelladapter; ein eigener Appadapter und die Projektion benötigen die
-zwei historischen Companion-Buildinputs nicht mehr. `1e97535f` zieht den
-Prozessstartmechanismus in einen neutralen Helfer: Cowork liefert seine drei
-Rollen und den alten Cacheresolver, die App ausschließlich Batch/Review ohne
-Resolver. Der Cache ist aus der Appprojektion ausgeschlossen. `ef6cb05a`
-bindet Qualitätsbericht und Gate an die tatsächliche Standalone-Policy statt
-an die Cowork-Policy. Exakte Listenreihenfolge und Hashes bleiben erhalten:
-Core `fca408e8fa04bb4c781b86387394980f0a06ee025d8d9fe5bd0f4ac530015a36`,
-Standalone `03b8c5c42ddd61fe1a77b8e546761b0b62c0c8226b414f86edc09cea93ce2bf8`.
-Eine frische projizierte Instanz akzeptiert den vor dem Schnitt erzeugten
-synthetischen Zustand ohne Policy-Neustart. Keine Nutzerzustandsänderung.
+`1b089367` korrigiert METHOD-20261027-SVG-WS-01 (P2) und SVG-LIMIT-02
+(P3): CSS-/SVG-Whitespace wird explizit behandelt, Unicode-Klassen und Text
+werden nicht in andere Tokens normalisiert. Parserlimits greifen beim ersten
+überzähligen Teil. Ein echter Rastergegenfall wechselte für sichtbaren Text
+von 0 auf die erwarteten 629 dunklen Pixel; die vollständige Grafikdecodersuite
+bestand 64 Gruppen. Unabhängiges tatsächliches Delta-Gegenlesen ohne weiteren
+bestätigten Blocker. Schutzgrenzen und ehrliche Auslassungscodes bleiben bestehen.
 
-`16e8f6ca` behebt einen unabhängig gefundenen und tatsächlich reproduzierten
-P2: Recovery und Ablaufbereinigung meldeten vor Aktionseintritt unter anderem
-ENOSPC/EIO/EACCES und einen ungültigen Lockrecord als erfolgreiche Konkurrenz-
-Auslassung. Nur die zwei eigenen festen Busy-Codes dürfen nun überspringen;
-alle übrigen sowie alle nach Eintritt auftretenden Fehler propagieren exakt,
-einschließlich falsy Werten. Der bestehende Datenwertdecoder führt weder
-Getter noch Proxy-Traps aus. Zehn tatsächliche Publisher-/Callerproben mit
-injizierten I/O-Fehlern und ausdrücklich modellierter Kernellaufzeit belegen
-vorher/nachher; keine echte volle Platte oder native OS-Konkurrenz behauptet.
-Die formalen Gegenfälle waren zuerst rot, danach Recovery 35/35 und Lock
-38/38 grün. Unabhängiges finales Quell-/Testgegenlesen ohne Einwand.
+Die zuvor lokal getrennten Policy-/Launcheradapter und die Qualitätsidentität
+entfernen Cowork-Build-/Cachekopplung aus Standalone. Der neutrale Kern bleibt
+eine gepflegte Quellimplementierung. Der Recoveryfix lässt nur eigene feste
+Busy-Codes vor Aktionseintritt überspringen. Der volle alte 16e8-Lauf war bei
+zwei veralteten Intakeassertionen rot; Testfix `6bdde433` behält alle
+Schutzassertionen. Alte Engineeringpakete und frühere Policy-Kompatibilität
+belegen ausschließlich ihren damaligen Schnitt. Die jetzigen Inhaltsänderungen
+erfordern neue Fingerprints, Gesamt-/Native-/Konverter-/Paketbelege.
 
-Frischer Windows-Releasebuild, Paketprüfung, tatsächlicher Bytevergleich und
-paketierter Sidecar-Smoke auf `16e8f6ca` bestanden. Archiv:
-`dist/engineering-rc177-recovery-review-16e8f6ca-20261027/DataSecure-Standalone-3.2.0-rc177-windows-x64.zip`,
-113533726 Byte, SHA-256
-`ca299a7fb5b599f7bb9acb3ae28f83172ad5f10fa15d403306aa785461615b7b`.
-270 projizierte Windowsdateien sowie alle fünf Appadapter, Launcher und
-korrigierte Recoverydatei sind exakt quellgleich. Unabhängiger Archivreview
-bestätigt Manifest/EXE-Marker, 1191 Payload- und 1192 Prüfsummenzeilen sowie
-den alten Policyreceipt; Companion, Cache, Paketstore und Terminalpresenter
-fehlen. Smoke-Log SHA-256
-`9620736e5ebe233d6bb2e62d2f89c6d8608c7a786dfb07e7a88bef9e554d0769`.
-Sein eigenes `.tmp-standalone-package-rC9fea` bleibt erhalten;
-writer_quiescence UNCONFIRMED, deletion NOT_ATTEMPTED. Kein GUI-PASS.
-Das frische kanonisch erzeugte Cowork-Erhaltungspaket mit eigenem neuen
-Ausgabepfad bestand seinen nativen Prüfer samt 150 Vertragsfällen
-(SHA-256 `6f1d8b9b5821c18c12327752ae6281d11d96020a96c2a490a9938a4155c497fc`).
-Dokumentationsbaseline und installierte CLI-Strukturprüfung bestanden;
-kein Modell oder Cowork-Host wurde gestartet.
+**Jetzt offen:** frischer unveränderter 328er-Gesamtlauf, Dokumentationsprüfung,
+Rust/Clippy, Konverterkette, Windows-Releasebuild und neues Engineering-ZIP samt
+Quell-/Paketgrenze und Sidecar-Smoke. Noch keine Gesamtfreigabe und kein Push
+dieser lokalen Topics. Das vollständige Einzelmethodenreview R0–R9 bleibt
+offen; Inventar und begrenzte manuelle Urteile sind kein Vollständigkeitsbeweis.
+Zusätzlich wurden alle Methoden der passiven PDF-Projektion samt Caller und
+gepinntem PDF.js sowie PDF-Sichtbarkeit/-Layout begrenzt gelesen, ohne weiteren
+bestätigten erreichbaren Defekt. Details und unveränderte Gegenbelege unter
+`dist/rc177-relative-results-review-20261027`.
 
-**Voller Lauf ausdrücklich rot:** `headless.log` im Belegordner
-`dist/rc177-recovery-final-16e8f6ca-20261027` hat SHA-256
-`d7f7a5f273a837cb02183de3d90540d0683678bad0170bc831415f527e65b418`.
-304 Testdateien davor bestanden; Datei 305 (`test-batch-intake.js`) meldete
-28 PASS und zwei FAIL. Sie schrieb absichtlich `{` in den globalen Lockrecord
-und erwartete noch dieselbe Busy-Antwort wie bei einem lebenden Besitzer.
-Produktcode und neuer Refusalvertrag waren richtig. Reiner Testfix `6bdde433`
-fordert dafür exakt `BATCH_ACTIVE_LOCK_RECORD_INVALID`; vorhandene Lockbytes,
-Intake-Intent, Arbeitskopie, Original und Ergebnis bleiben weiter geschützt.
-30 Intake-, 35 Recovery-, 38 Lock- und sechs Bootstrapfälle danach PASS;
-Log unter `dist/rc177-intake-refusal-test-review-20261027`, SHA-256
-`faaeaa6837cfc955cdd113a6278dddca27def72cecfeb26a6b7f4ea126a0192f`.
-Der vollständige rote Lauf hatte exakt unveränderte 1726 Inputs; der folgende
-volle Endlauf muss ihn ersetzen. Ein voriger Headlesslauf auf `ef6cb05a`
-wurde für den bestätigten Fix gezielt unterbrochen und bleibt als solcher
-erhalten, nicht grün umgedeutet.
-
-Das create-only Register v12 bindet `16e8f6ca`: 1726 Gitdateien,
-44075 JavaScript-AST-Objekte, null Parsefehler und null abweichende Codeblobs.
-Vier gebundene manuelle Overlays dokumentieren insgesamt 274 begrenzte
-Urteile in 18 Dateien, dazu fünf Appadapterdateiurteile. Sie enthalten
-Parameter-/Aufrufer-/Fehler-/Lebensdauergrenzen, erhaltene Quellhashes und
-explizit offene Befunde; 274 ist kein PASS- oder Gesamtvollständigkeitszähler.
-Neue Gegenreviews umfassten private PDFmetadaten, Personenfeldrichtlinie,
-Startup/Recovery, Status-/Ergebnisresolver, öffentliche Findermetadaten,
-Ergebnisgrade, Zeitframing, Dateinamen und terminale Zähler. Keine universelle
-Extraktions-/Dateisystem- oder native Mac-Freigabe daraus ableiten.
-
-**Neuer bestätigter P2 METHOD-20261027-NAMING-01:** Die Erstveröffentlichung
-erhält relative Pfade und Namenswahl gemäß DS-089/091. Automatisches
-`publishResults` bildet danach flache Markdown- beziehungsweise neue
-`Dokument_XX.md`-Namen; `resolveResultsGeneration` öffnet genau diesen Stand.
-Die aktive flache Ausnahme betrifft den getrennten ausgewählten KI-Export.
-Damit ist nach einer Korrektur die zugesagte Namens-/Ordnerkontinuität
-verletzt, ohne nachgewiesenes Überschreiben oder Löschen alter Bytes.
-Drei unabhängige begrenzte Design-/Testreviews sind konsolidiert: neue `/4`-
-Ergebnisgeneration nur mit festem Results-Baumvertrag bis Rust, Namensautorität
-aus `initial.files` je Dokument-ID, aktuelle Hashes aus privater Revision,
-neue vollständig initialisierte Native-Konstruktoren und plan-/elterngebundene
-Ordnerintents/Identitätsreceipts. Alte komplette/angefangene `/1`–`/3`-Pläne
-und separate KI-Exporte bleiben unverändert; bestehende Blattprüfungen werden
-nicht gelockert. Vor Implementierung sind rote Unterordner-/Namensmodusfälle
-mit unabhängiger Erstbindungsreferenz nötig, danach echte Node→Rust- sowie
-frische Gesamt-/Rust-/Paketprüfungen. Der lokale konkrete Ablauf-/Testplan
-liegt im obigen Belegordner unter
-`RESULTS-NAME-CONTINUITY-FINDING-AND-PLAN.md`. Noch nicht implementiert.
-
-R0–R9 bleibt insgesamt offen. Keine Desktopbedienung, keine neue automatische
-Aufgabe, keine Mainintegration oder Veröffentlichung. Mac-Actions wurden nach
-den geltenden Projektregeln nicht gestartet; frische Mac-Pakete und native
-Zielhostabnahme sind auf diesem Reviewstand offen. Der veröffentlichte RC177
-und seine Assets bleiben unverändert.
+Keine Desktopbedienung, neue Automatisierung, Mac-Actions, Mainintegration,
+Tag- oder Releaseänderung. Mac-Pakete/Zielhostabnahme bleiben getrennt offen;
+Desktoptests bleiben Nutzeraufgabe. Der veröffentlichte RC177 ist unverändert.
 
 Stand: 26.10.2026 · beauftragt, in Durchführung. Dieses Review ändert den
 veröffentlichten RC177-Tag oder seine Pakete nicht. Referenz für alle
