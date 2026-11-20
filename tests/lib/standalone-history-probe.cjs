@@ -10,7 +10,7 @@ const Module = require('node:module');
 const PREFIX = 'STANDALONE_HISTORY_PROBE:';
 const CODES = new Set(['ENOENT', 'EACCES', 'EPERM', 'EIO', 'BOUND_FILE_CHANGED',
   'BOUND_FILE_UNSAFE', 'BOUND_FILE_CLOSE_FAILED', 'STANDALONE_HISTORY_UNAVAILABLE', 'OTHER']);
-const PHASES = new Set(['bindDirectory', 'assertDirectory', 'readBoundFileRecord', 'migration']);
+const PHASES = new Set(['bindDirectory', 'assertDirectory', 'readBoundFileRecord', 'readBoundFileSnapshotAttemptRecord', 'migration']);
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function safeEvent(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -67,13 +67,13 @@ function install(root) {
     const original = Reflect.apply(load, this, [request, parent, ...rest]);
     if ([windowFile, storeFile].includes(parent?.filename) && request === '../core/bound-file-io') {
       const observedBoundary = { ...original };
-      for (const phase of ['bindDirectory', 'assertDirectory', 'readBoundFileRecord']) {
+      for (const phase of ['bindDirectory', 'assertDirectory', 'readBoundFileRecord', 'readBoundFileSnapshotAttemptRecord']) {
         observedBoundary[phase] = function (...args) {
           if (!active) return Reflect.apply(original[phase], this, args);
           return observed(phase, () => {
             const result = Reflect.apply(original[phase], this, args);
             try {
-              if (emitted < 128 && metadataEvents < 64 && phase === 'readBoundFileRecord' &&
+              if (emitted < 128 && metadataEvents < 64 && ['readBoundFileRecord', 'readBoundFileSnapshotAttemptRecord'].includes(phase) &&
                   Buffer.isBuffer(result.bytes) && result.bytes.length <= 4096)
                 emit({ kind: 'record', bytes: result.bytes.length, sha256: sha(result.bytes) });
             } catch { /* a diagnostic failure never changes successful I/O */ }

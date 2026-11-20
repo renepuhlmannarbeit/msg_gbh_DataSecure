@@ -4,7 +4,8 @@ const { createSuite } = require('./helpers');
 const { createXlsxReader } = require('../plugins/data-secure/server/xlsx-structure');
 const { formatXlsxNumber } = require('../plugins/data-secure/server/xlsx-number-format');
 const { xmlDecode } = require('../plugins/data-secure/server/ooxml');
-const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
+const { extractMarkdownBuffer, extractOfficeMarkdownAndMedia } = require('../plugins/data-secure/server/standalone/markdown-extractor');
+const { readZip } = require('../plugins/data-secure/server/zip-reader');
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const { extractSourceForPrivacy } = require('../plugins/data-secure/server/core/markdown-first-privacy');
 const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
@@ -354,6 +355,157 @@ for (const [raw, code, date1904 = false] of [
   ['-1', 'yyyy-mm-dd'], ['1', 'dddd']
 ]) test(`unsupported/ambiguous clock projection retains exact raw+format ${raw}/${code}`, () => {
   assert.deepEqual(formatXlsxNumber(raw, code, { date1904 }), { text: `${raw} [Zahlenformat: ${code}]`, unsupported: true });
+});
+
+// XS-F1: actual reader and complete own OPC fixtures; no replacement parser.
+const xsF1CommentPart = 'xl/threadedComments/threadedComment1.xml';
+const xsF1SheetPart = 'xl/worksheets/sheet1.xml';
+const xsF1Png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=', 'base64');
+function xsF1Thread(fields, extra = '') {
+  return '<ThreadedComments xmlns="' + T + '"><threadedComment ref="A1" personId="' +
+    personId + '" id="' + commentId + '">' + fields + '</threadedComment>' + extra + '</ThreadedComments>';
+}
+const xsF1BadFields = [
+  ['foreign child text', '<text>COMMENTPREFIXXSF1<foreign xmlns="urn:unmodeled">COMMENTHIDDENXSF1</foreign>COMMENTTAILXSF1</text>'],
+  ['canonical child text', '<text>COMMENTPREFIXXSF1<text>COMMENTHIDDENXSF1</text>COMMENTTAILXSF1</text>'],
+  ['empty child joining an escape', '<text>COMMENTPREFIXXSF1_x00<foreign xmlns="urn:unmodeled"/>0D_COMMENTTAILXSF1</text>'],
+  ['repeated direct fields', '<text>COMMENTPREFIXXSF1</text><text>COMMENTTAILXSF1</text>'],
+  ['repeated fields joining an escape', '<text>COMMENTPREFIXXSF1_x00</text><text>0D_COMMENTTAILXSF1</text>'],
+  ['empty first direct field', '<text/><text>COMMENTTAILXSF1</text>'],
+  ['empty last direct field', '<text>COMMENTPREFIXXSF1</text><text/>']
+];
+for (const [label, fields] of xsF1BadFields) test('XS-F1 real reader refuses ' + label, () => {
+  const r = reader(), people = r.modernPersons(persons('COMMENTAUTHORXSF1'));
+  assert.throws(() => r.threadedComments(xsF1Thread(fields), people), { code: 'XLSX_STRUCTURE_UNSAFE' });
+});
+test('XS-F1 only one actual text field carries XML events into one Xstring decode', () => {
+  const r = reader(), people = r.modernPersons(persons('Prüfer Äß'));
+  const value = r.threadedComments(xsF1Thread(
+    '<text>Name:_x00<![CDATA[0D]]>_Anna<!--same-field--> Berger &amp; _x005F_x000D_</text>'), people)[0];
+  assert.equal(value.text, 'Name:\rAnna Berger & _x000D_');
+  assert.equal(value.author, 'Prüfer Äß'); assert.equal(value.ref, 'A1');
+});
+test('XS-F1 existing empty or absent text fields keep their original empty result', () => {
+  const r = reader(), people = r.modernPersons(persons('Prüfer'));
+  for (const fields of ['', '<text/>', '<text></text>'])
+    assert.equal(r.threadedComments(xsF1Thread(fields), people)[0].text, '');
+});
+test('XS-F1 neither authors nor another comment can carry an escape into a text field', () => {
+  const r = reader(), people = r.modernPersons(persons('AUTHOR_x00'));
+  const extra = '<threadedComment ref="A2" personId="' + personId +
+    '" id="{00000000-0000-0000-0000-000000000003}"><text>0D_Anna</text></threadedComment>';
+  const values = r.threadedComments(xsF1Thread('<text>Name:_x00</text>', extra), people);
+  assert.deepEqual(values.map(value => [value.ref, value.author, value.text]),
+    [['A1', 'AUTHOR_x00', 'Name:_x00'], ['A2', 'AUTHOR_x00', '0D_Anna']]);
+});
+test('XS-F1 the unchanged text-source boundary admits exactly one million chars and refuses one more', () => {
+  const r = reader(), people = r.modernPersons(persons('Prüfer'));
+  assert.equal(r.threadedComments(xsF1Thread('<text>' + 'x'.repeat(1000000) + '</text>'), people)[0].text.length, 1000000);
+  assert.throws(() => r.threadedComments(xsF1Thread('<text>' + 'x'.repeat(1000001) + '</text>'), people),
+    { code: 'XLSX_STRUCTURE_LIMIT' });
+});
+function xsF1Workbook(fields, mutate) {
+  const entries = readZip(source({ author: 'COMMENTAUTHORXSF1' }));
+  const drawing = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const spreadsheetDrawing = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
+  const typed = [
+    ['xl/tables/table1.xml', 'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml'],
+    ['xl/drawings/drawing1.xml', 'application/vnd.openxmlformats-officedocument.drawing+xml'],
+    ['xl/media/image1.png', 'image/png']
+  ].map(([part, type]) => '<Override PartName="/' + part + '" ContentType="' + type + '"/>').join('');
+  entries.set('[Content_Types].xml', Buffer.from(entries.get('[Content_Types].xml').toString().replace('</Types>', typed + '</Types>')));
+  entries.set(xsF1SheetPart, Buffer.from('<worksheet xmlns="' + S + '" xmlns:r="' + O + '"><sheetData>' +
+    '<row r="1"><c r="A1" t="inlineStr"><is><t>INDEPENDENTCELLXSF1</t></is></c>' +
+    '<c r="B1" t="inlineStr"><is><t>SOURCECOLUMNXSF1</t></is></c></row>' +
+    '<row r="2"><c r="B2" t="inlineStr"><is><t>INDEPENDENTTABLEXSF1</t></is></c></row></sheetData>' +
+    '<drawing r:id="drawing"/><tableParts count="1"><tablePart r:id="table"/></tableParts></worksheet>'));
+  entries.set('xl/worksheets/_rels/sheet1.xml.rels', Buffer.from('<Relationships xmlns="' + R + '">' +
+    '<Relationship Id="t" Type="' + M + '/threadedComment" Target="../threadedComments/threadedComment1.xml"/>' +
+    '<Relationship Id="table" Type="' + O + '/table" Target="../tables/table1.xml"/>' +
+    '<Relationship Id="drawing" Type="' + O + '/drawing" Target="../drawings/drawing1.xml"/></Relationships>'));
+  entries.set('xl/tables/table1.xml', Buffer.from('<table xmlns="' + S +
+    '" id="1" name="SourceTableXSF1" displayName="SourceTableXSF1" ref="B1:B2"><tableColumns count="1">' +
+    '<tableColumn id="1" name="SOURCECOLUMNXSF1"/></tableColumns></table>'));
+  entries.set('xl/drawings/drawing1.xml', Buffer.from('<xdr:wsDr xmlns:xdr="' + spreadsheetDrawing +
+    '" xmlns:a="' + drawing + '" xmlns:r="' + O + '"><xdr:oneCellAnchor>' +
+    '<xdr:from><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' +
+    '<xdr:ext cx="9525" cy="9525"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="1" name="Picture"/><xdr:cNvPicPr/></xdr:nvPicPr>' +
+    '<xdr:blipFill><a:blip r:embed="image"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+    '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="9525" cy="9525"/></a:xfrm><a:prstGeom prst="rect"/></xdr:spPr>' +
+    '</xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>'));
+  entries.set('xl/drawings/_rels/drawing1.xml.rels', Buffer.from('<Relationships xmlns="' + R +
+    '"><Relationship Id="image" Type="' + O + '/image" Target="../media/image1.png"/></Relationships>'));
+  entries.set('xl/media/image1.png', xsF1Png);
+  entries.set(xsF1CommentPart, Buffer.from(xsF1Thread(fields)));
+  if (mutate) mutate(entries);
+  return zipStore([...entries]);
+}
+function xsF1AssertIndependent(out) {
+  for (const text of ['INDEPENDENTCELLXSF1', 'SOURCECOLUMNXSF1', 'INDEPENDENTTABLEXSF1'])
+    assert.ok(out.extraction.markdown.includes(text), text + ' must remain');
+  assert.equal(out.attachments.length, 1);
+  assert.deepEqual(Buffer.from(out.attachments[0].data, 'base64'), xsF1Png);
+  assert.equal(out.attachments[0].occurrences.length, 1);
+  assert.equal(out.attachments[0].occurrences[0].kind, 'sheet');
+  assert.equal(out.attachments[0].occurrences[0].index, 1);
+}
+test('XS-F1 real positive OPC retains one comment plus independent cell/table/image source', () => {
+  const input = xsF1Workbook('<text>COMMENTKEPTXSF1</text>'), before = Buffer.from(input);
+  const out = extractOfficeMarkdownAndMedia(input, '.xlsx', { markdownOutput: 'content-v1', partialExtraction: true });
+  xsF1AssertIndependent(out);
+  assert.ok(out.extraction.markdown.includes('COMMENTKEPTXSF1'));
+  assert.ok(out.extraction.markdown.includes('COMMENTAUTHORXSF1'));
+  assert.equal(out.extraction.coverage.reason_codes.includes('DOCUMENT_PARTS_DAMAGED'), false);
+  assert.deepEqual(input, before);
+});
+for (const [label, fields] of [xsF1BadFields[0], xsF1BadFields[4]]) {
+  test('XS-F1 strict actual OPC refuses the atomic comment model: ' + label, () => {
+    const input = xsF1Workbook(fields), before = Buffer.from(input);
+    assert.throws(() => extractOfficeMarkdownAndMedia(input, '.xlsx', { markdownOutput: 'content-v1' }),
+      { code: 'XLSX_STRUCTURE_UNSAFE' });
+    assert.deepEqual(input, before);
+  });
+  test('XS-F1 partial actual OPC omits only the damaged comment: ' + label, () => {
+    const input = xsF1Workbook(fields), before = Buffer.from(input);
+    const out = extractOfficeMarkdownAndMedia(input, '.xlsx', { markdownOutput: 'content-v1', partialExtraction: true });
+    xsF1AssertIndependent(out); assert.deepEqual(input, before);
+    assert.doesNotMatch(out.extraction.markdown, /COMMENT(?:AUTHOR|PREFIX|HIDDEN|TAIL)XSF1/u);
+    assert.ok(out.extraction.coverage.reason_codes.includes('DOCUMENT_PARTS_DAMAGED'));
+    assert.ok(out.extraction.coverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
+  });
+}
+for (const [label, mutate] of [
+  ['external thread target', entries => entries.set('xl/worksheets/_rels/sheet1.xml.rels',
+    Buffer.from(entries.get('xl/worksheets/_rels/sheet1.xml.rels').toString().replace(
+      'Target="../threadedComments/threadedComment1.xml"',
+      'Target="https://invalid.example/comment.xml" TargetMode="External"')))],
+  ['comment-owned media relationship', entries => entries.set('xl/threadedComments/_rels/threadedComment1.xml.rels',
+    Buffer.from('<Relationships xmlns="' + R + '"><Relationship Id="image" Type="' +
+      O + '/image" Target="../media/image1.png"/></Relationships>'))],
+  ['wrong modern-comment MIME', entries => entries.set('[Content_Types].xml',
+    Buffer.from(entries.get('[Content_Types].xml').toString().replace(
+      'application/vnd.ms-excel.threadedcomments+xml', 'application/xml')))]
+]) test('XS-F1 optional-model handling never softens role refusal: ' + label, () => {
+  const input = xsF1Workbook(xsF1BadFields[0][1], mutate), before = Buffer.from(input);
+  // Both container-role paths remain hard. Their existing public extraction
+  // wrappers differ; the six actual role/option cases were checked separately.
+  for (const partialExtraction of [false, true])
+    assert.throws(() => extractOfficeMarkdownAndMedia(input, '.xlsx',
+      { markdownOutput: 'content-v1', partialExtraction }),
+      { code: partialExtraction ? 'MARKDOWN_EXTRACTION_FAILED' : 'XLSX_STRUCTURE_UNSAFE' });
+  assert.deepEqual(input, before);
+});
+test('XS-F1 extractor option admission is not converted into an optional-comment omission', () => {
+  const input = xsF1Workbook(xsF1BadFields[0][1]);
+  assert.throws(() => extractOfficeMarkdownAndMedia(input, '.xlsx',
+    { markdownOutput: 'content-v1', partialExtraction: 'true' }), { code: 'CONVERSION_INPUT_INVALID' });
+});
+test('XS-F1 direct comment root/person/ref guards remain hard', () => {
+  const r = reader(), people = r.modernPersons(persons('Prüfer'));
+  const valid = xsF1Thread('<text>VALIDXSF1</text>');
+  for (const xml of [valid.replace(T, 'urn:foreign'), valid.replace('ref="A1"', 'ref="XFE1"'),
+    valid.replace('personId="' + personId + '"', 'personId="{00000000-0000-0000-0000-000000000099}"')])
+    assert.throws(() => r.threadedComments(xml, people), { code: 'XLSX_STRUCTURE_UNSAFE' });
 });
 
 done();

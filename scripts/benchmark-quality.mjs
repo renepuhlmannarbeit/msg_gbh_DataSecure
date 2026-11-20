@@ -7,7 +7,6 @@ import { pathToFileURL } from 'node:url';
 import { generateQualityCorpus } from './generate-quality-corpus.mjs';
 import { writeStandaloneRuntime, collectStandaloneRuntime } from './lib/standalone-runtime-projection.mjs';
 import { writeConversionRuntime, collectConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
-import { removePackageSmokeScope } from '../tests/helpers/standalone-package-scope.mjs';
 const require = createRequire(import.meta.url);
 const { evaluateQuality, summarizeQuality, bindReference, renderedText, tokens, assessQuality } = require('../benchmarks/evaluate-quality');
 const repo = path.resolve(import.meta.dirname, '..');
@@ -15,7 +14,8 @@ const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const semanticWords = value => tokens(value).words.map(word => word.value).join(' ');
 const evaluationFiles = ['benchmarks/quality-reference.js', 'benchmarks/evaluate-quality.js',
   'scripts/generate-quality-corpus.mjs', 'scripts/benchmark-quality.mjs', 'scripts/check-quality-gate.mjs',
-  'scripts/lib/standalone-runtime-projection.mjs', 'scripts/lib/standalone-conversion-runtime.mjs', 'package.json'];
+  'scripts/lib/standalone-runtime-projection.mjs', 'scripts/lib/standalone-conversion-runtime.mjs',
+  'tests/lib/read-product-package.cjs', 'package.json'];
 export function qualityPolicyFingerprint() {
   return require('../plugins/data-secure/server/core/standalone-policy-fingerprint').calculateStandalonePolicyFingerprint();
 }
@@ -315,22 +315,30 @@ export async function runQualityBenchmark(output, options = {}) {
       batch.exportCompletedBatchResults(token);
     }
   } catch (error) {
-    const code = error.code || error.message;
+    const code = error?.code || error?.message;
     fatal = /^[A-Z][A-Z0-9_]{2,100}$/u.test(code || '') ? code : 'QUALITY_RUN_FAILED';
   } finally {
     childProcess.spawn = originalSpawn;
-    for (const entry of children) if (!entry.closed) entry.child.kill('SIGTERM');
     let timer;
-    try { await Promise.race([Promise.all(children.map(entry => entry.done)), new Promise((_, reject) => {
+    try {
+      let stopFailed = false;
+      for (const entry of children) if (!entry.closed) {
+        try { entry.child.kill('SIGTERM'); }
+        catch { stopFailed = true; fatal ||= 'QUALITY_WORKER_CLEANUP_UNCONFIRMED'; }
+      }
+      await Promise.race([Promise.all(children.map(entry => entry.done)), new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error('QUALITY_WORKER_CLEANUP_UNCONFIRMED')), 6000);
-    })]); cleanupConfirmed = true; }
+      })]);
+      cleanupConfirmed = !stopFailed;
+    }
     catch { fatal ||= 'QUALITY_WORKER_CLEANUP_UNCONFIRMED'; }
     finally {
       clearTimeout(timer);
       for (const [key, value] of environment) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     }
-    // Do not remove an owned runtime while a worker may still hold it.
-    if (cleanupConfirmed) removePackageSmokeScope(repo, scope);
+    // Retain the owned runtime on every exit as local synthetic evidence.
+    // Direct-child close events are not a full writer/process-tree join.
+    // No automatic deletion, including after evaluation/report IO failures.
   }
   for (const entry of manifest.entries) if (hash(fs.readFileSync(path.join(corpusRoot, 'EINGABEN', ...entry.file.split('/')))) !== entry.sha256) {
     throw new Error('QUALITY_SOURCE_CHANGED');
@@ -352,6 +360,8 @@ export async function runQualityBenchmark(output, options = {}) {
     target, reference_sha256: referenceHash, synthetic_only: true, human_reference_review: 'NOT_RUN',
     review_decisions: 'synthetic-reference-bound', exact_release_package: false, fatal_error: fatal,
     fatal_file: activeFile, runtime_cleanup: cleanupConfirmed ? 'confirmed' : 'unconfirmed',
+    runtime_evidence: { directory: scope, retained: true, deletion: 'not_attempted',
+      observed_close_scope: 'captured-direct-spawn-children-only', writer_quiescence: 'unconfirmed' },
     source_revision: sourceRevision, ...sourceIdentity,
     corpus_selection: options.nativeOnly === true ? 'native-text-only' : 'all-formats',
     full_corpus_executed: entries.length === manifest.entries.length, summary: summarizeQuality(results), results };

@@ -9,7 +9,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { dataRoot, SafeError } = require('../runtime');
 const { ensurePrivateDirectory } = require('./common');
-const { readBoundFileRecord, bindDirectory, assertDirectory, sameFile } = require('../core/bound-file-io');
+const { readBoundFileRecord, bindDirectory, assertDirectory, sameFile, fileIdentity, objectIdentity, sameObject } = require('../core/bound-file-io');
 const { identity, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
 const { writeFully, syncParentDirectory, linkWithTransientRetry } = require('./batch-journal-io');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
@@ -61,23 +61,56 @@ function ensurePrivateMappingIntent(state, item, publication) {
     try { return { target, record: readExact(target, payload, directory) }; }
     catch (error) { if (error?.code !== 'ENOENT') throw error; }
     const temporary = path.join(path.dirname(target), `.am_${crypto.randomBytes(16).toString('hex')}.tmp`);
-    let descriptor;
+    let descriptor, temporaryObject;
+    const assertTemporary = fd => {
+      assertDirectory(directory);
+      const opened = fs.fstatSync(fd, { bigint: true });
+      if (!opened.isFile() || opened.isSymbolicLink() || opened.nlink !== 1n) throw fail();
+      if (!temporaryObject) temporaryObject = objectIdentity(opened);
+      if (!sameObject(opened, temporaryObject) ||
+          !sameFile(fs.lstatSync(temporary, { bigint: true }), fileIdentity(opened, true))) throw fail();
+      assertDirectory(directory);
+    };
+    const removeTemporary = () => {
+      // A random name alone never authorizes cleanup after parent loss.
+      if (!temporaryObject) return;
+      assertDirectory(directory);
+      const named = fs.lstatSync(temporary, { bigint: true });
+      if (!named.isFile() || named.isSymbolicLink() || ![1n, 2n].includes(named.nlink) ||
+          !sameObject(named, temporaryObject)) throw fail();
+      const expected = fileIdentity(named, true);
+      assertDirectory(directory);
+      if (!sameFile(fs.lstatSync(temporary, { bigint: true }), expected)) throw fail();
+      fs.unlinkSync(temporary);
+      assertDirectory(directory);
+    };
     try {
       assertWritableCapacity({ directory: path.dirname(target), bytes: payload.length + 1024 });
+      assertDirectory(directory);
       descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
         (fs.constants.O_NOFOLLOW || 0), 0o600);
-      writeFully(descriptor, payload, fs); fs.fsyncSync(descriptor); fs.closeSync(descriptor); descriptor = undefined;
-      assertDirectory(directory);
+      // Bind the actual opened object under the original parent BEFORE any
+      // private source/publication byte reaches it.
+      assertTemporary(descriptor);
+      writeFully(descriptor, payload, fs); fs.fsyncSync(descriptor);
+      assertTemporary(descriptor);
+      fs.closeSync(descriptor); descriptor = undefined;
+      const temporaryRecord = readExact(temporary, payload, directory);
+      if (!sameObject(temporaryRecord.stat, temporaryObject)) throw fail();
       // Atomic create-if-absent: a check followed by rename could replace a
       // conflicting intent between those operations, including on Windows.
-      linkWithTransientRetry(temporary, target, fs);
+      linkWithTransientRetry(temporary, target, { linkSync(from, to) {
+        assertDirectory(directory);
+        if (!sameFile(fs.lstatSync(temporary, { bigint: true }), temporaryRecord.identity)) throw fail();
+        return fs.linkSync(from, to);
+      } });
       syncParentDirectory(target, fs);
-      fs.unlinkSync(temporary);
+      removeTemporary();
       syncParentDirectory(target, fs);
       return { target, record: readExact(target, payload, directory) };
     } catch (error) {
       if (descriptor !== undefined) try { fs.closeSync(descriptor); } catch { /* original failure wins */ }
-      try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch { /* only our exact temporary file */ }
+      try { removeTemporary(); } catch { /* absent or uncertain: preserve any replacement and the primary failure */ }
       throw error;
     }
   } catch (error) {

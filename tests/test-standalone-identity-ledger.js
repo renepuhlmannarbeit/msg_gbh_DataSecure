@@ -42,6 +42,68 @@ try {
   assert.match(content, /\[PERSON_012\] = Max Mustermann/u);
   assert.match(content, /NICHT in KI-Systeme hochladen/u);
   assert.doesNotMatch(content, /OHNE ZUORDNUNG/u);
+  const snapshots = [first, second].map(id => path.join(ledger.privateRoot(options), token, `${id}.json`));
+  const snapshotBytes = snapshots.map(file => fs.readFileSync(file));
+  function withReadFault(fault, action) {
+    const read = fs.readFileSync, counts = new Map();
+    fs.readFileSync = function(file, ...args) {
+      if (snapshots.includes(file)) {
+        const count = (counts.get(file) || 0) + 1; counts.set(file, count);
+        if (fault(file, count)) throw Object.assign(new Error('synthetic snapshot refusal'), { code: 'EACCES' });
+      }
+      return read.call(this, file, ...args);
+    };
+    try { return { value: action(), counts }; }
+    finally { fs.readFileSync = read; }
+  }
+  const once = withReadFault((_file, count) => count > 1, () => ledger.materialize(state, options));
+  assert.equal(once.value.complete, true);
+  assert.deepEqual([...once.counts.values()], [1, 1], 'each rendered snapshot is read exactly once');
+  assert.equal(fs.readFileSync(result.local_path, 'utf8'), content);
+  const partial = withReadFault(file => file === snapshots[0], () => ledger.materialize(state, options));
+  assert.equal(partial.value.complete, false);
+  const partialBytes = fs.readFileSync(result.local_path);
+  assert.match(partialBytes.toString('utf8'), /Vollständigkeit der erfassten Ergebnisdateien: 1\/2/u);
+  assert.doesNotMatch(partialBytes.toString('utf8'), /Denise Koch/u);
+  assert.throws(() => withReadFault(() => true, () => ledger.materialize(state, options)),
+    { code: 'STANDALONE_IDENTITY_MAPPING_INVALID' });
+  assert.deepEqual(fs.readFileSync(result.local_path), partialBytes, 'zero valid snapshots never replace the previous aid');
+  const historical = { ...state }; delete historical.processing_mode;
+  assert.equal(ledger.materialize(historical, options).complete, true, 'legacy mode omission remains eligible');
+  assert.equal(fs.readFileSync(result.local_path, 'utf8'), content);
+  for (const value of [{ ...state, processing_mode: 'markdown-only' }, { ...state, product_channel: 'plugin' },
+    { ...state, token: 'invalid' }, { ...state, items: [] }]) {
+    assert.throws(() => ledger.materialize(value, options), { code: 'STANDALONE_IDENTITY_MAPPING_INVALID' });
+    assert.equal(fs.readFileSync(result.local_path, 'utf8'), content);
+  }
+  const open = fs.openSync, write = fs.writeFileSync, lstat = fs.lstatSync;
+  const directory = path.dirname(result.local_path);
+  let temporaryOpens = 0, temporaryFd;
+  fs.openSync = function(file, ...args) {
+    const fd = open.call(this, file, ...args);
+    if (typeof file === 'string' && file.startsWith(directory + path.sep) && file.endsWith('.tmp')) {
+      temporaryOpens++; temporaryFd = fd;
+    }
+    return fd;
+  };
+  try {
+    fs.lstatSync = function(file, ...args) {
+      if (file === directory) throw Object.assign(new Error('synthetic directory refusal'), { code: 'EACCES' });
+      return lstat.call(this, file, ...args);
+    };
+    assert.throws(() => ledger.materialize(state, options));
+    assert.equal(temporaryOpens, 0, 'private directory admission precedes the writer open');
+    fs.lstatSync = lstat;
+    fs.writeFileSync = function(file, ...args) {
+      if (file === temporaryFd) throw Object.assign(new Error('synthetic writer failure'), { code: 'EIO' });
+      return write.call(this, file, ...args);
+    };
+    assert.throws(() => ledger.materialize(state, options), { code: 'EIO' });
+  } finally { fs.openSync = open; fs.writeFileSync = write; fs.lstatSync = lstat; }
+  assert.equal(temporaryOpens, 1);
+  assert.equal(fs.readFileSync(result.local_path, 'utf8'), content, 'writer failure preserves the completed aid');
+  assert.equal(fs.readdirSync(directory).some(name => name.endsWith('.tmp')), false);
+  assert.deepEqual(snapshots.map(file => fs.readFileSync(file)), snapshotBytes);
   const output = path.join(root, 'visible', 'DataSecure-Output');
   const run = path.join(output, 'Lauf-20260930-203000-abcdef01');
   fs.mkdirSync(run, { recursive: true });
@@ -66,6 +128,7 @@ try {
   assert.equal(ledger.materialize(state, options).complete, false,
     'a visible typed pseudonym without a unique source remains incomplete');
   assert.match(fs.readFileSync(result.local_path, 'utf8'), /OHNE EINDEUTIGE ZUORDNUNG: \[PROJEKT_003\]/u);
+  assert.match(fs.readFileSync(result.local_path, 'utf8'), /Nicht eindeutig zuordenbare Pseudonymstellen: 1\./u);
   assert.equal(ledger.documentAvailable(token, options), true,
     'the document remains available without a background expiry or journal');
   const stoppedId = 'd'.repeat(32);
@@ -104,6 +167,22 @@ try {
   const largeTime = fs.statSync(large.local_path).mtimeMs;
   ledger.materialize(largeState, options);
   assert.equal(fs.statSync(large.local_path).mtimeMs, largeTime);
+  // A historical public aid is an immutable user copy. A different private
+  // rendering must not overwrite that copy or rewrite its publication marker.
+  const legacyToken = 'f'.repeat(64), legacyState = { ...state, token: legacyToken, items: [state.items[0]] };
+  ledger.capture(legacyToken, first, `ds_${first}`, [{ pseudonym: '[PERSON_011]', original: 'Denise Koch' }], options);
+  const legacyPrivate = ledger.materialize(legacyState, options).local_path;
+  fs.writeFileSync(legacyPrivate, 'Historical confidential mapping: [PERSON_011] = Denise Koch\r\n');
+  const legacyRun = path.join(output, 'Lauf-20261005-123000-abcdef03'); fs.mkdirSync(legacyRun);
+  const legacyPublic = ledger.publishDocumentToRun(legacyToken, legacyRun, options).local_path;
+  const marker = path.join(ledger.privateRoot(options), legacyToken, 'publication.json');
+  const oldPublic = fs.readFileSync(legacyPublic), oldMarker = fs.readFileSync(marker);
+  assert.equal(ledger.materialize(legacyState, options).complete, true);
+  assert.throws(() => ledger.publishDocumentToRun(legacyToken, legacyRun, options),
+    { code: 'STANDALONE_IDENTITY_MAPPING_INVALID' });
+  assert.deepEqual(fs.readFileSync(legacyPublic), oldPublic);
+  assert.deepEqual(fs.readFileSync(marker), oldMarker);
+  assert.equal(ledger.documentAvailable(legacyToken, options), true, 'the current private aid remains available');
   console.log('STANDALONE IDENTITY LEDGER PASS');
 } finally {
   const resolved = fs.realpathSync.native(root);

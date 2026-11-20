@@ -8,19 +8,21 @@ const { test } = require('node:test');
 const diagnostic = require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
 const modes = require('../plugins/data-secure/server/core/processing-mode');
 const content = require('../plugins/data-secure/server/core/content-options');
+const sourceStorage = require('../plugins/data-secure/server/core/source-snapshot-storage');
 const artifact = require('../plugins/data-secure/server/standalone/markdown-artifact');
 const grade = require('../plugins/data-secure/server/gateway/document-result-grade');
 const prepublication = require('../plugins/data-secure/server/gateway/prepublication-error');
 const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
+const { admitSynchronousOwnership } = require('../plugins/data-secure/server/gateway/synchronous-ownership-admission');
 const fixed = code => Object.assign(Error('PRIVATE /path/person'), { code });
 const root = path.resolve(__dirname, '..');
 const plain = value => JSON.parse(JSON.stringify(value));
 class SafeError extends Error {}
-function evaluate(relative, dependencies) {
+function evaluate(relative, dependencies, processModel = process) {
   const filename = path.join(root, relative), module = { exports: {} };
   // The pure validators and supplied values share the host realm, just as
   // JSON.parse and validators share one realm in the real CommonJS process.
-  const context = vm.createContext({ module, JSON, Buffer, TextDecoder, process, setTimeout, clearTimeout,
+  const context = vm.createContext({ module, JSON, Buffer, TextDecoder, process: processModel, setTimeout, clearTimeout,
     require(id) {
       if (Object.hasOwn(dependencies, id)) return dependencies[id];
       if (id.startsWith('node:') || ['path', 'crypto'].includes(id)) return require(id);
@@ -31,7 +33,7 @@ function evaluate(relative, dependencies) {
   return module.exports;
 }
 function fixture(options = {}) {
-  const events = [], frames = [], calls = [];
+  const events = [], frames = [], calls = [], unexpectedCleanupIo = [];
   const token = 'e'.repeat(64), targetId = '2'.repeat(32), pid = process.pid;
   const extraction = { schema: 'datasecure-markdown-extraction/1', processing_mode: 'markdown-only',
     anonymized: false, source_type: 'txt', markdown: 'Synthetischer Test.', coverage: { status: 'complete', reason_codes: [] } };
@@ -49,8 +51,35 @@ function fixture(options = {}) {
     local_executor_pid: pid, io_summary: {}, items: [oldItem, { id: targetId, status: 'pending', checkpoint: 'sealed',
       work_name: '002_' + '2'.repeat(24) + '.txt' },
     ...(options.unstarted ? [{ id: '3'.repeat(32), status: 'pending', checkpoint: 'sealed' }] : [])] };
+  if (options.alreadyPending)
+    Object.assign(state.items[1], metadata(targetId), { status: 'delivery_pending', checkpoint: 'package_published' });
   const originalOld = JSON.stringify(oldItem);
-  let held = false;
+  let held = false, kernelHeld = false, kernelAttempts = 0, monotonicTime = 0;
+  const waits = [];
+  const ownershipRoot = 'C:\\ram\\private';
+  const ownership = evaluate('plugins/data-secure/server/core/ownership-control.js', {
+    'node:path': path.win32, '../standalone/macos-bundle-layout': {},
+    './native-ownership-guard': {
+      hasUnconfirmedCleanup: () => false,
+      createOwnershipGuard() {
+        return {
+          tryAcquire() {
+            assert.equal(kernelHeld, false);
+            kernelAttempts++;
+            if (kernelAttempts <= (options.nativeBusyAttempts || 0)) return null;
+            kernelHeld = true;
+            return {
+              assertHeld() { assert.equal(kernelHeld, true); },
+              release() { assert.equal(kernelHeld, true); kernelHeld = false; return true; }
+            };
+          },
+          close() { assert.equal(kernelHeld, false); return options.unconfirmedNativeClose !== true; }
+        };
+      }
+    }
+  }, { platform: 'win32', env: { DATASECURE_NATIVE_EXPORT_CHANNEL: '1' } });
+  ownership.configureOwnershipControl({ schema: 'datasecure-native-ownership-guard/1', abi: 1, napi: 8,
+    target: 'windows-x64', path: 'C:\\ram\\ownership-guard.node', sha256: 'f'.repeat(64) });
   const record = (phase, error) => diagnostic.recordBatchExecutionFailure(phase, error, {
     recordWorkflowEvent(event) { if (options.badSink) throw Error('PRIVATE'); events.push(plain(event)); },
     send(frame) { if (options.badSink) throw Error('PRIVATE'); frames.push(frame); }
@@ -75,6 +104,7 @@ function fixture(options = {}) {
     fs: {}, '../runtime': { dataRoot: () => '/ram/private' },
     '../gateway/common': { ensurePrivateDirectory: (base, leaf) => path.join(base, leaf), assertPrivateDirectory() {} },
     '../gateway/batch-journal-io': {}, './markdown-artifact': artifact,
+    '../gateway/prepublication-error': prepublication,
     '../core/content-options': content, './markdown-contract': require('../plugins/data-secure/server/standalone/markdown-contract'),
     '../core/bound-file-io': { bindDirectory: directory => ({ path: directory }), assertDirectory() {},
       readBoundFile(file) {
@@ -88,18 +118,45 @@ function fixture(options = {}) {
   const delivery = evaluate('plugins/data-secure/server/gateway/batch-delivery.js', {
     fs: {}, '../runtime': { SafeError }, './batch-private-store': { workPath: () => '/ram/work' },
     './batch-lock-release': {}, '../standalone/markdown-store': store, '../core/processing-mode': modes,
-    '../core/content-options': content, './standalone-anonymized-batch': {}, './batch-execution-diagnostic': diagnostic
+    '../core/content-options': content, '../core/source-snapshot-storage': sourceStorage,
+    // This RAM fixture has a stable parent and no work directory. Unexpected
+    // leaf operations are checked after the Runner, even if cleanup catches them.
+    '../core/bound-file-io': {
+      bindDirectory(directory) { if (directory !== '/ram') unexpectedCleanupIo.push('bind:' + directory); return { path: directory }; },
+      assertDirectory(directory) { if (directory.path !== '/ram') unexpectedCleanupIo.push('parent:' + directory.path); }
+    },
+    './bound-private-file': {
+      bindPrivateFile() { unexpectedCleanupIo.push('bind-leaf'); throw Error('UNEXPECTED_RAM_LEAF'); },
+      identity() { unexpectedCleanupIo.push('leaf-identity'); throw Error('UNEXPECTED_RAM_LEAF'); }
+    },
+    './standalone-anonymized-batch': {}, './batch-execution-diagnostic': diagnostic
   }).createBatchDelivery({
-    SafeError, active: new Set(), io: { existsSync: () => false },
-    withSynchronousActiveLock(batchToken, action) {
-      calls.push('gate-acquire'); assert.equal(batchToken, token);
-      if (Object.hasOwn(options, 'acquireError')) throw options.acquireError;
-      held = true;
-      try {
-        const value = action(); assert.ok(!value || typeof value.then !== 'function', 'actual delivery callback stays synchronous');
-        if (Object.hasOwn(options, 'gateReleaseError')) throw options.gateReleaseError;
-        return value;
-      } finally { held = false; calls.push('gate-release'); }
+    SafeError, active: new Set(), io: { lstatSync(target) {
+      if (target !== '/ram/work') unexpectedCleanupIo.push('stat:' + target);
+      throw Object.assign(Error('modeled absent work directory'), { code: 'ENOENT' });
+    } },
+    withSynchronousActiveLockAdmitted(batchToken, action) {
+      assert.equal(batchToken, token);
+      return admitSynchronousOwnership(callback => ownership.withOwnershipControl(ownershipRoot, callback), () => {
+        calls.push('gate-acquire'); assert.equal(kernelHeld, true);
+        if (Object.hasOwn(options, 'acquireError')) throw options.acquireError;
+        held = true;
+        try {
+          const value = action(); assert.ok(!value || typeof value.then !== 'function', 'actual delivery callback stays synchronous');
+          if (Object.hasOwn(options, 'gateReleaseError')) throw options.gateReleaseError;
+          return value;
+        } finally { held = false; calls.push('gate-release'); }
+      }, {
+        isRetryableBusy: ownership.isConfirmedOwnershipBusy,
+        monotonicNow: () => monotonicTime,
+        async delay(milliseconds) {
+          assert.equal(kernelHeld, false);
+          assert.equal(held, false);
+          assert.equal(state.items[1].status, 'delivery_pending');
+          waits.push(milliseconds);
+          monotonicTime += milliseconds;
+        }
+      });
     },
     readState(batchToken) {
       calls.push('delivery-read'); assert.equal(held, true); assert.equal(batchToken, token);
@@ -144,7 +201,7 @@ function fixture(options = {}) {
       Object.assign(current, metadata(targetId), { status: 'delivery_pending', checkpoint: 'package_published' });
       return { ...progress(state), artifact_id: options.wrongId ? 'dm_' + '4'.repeat(32) : current.artifact_id };
     },
-    finalizePublishedPackageLocally: delivery.finalizePublishedPackageLocally,
+    finalizePublishedPackageLocally: delivery.finalizePublishedPackageLocallyAdmitted,
     pauseRequested: current => options.stopAfterDelivery && current.items[1].status === 'released',
     releaseLocalBatchExecutor(batchToken, executorPid) {
       calls.push('lease-release'); assert.equal(batchToken, token); assert.equal(executorPid, pid);
@@ -157,9 +214,10 @@ function fixture(options = {}) {
     let caught, failed = false, result;
     try { result = await runner.runLocalBatchExecutor(token, { executorPid: pid }); }
     catch (error) { caught = error; failed = true; }
-    assert.equal(held, false); assert.equal(JSON.stringify(state.items[0]), originalOld);
-    assert.equal(calls.filter(call => call === 'process').length, 1, 'no processing replay');
-    assert.equal(calls.filter(call => call === 'gate-acquire').length, 1, 'no delivery replay');
+    assert.equal(held, false); assert.equal(kernelHeld, false); assert.equal(JSON.stringify(state.items[0]), originalOld);
+    assert.deepEqual(unexpectedCleanupIo, [], 'missing-work model cannot hide unexpected cleanup operations');
+    assert.equal(calls.filter(call => call === 'process').length, options.alreadyPending ? 0 : 1, 'no processing replay');
+    assert.ok(calls.filter(call => call === 'gate-acquire').length <= 1, 'no delivery replay');
     assert.equal(calls.filter(call => call === 'lease-release').length, 1);
     if (options.unstarted) assert.equal(state.items[2].status, 'pending');
     assert.equal(events.length, frames.length);
@@ -167,7 +225,7 @@ function fixture(options = {}) {
       assert.deepEqual(plain(diagnostic.readBatchExecutionDiagnostic(frame)), events[index]);
       assert.ok(!JSON.stringify(frame).includes('PRIVATE'));
     }
-    return { failed, caught, result, state, events: events.map(event => [event.phase, event.error_code]), calls };
+    return { failed, caught, result, state, events: events.map(event => [event.phase, event.error_code]), calls, waits, kernelAttempts };
   }
   return { run };
 }
@@ -243,7 +301,7 @@ test('actual initial Runner admission rejects foreign and invalid leases before 
   }
 });
 
-test('actual Runner forwards artifact ID/current PID into actual synchronous Markdown finalizer', async () => {
+test('actual Runner forwards artifact ID/current PID while keeping the Markdown transaction synchronous', async () => {
   const value = await fixture().run(); assert.equal(value.failed, false); assert.equal(value.result.complete, true);
   assert.equal(value.state.items[1].status, 'released'); assert.deepEqual(value.events, []);
 });
@@ -253,10 +311,43 @@ test('actual acquisition Busy survives the closed catalogue without entering the
   assert.deepEqual(value.events.slice(0, 2), [['local_delivery_verify', 'BATCH_LOCAL_DELIVERY_ACQUIRE_FAILED'],
     ['local_delivery_verify', 'BATCH_ACTIVE_LOCK_BUSY']]);
 });
-test('raw Native Busy remains mapped and never retries the finalizer', async () => {
+test('a raw Busy from the inner logical lock is not a confirmed native refusal', async () => {
   const error = fixed('OWNERSHIP_GUARD_BUSY'), value = await fixture({ acquireError: error, unstarted: true }).run();
   assert.equal(value.caught, error);
+  assert.equal(value.kernelAttempts, 1);
+  assert.deepEqual(value.waits, []);
   assert.equal(value.events[1][1], 'STANDALONE_OWNERSHIP_CONTROL_BUSY');
+});
+test('both Runner paths wait for confirmed native Busy then deliver one existing package', async () => {
+  for (const alreadyPending of [false, true]) {
+    const value = await fixture({ alreadyPending, nativeBusyAttempts: 2 }).run();
+    assert.equal(value.failed, false);
+    assert.equal(value.result.complete, true);
+    assert.equal(value.state.items[1].status, 'released');
+    assert.equal(value.kernelAttempts, 3);
+    assert.deepEqual(value.waits, [10, 25]);
+    assert.equal(value.calls.filter(call => call === 'delivery-read').length, 1);
+    assert.equal(value.calls.filter(call => call === 'delivery-commit').length, 1);
+    assert.deepEqual(value.events, []);
+  }
+});
+test('persistent confirmed native Busy exhausts bounded acquisition without delivering', async () => {
+  const value = await fixture({ alreadyPending: true, nativeBusyAttempts: Infinity }).run();
+  assert.equal(value.caught.code, 'OWNERSHIP_GUARD_BUSY');
+  assert.equal(value.kernelAttempts, 11);
+  assert.equal(value.waits.length, 10);
+  assert.equal(value.state.items[1].status, 'delivery_pending');
+  assert.equal(value.calls.includes('delivery-read'), false);
+  assert.deepEqual(value.events.slice(0, 2), [['local_delivery_verify', 'BATCH_LOCAL_DELIVERY_ACQUIRE_FAILED'],
+    ['local_delivery_verify', 'STANDALONE_OWNERSHIP_CONTROL_BUSY']]);
+});
+test('unconfirmed native close after Busy preserves the primary and schedules no wait', async () => {
+  const value = await fixture({ alreadyPending: true, nativeBusyAttempts: 1, unconfirmedNativeClose: true }).run();
+  assert.equal(value.caught.code, 'OWNERSHIP_GUARD_BUSY');
+  assert.equal(value.kernelAttempts, 1);
+  assert.deepEqual(value.waits, []);
+  assert.equal(value.state.items[1].status, 'delivery_pending');
+  assert.equal(value.calls.includes('delivery-read'), false);
 });
 test('read and access boundaries retain the first original coded cause', async () => {
   for (const [option, step] of [['readError', 'STATE'], ['accessError', 'ACCESS']]) {
@@ -307,6 +398,7 @@ test('actual postcommit observer errors preserve committed work without replay o
     const error = fixed(code), value = await fixture({ realProgress: true, observeError: error, unstarted: true }).run();
     assert.equal(value.failed, true); assert.equal(value.caught, error);
     assert.equal(value.state.items[1].status, 'released'); assert.equal(value.state.items[2].status, 'pending');
+    assert.equal(value.kernelAttempts, 1); assert.deepEqual(value.waits, []);
     assert.equal(value.calls.filter(call => call === 'progress-pause-observer').length, 1);
     assert.equal(value.events[0][1], 'BATCH_LOCAL_DELIVERY_PROGRESS_FAILED');
     assert.equal(value.events[1][1], diagnostic.diagnosticCode(error));

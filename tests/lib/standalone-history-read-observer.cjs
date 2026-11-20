@@ -9,11 +9,11 @@ const bound = require('../../plugins/data-secure/server/core/bound-file-io');
 const PREFIX = 'STANDALONE_HISTORY_READ:';
 const ENV = 'DATASECURE_TEST_HISTORY_READ_SCOPE';
 const PHASES = new Set(['observer', 'resolver', 'locator', 'journal', 'journal_anchor', 'saved_summary',
-  'export', 'export_owner', 'export_anchor', 'initial_results', 'initial_binding', 'initial_leaf', 'inventory']);
+  'export', 'export_owner', 'export_anchor', 'initial_results', 'initial_binding', 'initial_leaf', 'inventory', 'history_window']);
 const OPERATIONS = new Set(['install', 'resolveResults', 'readHistoryLocator', 'readStandaloneHistoryState',
   'readStandaloneSummary', 'readStandaloneExportHistoryEntry', 'initialResultPublication', 'assertContentBinding',
   'bindDirectory', 'assertDirectory', 'readBoundFile', 'readBoundFileRecord', 'readBoundFileSnapshot',
-  'readBoundFileSnapshotRecord', 'readHeldBytes',
+  'readBoundFileSnapshotRecord', 'readBoundFileSnapshotAttemptRecord', 'readHeldBytes', 'readRecentHistory', 'registerHistory',
   'lstatSync', 'openSync', 'fstatSync', 'readSync', 'closeSync', 'realpathSync', 'readdirSync']);
 const CODES = new Set(['OTHER', 'ENOENT', 'EACCES', 'EPERM', 'EIO', 'EBUSY', 'EMFILE', 'ENFILE',
   'BOUND_FILE_CHANGED', 'BOUND_FILE_UNSAFE', 'BOUND_FILE_CLOSE_FAILED', 'RESULT_EXPORT_STATE_UNSAFE',
@@ -80,7 +80,7 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
   if (scopeBinding.real !== caseRoot || serverBinding.real !== server) throw Error('HISTORY_READ_OBSERVER_SCOPE');
   const names = ['standalone/application-service.js', 'standalone/run-history.js', 'gateway/batch.js',
     'gateway/standalone-history-store.js', 'gateway/batch-journal-store.js', 'gateway/result-export.js',
-    'gateway/standalone-document-review-store.js', 'core/bound-file-io.js'];
+    'gateway/standalone-document-review-store.js', 'gateway/standalone-history-window.js', 'core/bound-file-io.js'];
   const source = path.resolve(__dirname, '../../plugins/data-secure/server');
   for (const name of names) {
     const file = path.join(server, name);
@@ -135,6 +135,7 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
     const relative = path.relative(caseRoot, file);
     if (path.isAbsolute(relative) || relative === '..' || relative.startsWith('..' + path.sep)) return null;
     const parts = relative.split(path.sep), parent = parts.at(-2), leaf = parts.at(-1);
+    if (parent === 'standalone-history-window' && leaf === 'recent.json') return 'history_window';
     if (parent === 'batches' && /^[a-f0-9]{64}\.json$/u.test(leaf)) return 'journal';
     if (parent === 'standalone-run-history' && /^legacy-[a-f0-9]{64}\.json$/u.test(leaf)) return 'locator';
     if (parent === 'standalone-run-history' && /^[a-f0-9]{64}\.json$/u.test(leaf)) return 'saved_summary';
@@ -232,6 +233,9 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
       if (relative === 'standalone/run-history.js' && request === '../gateway/standalone-history-store')
         return { ...original, readHistoryLocator: wrap(original.readHistoryLocator, 'locator', 'readHistoryLocator'),
           readStandaloneSummary: wrap(original.readStandaloneSummary, 'saved_summary', 'readStandaloneSummary') };
+      if (relative === 'gateway/standalone-history-store.js' && request === './standalone-history-window')
+        return { ...original, readRecentHistory: wrap(original.readRecentHistory, 'history_window', 'readRecentHistory'),
+          registerHistory: wrap(original.registerHistory, 'history_window', 'registerHistory') };
       if (relative === 'standalone/application-service.js' && request === './run-history')
         return { ...original, createRunHistory(...args) {
           if (!active) return Reflect.apply(original.createRunHistory, this, args);
@@ -251,18 +255,18 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
         } };
       if (relative === 'core/bound-file-io.js' && ['fs', 'node:fs'].includes(request)) return ioView(original, true);
       if (relative === 'gateway/result-export.js' && ['fs', 'node:fs'].includes(request)) return ioView(original, false, true);
-      if (['gateway/batch-journal-store.js', 'gateway/standalone-history-store.js'].includes(relative) && ['fs', 'node:fs'].includes(request))
+      if (['gateway/batch-journal-store.js', 'gateway/standalone-history-store.js', 'gateway/standalone-history-window.js'].includes(relative) && ['fs', 'node:fs'].includes(request))
         return ioView(original);
       if (request === '../core/bound-file-io') {
         const copy = { ...original };
         for (const operation of ['bindDirectory', 'assertDirectory', 'readBoundFile', 'readBoundFileRecord',
-          'readBoundFileSnapshot', 'readBoundFileSnapshotRecord', 'readHeldBytes']) {
+          'readBoundFileSnapshot', 'readBoundFileSnapshotRecord', 'readBoundFileSnapshotAttemptRecord', 'readHeldBytes']) {
           if (typeof original[operation] !== 'function') continue;
           copy[operation] = function (...args) {
             if (!active || !context()) return Reflect.apply(original[operation], this, args);
             const phase = leafPhase(args[0]) || context().phase;
             return observed(phase, operation, () => Reflect.apply(original[operation], this, args),
-              ['readBoundFileSnapshot', 'readBoundFileSnapshotRecord'].includes(operation) ? args[0] : null);
+              ['readBoundFileSnapshot', 'readBoundFileSnapshotRecord', 'readBoundFileSnapshotAttemptRecord'].includes(operation) ? args[0] : null);
           };
         }
         return copy;

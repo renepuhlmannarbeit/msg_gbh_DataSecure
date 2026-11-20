@@ -53,6 +53,121 @@ function legacy(f, index = 1, size = 0) {
   const file = path.join(f.exports, `${id}.json`); fs.writeFileSync(file, JSON.stringify(value)); return file;
 }
 
+// Load actual complete module bodies with fixed private function exports for
+// error/close assertions. This does not change any product export or authorize
+// publication. All real IO below remains inside this suite's synthetic root.
+function historyInternals(file, names) {
+  const mod = { exports: {} }, localRequire = require('node:module').createRequire(file);
+  require('node:vm').runInNewContext(fs.readFileSync(file, 'utf8') +
+    '\nmodule.exports.__review = {' + names.join(',') + '};\n',
+  { module: mod, exports: mod.exports, require: localRequire, Buffer, process }, { filename: file });
+  return mod.exports.__review;
+}
+const windowFile = path.join(path.dirname(storeFile), 'standalone-history-window.js');
+function localHistoryIoCase(kind, phase, options = {}) {
+  const f = fixture(), bound = require('../plugins/data-secure/server/core/bound-file-io');
+  const api = kind === 'window' ? historyInternals(windowFile, ['publish'])
+    : historyInternals(storeFile, ['readJson', 'writeJson', 'historyWindowMigration']);
+  const name = 'a'.repeat(64);
+  let file, directory;
+  if (kind === 'read') {
+    file = save(f, row(20));
+    if (phase === 'parse') fs.writeFileSync(file, '{');
+  } else if (kind === 'locator') legacy(f);
+  else if (kind === 'window') {
+    const target = path.join(f.data, 'standalone-history-window');
+    fs.mkdirSync(target, { mode: 0o700 }); directory = bound.bindDirectory(target);
+  }
+  const primary = options.primary, secondary = Object.hasOwn(options, 'close') ? options.close : new Error('secondary close');
+  const original = Object.fromEntries(['openSync', 'closeSync', 'readSync', 'writeSync', 'fsyncSync',
+    'fstatSync', 'lstatSync', 'renameSync', 'unlinkSync'].map(key => [key, fs[key]]));
+  let held, nativeFd, temporary, closes = 0, renames = 0, unlinks = 0, didThrow = false, error, value;
+  const own = target => typeof target === 'string' && (kind === 'read' ? target === file :
+    kind === 'window' ? path.dirname(target) === directory.path && path.basename(target).startsWith('recent.json.') && target.endsWith('.tmp') :
+      path.dirname(target) === f.summaries && target.endsWith('.tmp') &&
+      path.basename(target).startsWith(kind === 'locator' ? 'legacy-' : name + '.json.'));
+  const actual = fd => fd === held && nativeFd !== undefined ? nativeFd : fd;
+  try {
+    value = patched({
+      openSync(target, ...args) {
+        if (own(target) && phase === 'open') throw primary;
+        const fd = original.openSync.call(this, target, ...args);
+        if (!own(target)) return fd;
+        nativeFd = fd; held = options.zero ? 0 : fd;
+        if (kind !== 'read') temporary = target;
+        return held;
+      },
+      lstatSync(target, ...args) {
+        if (phase === 'parent' && held !== undefined && target === f.data) throw primary;
+        return original.lstatSync.call(this, target, ...args);
+      },
+      fstatSync(fd, ...args) {
+        if (fd === held && phase === 'stat') throw primary;
+        return original.fstatSync.call(this, actual(fd), ...args);
+      },
+      readSync(fd, ...args) {
+        if (fd === held && phase === 'read') throw primary;
+        return original.readSync.call(this, actual(fd), ...args);
+      },
+      writeSync(fd, ...args) {
+        if (fd === held && phase === 'write') throw primary;
+        return original.writeSync.call(this, actual(fd), ...args);
+      },
+      fsyncSync(fd) {
+        if (fd === held && phase === 'flush') throw primary;
+        return original.fsyncSync.call(this, actual(fd));
+      },
+      closeSync(fd) {
+        if (fd !== held) return original.closeSync.call(this, fd);
+        closes++; original.closeSync.call(this, actual(fd));
+        if (options.closeFailure !== false) throw secondary;
+      },
+      renameSync(from, to) {
+        if (from === temporary) renames++;
+        return original.renameSync.call(this, from, to);
+      },
+      unlinkSync(target) {
+        if (target === temporary) unlinks++;
+        return original.unlinkSync.call(this, target);
+      }
+    }, () => kind === 'read' ? api.readJson(file) : kind === 'write' ? api.writeJson(name, { value: 'synthetic' }) :
+      kind === 'locator' ? api.historyWindowMigration() : api.publish(directory, null, []));
+  } catch (caught) { didThrow = true; error = caught; }
+  if (nativeFd !== undefined) assert.throws(() => original.fstatSync(nativeFd), caught => caught.code === 'EBADF');
+  if (didThrow && temporary) assert.equal(fs.existsSync(temporary), true, 'failed own temporary remains; no cleanup by name');
+  return { didThrow, error, value, secondary, closes, renames, unlinks, temporary, file };
+}
+test('actual history read/write/locator/window bodies preserve a first failure including falsy values through close refusal', () => {
+  const phases = { read: ['stat', 'read'], write: ['write', 'flush'],
+    locator: ['parent', 'write', 'flush', 'stat'], window: ['write', 'flush'] };
+  for (const [kind, operations] of Object.entries(phases)) for (const phase of operations)
+    for (const primary of [Object.freeze(new Error('primary')), undefined, null, false, 0, '']) {
+      const result = localHistoryIoCase(kind, phase, { primary });
+      assert.equal(result.didThrow, true, kind + '/' + phase);
+      assert.strictEqual(result.error, primary, kind + '/' + phase);
+      assert.equal(result.closes, 1); assert.equal(result.renames, 0); assert.equal(result.unlinks, 0);
+    }
+});
+test('actual history close-only and failed-open paths never return success, rename or close twice', () => {
+  for (const kind of ['read', 'write', 'locator', 'window']) {
+    for (const close of [Object.freeze(new Error('close')), undefined, null, false, 0, '']) {
+      const result = localHistoryIoCase(kind, 'none', { close });
+      assert.equal(result.didThrow, true); assert.strictEqual(result.error, close);
+      assert.equal(result.closes, 1); assert.equal(result.renames, 0); assert.equal(result.unlinks, 0);
+    }
+    const primary = Object.freeze(new Error('open'));
+    const result = localHistoryIoCase(kind, 'open', { primary });
+    assert.equal(result.didThrow, true); assert.strictEqual(result.error, primary);
+    assert.equal(result.closes, 0); assert.equal(result.renames, 0); assert.equal(result.unlinks, 0);
+  }
+  const parsed = localHistoryIoCase('read', 'parse');
+  assert.equal(parsed.didThrow, true); assert.equal(parsed.error.name, 'SyntaxError');
+  assert.notStrictEqual(parsed.error, parsed.secondary); assert.equal(parsed.closes, 1);
+  const zero = localHistoryIoCase('read', 'none', { zero: true, closeFailure: false });
+  assert.equal(zero.didThrow, false); assert.equal(zero.value.batch_id, row(20).token);
+  assert.equal(zero.closes, 1);
+});
+
 test('actual child publishes the first summary under the index lock; full second snapshot succeeds', () => {
   const f = fixture(), state = row(1), readdir = fs.readdirSync;
   let scans = 0, children = 0;
@@ -87,22 +202,92 @@ test('third actual membership change is final; no fourth scan and no index', () 
   assert.equal(scans, 6); noIndex(f);
 });
 
-test('same-name actual child replacement during held read retries and closes every descriptor', () => {
-  const f = fixture(), state = row(2), file = save(f, state);
-  const open = fs.openSync, close = fs.closeSync, read = fs.readSync;
-  const handles = new Set(); let injected = false, opens = 0, closes = 0;
-  const result = patched({
-    openSync(target, ...args) { const fd = open.call(this, target, ...args); if (target === file) { handles.add(fd); opens++; } return fd; },
-    closeSync(fd) { if (handles.delete(fd)) closes++; return close.call(this, fd); },
-    readSync(fd, ...args) {
-      const count = read.call(this, fd, ...args);
-      if (handles.has(fd) && !injected) { injected = true; childSave({ ...state, items: [{ id: 'a'.repeat(32), status: 'stopped' }] }); }
-      return count;
+function publicationFixture(kind) {
+  const f = fixture(), state = row(8);
+  const next = { ...state, items: [{ id: 'a'.repeat(32), status: 'stopped' }] };
+  let target, sequence = 0;
+  if (kind === 'summary') target = save(f, state);
+  else {
+    const name = `re_${sha(state.token).slice(0, 32)}.json`;
+    fs.writeFileSync(path.join(f.exports, name), JSON.stringify({ schema: 'datasecure-result-export/2',
+      product_channel: 'standalone', run_directory: 'Lauf-20261018-120000-1234abcd', items: [] }));
+    const owner = path.join(f.data, 'result-export-owners', name), journal = path.join(f.data, 'batches', `${state.token}.json`);
+    fs.writeFileSync(owner, JSON.stringify({ schema: 'datasecure-content-export-owner/1', product_channel: 'standalone',
+      record_name: name, batch_id: state.token }));
+    fs.writeFileSync(journal, JSON.stringify(state));
+    target = kind === 'owner' ? owner : journal;
+  }
+  const before = fs.readFileSync(target), identity = fs.lstatSync(target, { bigint: true });
+  const expected = kind === 'summary' ? Buffer.from(JSON.stringify(store.summarizeState(next))) : before;
+  const publish = () => {
+    if (kind === 'summary') childSave(next);
+    else {
+      const temporary = `${target}.replacement-${++sequence}`;
+      fs.copyFileSync(target, temporary, fs.constants.COPYFILE_EXCL);
+      fs.renameSync(temporary, target);
     }
-  }, () => store.readRecentHistory());
-  assert.equal(injected, true); assert.equal(opens, 2); assert.equal(closes, 2); assert.equal(handles.size, 0);
-  assert.deepEqual(result, [{ batch_id: state.token, created_at: state.created_at }]);
-});
+  };
+  return { f, state, target, before, identity, expected, publish };
+}
+for (const kind of ['summary', 'owner', 'journal']) {
+  test(`actual ${kind} publication during held read proves either replacement or native Windows refusal`, () => {
+    const p = publicationFixture(kind), { f, state, target } = p;
+    const open = fs.openSync, close = fs.closeSync, read = fs.readSync;
+    const handles = new Set(); let injected = false, opens = 0, closes = 0, publisherError, readError, result;
+    try {
+      result = patched({
+        openSync(file, ...args) { const fd = open.call(this, file, ...args); if (file === target) { handles.add(fd); opens++; } return fd; },
+        closeSync(fd) { if (handles.delete(fd)) closes++; return close.call(this, fd); },
+        readSync(fd, ...args) {
+          const count = read.call(this, fd, ...args);
+          if (handles.has(fd) && !injected) {
+            injected = true;
+            try { p.publish(); } catch (error) { publisherError = error; throw error; }
+          }
+          return count;
+        }
+      }, () => store.readRecentHistory());
+    } catch (error) { readError = error; }
+    assert.equal(injected, true); assert.equal(handles.size, 0); assert.equal(closes, opens);
+    if (publisherError) {
+      // The synchronous writer barrier cannot finish while this host refuses
+      // rename over the held reader. No publication happened: retrying would
+      // merely wash away the publisher's failure and return the old record.
+      assert.equal(process.platform, 'win32');
+      assert.match(publisherError.code === 'EPERM' ? publisherError.code : publisherError.message, /EPERM/u);
+      assert.equal(readError?.code, 'BOUND_FILE_CHANGED'); assert.equal(opens, 1); noIndex(f);
+      assert.deepEqual(fs.readFileSync(target), p.before);
+      const now = fs.lstatSync(target, { bigint: true });
+      for (const key of ['dev', 'ino', 'birthtimeNs', 'ctimeNs', 'mtimeNs', 'size', 'nlink']) assert.equal(now[key], p.identity[key], key);
+      // A separate real publication after confirmed close must succeed; no
+      // rights/open-flag change or product retry is used for this control.
+      p.publish();
+      assert.notEqual(fs.lstatSync(target, { bigint: true }).ino, p.identity.ino);
+      result = store.readRecentHistory();
+    } else {
+      assert.equal(readError, undefined); assert.equal(opens, 2);
+      assert.notEqual(fs.lstatSync(target, { bigint: true }).ino, p.identity.ino);
+    }
+    assert.deepEqual(fs.readFileSync(target), p.expected);
+    assert.deepEqual(result, [{ batch_id: state.token, created_at: state.created_at }]);
+  });
+  test(`actual ${kind} pre-open publication restarts the full snapshot from the same original parents`, () => {
+    const p = publicationFixture(kind), open = fs.openSync, close = fs.closeSync;
+    const handles = new Set(); let injected = false, opens = 0, closes = 0;
+    const result = patched({
+      openSync(file, ...args) {
+        if (file === p.target && !injected) { injected = true; p.publish(); }
+        const fd = open.call(this, file, ...args); if (file === p.target) { handles.add(fd); opens++; } return fd;
+      },
+      closeSync(fd) { if (handles.delete(fd)) closes++; return close.call(this, fd); }
+    }, () => store.readRecentHistory());
+    assert.equal(injected, true); assert.equal(opens, 2); assert.equal(closes, 2); assert.equal(handles.size, 0);
+    assert.notEqual(fs.lstatSync(p.target, { bigint: true }).ino, p.identity.ino);
+    assert.deepEqual(fs.readFileSync(p.target), p.expected);
+    assert.deepEqual(result, [{ batch_id: p.state.token, created_at: p.state.created_at }]);
+    assert.equal(fs.readdirSync(p.f.summaries).some(value => value.startsWith('legacy-')), false);
+  });
+}
 
 test('same-name replacement after the held read is caught by the final record snapshot', () => {
   const f = fixture(), state = row(4); save(f, state);
@@ -114,36 +299,6 @@ test('same-name replacement after the held read is caught by the final record sn
   } }, () => store.readRecentHistory());
   assert.equal(scans, 4); assert.equal(result[0].batch_id, state.token);
 });
-
-for (const leaf of ['owner', 'journal']) {
-  test(`optional ${leaf} replacement is read again under its original parent binding`, () => {
-    const f = fixture(), state = row(8), id = `re_${sha(state.token).slice(0, 32)}`, name = `${id}.json`;
-    fs.writeFileSync(path.join(f.exports, name), JSON.stringify({ schema: 'datasecure-result-export/2',
-      product_channel: 'standalone', run_directory: 'Lauf-20261018-120000-1234abcd', items: [] }));
-    const owner = path.join(f.data, 'result-export-owners', name), journal = path.join(f.data, 'batches', `${state.token}.json`);
-    fs.writeFileSync(owner, JSON.stringify({ schema: 'datasecure-content-export-owner/1', product_channel: 'standalone',
-      record_name: name, batch_id: state.token }));
-    fs.writeFileSync(journal, JSON.stringify(state));
-    const target = leaf === 'owner' ? owner : journal;
-    const open = fs.openSync, close = fs.closeSync, read = fs.readSync, readdir = fs.readdirSync;
-    const handles = new Set(); let injected = false, scans = 0;
-    const result = patched({
-      openSync(file, ...args) { const fd = open.call(this, file, ...args); if (file === target) handles.add(fd); return fd; },
-      closeSync(fd) { handles.delete(fd); return close.call(this, fd); },
-      readSync(fd, ...args) {
-        const count = read.call(this, fd, ...args);
-        if (handles.has(fd) && !injected) {
-          injected = true; fs.copyFileSync(target, `${target}.replacement`); fs.renameSync(`${target}.replacement`, target);
-        }
-        return count;
-      }, readdirSync(file, ...args) { if (file === f.summaries) scans++; return readdir.call(this, file, ...args); }
-    }, () => store.readRecentHistory());
-    assert.equal(injected, true); assert.equal(scans, 3); assert.equal(handles.size, 0);
-    assert.deepEqual(result, [{ batch_id: state.token, created_at: state.created_at }]);
-    assert.equal(fs.readdirSync(f.summaries).some(value => value.startsWith('legacy-')), false,
-      'a verified real owner/date is discovery metadata, not a fabricated legacy identity');
-  });
-}
 
 for (const parent of ['standalone-run-history', 'result-export-state', 'result-export-owners', 'batches']) {
   test(`replacement ${parent} is never rebound on a retry`, () => {
@@ -218,7 +373,7 @@ test('entry budget is shared across full scan attempts (explicit adversarial inv
   assert.equal(scans, 2); noIndex(f);
 });
 
-test('actual bytes from a failed read remain charged against the 64 MiB budget on the next scan', () => {
+test('a generic failed read is final even after actual bytes were read; it cannot buy another snapshot', () => {
   const f = fixture(), files = Array.from({ length: 33 }, (_, index) => legacy(f, index + 1, 1024 * 1024));
   const open = fs.openSync, close = fs.closeSync, read = fs.readSync, readdir = fs.readdirSync;
   const handles = new Map(); let injected = false, actualBytes = 0, scans = 0;
@@ -229,9 +384,135 @@ test('actual bytes from a failed read remain charged against the 64 MiB budget o
       if (!injected && handles.get(fd) === files[32]) { injected = true; throw Error('failure after actual bytes were read'); }
       return count;
     }, readdirSync(file, ...args) { if (file === f.summaries) scans++; return readdir.call(this, file, ...args); }
-  }, () => unavailable(() => store.readRecentHistory()));
-  assert.equal(injected, true); assert.equal(scans, 2); assert.ok(actualBytes <= 64 * 1024 * 1024);
+  }, () => assert.throws(() => store.readRecentHistory(), error => error.code === 'BOUND_FILE_CHANGED'));
+  assert.equal(injected, true); assert.equal(scans, 1); assert.ok(actualBytes <= 64 * 1024 * 1024);
   assert.equal(handles.size, 0); noIndex(f);
+});
+
+test('actual replacement in a completed snapshot cannot reset the cumulative 64 MiB read budget', () => {
+  const f = fixture(), files = Array.from({ length: 33 }, (_, index) => legacy(f, index + 1, 1024 * 1024));
+  const open = fs.openSync, close = fs.closeSync, read = fs.readSync, readdir = fs.readdirSync;
+  const handles = new Map(), legacyFiles = new Set(files);
+  let injected = false, actualBytes = 0, scans = 0, locatorWrites = 0;
+  patched({
+    openSync(target, ...args) {
+      const fd = open.call(this, target, ...args); if (legacyFiles.has(target)) handles.set(fd, target);
+      if (path.basename(String(target)).startsWith('legacy-') && String(target).endsWith('.tmp')) locatorWrites++;
+      return fd;
+    },
+    closeSync(fd) { handles.delete(fd); return close.call(this, fd); },
+    readSync(fd, ...args) {
+      const count = read.call(this, fd, ...args);
+      if (legacyFiles.has(handles.get(fd))) actualBytes += count;
+      return count;
+    },
+    readdirSync(file, ...args) {
+      const names = readdir.call(this, file, ...args);
+      if (file === f.summaries && ++scans === 2) {
+        assert.equal(actualBytes, 33 * 1024 * 1024);
+        assert.equal(handles.size, 0, 'replacement here occurs after every held read closed');
+        fs.copyFileSync(files[32], files[32] + '.replacement');
+        fs.renameSync(files[32] + '.replacement', files[32]); injected = true;
+      }
+      return names;
+    }
+  }, () => unavailable(() => store.readRecentHistory()));
+  assert.equal(injected, true); assert.equal(scans, 3);
+  assert.equal(actualBytes, 64 * 1024 * 1024); assert.equal(handles.size, 0);
+  assert.equal(locatorWrites, 0); noIndex(f);
+});
+test('generic IO, forged public change codes and same-object mutation do not retry migration reads', () => {
+  for (const fault of ['EIO', 'EACCES', 'BOUND_FILE_CHANGED', 'inplace']) {
+    const f = fixture(), file = save(f, row(23)), open = fs.openSync, close = fs.closeSync, read = fs.readSync, readdir = fs.readdirSync;
+    const handles = new Set(); let opens = 0, closes = 0, scans = 0;
+    patched({
+      openSync(target, ...args) { const fd = open.call(this, target, ...args); if (target === file) { handles.add(fd); opens++; } return fd; },
+      closeSync(fd) { if (handles.delete(fd)) closes++; return close.call(this, fd); },
+      readSync(fd, ...args) {
+        const count = read.call(this, fd, ...args);
+        if (handles.has(fd)) {
+          if (fault === 'inplace') fs.appendFileSync(file, ' ');
+          else throw Object.assign(new Error('fixed synthetic read refusal'), { code: fault });
+        }
+        return count;
+      },
+      readdirSync(target, ...args) { if (target === f.summaries) scans++; return readdir.call(this, target, ...args); }
+    }, () => assert.throws(() => store.readRecentHistory(), error => error.code === 'BOUND_FILE_CHANGED'));
+    assert.equal(opens, 1); assert.equal(closes, 1); assert.equal(scans, 1);
+    assert.equal(handles.size, 0); noIndex(f);
+  }
+});
+test('an ENOENT code with a still-present leaf cannot restart migration', () => {
+  const f = fixture(), file = save(f, row(24)), lstat = fs.lstatSync, readdir = fs.readdirSync;
+  const primary = Object.freeze(Object.assign(new Error('one synthetic missing response'), { code: 'ENOENT' }));
+  let stats = 0, scans = 0;
+  patched({
+    lstatSync(target, ...args) {
+      if (target === file && ++stats === 2) throw primary;
+      return lstat.call(this, target, ...args);
+    },
+    readdirSync(target, ...args) { if (target === f.summaries) scans++; return readdir.call(this, target, ...args); }
+  }, () => assert.throws(() => store.readRecentHistory(), error => error === primary));
+  assert.equal(stats, 3); assert.equal(scans, 1); assert.equal(fs.existsSync(file), true); noIndex(f);
+});
+test('actual leaf disappearance between outer metadata and held-reader lstat restarts only the whole snapshot', () => {
+  const f = fixture(), file = save(f, row(25)), lstat = fs.lstatSync, readdir = fs.readdirSync;
+  let stats = 0, scans = 0, removed = false;
+  const rows = patched({
+    lstatSync(target, ...args) {
+      if (target === file && ++stats === 2) { fs.renameSync(file, file + '.removed'); removed = true; }
+      return lstat.call(this, target, ...args);
+    },
+    readdirSync(target, ...args) { if (target === f.summaries) scans++; return readdir.call(this, target, ...args); }
+  }, () => store.readRecentHistory());
+  assert.equal(removed, true); assert.deepEqual(rows, []); assert.equal(scans, 3);
+  assert.equal(fs.existsSync(file), false);
+});
+test('actual window reads retry only privately classified replacement, never generic codes or changed-then-absence', () => {
+  const bound = require('../plugins/data-secure/server/core/bound-file-io');
+  const api = historyInternals(windowFile, ['read']);
+  for (const mode of ['replace', 'replace-missing', 'EIO', 'BOUND_FILE_CHANGED', 'fake-ENOENT']) {
+    const f = fixture(), target = path.join(f.data, 'standalone-history-window');
+    fs.mkdirSync(target, { mode: 0o700 });
+    const file = path.join(target, 'recent.json'), bytes = JSON.stringify({ schema: 'datasecure-standalone-history-window/1', entries: [] });
+    fs.writeFileSync(file, bytes);
+    const directory = bound.bindDirectory(target), open = fs.openSync, close = fs.closeSync, read = fs.readSync, lstat = fs.lstatSync;
+    const held = new Set(); let opens = 0, closes = 0, stats = 0;
+    const action = () => patched({
+      lstatSync(name, ...args) {
+        if (name === file && ++stats === 1 && mode === 'fake-ENOENT') throw Object.assign(new Error('not absent'), { code: 'ENOENT' });
+        return lstat.call(this, name, ...args);
+      },
+      openSync(name, ...args) {
+        if (name === file) {
+          opens++;
+          if (opens === 1 && mode.startsWith('replace')) {
+            fs.writeFileSync(file + '.next', bytes); fs.renameSync(file + '.next', file);
+          }
+        }
+        const fd = open.call(this, name, ...args); if (name === file) held.add(fd); return fd;
+      },
+      readSync(fd, ...args) {
+        if (held.has(fd) && ['EIO', 'BOUND_FILE_CHANGED'].includes(mode))
+          throw Object.assign(new Error('fixed read refusal'), { code: mode });
+        return read.call(this, fd, ...args);
+      },
+      closeSync(fd) {
+        const own = held.delete(fd); close.call(this, fd);
+        if (own) { closes++; if (closes === 1 && mode === 'replace-missing') fs.renameSync(file, file + '.removed'); }
+      }
+    }, () => api.read(directory));
+    if (mode === 'replace') {
+      const result = action(); assert.equal(result.entries.length, 0); assert.equal(opens, 2); assert.equal(closes, 2);
+    } else {
+      unavailable(action); assert.equal(opens, mode === 'fake-ENOENT' ? 0 : 1); assert.equal(closes, opens);
+    }
+    assert.equal(held.size, 0);
+    assert.equal(fs.readdirSync(target).some(name => name.endsWith('.tmp')), false, 'read-only refusal creates no replacement index');
+  }
+  const f = fixture(), target = path.join(f.data, 'standalone-history-window');
+  fs.mkdirSync(target, { mode: 0o700 });
+  assert.equal(api.read(bound.bindDirectory(target)), null, 'only genuine first absence admits migration');
 });
 
 test('legacy locator writes wait for the stable attempt and preserve exact legacy identity/five-row limit', () => {

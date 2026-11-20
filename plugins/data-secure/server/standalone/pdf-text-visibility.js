@@ -106,10 +106,14 @@ function differenceBox(left, right, width, height) {
 
 async function classifyPdfTextVisibility({ page, textItems, viewport, createCanvas,
   setTextPaintObserver, annotationMode, maxPagePixels = 2_000_000,
-  maxProbePixels = 128_000_000, maxProbes = 256, budget }) {
-  const hiddenIndices = new Set(), visibleIndices = new Set(), wordRegions = [];
-  const retained = () => ({ hiddenIndices, visibleIndices, wordRegions, items: textItems.filter((_, index) => !hiddenIndices.has(index)) });
-  const invalidate = () => { hiddenIndices.clear(); visibleIndices.clear(); wordRegions.length = 0; return retained(); };
+  maxProbePixels = 128_000_000, maxProbes = 256, budget, phraseIndices }) {
+  const hiddenIndices = new Set(), visibleIndices = new Set(), paintedPhraseIndices = new Set(), paintedPhraseWords = new Map(), wordRegions = [];
+  const retained = () => ({ hiddenIndices, visibleIndices, paintedPhraseIndices, paintedPhraseWords, wordRegions,
+    items: textItems.filter((_, index) => !hiddenIndices.has(index)) });
+  const invalidate = () => {
+    hiddenIndices.clear(); visibleIndices.clear(); paintedPhraseIndices.clear(); paintedPhraseWords.clear(); wordRegions.length = 0;
+    return retained();
+  };
   const width = Math.ceil(viewport.width), height = Math.ceil(viewport.height), area = width * height;
   const hasBudget = () => !budget || (Number.isSafeInteger(budget.remainingProbes) && budget.remainingProbes > 0 &&
     Number.isSafeInteger(budget.remainingPixels) && budget.remainingPixels >= area);
@@ -142,7 +146,15 @@ async function classifyPdfTextVisibility({ page, textItems, viewport, createCanv
     if (!spend()) return null;
     ordinal = 0; stableEvents = true; replay = [];
     context.clearRect(0, 0, width, height);
-    await page.render({ canvas, canvasContext: context, viewport, annotationMode }).promise;
+    try {
+      await page.render({ canvas, canvasContext: context, viewport, annotationMode }).promise;
+    } catch (cause) {
+      // The independent OCR is already complete. An optional counterfactual
+      // renderer failure must not discard it or authorize any suppression.
+      if (!phraseIndices || cause?.code !== undefined || !['Error', 'UnknownErrorException'].includes(cause?.name)) throw cause;
+      stableEvents = false;
+      return null;
+    }
     if (!recording && (ordinal !== runs.length || replay.some((event, index) => !sameRun(runs[index], event, true)))) stableEvents = false;
     return context.getImageData(0, 0, width, height).data;
   }
@@ -159,11 +171,12 @@ async function classifyPdfTextVisibility({ page, textItems, viewport, createCanv
     const baseline = Uint8ClampedArray.from(first);
     if (!stableEvents) return invalidate();
     recording = false;
-    const bindings = bindTextRuns(textItems, runs, viewport);
+    const bindings = bindTextRuns(textItems, runs, viewport).filter(binding =>
+      !phraseIndices || (binding.wordIndex === null && phraseIndices.has(binding.item)));
     if (!bindings.length) return retained();
     const reproduced = await render();
     if (!reproduced || !equalPixels(baseline, reproduced) || !stableEvents) return invalidate();
-    for (const binding of bindings) {
+    for (const binding of phraseIndices ? [] : bindings) {
       const run = runs[binding.run];
       if (hiddenRuns.has(binding.run)) { hiddenIndices.add(binding.item); continue; }
       if (visibleRuns.has(binding.run)) { visibleIndices.add(binding.item); continue; }
@@ -191,10 +204,15 @@ async function classifyPdfTextVisibility({ page, textItems, viewport, createCanv
     }
     const processedWords = new Set();
     for (const binding of bindings) {
-      if (!visibleIndices.has(binding.item)) continue;
+      if (phraseIndices ? explicitlyInvisible(runs[binding.run]) : !visibleIndices.has(binding.item)) continue;
       const candidates = wordCandidates(runs[binding.run]);
       if (!candidates.length) continue;
-      const itemTokens = new Set(textItems[binding.item].str.split(/\s+/u));
+      const orderedTokens = textItems[binding.item].str.trim().split(/\s+/u);
+      const itemTokens = new Set(orderedTokens);
+      const wholePhrase = binding.wordIndex === null && orderedTokens.length >= 2 &&
+        orderedTokens.length === candidates.length && candidates.every((word, index) => word.text === orderedTokens[index]);
+      if (phraseIndices && !wholePhrase) continue;
+      const provenWords = [];
       for (const [wordIndex, word] of candidates.entries()) {
         // TextContent may insert a real word boundary for a numeric TJ gap
         // even though the renderer's Unicode glyphs concatenate. Only the
@@ -204,7 +222,7 @@ async function classifyPdfTextVisibility({ page, textItems, viewport, createCanv
         if (processedWords.has(key) || (binding.wordIndex !== null && binding.wordIndex !== wordIndex)) continue;
         processedWords.add(key);
         let delta;
-        if (candidates.length === 1 && word.indices.length === runs[binding.run].glyphCount) delta = visibleDeltas.get(binding.run);
+        if (!phraseIndices && candidates.length === 1 && word.indices.length === runs[binding.run].glyphCount) delta = visibleDeltas.get(binding.run);
         else {
           if (!canSpend()) break;
           wordMask = { run: binding.run, indices: word.indices };
@@ -218,7 +236,16 @@ async function classifyPdfTextVisibility({ page, textItems, viewport, createCanv
         const margin = word.height * 0.5;
         if (delta.x0 < word.x0 - margin || delta.x1 > word.x1 + margin ||
             delta.y0 < word.baseline - word.height * 2 || delta.y1 > word.baseline + word.height) continue;
-        wordRegions.push({ text: word.text, ...delta });
+        const region = { text: word.text, ...delta };
+        wordRegions.push(region);
+        provenWords.push(region);
+      }
+      // A partially visible run is not a phrase owner. Every word in one
+      // unambiguously bound complete run needs its own positive pixel delta.
+      if (wholePhrase && provenWords.length === candidates.length) {
+        paintedPhraseIndices.add(binding.item);
+        paintedPhraseWords.set(binding.item, provenWords);
+        if (phraseIndices) visibleIndices.add(binding.item);
       }
     }
     return retained();

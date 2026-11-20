@@ -9,10 +9,11 @@ const { verifyNativeLauncherArtifact } = require('../native-launcher');
 const { verifyPosixSupervisor } = require('../posix-supervisor');
 const { createMarkdownExtraction, validateMarkdownExtractionForOptions, exactKeys } = require('./markdown-contract');
 const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
-const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
-const { CheckpointStream, MAX_RESPONSE_BYTES } = require('./conversion-checkpoints');
+const { SOURCE_TYPES, ERROR_CODES, STOP_CAUSE_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
+const { CheckpointStream, MAX_RESPONSE_BYTES, recoveryReason } = require('./conversion-checkpoints');
 const { createConversionTimingStream } = require('../core/conversion-timing-contract');
 const ERROR_SET = new Set(ERROR_CODES);
+const STOP_CAUSES = new Set(STOP_CAUSE_CODES);
 const DEFAULT_TIMEOUT_MS = 300_000;
 const TERMINATION_GRACE_MS = 1500;
 const error = code => Object.assign(new Error('Die lokale Markdown-Konvertierung konnte nicht abgeschlossen werden.'), { code });
@@ -59,6 +60,7 @@ function nativeConversionExitCode(code, platform = process.platform) {
   }
   if (platform !== 'win32' && code === 132) return 'CONVERSION_DEPENDENCY_MISSING';
   if (platform !== 'win32' && [130, 131, 134, 135].includes(code)) return 'CONVERSION_LIMIT_SETUP_FAILED';
+  if (code === 124) return 'CONVERSION_TERMINATION_UNCONFIRMED';
   if (code === 125) return 'CONVERSION_RESOURCE_LIMIT';
   if (Number.isInteger(code) && code >= 120 && code <= 126) return 'CONVERSION_ISOLATION_FAILED';
   return null;
@@ -118,9 +120,14 @@ async function convertBuffer(bytes, extension, options = {}) {
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > DEFAULT_TIMEOUT_MS) throw error('CONVERSION_INPUT_INVALID');
   if (contentOptions && ['png', 'bmp', 'jpeg'].includes(type) && !contentOptions.imageOcr) throw error('IMAGE_OCR_REQUIRED');
   const input = Buffer.from(bytes); // The worker cannot detach or mutate originals.
-  const runtime = resolveConversionRuntime();
-  const invocation = launch(runtime, type, input.length, timeoutMs, omitDocxHeaderFooter, passiveObjects, options.markdownOutput, contentOptions);
-  if (abortSignal?.aborted()) throw error('REQUEST_CANCELLED');
+  let inputDisposed = false;
+  const discardInput = () => { if (!inputDisposed) { inputDisposed = true; input.fill(0); } };
+  let runtime, invocation;
+  try {
+    runtime = resolveConversionRuntime();
+    invocation = launch(runtime, type, input.length, timeoutMs, omitDocxHeaderFooter, passiveObjects, options.markdownOutput, contentOptions);
+    if (abortSignal?.aborted()) throw error('REQUEST_CANCELLED');
+  } catch (failure) { discardInput(); throw failure; }
   const environment = { DISABLE_SYSTEM_FONTS_LOAD: '1', PATH: '' };
   // Only the verified fixed macOS bundle role may select the native addon.
   // Ambient NAPI_RS_* / NODE_* settings are deliberately not inherited.
@@ -130,19 +137,25 @@ async function convertBuffer(bytes, extension, options = {}) {
     let child;
     try { child = childProcess.spawn(invocation.command, invocation.args, { cwd: runtime.root,
       env: environment, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true }); }
-    catch (failure) { reject(error(conversionStartFailureCode(failure, invocation.command))); return; }
+    catch (failure) { discardInput(); reject(error(conversionStartFailureCode(failure, invocation.command))); return; }
+    const streamsAvailable = [child.stdin, child.stdout, child.stderr].every(stream => stream &&
+      typeof stream.on === 'function' && typeof stream.once === 'function') &&
+      typeof child.stdin.end === 'function' && typeof child.stdin.destroy === 'function';
     const chunks = [];
     const timingStream = createConversionTimingStream(type);
     // Only the new Standalone Office/PDF path can produce partial units.
     // Legacy/plugin and standalone raster/Markdown responses stay unchanged.
     const checkpointStream = contentOptions && ['docx', 'xlsx', 'pptx', 'pdf'].includes(type)
       ? new CheckpointStream(type, contentOptions) : null;
-    let size = 0, stopped = null, closed = false, settled = false, inputFlushed = false, grace, closedMetrics = null;
+    let size = 0, stopped = null, closed = false, settled = false, childStarted = false, inputFlushed = false, inputSubmitted = false,
+      stderrReadFailed = false, grace, closedMetrics = null;
     const finish = (failure, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer); clearTimeout(grace);
       abortSignal?.unsubscribe(abort);
+      // An unresolved pipe write still owns the submitted bytes.
+      if (!inputSubmitted) discardInput();
       // The worker exit fact is separate from the now-known conversion result.
       // Persist only after actual close and final protocol/input/error checks;
       // a diagnostic exception cannot replace the original resolve/reject.
@@ -151,10 +164,18 @@ async function convertBuffer(bytes, extension, options = {}) {
           outcome: failure ? 'stopped' : 'ok', phase: 'content_extract', item_count: 1,
           duration_ms: closedMetrics.worker_total_ms, metrics: closedMetrics });
       } catch { /* best effort, fixed numeric diagnostics only */ }
-      if (failure) reject(error(failure)); else resolve(result);
+      if (failure) {
+        const rejected = error(failure);
+        if (failure === 'CONVERSION_TERMINATION_UNCONFIRMED' && STOP_CAUSES.has(stopped)) {
+          // Closed machine fact only; never retain an arbitrary thrown object,
+          // parser message, stack or source content as the secondary cause.
+          Object.defineProperty(rejected, 'cause', { value: Object.freeze({ code: stopped }), configurable: true });
+        }
+        reject(rejected);
+      } else resolve(result);
     };
     const stop = code => {
-      if (closed) return;
+      if (closed || settled) return;
       if (stopped) {
         // A recoverable timeout is not permission to ignore a later hard
         // transport/input/runtime fault while the worker is being reaped.
@@ -165,8 +186,8 @@ async function convertBuffer(bytes, extension, options = {}) {
       }
       stopped = code;
       grace = setTimeout(() => finish('CONVERSION_TERMINATION_UNCONFIRMED'), TERMINATION_GRACE_MS);
-      // SIGTERM lets the POSIX supervisor reap its process group. Windows closes
-      // the Job Object on launcher termination, including all worker threads.
+      // POSIX may reap cooperatively; Windows job close requests termination.
+      // Neither the request nor a signal-only supervisor close proves inner end.
       try { child.kill('SIGTERM'); } catch { /* bounded, explicitly unconfirmed below */ }
     };
     const inputFailure = failure => {
@@ -188,45 +209,91 @@ async function convertBuffer(bytes, extension, options = {}) {
       abortSignal?.subscribe(abort);
       if (abortSignal?.aborted()) abort();
     } catch { stop('CONVERSION_INPUT_INVALID'); }
-    child.once('error', failure => stop(conversionStartFailureCode(failure, invocation.command)));
-    child.stdout.on('data', chunk => {
-      if (checkpointStream) {
-        try { checkpointStream.push(chunk); }
-        catch (failure) { stop(failure?.code === 'CONVERSION_OUTPUT_LIMIT' ? 'CONVERSION_OUTPUT_LIMIT' : 'CONVERSION_RESPONSE_INVALID'); }
-        return;
-      }
-      size += chunk.length;
-      if (size > MAX_RESPONSE_BYTES) { stop('CONVERSION_OUTPUT_LIMIT'); return; }
-      chunks.push(chunk);
+    child.once('spawn', () => {
+      childStarted = true;
+      if (!streamsAvailable) stop('CONVERSION_RESPONSE_INVALID');
     });
-    // Drain vendor diagnostics, never return/persist raw document text or paths.
-    child.stderr.on('data', chunk => {
-      timingStream.push(chunk);
-      if (timingStream.exceededBudget()) stop('CONVERSION_OUTPUT_LIMIT'); });
-    child.stdin.on('error', inputFailure);
-    child.once('close', code => {
+    child.once('error', failure => {
+      const cause = conversionStartFailureCode(failure, invocation.command);
+      // Node's spawn event precedes stdout/data and exists only after successful
+      // process creation. A failed spawn has no inner worker to terminate.
+      if (!childStarted) { finish(cause); return; }
+      stop(cause);
+    });
+    if (streamsAvailable) {
+      child.stdout.on('error', () => stop('CONVERSION_RESPONSE_INVALID'));
+      // Optional diagnostics must never crash the host or become a content gate.
+      // Lost diagnostic bytes cannot support complete timing metrics either.
+      child.stderr.on('error', () => { stderrReadFailed = true; });
+      child.stdout.on('data', chunk => {
+        if (checkpointStream) {
+          try { checkpointStream.push(chunk); }
+          catch (failure) { stop(failure?.code === 'CONVERSION_OUTPUT_LIMIT' ? 'CONVERSION_OUTPUT_LIMIT' : 'CONVERSION_RESPONSE_INVALID'); }
+          return;
+        }
+        size += chunk.length;
+        if (size > MAX_RESPONSE_BYTES) { stop('CONVERSION_OUTPUT_LIMIT'); return; }
+        chunks.push(chunk);
+      });
+      // Drain vendor diagnostics, never return/persist raw document text or paths.
+      child.stderr.on('data', chunk => {
+        timingStream.push(chunk);
+        if (timingStream.exceededBudget()) stop('CONVERSION_OUTPUT_LIMIT'); });
+      child.stdin.on('error', inputFailure);
+      child.stdin.once('close', discardInput);
+    }
+    child.once('close', (code, signal = null) => {
       closed = true;
+      // Node ChildProcess close does not count stdin; only its own successful
+      // write or pipe-close callback can retire an already submitted input.
       // A final canonical metric has its own fixed line reserve. All invalid,
       // mismatched or incomplete frames count fully as opaque vendor stderr.
       // A newly proven hard overflow outranks a pending recoverable timeout,
       // while an earlier hard fault/cancellation keeps its original priority.
       try {
-        closedMetrics = timingStream.close(code);
+        // Always settle the provisional frame allowance, even if diagnostic
+        // transport failed. Only the optional metric value is unavailable.
+        const metrics = timingStream.close(code);
+        closedMetrics = stderrReadFailed ? null : metrics;
         if (timingStream.exceededBudget() && (!stopped || stopped === 'CONVERSION_TIMEOUT')) stopped = 'CONVERSION_OUTPUT_LIMIT';
       } catch { /* unavailable diagnostics never replace a product result */ }
       // A launcher that cannot start its parser can close stdin first (EPIPE).
       // Keep the confirmed inner OS fact instead of hiding it behind that
       // secondary incomplete-input symptom; deliberate cancellation still wins.
-      const nativeFailure = nativeConversionExitCode(code);
+      // Close observes our supervisor, not its held inner process. A signal
+      // bypasses its completion contract, including POSIX's reap handler.
+      let nativeFailure = nativeConversionExitCode(code);
+      if (signal !== null || code === null || stopped && !nativeFailure && ![0, 2, 125].includes(code))
+        nativeFailure = 'CONVERSION_TERMINATION_UNCONFIRMED';
       const partial = failure => inputFlushed && checkpointStream ? checkpointStream.recover(failure) : null;
+      if (nativeFailure === 'CONVERSION_TERMINATION_UNCONFIRMED') {
+        // This operational stop must survive any earlier cancellation or hard
+        // input/output fault, so the executor cannot start another source.
+        finish(nativeFailure); return;
+      }
       if (nativeFailure && stopped === 'CONVERSION_INPUT_INCOMPLETE') {
         finish(nativeFailure); return;
       }
       if (stopped) {
         // An explicit cancellation, invalid protocol or unconfirmed termination
         // never becomes success. This branch runs only on actual child close.
-        const failure = stopped === 'CONVERSION_TIMEOUT' && nativeFailure && nativeFailure !== 'CONVERSION_RESOURCE_LIMIT'
-          ? nativeFailure : stopped;
+        let failure = stopped;
+        if (stopped === 'CONVERSION_TIMEOUT') {
+          if (nativeFailure && nativeFailure !== 'CONVERSION_RESOURCE_LIMIT') failure = nativeFailure;
+          else if (![0, 2, 125].includes(code)) failure = 'CONVERSION_TERMINATION_UNCONFIRMED';
+          else if (code === 2) {
+            // A completed hard refusal cannot become a retryable timeout.
+            // Exit2 requires its complete typed negative response, not a prefix.
+            try {
+              const response = checkpointStream ? checkpointStream.response()
+                : JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
+              const schema = contentOptions ? 'datasecure-conversion-response/2' : 'datasecure-conversion-response/1';
+              if (!exactKeys(response, ['schema', 'ok', 'error_code']) || response.schema !== schema ||
+                  response.ok !== false || !ERROR_SET.has(response.error_code)) failure = 'CONVERSION_RESPONSE_INVALID';
+              else if (!recoveryReason(response.error_code)) failure = response.error_code;
+            } catch { failure = 'CONVERSION_RESPONSE_INVALID'; }
+          }
+        }
         const result = partial(failure);
         if (result) finish(null, result); else finish(failure);
         return;
@@ -257,10 +324,16 @@ async function convertBuffer(bytes, extension, options = {}) {
           ...(response.result.ocr_contacts ? { ocr_contacts: response.result.ocr_contacts } : {}) }));
       } catch { finish('CONVERSION_RESPONSE_INVALID'); }
     });
-    if (!stopped) child.stdin.end(input, failure => {
-      if (failure) inputFailure(failure); else inputFlushed = true;
-    });
-    else child.stdin.destroy();
+    if (streamsAvailable && !stopped) {
+      inputSubmitted = true;
+      try { child.stdin.end(input, failure => {
+        if (failure) inputFailure(failure);
+        else { inputFlushed = true; discardInput(); }
+      }); } catch (failure) { inputFailure(failure); }
+    } else {
+      discardInput();
+      if (streamsAvailable) child.stdin.destroy();
+    }
   });
 }
 

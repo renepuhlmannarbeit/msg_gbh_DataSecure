@@ -38,8 +38,9 @@ const CASES = [
   { name: 'retry-revalidates-new-schema', phases: ['lstat'], afterPublishDamage: 'schema', attempts: 2, fails: true },
   { name: 'retry-revalidates-new-sort-order', phases: ['lstat'], afterPublishDamage: 'sort-order', attempts: 2, fails: true },
   { name: 'retry-revalidates-new-batch-id', phases: ['lstat'], afterPublishDamage: 'batch-id', attempts: 2, fails: true },
-  { name: 'retry-revalidates-new-link-count', phases: ['lstat'], afterPublishDamage: 'hardlink', attempts: 2, fails: true },
-  { name: 'changed-then-missing-never-migrates-or-repairs', phases: ['lstat'], afterPublishMissing: true, attempts: 2, fails: true },
+  // An unsafe replacement or a failed open is not classified retry authority.
+  { name: 'replacement-with-new-link-count-is-not-retried', phases: ['lstat'], afterPublishDamage: 'hardlink', attempts: 1, fails: true },
+  { name: 'changed-then-missing-never-migrates-or-repairs', phases: ['lstat'], afterPublishMissing: true, attempts: 1, fails: true },
   { name: 'initial-missing-then-replaced-directory-never-rebinds', initialMissingDirectory: 'replaced', fails: true },
   { name: 'initial-missing-then-missing-directory-never-rebinds', initialMissingDirectory: 'missing', fails: true },
   { name: 'directory-replacement-is-never-rebound', replaceDirectory: true, fails: true }
@@ -116,7 +117,7 @@ function runCase(repository, root, specification) {
   const directory = path.join(root, 'private', 'standalone-history-window');
   const index = path.join(directory, 'recent.json');
   const bound = require(path.join(repository, BOUND));
-  const readBoundFileRecord = bound.readBoundFileRecord;
+  const readBoundFileSnapshotAttemptRecord = bound.readBoundFileSnapshotAttemptRecord;
   const bindDirectory = bound.bindDirectory;
   const methods = ['lstatSync', 'openSync', 'readSync', 'closeSync', 'readdirSync', 'opendirSync',
     'writeFileSync', 'renameSync', 'linkSync', 'mkdirSync', 'unlinkSync', 'rmdirSync', 'truncateSync'];
@@ -225,8 +226,8 @@ function runCase(repository, root, specification) {
       metrics.directory_binds++;
     return bindDirectory(candidate, options);
   };
-  bound.readBoundFileRecord = function observedRead(target, options) {
-    if (!observing || !isIndex(target)) return readBoundFileRecord(target, options);
+  bound.readBoundFileSnapshotAttemptRecord = function observedRead(target, options, onReplacement) {
+    if (!observing || !isIndex(target)) return readBoundFileSnapshotAttemptRecord(target, options, onReplacement);
     metrics.attempts++;
     directories.push(options?.directory);
     attemptOptions.push({ maximum: options?.maximum, minimum: options?.minimum });
@@ -234,8 +235,14 @@ function runCase(repository, root, specification) {
       { code: 'COUNTERCASE_ATTEMPT_OVERFLOW' });
     leafStats = 0;
     publishedOnRead = false;
-    try { return readBoundFileRecord(target, options); }
-    catch (error) { metrics.read_errors.push(error.code || error.name); throw error; }
+    // Forward the actual private replacement callback unchanged. Its Symbol is
+    // the history caller's control signal, not an exposed raw BOUND_FILE error.
+    try { return readBoundFileSnapshotAttemptRecord(target, options, onReplacement); }
+    catch (error) {
+      metrics.read_errors.push(typeof error === 'symbol' ? 'HISTORY_RETRY_SIGNAL' :
+        error?.code || error?.name || 'UNTYPED_THROW');
+      throw error;
+    }
   };
   const window = require(productFile);
   try {
@@ -359,11 +366,19 @@ function runCase(repository, root, specification) {
       assert.equal(fs.existsSync(directory), replacement, 'no directory repair after initial ENOENT');
       if (replacement) assert.deepEqual(JSON.parse(fs.readFileSync(index)).entries, [row(1)]);
     }
-    if (specification.damage === 'hardlink' || specification.afterPublishDamage === 'hardlink')
+    if (specification.damage === 'hardlink')
       assert.ok(metrics.read_errors.includes('BOUND_FILE_UNSAFE'));
+    if (specification.afterPublishDamage === 'hardlink') {
+      assert.deepEqual(metrics.read_errors, ['BOUND_FILE_CHANGED']);
+      assert.equal(metrics.opens, 1); assert.equal(metrics.reads, 0); assert.equal(metrics.closes, 1);
+    }
+    if (specification.afterPublishMissing) {
+      assert.deepEqual(metrics.read_errors, ['BOUND_FILE_CHANGED']);
+      assert.equal(metrics.opens, 0); assert.equal(metrics.reads, 0); assert.equal(metrics.closes, 0);
+    }
     if (specification.closeFailure) assert.deepEqual(metrics.read_errors, ['BOUND_FILE_CLOSE_FAILED']);
     if (specification.closeFailureAttempt) {
-      assert.deepEqual(metrics.read_errors, ['BOUND_FILE_CHANGED', 'BOUND_FILE_CLOSE_FAILED']);
+      assert.deepEqual(metrics.read_errors, ['HISTORY_RETRY_SIGNAL', 'BOUND_FILE_CLOSE_FAILED']);
       assert.equal(metrics.closes, 2, 'both real descriptors were closed before failure was reported');
     }
     if (expectedAbsent) assert.equal(fs.existsSync(index), false, 'CHANGED then ENOENT must not repair/create an index');
@@ -372,7 +387,7 @@ function runCase(repository, root, specification) {
   finally {
     observing = false;
     for (const name of methods) fs[name] = real[name];
-    bound.readBoundFileRecord = readBoundFileRecord;
+    bound.readBoundFileSnapshotAttemptRecord = readBoundFileSnapshotAttemptRecord;
     bound.bindDirectory = bindDirectory;
     // These descriptors belong only to this case. Preserve all fixture paths.
     for (const fd of held) { try { call('closeSync', fd); } catch (error) { caseFailure ||= error; } }

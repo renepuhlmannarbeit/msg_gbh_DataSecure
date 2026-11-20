@@ -128,6 +128,16 @@ class OpcValidationError extends Error {
   }
 }
 
+// Bound parser work before allocation/retention, independently of ZIP bytes.
+// Depth, per-node attributes and active bindings match the bounded XML reader.
+const CONTROL_XML_LIMITS = Object.freeze({
+  depth: 128, attributesPerElement: 256, namespaces: 256,
+  elements: 1000000, attributes: 2000000, namespaceEntries: 65536
+});
+function controlXmlBudget() {
+  return { elements: 0, attributes: 0, namespaceEntries: 0 };
+}
+
 function decodeXmlValue(value) {
   return value.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);/giu, (entity) => {
     const fixed = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" }[entity];
@@ -141,7 +151,7 @@ function decodeXmlValue(value) {
   });
 }
 
-function parseAttributes(source) {
+function parseAttributes(source, work) {
   const attributes = new Map();
   let offset = 0;
   while (offset < source.length) {
@@ -149,6 +159,10 @@ function parseAttributes(source) {
     if (!whitespace) throw new OpcValidationError();
     offset += whitespace[0].length;
     if (offset === source.length) break;
+    if (attributes.size >= CONTROL_XML_LIMITS.attributesPerElement ||
+        work.attributes >= CONTROL_XML_LIMITS.attributes) {
+      throw new OpcValidationError('SOURCE_CONTAINER_LIMIT');
+    }
     const name = /^[A-Za-z_][A-Za-z0-9_.:-]*/u.exec(source.slice(offset));
     if (!name || attributes.has(name[0])) throw new OpcValidationError();
     offset += name[0].length;
@@ -163,13 +177,14 @@ function parseAttributes(source) {
     if (raw.includes('<') || /&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-f]+;)/iu.test(raw)) {
       throw new OpcValidationError();
     }
+    work.attributes++;
     attributes.set(name[0], decodeXmlValue(raw));
     offset = end + 1;
   }
   return attributes;
 }
 
-function parseXml(text, expectedNamespace, expectedRoot) {
+function parseXml(text, expectedNamespace, expectedRoot, work) {
   if (typeof text !== 'string' || text.length === 0 || /<!DOCTYPE|<!ENTITY/iu.test(text)) {
     throw new OpcValidationError();
   }
@@ -222,8 +237,28 @@ function parseXml(text, expectedNamespace, expectedRoot) {
     if (selfClosing) body = body.replace(/\/\s*$/u, '');
     const head = /^([A-Za-z_][A-Za-z0-9_.:-]*)([\s\S]*)$/u.exec(body);
     if (!head) throw new OpcValidationError();
-    const attributes = parseAttributes(head[2]);
-    const namespaces = new Map(stack.at(-1)?.namespaces || []);
+    if (stack.length >= CONTROL_XML_LIMITS.depth || work.elements >= CONTROL_XML_LIMITS.elements) {
+      throw new OpcValidationError('SOURCE_CONTAINER_LIMIT');
+    }
+    work.elements++;
+    const attributes = parseAttributes(head[2], work);
+    const inherited = stack.at(-1)?.namespaces || new Map();
+    let declarations = 0, additional = 0;
+    for (const [name] of attributes) {
+      if (name !== 'xmlns' && !name.startsWith('xmlns:')) continue;
+      const prefix = name === 'xmlns' ? '' : name.slice(6);
+      declarations++;
+      if (!inherited.has(prefix)) additional++;
+    }
+    const namespaceCost = declarations ? inherited.size + declarations : 0;
+    if (inherited.size + additional > CONTROL_XML_LIMITS.namespaces ||
+        namespaceCost > CONTROL_XML_LIMITS.namespaceEntries - work.namespaceEntries) {
+      throw new OpcValidationError('SOURCE_CONTAINER_LIMIT');
+    }
+    work.namespaceEntries += namespaceCost;
+    // Unchanged child scopes may share the immutable inherited map. A real
+    // declaration gets its own copy only after its full cost was admitted.
+    const namespaces = declarations ? new Map(inherited) : inherited;
     for (const [name, value] of attributes) {
       if (name === 'xmlns') namespaces.set('', value);
       else if (name.startsWith('xmlns:')) namespaces.set(name.slice(6), value);
@@ -316,8 +351,9 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
   if (!expected || !(entries instanceof Set) || !controlParts || typeof controlParts !== 'object') {
     throw new OpcValidationError();
   }
-  const contentTypes = parseXml(controlParts['[Content_Types].xml'], CONTENT_TYPES_NS, 'Types');
-  const rootRelationships = parseXml(controlParts['_rels/.rels'], RELATIONSHIPS_NS, 'Relationships');
+  const work = controlXmlBudget();
+  const contentTypes = parseXml(controlParts['[Content_Types].xml'], CONTENT_TYPES_NS, 'Types', work);
+  const rootRelationships = parseXml(controlParts['_rels/.rels'], RELATIONSHIPS_NS, 'Relationships', work);
 
   const overrides = new Map();
   for (const node of elements(contentTypes, CONTENT_TYPES_NS, 'Override')) {
@@ -332,7 +368,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
   // admitted merely because their owner has a chart-looking filename/MIME.
   const chartExParts=new Set(),relationshipTrees=new Map();
   for(const [name,xml]of Object.entries(controlParts))if(name.endsWith('.rels')){
-    const tree=parseXml(xml,RELATIONSHIPS_NS,'Relationships');relationshipTrees.set(name,tree);
+    const tree=parseXml(xml,RELATIONSHIPS_NS,'Relationships',work);relationshipTrees.set(name,tree);
     for(const node of elements(tree,RELATIONSHIPS_NS,'Relationship'))if(attribute(node,'Type')===CHARTEX_RELATIONSHIP){
       const target=resolveRelationshipTarget(name,String(attribute(node,'Target'))),mode=String(attribute(node,'TargetMode'));
       const owner=name.replace('/_rels/','/').slice(0,-'.rels'.length),family={docx:'word',pptx:'ppt',xlsx:'xl'}[declaredType];

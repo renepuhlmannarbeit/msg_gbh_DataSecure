@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import https from 'node:https';
 import cp from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const NODE = '22.23.2';
 const HEADERS_SHA = 'daaf13ec5d45a38bbcfcff06d0723f72a6813b89ab27bb5af2ac8e1f6259dde0';
@@ -19,19 +20,30 @@ if (!['win32', 'darwin'].includes(process.platform) || !['x64', 'arm64'].include
 const output = path.resolve(args[1]), dist = path.join(root, 'dist');
 const relative = path.relative(dist, output);
 if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw Error('Unsafe build output');
-for (let p = path.dirname(output); ;) {
-  if (fs.existsSync(p) && (!fs.lstatSync(p).isDirectory() || fs.lstatSync(p).isSymbolicLink())) throw Error('Unsafe build parent');
-  // Use the same platform path comparison as containment above: on Windows,
-  // DIST and dist identify the same parent. Never walk past a filesystem root.
-  if (path.relative(dist, p) === '') break;
-  const parent = path.dirname(p);
-  if (parent === p) throw Error('Unsafe build parent');
-  p = parent;
+// Bind each physical parent; missing parents are created one level at a time.
+// The final output leaf must be acquired by an exclusive nonrecursive mkdir.
+const directories = [boundFileIo.bindDirectory(root, { io: fs })];
+let parent = root;
+for (const component of path.relative(root, path.dirname(output)).split(path.sep)) {
+  const previous = directories[directories.length - 1];
+  boundFileIo.assertDirectory(previous);
+  parent = path.join(parent, component);
+  try { fs.mkdirSync(parent, { mode: 0o700 }); }
+  catch (error) { if (error?.code !== 'EEXIST') throw error; }
+  boundFileIo.assertDirectory(previous);
+  directories.push(boundFileIo.bindDirectory(parent, { io: fs }));
 }
 if (fs.existsSync(output)) throw Error('Build output must not already exist');
-fs.mkdirSync(output, { recursive: true, mode: 0o700 });
+for (const directory of directories) boundFileIo.assertDirectory(directory);
+fs.mkdirSync(output, { mode: 0o700 });
+directories.push(boundFileIo.bindDirectory(output, { io: fs }));
+function assertBuildDirectories() {
+  for (const directory of directories) boundFileIo.assertDirectory(directory);
+}
+assertBuildDirectories();
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 async function download(name, destination, expected) {
+  assertBuildDirectories();
   const bytes = await new Promise((resolve, reject) => {
     const request = https.get(`https://nodejs.org/dist/v${NODE}/${name}`, response => {
       if (response.statusCode !== 200) { response.resume(); reject(Error('Official download failed')); return; }
@@ -42,11 +54,13 @@ async function download(name, destination, expected) {
     request.setTimeout(30_000, () => request.destroy(Error('Official download timeout'))); request.on('error', reject);
   });
   if (hash(bytes) !== expected) throw Error('Official build input checksum mismatch');
+  assertBuildDirectories();
   fs.writeFileSync(destination, bytes, { flag: 'wx', mode: 0o600 });
 }
 const headers = path.join(output, 'node-headers.tar.gz');
 await download(`node-v${NODE}-headers.tar.gz`, headers, HEADERS_SHA);
 function run(command, argv, options = {}) {
+  assertBuildDirectories();
   const result = cp.spawnSync(command, argv, { cwd: output, encoding: 'utf8', windowsHide: true, shell: false,
     timeout: 120_000, maxBuffer: 4 * 1024 * 1024, ...options });
   if (result.status !== 0 || result.error) throw Error(`Native build step failed: ${command}\n${result.stdout || ''}${result.stderr || ''}`);
@@ -67,12 +81,14 @@ if (process.platform === 'win32') {
   const quote = value => { if (/["\r\n%!?&|<>^]/u.test(value)) throw Error('Unsafe build argument'); return `"${value}"`; };
   const command = `call ${quote(vcvars)} x64 10.0.26100.0 >nul && cl.exe /nologo /Bv /TC /std:c11 /LD /O2 /MT /W4 /WX /sdl /guard:cf /Brepro /D_WIN32_WINNT=0x0601 /I${quote(include)} /Fo:${quote(path.join(output, 'ownership-guard.obj'))} /Fe:${quote(artifact)} ${quote(source)} /link ${quote(library)} Advapi32.lib delayimp.lib /DELAYLOAD:node.exe /Brepro /guard:cf /CETCOMPAT /DYNAMICBASE /NXCOMPAT /HIGHENTROPYVA /INCREMENTAL:NO`;
   const log = run('C:\\Windows\\System32\\cmd.exe', ['/d', '/c', command], { windowsVerbatimArguments: true });
+  assertBuildDirectories();
   fs.writeFileSync(path.join(output, 'build.log'), log, { flag: 'wx' });
   const imports = run('C:\\Windows\\System32\\cmd.exe', ['/d', '/c',
     `call ${quote(vcvars)} x64 10.0.26100.0 >nul && dumpbin.exe /DEPENDENTS ${quote(artifact)}`], { windowsVerbatimArguments: true });
   dependencies = [...imports.matchAll(/^\s+([a-zA-Z0-9_.-]+\.(?:dll|exe))\s*$/gmu)].map(match => match[1].toLowerCase());
   if (!dependencies.includes('node.exe') || dependencies.some(name => !['node.exe', 'kernel32.dll', 'advapi32.dll'].includes(name)))
     throw Error(`Unexpected native dependency: ${dependencies.join(',')}`);
+  assertBuildDirectories();
   fs.writeFileSync(path.join(output, 'dependencies.log'), imports, { flag: 'wx' });
   compiler = 'MSVC x64 /MT; SDK 10.0.26100.0; /Bv evidence in build.log';
 } else {
@@ -83,12 +99,14 @@ if (process.platform === 'win32') {
   const imports = run('/usr/bin/otool', ['-L', artifact]);
   dependencies = imports.split('\n').slice(1).map(line => line.trim().split(' ')[0]).filter(Boolean);
   if (dependencies.length !== 1 || dependencies[0] !== '/usr/lib/libSystem.B.dylib') throw Error('Unexpected native macOS dependency');
+  assertBuildDirectories();
   fs.writeFileSync(path.join(output, 'dependencies.log'), imports, { flag: 'wx' });
   // Replace any linker-generated signature, then verify before hashing the
   // final bytes. Ad-hoc signing needs neither a signing identity nor a timestamp.
   run('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', artifact]);
   run('/usr/bin/codesign', ['--verify', '--strict', artifact]);
 }
+assertBuildDirectories();
 const manifest = {
   schema: 'datasecure-native-ownership-guard-build/1', node_headers_version: NODE,
   headers_sha256: HEADERS_SHA, ...(process.platform === 'win32' ? { node_lib_sha256: LIB_SHA } : {}),
@@ -96,5 +114,6 @@ const manifest = {
   verified_artifact: { schema: 'datasecure-native-ownership-guard/1', abi: 1, napi: 8,
     target: process.platform === 'win32' ? 'windows-x64' : `macos-${process.arch}`, path: artifact, sha256: hash(fs.readFileSync(artifact)) }
 };
+assertBuildDirectories();
 fs.writeFileSync(path.join(output, 'build-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
 console.log(JSON.stringify(manifest));

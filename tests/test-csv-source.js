@@ -30,7 +30,7 @@ test('German semicolon and tab dialects are detected from consistent records', (
   assert.match(csvToMarkdown('Name;Rolle\nErika Beispiel;Tester'), /\| Name \| Rolle \|/);
 });
 
-test('dialect selection parses the selected CSV only once', () => {
+test('dialect selection returns the parsed rows for the selected delimiter', () => {
   const dialect = parseCsvDialect('Name;Rolle\nErika Beispiel;Tester');
   assert.strictEqual(dialect.delimiter, ';');
   assert.deepStrictEqual(dialect.rows, [['Name', 'Rolle'], ['Erika Beispiel', 'Tester']]);

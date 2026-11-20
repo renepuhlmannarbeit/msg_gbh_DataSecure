@@ -28,6 +28,56 @@ test('missing word geometry or a multiword bounding rectangle cannot grant suppr
   assert.equal(uncoveredOcrText(source, [region('Alpha Beta')], { singleTokenOnly: true }), source.text);
   assert.equal(uncoveredOcrText({ text: 'Alpha', blocks: null }, [region('Alpha')], { singleTokenOnly: true }), 'Alpha');
 });
+function positionedLine(words, x = 10, y = 10) {
+  const values = words.map((text, index) => ({ text,
+    bbox: { x0: x + index * 35, y0: y, x1: x + index * 35 + 25, y1: y + 10 } }));
+  return { text: words.join(' ') + '\n', words: values };
+}
+const positionedPage = (...lines) => ({ text: lines.map(line => line.text).join(''), blocks: [{ paragraphs: [{ lines }] }] });
+const samePlace = text => ({ text, x0: 9, y0: 8, x1: 71, y1: 24 });
+test('an exact positioned native phrase removes only the duplicate words from a mixed OCR line', () => {
+  const source = positionedPage(positionedLine(['Alpha', 'Beta', 'new', 'label']), positionedLine(['Alpha', 'Beta'], 400));
+  assert.equal(uncoveredOcrText(source, [], { phrases: [samePlace('Alpha Beta')] }), 'new label\nAlpha Beta\n');
+});
+test('coincident geometry cannot hide a different OCR value or a scan without native evidence', () => {
+  const source = positionedPage(positionedLine(['Alpha', 'Beta']));
+  for (const phrases of [[], [samePlace('Alpha Wrong')], [samePlace('alpha Beta')], [samePlace('Beta Alpha')]]) {
+    assert.equal(uncoveredOcrText(source, [], { phrases }), source.text);
+  }
+});
+test('phrase filtering also retains other lines on a page with OCR review contacts', () => {
+  const source = positionedPage(positionedLine(['Alpha', 'Beta']), positionedLine(['E-Mail:', 'review@example.invalid'], 10, 55));
+  assert.equal(uncoveredOcrText(source, [], { phrases: [samePlace('Alpha Beta')] }), source.text);
+});
+test('phrase evidence requires tight width, position, ownership and a trustworthy complete OCR layout', () => {
+  const phrase = samePlace('Alpha Beta');
+  const source = positionedPage(positionedLine(['Alpha', 'Beta']));
+  for (const phrases of [[{...phrase, x1: 95}], [{...phrase, y0: 13}], [phrase, {...phrase}],
+    [samePlace('Alpha')]]) assert.equal(uncoveredOcrText(source, [], { phrases }), source.text);
+  const twoOwners = positionedPage(positionedLine(['Alpha', 'Beta']), positionedLine(['Alpha', 'Beta']));
+  assert.equal(uncoveredOcrText(twoOwners, [], { phrases: [phrase] }), twoOwners.text);
+  assert.equal(uncoveredOcrText({ ...source, text: source.text + 'unmodelled glyph\n' }, [], { phrases: [phrase] }),
+    source.text + 'unmodelled glyph\n');
+});
+test('focused phrase proof requires a positive pixel box at the position of every OCR word', () => {
+  const source = positionedPage(positionedLine(['Alpha', 'Beta']));
+  const words = source.blocks[0].paragraphs[0].lines[0].words.map(word => word.bbox);
+  const phrase = samePlace('Alpha Beta');
+  assert.equal(uncoveredOcrText(source, [], { phrases: [{ ...phrase, words }] }), '');
+  for (const evidence of [undefined, [words[0]], [words[0], { ...words[1], x1: 64 }], words.slice().reverse()]) {
+    assert.equal(uncoveredOcrText(source, [], { phrases: [{ ...phrase, words: evidence }] }), source.text);
+  }
+});
+test('focused PDF probing prefers a prominent heading over an earlier small banner', () => {
+  const makeItem = (str, baseline, size) => ({ ...item(str, 9, baseline, 62), transform: [size, 0, 0, size, 9, baseline] });
+  const pageViewport = { height: 300, convertToViewportPoint: (x, y) => [x, 300 - y] };
+  const items = [makeItem('Small Banner', 280, 12), makeItem('Main Heading', 240, 32), makeItem('Other Text', 140, 12)];
+  const heading = positionedLine(['Main', 'Heading'], 10, 40);
+  heading.words.forEach(word => { word.bbox.y1 = 62; });
+  const source = positionedPage(positionedLine(['Small', 'Banner'], 10, 11), heading, positionedLine(['Other', 'Text'], 10, 151));
+  assert.deepEqual(layout.coincidentNativePhraseCandidates(source, items, { F: { ascent: 0.8, descent: -0.2 } },
+    pageViewport, source.text), [1, 0]);
+});
 test('aligned columns retain every item and whitespace in original row order', () => {
   const sources = [];
   for (let row = 0; row < 3; row++) for (let column = 0; column < 3; column++) {

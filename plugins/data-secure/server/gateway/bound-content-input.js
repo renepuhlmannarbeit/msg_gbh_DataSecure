@@ -10,7 +10,8 @@ const { contentAbortChecker } = require('./content-consumer-dependencies');
 const invalid = () => Object.assign(new SafeError('Der interne Inhaltsanschluss ist ungültig.'), { code: 'CONTENT_OPTIONS_BINDING_INVALID' });
 const CAPTURE = ['pseudonymRegistry', 'abortSignal', 'convertBuffer', 'timeoutMs', 'prepareOcrContacts', 'captureOcrInput', 'onOcrSourceCaptured'];
 const PUBLICATION = ['pseudonymRegistry', 'abortSignal', 'convertBuffer', 'timeoutMs', 'prepareOcrContacts', 'reviewText',
-  'persistStandaloneIdentitySnapshot', 'beforePublish', 'afterPublish', 'onClaimed', 'onExtracted', 'onDetected'];
+  'persistStandaloneIdentitySnapshot', 'beforePublish', 'afterPublish', 'onClaimed', 'onExtracted', 'onDetected',
+  'assertConversionHealth'];
 function automaticallyRedactOcrContacts(input) {
   require('../core/ocr-contact-review').validateContacts(input.contacts, input.original_text, input.source_type);
   const unmappable = () => Object.assign(new SafeError('OCR-Kontaktbereiche konnten nicht eindeutig auf die lokale Textfassung abgebildet werden.'),

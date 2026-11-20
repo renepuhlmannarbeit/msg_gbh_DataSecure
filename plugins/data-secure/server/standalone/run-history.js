@@ -68,6 +68,13 @@ function createRunHistory(deps) {
     // supplies the bound, read-only one-journal reader below.
     return deps.readStates().find(state => state.token === batchId && state.product_channel === 'standalone');
   }
+  function readTargetActionState(batchId) {
+    validateBatchId(batchId);
+    if (typeof deps.readActionState !== 'function') return readTargetState(batchId); // legacy/source adapter
+    const state = deps.readActionState(batchId);
+    if (state && (state.token !== batchId || state.product_channel !== 'standalone')) throw failure('STANDALONE_HISTORY_INVALID');
+    return state;
+  }
   function captureExistingExportBindings({ requireCurrentBindings = false } = {}) {
     // Interactive folder changes preserve original destinations, not journal
     // snapshots. A worker may publish a newer summary while the picker is open.
@@ -380,7 +387,7 @@ function createRunHistory(deps) {
     // The journal can expire while the human mapping intentionally remains.
     // While it still exists, re-materialize on access so a transient locked
     // document cannot leave a stale partial view after later releases.
-    const current = readTargetState(batchId);
+    const current = readTargetActionState(batchId);
     if (current) {
       try { identityLedger.materialize(current); }
       catch { throw failure('STANDALONE_IDENTITY_MAPPING_INVALID'); }
@@ -453,7 +460,7 @@ function createRunHistory(deps) {
       ? state.items.filter(item => item.status === 'pending') : [];
     const pendingFiles = pending.slice(0, 200).map(item => ({ name: item.source_label || item.name }))
       .filter(item => safeLocalLabel(item.name));
-    return { ok: true, available: true, total: stopped.length, files,
+    return { ok: true, available: files.length === stopped.length, total: stopped.length, files,
       ...(contentNotices || {}),
       ...(feedback ? { conversion_feedback: feedback,
         content_notices: state.items.filter(hasContentNotice).map(item => ({ name: item.source_label || item.name,

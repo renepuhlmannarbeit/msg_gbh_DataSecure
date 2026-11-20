@@ -257,16 +257,19 @@ fn collect_with_segments(path: &Path, current: Option<String>, sidecars: Vec<Str
                 if kind == "startup" {
                     // Startup reports can contain arbitrary edited prose. Only
                     // one of the exact startup codes is extracted, never prose.
+                    let mut budget_blocked = false;
                     if let Ok(text) = std::str::from_utf8(&bytes) {
                         for line in text.lines().take(32) {
+                            if records >= MAX_RECORDS || lines >= MAX_LINES { budget_blocked = true; break; }
+                            lines += 1;
                             if let Some(value) = line.strip_prefix("Fehlercode: ") {
                                 if literal(include_str!("startup_diagnostics.rs"), value) && code(value) {
-                                    accepted.push(json!({ "event": "startup_report", "error_code": value })); break;
+                                    accepted.push(json!({ "event": "startup_report", "error_code": value })); records += 1; break;
                                 }
                             }
                         }
                     }
-                    if accepted.is_empty() { rejected += 1; }
+                    if accepted.is_empty() && !budget_blocked { rejected += 1; }
                 } else {
                     let mut fragments: Vec<_> = bytes.split_inclusive(|b| *b == b'\n').collect();
                     if truncated && !fragments.is_empty() { fragments.remove(0); }
@@ -695,6 +698,79 @@ mod tests {
         let missing = root.join("missing");
         assert!(save(&missing, &root.join("missing-source.json")).unwrap());
         assert_eq!(collect(&missing)["inventory"], "missing_or_unreadable");
+        cleanup(root);
+    }
+    fn timed_source(root: &Path, name: &str, bytes: &[u8], seconds: u64) {
+        let path = root.join(name);
+        std::fs::write(&path, bytes).unwrap();
+        let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(seconds);
+        std::fs::OpenOptions::new().write(true).open(path).unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(modified)).unwrap();
+    }
+    fn actual_record_count(bundle: &Value) -> usize {
+        bundle["sources"].as_array().unwrap().iter()
+            .filter_map(|part| part["records"].as_array()).map(Vec::len).sum()
+    }
+    #[test]
+    fn startup_and_jsonl_share_the_actual_output_record_budget_in_both_orders() {
+        const STARTUP: &str = "DataSecure-Startdiagnose-1-00000000000000000000000000000001-0.txt";
+        let line = format!("{}\n", json!({ "schema": "datasecure-standalone-interaction/1", "time_ms": 10,
+            "component": "desktop", "event": "application_started", "outcome": "ready" }));
+        for count in [4094usize, 4095, 4096, 6000] {
+            for startup_first in [false, true] {
+                let root = root();
+                for (index, chunk) in (0..count).collect::<Vec<_>>().chunks(1500).enumerate() {
+                    let log = line.repeat(chunk.len()); assert!(log.len() < MAX_FILE_BYTES);
+                    timed_source(&root, &format!("desktop-interactions.1.{:032x}.jsonl", index + 1),
+                        log.as_bytes(), 1_000_000 + index as u64);
+                }
+                timed_source(&root, STARTUP, b"Fehlercode: STANDALONE_WEBVIEW_UNAVAILABLE\nPRIVATE PROSE\n",
+                    if startup_first { 2_000_000 } else { 500_000 });
+                let bundle = collect_with_segments(&root, None, vec![]);
+                let parts = bundle["sources"].as_array().unwrap();
+                let first = parts.iter().find(|part| part["status"] == "snapshot").unwrap();
+                assert_eq!(first["component"], if startup_first { "startup" } else { "desktop" });
+                assert_eq!(actual_record_count(&bundle), (count + 1).min(MAX_RECORDS),
+                    "independent sum of emitted records; count={count}, startup_first={startup_first}");
+                let startup = parts.iter().find(|part| part["component"] == "startup").unwrap();
+                let expected_startup = usize::from(startup_first || count < MAX_RECORDS);
+                assert_eq!(startup["records"].as_array().unwrap().len(), expected_startup);
+                assert_eq!(startup["rejected_lines"], 0, "budget omission is not an invalid-content finding");
+                assert!(!bundle.to_string().contains("PRIVATE PROSE"));
+                cleanup(root);
+            }
+        }
+    }
+    #[test]
+    fn startup_scans_share_the_line_budget_and_keep_their_own_32_line_limit() {
+        const STARTUP: &str = "DataSecure-Startdiagnose-1-00000000000000000000000000000001-0.txt";
+        for prefix_lines in [0usize, 1, 31, 32] {
+            let root = root();
+            let report = "PRIVATE PROSE\n".repeat(prefix_lines) + "Fehlercode: STANDALONE_WEBVIEW_UNAVAILABLE\n";
+            timed_source(&root, STARTUP, report.as_bytes(), 2_000_000);
+            timed_source(&root, "desktop-interactions.jsonl", "{}\n".repeat(MAX_LINES).as_bytes(), 1_000_000);
+            let bundle = collect_with_segments(&root, None, vec![]);
+            let parts = bundle["sources"].as_array().unwrap();
+            let startup = parts.iter().find(|part| part["component"] == "startup").unwrap();
+            let desktop = parts.iter().find(|part| part["component"] == "desktop").unwrap();
+            assert_eq!(parts.iter().find(|part| part["status"] == "snapshot").unwrap()["component"], "startup");
+            assert_eq!(actual_record_count(&bundle), usize::from(prefix_lines < 32));
+            assert_eq!(startup["rejected_lines"], usize::from(prefix_lines == 32));
+            assert_eq!(desktop["rejected_lines"], MAX_LINES - (prefix_lines + 1).min(32));
+            assert_eq!(desktop["record_limit_reached"], true);
+            assert!(!bundle.to_string().contains("PRIVATE PROSE"));
+            cleanup(root);
+        }
+        let root = root();
+        timed_source(&root, "desktop-interactions.jsonl", "{}\n".repeat(MAX_LINES).as_bytes(), 2_000_000);
+        timed_source(&root, STARTUP, b"Fehlercode: STANDALONE_WEBVIEW_UNAVAILABLE\n", 1_000_000);
+        let bundle = collect_with_segments(&root, None, vec![]);
+        let parts = bundle["sources"].as_array().unwrap();
+        assert_eq!(parts.iter().find(|part| part["status"] == "snapshot").unwrap()["component"], "desktop");
+        let startup = parts.iter().find(|part| part["component"] == "startup").unwrap();
+        assert_eq!(actual_record_count(&bundle), 0);
+        assert_eq!(startup["rejected_lines"], 0);
+        assert_eq!(startup["record_limit_reached"], true);
         cleanup(root);
     }
     #[cfg(windows)]

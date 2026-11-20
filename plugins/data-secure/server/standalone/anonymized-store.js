@@ -7,6 +7,7 @@ const { ensurePrivateDirectory, assertPrivateDirectory } = require('../gateway/c
 const { readBoundFileRecord, bindDirectory, assertDirectory, sameFile } = require('../core/bound-file-io');
 const { writeFully } = require('../gateway/batch-journal-io');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('../gateway/storage-capacity');
+const { isOwnershipControlFailure } = require('../gateway/prepublication-error');
 const { createStage, assertStage, publishStage, discardStage, recoverAbandonedStages, inspectStaging } = require('../gateway/package-staging');
 const { MAX_MARKDOWN_CHARS } = require('./markdown-contract');
 const { createAnonymizedArtifact, validateExpectation, validateAnonymizedArtifactForExpectation } = require('./anonymized-artifact');
@@ -60,6 +61,7 @@ async function publishAnonymizedArtifact(input, hooks = {}) {
   const roots = anonymizedArtifactRoots(), target = path.join(roots.output, context.package_id);
   const stage = createStage(context.package_id, { roots });
   let committed = false;
+  let ownershipFailure = false;
   const details = Object.freeze({ package_id: context.package_id, document_sha256: context.document_sha256,
     document_result: artifact.manifest.document_result, profile: context.profile, publication_binding: context });
   try {
@@ -72,7 +74,13 @@ async function publishAnonymizedArtifact(input, hooks = {}) {
     for (const [name, bytes] of payload) {
       assertStage(stage);
       const fd = fs.openSync(path.join(stage.path, name), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
-      try { writeFully(fd, bytes, fs); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      let writeFailed = false, writeError;
+      try { writeFully(fd, bytes, fs); fs.fsyncSync(fd); }
+      catch (error) { writeFailed = true; writeError = error; }
+      // Exactly one close attempt; even a falsy primary keeps precedence.
+      try { fs.closeSync(fd); }
+      catch (error) { if (!writeFailed) { writeFailed = true; writeError = error; } }
+      if (writeFailed) throw writeError;
     }
     if (hooks.beforePublish) await hooks.beforePublish(details);
     assertStage(stage);
@@ -87,10 +95,14 @@ async function publishAnonymizedArtifact(input, hooks = {}) {
     if (hooks.afterPublish) await hooks.afterPublish(details);
     return details;
   } catch (error) {
+    ownershipFailure = isOwnershipControlFailure(error);
     if (committed) throw unconfirmed(error);
     throw normalizePostPreflightWriteError(error);
   } finally {
-    if (!committed) discardStage(stage);
+    if (!committed) {
+      try { discardStage(stage); }
+      catch (cleanupError) { if (!ownershipFailure) throw cleanupError; }
+    }
   }
 }
 function inspectAnonymizedStaging() { return inspectStaging({ roots: anonymizedArtifactRoots() }); }

@@ -826,4 +826,36 @@ test('every expiry removal preserves summaries even after startup recovery was s
   }
 });
 
+test('reserved journal directory makes real cleanup inventory incomplete without being read or removed', () => {
+  const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+  const parent = fs.realpathSync.native(os.tmpdir());
+  const directory = fs.mkdtempSync(path.join(parent, 'datasecure-cleanup-status90-'));
+  const token = 'f'.repeat(64), reserved = path.join(directory, token + '.json');
+  let reads = 0;
+  const recovery = createBatchRecovery({ io: fs, batchRoot: () => directory,
+    readActiveLock: () => null, processAlive: () => false,
+    readStateForMaintenance: () => { reads++; throw new Error('modeled unreadable regular journal'); } });
+  const inspect = expected => {
+    assert.deepStrictEqual(recovery.localCleanupStatus(), { private_work_copy_cleanup_pending: 0,
+      expired_batch_cleanup_pending: 0, local_cleanup_counts_complete: expected });
+  };
+  try {
+    fs.mkdirSync(reserved); fs.mkdirSync(path.join(directory, 'nonjournal-helper'));
+    const before = fs.readdirSync(directory).sort();
+    inspect(false); assert.strictEqual(reads, 0, 'nonregular canonical token is never opened');
+    assert.deepStrictEqual(fs.readdirSync(directory).sort(), before);
+    assert.strictEqual(fs.lstatSync(reserved).isDirectory(), true);
+    fs.renameSync(reserved, path.join(directory, 'nonreserved-helper'));
+    inspect(true); assert.strictEqual(reads, 0, 'unrelated helper names stay outside the journal inventory');
+    fs.writeFileSync(reserved, 'SYNTHETIC-UNREADABLE-JOURNAL90', { flag: 'wx', mode: 0o600 });
+    const bytes = fs.readFileSync(reserved);
+    inspect(false); assert.strictEqual(reads, 1);
+    assert.deepStrictEqual(fs.readFileSync(reserved), bytes);
+  } finally {
+    assert.strictEqual(path.dirname(directory), parent);
+    assert.ok(path.basename(directory).startsWith('datasecure-cleanup-status90-'));
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 done();

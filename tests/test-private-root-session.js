@@ -11,8 +11,10 @@ test('cached roots avoid repeated ancestor walks but reject a same-path replacem
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-root-session-'));
   const previousRoot = process.env.EU_PRIVACY_ROOT;
   const previousDataRoot = process.env.EU_PRIVACY_DATA_ROOT;
+  const previousResultRoot = process.env.EU_PRIVACY_RESULT_ROOT;
   process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
   process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'runtime');
+  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
   const commonPath = require.resolve('../plugins/data-secure/server/gateway/common');
   delete require.cache[commonPath];
   const common = require(commonPath);
@@ -64,6 +66,7 @@ test('cached roots avoid repeated ancestor walks but reject a same-path replacem
     else process.env.EU_PRIVACY_ROOT = previousRoot;
     if (previousDataRoot === undefined) delete process.env.EU_PRIVACY_DATA_ROOT;
     else process.env.EU_PRIVACY_DATA_ROOT = previousDataRoot;
+    if (previousResultRoot === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT; else process.env.EU_PRIVACY_RESULT_ROOT = previousResultRoot;
     fs.rmSync(base, { recursive: true, force: true });
   }
 });

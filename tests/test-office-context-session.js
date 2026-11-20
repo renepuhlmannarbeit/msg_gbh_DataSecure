@@ -230,7 +230,8 @@ test('optional-comment boundary catches only its two typed model errors, not can
   for (const code of ['PPTX_STRUCTURE_UNSAFE', 'PPTX_STRUCTURE_LIMIT', 'REQUEST_CANCELLED', 'REQUEST_TIMEOUT', 'CONVERSION_POLICY_FAILED', 'INPUT_FORMAT_LIMIT', null]) {
     const error = code ? Object.assign(new Error(code), { code }) : new Error('ordinary unexpected model failure');
     const isolated = new Module(filename, module); isolated.filename = filename; isolated.paths = Module._nodeModulePaths(path.dirname(filename));
-    isolated.require = request => request === './presentation-comments' ? { readPresentationComments() { throw error; } } : regular(request);
+    // Keep the real budget/token exports; this seam replaces only the reader.
+    isolated.require = request => request === './presentation-comments' ? { ...regular(request), readPresentationComments() { throw error; } } : regular(request);
     isolated._compile(source, filename);
     const run = () => isolated.exports.parseOoxml(presentation(), '.pptx', undefined, { preserveText: true, contentMode: true, literalMarkup: true, partialExtraction: true, referencedImagesOnly: true });
     if (code === 'PPTX_STRUCTURE_UNSAFE' || code === 'PPTX_STRUCTURE_LIMIT') {

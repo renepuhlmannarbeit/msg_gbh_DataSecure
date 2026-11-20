@@ -8,6 +8,8 @@ const { createSuite } = require('./helpers');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-direct-picker-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch, discardIncompleteBatches, releaseLocalBatchExecutor, _test } = require('../plugins/data-secure/server/gateway/batch');
 const { startLocalBatchExecutor, startLocalIntakeExecutor, localIntakeActive } = require('../plugins/data-secure/server/gateway/batch-executor');
@@ -307,12 +309,13 @@ test('a resting intake state shows exactly one local next-action notice and exit
   assert.doesNotMatch(JSON.stringify(states), /resting-private-source|Hidden Example|token|path/u);
 });
 
-test('a final IPC state that arrives just after worker exit suppresses a false failure notice', () => {
+test('a durable final state suppresses false failure even when final IPC arrives after exit', () => {
   const source = path.join(base, 'exit-before-message.txt');
   fs.writeFileSync(source, 'Kontakt: Hidden Example', 'utf8');
   const listeners = {};
   const states = [];
   const failures = [];
+  let journalReads = 0;
   let finalizeExit;
   const child = {
     pid: process.pid,
@@ -321,11 +324,16 @@ test('a final IPC state that arrives just after worker exit suppresses a false f
     send(_value, callback) { callback(); },
     unref() {}, kill() {}
   };
-  startLocalIntakeExecutor([
+  const started = startLocalIntakeExecutor([
     { name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size }
   ], 'general', {
     forkProcess: () => child,
     claimTerminalNotice: () => true,
+    // Explicit journal-boundary model, independent of the stale IPC envelope.
+    readBatchProgress(token) {
+      assert.strictEqual(token, started.batch_token); journalReads++;
+      return { complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0 };
+    },
     showBatchStateNotice: (state) => states.push(state),
     showLocalIntakeNotice: (stage) => failures.push(stage),
     scheduleExitFinalization: (callback) => { finalizeExit = callback; }
@@ -337,7 +345,10 @@ test('a final IPC state that arrives just after worker exit suppresses a false f
     type: 'local-intake-state', complete: true, batch_phase: 'complete',
     batch_total: 1, released: 1, stopped: 0
   });
+  assert.deepStrictEqual(states, [], 'late IPC cannot supply a terminal presentation');
+  assert.strictEqual(journalReads, 0);
   finalizeExit();
+  assert.strictEqual(journalReads, 1, 'only the selected journal supplies the final state');
   assert.deepStrictEqual(states.map((state) => state.batch_phase), ['complete']);
   assert.deepStrictEqual(failures, []);
 });

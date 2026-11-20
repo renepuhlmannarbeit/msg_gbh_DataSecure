@@ -9,7 +9,7 @@ const { prepareStandaloneReviewChoices, mergeStandaloneReviewChoices,
   rememberStandaloneReviewChoices } = require('./standalone-review-choices');
 
 const { MAX_REVIEW_CHARS, MAX_DARWIN_REVIEW_FINDINGS, reviewSizeError } = require('../core/local-review-model');
-const { MAX_STANDALONE_REVIEW_FINDINGS, standaloneReviewSizeError } = require('./standalone-review-budget');
+const { MAX_STANDALONE_REVIEW_FINDINGS, standaloneReviewSizeError, standaloneReviewSourceLabel } = require('./standalone-review-budget');
 
 // Covers both per-document separator labels (at most 100 documents).
 const REVIEW_LABEL_BUDGET = 64;
@@ -217,7 +217,8 @@ function createBatchReviewOrchestrator(options = {}) {
           platform,
           allowDefer: true,
           ...(state.product_channel === 'standalone' ? { allowOrganizationReview: true,
-            privateSourceLabels: plan.openIndices.map(index => selected[index].source_label) } : {}),
+            privateSourceLabels: plan.openIndices.map((index, displayIndex) =>
+              standaloneReviewSourceLabel(selected[index].source_label || selected[index].name, displayIndex + 1)) } : {}),
           batchSummary: {
             batchTotal,
             automaticallyCompleted,

@@ -10,6 +10,7 @@ const { diagnosticCode } = require('./batch-execution-diagnostic');
 const { retryDocumentControl, isOwnershipControlFailure } = require('./prepublication-error');
 const { sanitizeReceipt, retainAudit } = require('./audit');
 const { renameWithTransientRetry } = require('./batch-journal-io');
+const { measure, measureAsync } = require('./standalone-publication-timings');
 const path = require('node:path');
 const unconfirmed = () => Object.assign(new SafeError('Das veröffentlichte Ergebnis bleibt erhalten; seine Bestätigung wird lokal abgeglichen.'), { code: 'BATCH_PUBLICATION_UNCONFIRMED' });
 
@@ -26,15 +27,19 @@ async function publishPersistedContent(context, suppliedHooks) {
     document_sha256: prepared.artifact.expectation.document_sha256, document_result: prepared.artifact.manifest.document_result,
     publication_binding: prepared.artifact.expectation });
   function retainCommittedAudit() {
-    context.assertOwnedEpoch();
-    readAnonymizedArtifact(context.package_id, prepared.artifact.expectation);
-    return retainAudit(prepared.audit_receipt);
+    return measure('result_private_confirm', () => {
+      context.assertOwnedEpoch();
+      readAnonymizedArtifact(context.package_id, prepared.artifact.expectation);
+      return retainAudit(prepared.audit_receipt);
+    });
   }
   try {
-    prepared = await retryDocumentControl(() => context.preparedReplay());
     // Existing committed bytes are discovered before cancellation can demote
     // them to a parser stop. A saved prepared state is never re-extracted.
-    const record = await retryDocumentControl(() => context.publicationRecord());
+    const record = await measureAsync('result_resume_check', async () => {
+      prepared = await retryDocumentControl(() => context.preparedReplay());
+      return retryDocumentControl(() => context.publicationRecord());
+    });
     if (record.state === 'unsafe') throw Object.assign(Error('STANDALONE_PUBLICATION_INVALID'), { code: 'STANDALONE_PUBLICATION_INVALID' });
     if (record.state === 'verified') {
       phase = 'content_ack';
@@ -55,15 +60,17 @@ async function publishPersistedContent(context, suppliedHooks) {
           ocrLineReview: source.extraction.coverage.reason_codes.includes('OCR_NOT_VERIFIED'),
           sourceRedaction: source.source_redaction || null });
         if (hooks.onDetected) { await hooks.onDetected({ profile, detected_identifiers: operation.entityCount }); check(); }
-        const reviewed = await resolveTextPrivacyReview(operation, hooks.reviewText,
-          { checkAbort: check, reviewPolicy: context.review_policy || 'manual' }); check();
-        // Both converters already render their selected content/notes profile.
-        // No Legacy compliance claim, image reference or raw OCR notice follows.
-        const final = finalizeTextPrivacyReview(operation, reviewed, { prefix: '', suffix: '' });
+        const final = await measureAsync('result_privacy_decisions', async () => {
+          const reviewed = await resolveTextPrivacyReview(operation, hooks.reviewText,
+            { checkAbort: check, reviewPolicy: context.review_policy || 'manual' });
+          check();
+          // The converter already renders the chosen content/notes profile.
+          return finalizeTextPrivacyReview(operation, reviewed, { prefix: '', suffix: '' });
+        });
         phase = 'content_verify';
-        const proof = verifyAnonymizedPublication({ markdown: final.markdown, profile, content_options: context.content_options,
+        const proof = measure('result_residual_check', () => verifyAnonymizedPublication({ markdown: final.markdown, profile, content_options: context.content_options,
           source_extraction: source.extraction, dictionary: final.dictionary, strong_person_anchor: final.strong_person_anchor,
-          reviewed_person_candidates: final.reviewed_person_candidates });
+          reviewed_person_candidates: final.reviewed_person_candidates }));
         const artifact = createAnonymizedArtifact({ package_id: context.package_id, content_options: context.content_options,
           source_type: context.source_type, profile, operation_id: context.operation_id, created_at: context.created_at,
           coverage: source.extraction.coverage, markdown: final.markdown, verification_proof: proof });
@@ -80,12 +87,14 @@ async function publishPersistedContent(context, suppliedHooks) {
           const captured = new Set(entries.map(row => row.pseudonym));
           const unmapped_labels = [...new Set(final.markdown.match(/\[(?:PERSON|UNTERNEHMEN|PROJEKT)_\d{3,5}\]/gu) || [])].filter(label => !captured.has(label));
           // This optional local human aid cannot weaken or replace verification.
-          try { await hooks.persistStandaloneIdentitySnapshot({ package_id: context.package_id, entries, unmapped_labels }); }
+          try { await measureAsync('result_identity_snapshot', () =>
+            hooks.persistStandaloneIdentitySnapshot({ package_id: context.package_id, entries, unmapped_labels })); }
           catch { /* absent/incomplete private reference remains separately visible */ }
           check();
         }
         phase = 'content_prepare';
-        const witness = context.commitPreparedRegistry(hooks.pseudonymRegistry, artifact.expectation.manifest_sha256);
+        const witness = measure('result_registry_commit', () =>
+          context.commitPreparedRegistry(hooks.pseudonymRegistry, artifact.expectation.manifest_sha256));
         check();
         phase = 'content_prepare';
         const preparedSnapshot = { package_id: context.package_id, content_options: context.content_options, source_type: context.source_type,
@@ -93,15 +102,17 @@ async function publishPersistedContent(context, suppliedHooks) {
           verification_context: final.verification_context, publication_binding: artifact.expectation,
           ...(source.private_document_metadata ? { private_document_metadata: source.private_document_metadata } : {}) };
         const preparedRecord = { manifest_json: JSON.stringify(artifact.manifest), audit_receipt: receipt, registry_commit: witness };
-        await retryDocumentControl(() => context.capturePrepared(preparedSnapshot, preparedRecord));
-        prepared = await retryDocumentControl(() => context.preparedReplay()); if (!prepared) throw unconfirmed();
+        await measureAsync('result_prepared_write', () => retryDocumentControl(() => context.capturePrepared(preparedSnapshot, preparedRecord)));
+        prepared = await measureAsync('result_prepared_read', () => retryDocumentControl(() => context.preparedReplay()));
+        if (!prepared) throw unconfirmed();
       }
       check();
       phase = 'content_publish';
-      await publishAnonymizedArtifact(prepared.publication_input, {
+      await measureAsync('result_private_publish', () => publishAnonymizedArtifact(prepared.publication_input, {
         beforePublish: async value => { check(); if (hooks.beforePublish) await hooks.beforePublish(value); check(); },
         publishPackage(from, to) {
-          try { check(); } catch (error) { barrierError = error; throw error; }
+          try { check(); hooks.assertConversionHealth?.(); }
+          catch (error) { barrierError = error; throw error; }
           renameWithTransientRetry(from, to);
         },
         afterPublish: async value => {
@@ -110,7 +121,7 @@ async function publishPersistedContent(context, suppliedHooks) {
           if (hooks.afterPublish) await hooks.afterPublish(value);
           context.assertOwnedEpoch();
         }
-      });
+      }));
       committed = true;
     }
     phase = 'content_ack';

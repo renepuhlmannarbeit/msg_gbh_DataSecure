@@ -190,12 +190,69 @@ test('actual journal, run membership and acquisition are rechecked after issuanc
         // The already issued owned snapshot is still the verified old source.
         const context = f.authority.consume(ticket); assert.deepEqual(context.takeSourceBytes(), f.bytes); context.dispose(); continue;
       }
-      assert.throws(() => f.authority.consume(ticket), error => error.code === 'CONTENT_OPTIONS_BINDING_INVALID');
+      assert.throws(() => f.authority.consume(ticket), error => error.code ===
+        (change === 'epoch' ? 'BATCH_OWNERSHIP_CHANGED' : 'CONTENT_OPTIONS_BINDING_INVALID'));
       assert.throws(() => f.authority.consume(ticket));
       assert.deepEqual(fs.readFileSync(f.source), f.bytes);
     } finally { f.release(); }
   }
 });
+
+test('real renewed acquisitions retain their exact control refusal through issue, consume and context checks', () => {
+  for (const boundary of ['issue', 'consume', 'check']) {
+    const f = authorizedFixture(); let context, observed, bytes;
+    const assertEpoch = f.services.assertOwnedEpoch;
+    f.services.assertOwnedEpoch = epoch => {
+      try { return assertEpoch(epoch); } catch (error) { observed = error; throw error; }
+    };
+    try {
+      let action;
+      if (boundary === 'issue') {
+        const capture = f.services.captureOwnedEpoch;
+        f.services.captureOwnedEpoch = token => { const epoch = capture(token); f.release(); f.lock.acquireActiveLock(token); return epoch; };
+        action = () => f.authority.issue(f.state.token, f.item.id, 'publication');
+      } else {
+        const ticket = f.authority.issue(f.state.token, f.item.id, 'publication');
+        if (boundary === 'check') { context = f.authority.consume(ticket); bytes = context.takeSourceBytes(); }
+        f.release(); f.lock.acquireActiveLock(f.state.token);
+        action = boundary === 'consume' ? () => f.authority.consume(ticket) : () => context.revalidate();
+        if (boundary === 'consume') {
+          assert.throws(action, error => error === observed && error.code === 'BATCH_OWNERSHIP_CHANGED');
+          assert.throws(() => f.authority.consume(ticket), { code: 'CONTENT_OPTIONS_BINDING_INVALID' });
+          action = null;
+        }
+      }
+      if (action) assert.throws(action, error => error === observed && error.code === 'BATCH_OWNERSHIP_CHANGED');
+      if (context) {
+        assert.ok(bytes.every(byte => byte === 0));
+        assert.throws(() => context.revalidate(), { code: 'CONTENT_OPTIONS_BINDING_INVALID' });
+      }
+      assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+    } finally { context?.dispose(); f.release(); }
+  }
+});
+
+async function registryReadbackEpochProbe() {
+  const f = authorizedFixture(); let context, observed, writtenBytes, writes = 0;
+  const assertEpoch = f.services.assertOwnedEpoch, write = f.services.writeState;
+  f.services.assertOwnedEpoch = epoch => { try { return assertEpoch(epoch); } catch (error) { observed = error; throw error; } };
+  f.services.writeState = state => {
+    writes++; write(state); writtenBytes = fs.readFileSync(path.join(batch._test.batchRoot(), `${f.state.token}.json`));
+    f.release(); f.lock.acquireActiveLock(f.state.token);
+  };
+  try {
+    context = f.authority.consume(f.authority.issue(f.state.token, f.item.id, 'publication'));
+    const bytes = context.takeSourceBytes(), state = batch._test.readStateForMaintenance(f.state.token);
+    await assert.rejects(withBatchPseudonymRegistry(state, async registry => {
+      context.commitPreparedRegistry(registry, 'a'.repeat(64));
+      assert.fail('refused registry readback must not return a witness');
+    }), error => error === observed && error.code === 'BATCH_OWNERSHIP_CHANGED');
+    assert.equal(writes, 1, 'only the earlier authorized write occurred');
+    assert.ok(bytes.every(byte => byte === 0));
+    assert.deepEqual(fs.readFileSync(path.join(batch._test.batchRoot(), `${f.state.token}.json`)), writtenBytes);
+    assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+  } finally { context?.dispose(); f.release(); }
+}
 
 test('scope and durable item phase are bound, while normal checkpoint/registry updates remain possible', () => {
   for (const kind of ['capture', 'publication']) {
@@ -235,6 +292,7 @@ test('a changed owned decoder buffer or loss of the active scope revokes a consu
 });
 
 async function main() {
+  await testAsync('a real epoch change at registry readback returns no witness or later registry write', registryReadbackEpochProbe);
   await testAsync('prepared records replay exact manifest, final Markdown and audit in a fresh process without publication authority', async () => {
     const f = authorizedFixture(); let p;
     try {
@@ -430,7 +488,8 @@ async function main() {
         context = f.authority.consume(f.authority.issue(f.state.token, f.item.id, 'publication'));
         await assert.rejects(withBatchPseudonymRegistry(batch._test.readStateForMaintenance(f.state.token), async registry => {
           registry.assign('PERSON', 'Anna Beispiel');
-          assert.throws(() => context.commitPreparedRegistry(registry, 'a'.repeat(64)), e => e.code === 'CONTENT_OPTIONS_BINDING_INVALID');
+          assert.throws(() => context.commitPreparedRegistry(registry, 'a'.repeat(64)), e => e.code ===
+            (lost === 'epoch' ? 'BATCH_OWNERSHIP_CHANGED' : 'CONTENT_OPTIONS_BINDING_INVALID'));
         }), e => e.code === 'DOCUMENT_REVIEW_CONFLICT');
         assert.equal(fs.existsSync(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', f.state.token, f.item.id)), false);
       } finally { context?.dispose(); f.release(); }

@@ -77,6 +77,51 @@ test('legacy header migration quotes protected bytes without applying apostrophe
   assert.equal(normalizeExistingMapping(reread.text).text, upgraded.text);
 });
 
+test('a closed final quoted record without CRLF is retained exactly once in both mapping schemas', () => {
+  const quote = value => `"${value.replace(/"/gu, '""')}"`;
+  const currentFields = ["'-Ärger.txt", PACKAGE_A, 'Vollständig verarbeitet', '', '', 'Notiz; "ÄÖÜß"\r\nzweite Zeile'];
+  const legacyFields = ["'-Ärger.txt", PACKAGE_A, 'freigegeben', 'Notiz; "ÄÖÜß"\r\nzweite Zeile'];
+  for (const [header, fields] of [[HEADER, currentFields], [LEGACY_HEADER, legacyFields]]) {
+    const input = header + fields.map(quote).join(';');
+    const decoded = normalizeExistingMapping(input);
+    assert.equal(decoded.rows.length, 1);
+    assert.equal(decoded.rows[0][0], fields[0]);
+    assert.equal(decoded.rows[0][1], PACKAGE_A);
+    assert.ok(decoded.text.endsWith('\r\n'));
+    assert.equal(normalizeExistingMapping(decoded.text).rows.length, 1);
+    assert.ok(decoded.rows[0].at(-1).includes(legacyFields.at(-1)));
+    assert.throws(() => normalizeExistingMapping(input + ';'), /ungültiges Format/u);
+    assert.throws(() => normalizeExistingMapping(input.slice(0, -1)), /ungültiges Format/u);
+  }
+});
+
+test('append after an external final-CRLF removal preserves the old row and commits a readable second row', () => {
+  const exportsRoot = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'data-secure-mapping-eof-'));
+  const roots = () => ({ exports: exportsRoot }), options = { roots, documentResult: COMPLETE };
+  const target = mappingPath({ roots }); let complete = false;
+  try {
+    assert.equal(appendMapping('-Ärger.txt', PACKAGE_A, undefined, options), true);
+    const original = fs.readFileSync(target, 'utf8');
+    assert.ok(original.endsWith('\r\n'));
+    const withoutTerminator = original.slice(0, -2);
+    fs.writeFileSync(target, withoutTerminator);
+    assert.equal(appendMapping('-Ärger.txt', PACKAGE_A, undefined, options), false);
+    assert.equal(fs.readFileSync(target, 'utf8'), withoutTerminator, 'a no-op does not rewrite external bytes');
+    assert.equal(appendMapping('zweite-Ö.txt', PACKAGE_B, undefined, options), true);
+    const rows = normalizeExistingMapping(fs.readFileSync(target, 'utf8')).rows;
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows[0], normalizeExistingMapping(original).rows[0]);
+    assert.deepEqual(rows.map(row => row[1]), [PACKAGE_A, PACKAGE_B]);
+    assert.equal(appendMapping('zweite-Ö.txt', PACKAGE_B, undefined, options), false);
+    complete = true;
+  } finally {
+    if (complete) {
+      assert.deepEqual(fs.readdirSync(exportsRoot), [path.basename(target)]);
+      fs.unlinkSync(target); fs.rmdirSync(exportsRoot);
+    }
+  }
+});
+
 test('six-column legacy apostrophe rows retry without conflating newly encoded names', () => {
   const exportsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-mapping-v1-retry-'));
   const roots = () => ({ exports: exportsRoot });

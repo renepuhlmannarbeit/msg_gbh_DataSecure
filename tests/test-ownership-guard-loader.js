@@ -11,6 +11,7 @@ const { test } = require('node:test');
 const { desktopErrorCode, DESKTOP_ERROR_CODES } = require('../plugins/data-secure/server/core/desktop-error-contract');
 
 const source = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/core/native-ownership-guard.js'), 'utf8');
+const controlSource = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/core/ownership-control.js'), 'utf8');
 const PRIVATE = 'PRIVATE_VENDOR_SENTINEL /Users/Confidential Customer/Secret.app/Contents/Frameworks/private.node';
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const dto = fields => Object.assign(Object.create(null), fields);
@@ -57,13 +58,28 @@ class InjectedLoader {
     const api = dto({ abi: 1,
       createRoot: real => { this.nativeRoots++; assert.equal(real, this.root); return this.nativeRoot; },
       tryAcquire: root => { assert.equal(root, this.nativeRoot); return this.nativeGuard; },
-      assertHeld: guard => { assert.equal(guard, this.nativeGuard); return true; },
-      release: guard => { assert.equal(guard, this.nativeGuard); return true; },
-      closeRoot: root => { assert.equal(root, this.nativeRoot); return true; }
+      assertHeld: guard => {
+        assert.equal(guard, this.nativeGuard);
+        if (Object.hasOwn(options, 'heldError')) throw options.heldError;
+        return true;
+      },
+      release: guard => {
+        assert.equal(guard, this.nativeGuard); this.events.push('guard-release');
+        if (options.releaseThrow) throw options.releaseError;
+        return Object.hasOwn(options, 'releaseResult') ? options.releaseResult : true;
+      },
+      closeRoot: root => {
+        assert.equal(root, this.nativeRoot); this.events.push('root-close');
+        if (options.rootCloseThrow) throw options.rootCloseError;
+        return Object.hasOwn(options, 'rootCloseResult') ? options.rootCloseResult : true;
+      }
     });
     const binding = {
       bindDirectory: name => { this.step('bind'); return Object.freeze({ real: name }); },
-      assertDirectory: () => { this.step('directory'); },
+      assertDirectory: () => {
+        this.step('directory');
+        if (options.rootChangedAfterCreate && this.nativeRoots) throw nativeError('BOUND_FILE_CHANGED');
+      },
       fileIdentity: () => this.identity,
       sameFile: (stat, identity) => stat === this.stat && identity === this.identity,
       readHeldBytes: (fd, size) => { this.step('read'); assert.equal(fd, 71); assert.equal(size, this.bytes.length); return Buffer.from(this.bytes); }
@@ -89,7 +105,7 @@ class InjectedLoader {
       }
     });
     vm.runInContext(source, context, { filename: 'ownership-guard-loader-model.cjs', timeout: 500 });
-    this.api = context.module.exports;
+    this.api = context.module.exports; this.context = context;
   }
   step(name) { this.events.push(name); if (this.options.failAt === name) throw this.options.error; }
   artifact() {
@@ -98,7 +114,70 @@ class InjectedLoader {
       path: this.filename, sha256: hash(this.bytes) });
   }
   create(artifact = this.artifact()) { return this.api.createOwnershipGuard(dto({ root: this.root, verifiedArtifact: artifact })); }
+  control() {
+    // The two actual modules share one modeled JS realm, as in production.
+    // Only the OS/NAPI boundary is injected; no replacement guard/control logic.
+    const make = vm.runInContext('(function(module, require, __dirname) {\n' + controlSource +
+      '\n;return module.exports;})', this.context, { filename: 'ownership-control-composed-model.cjs', timeout: 500 });
+    this.context.process.env = { DATASECURE_NATIVE_EXPORT_CHANNEL: '1' };
+    const api = make({ exports: {} }, name => {
+      if (name === 'node:path') return this.path;
+      if (name === 'node:util') return require(name);
+      if (name === './native-ownership-guard') return this.api;
+      assert.equal(name, '../standalone/macos-bundle-layout'); return { bundleContext: () => null };
+    }, 'C:\\isolated\\server\\core');
+    api.configureOwnershipControl(this.artifact()); return api;
+  }
 }
+
+test('constructor cleanup uncertainty preserves primary refusal and blocks every subsequent control entry', () => {
+  for (const options of [{ rootCloseThrow: true, rootCloseError: nativeError('OWNERSHIP_GUARD_CLOSE_UNCONFIRMED') },
+    { rootCloseResult: false }, { rootCloseResult: undefined }]) {
+    const f = new InjectedLoader({ ...options, rootChangedAfterCreate: true }), control = f.control();
+    const primary = thrown(() => control.withOwnershipControl(f.root, () => assert.fail('no authority')));
+    sanitized(primary, 'OWNERSHIP_GUARD_UNSAFE');
+    assert.equal(f.api.hasUnconfirmedCleanup(primary), true);
+    assert.equal(f.events.filter(event => event === 'root-close').length, 1);
+    const before = f.events.slice();
+    assert.throws(() => control.withOwnershipControl('C:\\isolated\\other', () => assert.fail('poisoned')),
+      { code: 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED' });
+    assert.deepEqual(f.events, before);
+    assert.equal(f.api.hasUnconfirmedCleanup(nativeError('OWNERSHIP_GUARD_UNSAFE')), false);
+  }
+});
+test('post-acquire cleanup uncertainty preserves frozen identity and still closes its factory exactly once', () => {
+  for (const options of [{ releaseThrow: true, releaseError: nativeError('OWNERSHIP_GUARD_CLOSE_UNCONFIRMED') },
+    { releaseResult: false }, { releaseResult: undefined }]) {
+    const primary = Object.freeze(nativeError('OWNERSHIP_GUARD_UNSAFE'));
+    const f = new InjectedLoader({ ...options, heldError: primary }), control = f.control();
+    const properties = Object.getOwnPropertyDescriptors(primary);
+    assert.equal(thrown(() => control.withOwnershipControl(f.root, () => assert.fail('no authority'))), primary);
+    assert.deepEqual(Object.getOwnPropertyDescriptors(primary), properties);
+    assert.equal(f.api.hasUnconfirmedCleanup(primary), true);
+    assert.equal(f.events.filter(event => event === 'guard-release').length, 1);
+    assert.equal(f.events.filter(event => event === 'root-close').length, 1);
+    const before = f.events.slice();
+    assert.throws(() => control.withOwnershipControl(f.root, () => assert.fail('poisoned')),
+      { code: 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED' });
+    assert.deepEqual(f.events, before);
+  }
+});
+test('confirmed cleanup and primitive engineering errors cannot mint or accidentally mask cleanup evidence', () => {
+  const primary = Object.freeze(nativeError('OWNERSHIP_GUARD_UNSAFE'));
+  const f = new InjectedLoader({ heldError: primary }), control = f.control();
+  for (let attempt = 0; attempt < 2; attempt++)
+    assert.equal(thrown(() => control.withOwnershipControl(f.root, () => assert.fail('no authority'))), primary);
+  assert.equal(f.api.hasUnconfirmedCleanup(primary), false);
+  assert.equal(f.nativeRoots, 2);
+  for (const value of [undefined, null, false, 0, 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED']) {
+    assert.equal(f.api.hasUnconfirmedCleanup(value), false);
+    const primitive = new InjectedLoader({ heldError: value, releaseResult: false });
+    const factory = primitive.create(); let didThrow = false;
+    try { factory.tryAcquire(); } catch (error) { didThrow = true; assert.equal(error, value); }
+    assert.equal(didThrow, true); assert.equal(primitive.api.hasUnconfirmedCleanup(value), false);
+    assert.equal(factory.close(), true);
+  }
+});
 
 test('injected loader reaches fixed headers, validated exports and returned guard capabilities', () => {
   for (const [platform, arch] of [['win32', 'x64']]) {

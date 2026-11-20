@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +12,7 @@ import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 import { standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged } from './lib/standalone-build-fingerprint.mjs';
 import { loadOwnershipGuardBuild, writeOwnershipGuardRuntime, assertOwnershipGuardMarker } from './lib/ownership-guard-artifact.mjs';
 import { WINDOWS_PACKAGE_ROOT } from './lib/standalone-windows-layout.mjs';
+import { createWindowsPackageStage, writeWindowsStageBytes, writeWindowsPackageChecksum } from './lib/standalone-windows-package.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const font = standaloneFontLicense(root);
@@ -24,36 +24,12 @@ const folderName = WINDOWS_PACKAGE_ROOT;
 const args = process.argv.slice(2);
 if (args.length && (args.length !== 2 || args[0] !== '--engineering-directory' ||
     !/^engineering-[a-z0-9-]{1,64}$/u.test(args[1]))) throw new Error('STANDALONE_BUILD_ARGUMENT_INVALID');
-// Fresh unpublished candidates must not overwrite a saved release archive.
-const engineeringDirectory = args.length ? path.join(root, 'dist', args[1]) : null;
-if (engineeringDirectory) {
-  const parent = fs.lstatSync(path.join(root, 'dist'));
-  if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('STANDALONE_STAGE_UNSAFE');
-  fs.mkdirSync(engineeringDirectory); // EEXIST is intentionally fatal.
-}
-const stageParent = engineeringDirectory ? path.join(engineeringDirectory, 'stage') : path.join(root, 'dist', 'standalone-package-stage');
-const stage = path.join(stageParent, folderName);
-const output = path.join(engineeringDirectory || path.join(root, 'dist'), `${packageName}.zip`);
-
-function safeResetStage() {
-  if (engineeringDirectory) {
-    fs.mkdirSync(stage, { recursive: true });
-    return;
-  }
-  const resolved = path.resolve(stageParent);
-  const dist = path.resolve(root, 'dist');
-  if (path.dirname(resolved) !== dist || path.basename(resolved) !== 'standalone-package-stage') {
-    throw new Error('STANDALONE_STAGE_UNSAFE');
-  }
-  fs.rmSync(resolved, { recursive: true, force: true });
-  fs.mkdirSync(stage, { recursive: true });
-}
+// Every stage/output is create-only; old release archives and failed stages remain.
+const { stageParent, stage, output } = createWindowsPackageStage(root, packageName, folderName, args.length ? args[1] : null);
 
 function copyFile(source, relative, mode = 0o600) {
   const bytes = readRegular(source, 160 * 1024 * 1024);
-  const destination = path.join(stage, ...relative.split('/'));
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.writeFileSync(destination, bytes, { flag: 'wx', mode });
+  writeWindowsStageBytes(stage, relative, bytes, mode);
 }
 
 function copyCargoExecutable(source, relative) {
@@ -81,7 +57,6 @@ function inventory(directory, ignored = new Set()) {
     .sort((left, right) => left.path.localeCompare(right.path));
 }
 
-safeResetStage();
 const executable = path.join(root, 'apps', 'datasecure-standalone', 'tauri-contract', 'target', 'release', 'datasecure-standalone.exe');
 const runtimeDir = path.join(root, 'dist', productTarget);
 const runtime = path.join(runtimeDir, 'datasecure-node.exe');
@@ -98,7 +73,7 @@ const windowsPolicyBytes = readRegular(path.join(root, 'native/runtime/standalon
 const windowsPolicy = verifyWindowsCrtPolicy(JSON.parse(windowsPolicyBytes));
 
 copyCargoExecutable(executable, 'DataSecure Standalone.exe');
-copyFile(runtime, `datasecure-core-${rustTarget}.exe`, 0o700);
+writeWindowsStageBytes(stage, `datasecure-core-${rustTarget}.exe`, runtimeBytes, 0o700);
 // Build the closed runtime projection from the current source tree. Packaging
 // must never trust a possibly stale generated-runtime directory left by an
 // earlier desktop build.
@@ -109,7 +84,7 @@ writeStandaloneRuntime(
 );
 writeConversionRuntime(root, path.join(stage, 'server', 'standalone', 'conversion-runtime'), productTarget);
 writeOwnershipGuardRuntime(root, productTarget, path.join(stage, 'server'));
-copyFile(runtimeLicense, 'LICENSE.node.txt');
+writeWindowsStageBytes(stage, 'LICENSE.node.txt', licenseBytes);
 copyFile(font.licensePath, 'LICENSE-Inter.txt');
 copyFile(path.join(root, 'LICENSE'), 'LICENSE');
 copyFile(path.join(root, 'apps', 'datasecure-standalone', 'THIRD_PARTY_NOTICES.md'), 'THIRD_PARTY_NOTICES.md');
@@ -181,8 +156,7 @@ fs.writeFileSync(path.join(stage, 'SHA256SUMS'), `${hashes.map((file) => `${file
 const archiveFiles = collectFiles(stageParent).map((file) => ({ ...file,
   mode: file.archivePath.endsWith('.exe') ? 0o100755 : 0o100644 }));
 assertStandaloneSourceUnchanged(root, sourceFingerprint);
-if (!engineeringDirectory) fs.rmSync(output, { force: true });
-const archive = writeZip(output, archiveFiles);
+const archive = writeZip(output, archiveFiles, { createOnly: true });
 const zipBytes = readRegular(output, 512 * 1024 * 1024);
-fs.writeFileSync(`${output}.sha256`, `${crypto.createHash('sha256').update(zipBytes).digest('hex')}  ${path.basename(output)}\n`);
+writeWindowsPackageChecksum(output, zipBytes);
 process.stdout.write(`${JSON.stringify({ ok: true, output, sha256: sha256(zipBytes), ...archive })}\n`);

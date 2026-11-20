@@ -137,6 +137,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm ci --prefix native/graphics/pilot --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node native/ocr/pilot/fetch-models.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Fetch and attest the pinned official Windows runtime
@@ -176,9 +178,17 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $archive = "dist/DataSecure-Standalone-$version-windows-x64.zip"
           $before = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
-          node scripts/build-standalone-package.mjs
+          $reproDirectory = 'engineering-repro-windows-x64'
+          $reproArchive = "dist/$reproDirectory/DataSecure-Standalone-$version-windows-x64.zip"
+          node scripts/build-standalone-package.mjs --engineering-directory $reproDirectory
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $before) { throw 'STANDALONE_PACKAGE_NOT_DETERMINISTIC' }
+          node scripts/verify-standalone-package.mjs $archive
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/verify-standalone-package.mjs $reproArchive
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          if ((Get-FileHash -LiteralPath $reproArchive -Algorithm SHA256).Hash -ne $before) { throw 'STANDALONE_PACKAGE_NOT_DETERMINISTIC' }
+          & "$env:SystemRoot\System32\fc.exe" /b $archive $reproArchive > $null
+          if ($LASTEXITCODE -ne 0) { throw 'STANDALONE_PACKAGE_NOT_DETERMINISTIC' }
       - name: Launch the exact archive with a fresh isolated profile and require v2 IPC
         run: |
           $ErrorActionPreference = 'Stop'

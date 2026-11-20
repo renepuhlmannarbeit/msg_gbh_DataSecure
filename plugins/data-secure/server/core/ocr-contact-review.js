@@ -41,8 +41,15 @@ function contactSpans(text, quality, page = 1, offset = 0) {
     const line = matchLine[1];
     start = matchLine.index;
     if (quality.contact_lines.includes(index + 1)) {
-      const matches = [...line.matchAll(/[^\s<>()[\]{},;:]+@[^\s<>()[\]{},;:]+/gu)]
-        .map(match => ({ index: match.index, value: match[0], kind: 'email' }));
+      const matches = [];
+      // The old greedy expression owns a complete maximal token containing
+      // an internal @. Iterate runs once; do not retain noncontact matches.
+      // Unlike the quality predicate, this candidate grammar allows @ itself.
+      for (const match of line.matchAll(/[^\s<>()[\]{},;:]+/gu)) {
+        const at = match[0].indexOf('@', 1);
+        if (at > 0 && at < match[0].length - 1)
+          matches.push({ index: match.index, value: match[0], kind: 'email' });
+      }
       for (const match of line.matchAll(/\+\d[\d ()./-]{6,}\d/gu)) {
         if (!matches.some(email => match.index < email.index + email.value.length && match.index + match[0].length > email.index))
           matches.push({ index: match.index, value: match[0], kind: 'phone' });

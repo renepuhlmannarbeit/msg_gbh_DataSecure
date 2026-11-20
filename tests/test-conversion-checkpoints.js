@@ -1,15 +1,11 @@
 'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
-const { createRequire } = require('node:module');
-const { EventEmitter } = require('node:events');
+const { createParentModel: parentModel, CONTENT_OPTIONS: options } = require('./lib/conversion-parent-model.cjs');
 const { createSuite } = require('./helpers');
 const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
 const { CheckpointStream, createCheckpointEmitter, recoveryReason, MAX_TRANSPORT_BYTES,
   MAX_RESPONSE_BYTES } = require('../plugins/data-secure/server/standalone/conversion-checkpoints');
 const { test, testAsync, assert, done } = createSuite('Private bounded conversion checkpoints');
-const options = Object.freeze({ schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: true });
 const unit = (text = 'Sicherer Text äöüß', changes = {}) => createMarkdownExtraction({ source_type: 'pdf',
   content_options: options, markdown: text, coverage: { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }, ...changes });
 const frame = (result = unit(), index = 0, sequence = 1) => ({ schema: 'datasecure-conversion-unit/1', sequence, index, result });
@@ -168,36 +164,6 @@ testAsync('emitter output failure prevents all subsequent writes', async () => {
   assert.equal(writes, 1);
 });
 
-// Execute the actual production parent closure, replacing only OS launch/clock
-// dependencies. These are lifecycle counterexamples, not native OS test claims.
-function parentModel({ legacy = false, flush = true } = {}) {
-  const filename = path.resolve(__dirname, '../plugins/data-secure/server/standalone/conversion-worker.js');
-  const originalRequire = createRequire(filename), child = new EventEmitter(), timers = new Map();
-  let nextTimer = 0, killed = 0, inputCallback;
-  child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.stdin = new EventEmitter();
-  child.stdin.end = (_bytes, callback) => { inputCallback=callback; if (flush) callback(); };
-  child.stdin.destroy = () => {};
-  child.kill = () => { killed++; return true; };
-  const module = { exports: {} };
-  const localRequire = name => {
-    if (name === 'node:child_process') return { spawn: () => child };
-    if (name === './conversion-runtime-resolver') return { resolveConversionRuntime: () => ({ node: 'bound-node', root: __dirname }) };
-    if (name === '../native-launcher') return { verifyNativeLauncherArtifact() {} };
-    if (name === '../posix-supervisor') return { verifyPosixSupervisor: () => ({ available: true, executable: 'bound-supervisor' }) };
-    return originalRequire(name);
-  };
-  new Function('require', 'module', '__dirname', 'setTimeout', 'clearTimeout', fs.readFileSync(filename, 'utf8'))(
-    localRequire, module, path.dirname(filename), (callback, ms) => { const id = ++nextTimer; timers.set(id, { callback, ms }); return id; },
-    id => timers.delete(id));
-  const controller = new AbortController();
-  const promise = module.exports.convertBuffer(Buffer.from('bound original bytes'), '.pdf',
-    { timeoutMs: 1000, signal: controller.signal, ...(legacy ? {} : { contentOptions: options }) });
-  const tick = ms => { const entry = [...timers].find(([, timer]) => timer.ms === ms); assert.ok(entry); timers.delete(entry[0]); entry[1].callback(); };
-  return { promise, child, controller, tick, killed: () => killed, timers,
-    inputError: (code, via) => { const failure=code === undefined ? new Error('synthetic I/O failure') : Object.assign(new Error(code),{code});
-      if(via === 'callback') inputCallback(failure); else child.stdin.emit('error',failure); },
-    send: value => child.stdout.emit('data', Buffer.isBuffer(value) ? value : line(value)), close: code => child.emit('close', code) };
-}
 testAsync('actual parent releases a checkpoint only after confirmed resource close', async () => {
   const m = parentModel(); let settled = false; m.promise.then(() => { settled = true; });
   m.send(frame()); await Promise.resolve(); assert.equal(settled, false);
@@ -209,14 +175,14 @@ testAsync('actual parent timeout needs child close; missing close rejects at unc
   m.tick(1500); await assert.rejects(m.promise, error => error.code === 'CONVERSION_TERMINATION_UNCONFIRMED');
 });
 testAsync('actual parent confirmed timeout yields an incomplete result', async () => {
-  const m = parentModel(); m.send(frame()); m.tick(1000); m.close(null);
+  const m = parentModel(); m.send(frame()); m.tick(1000); m.close(125);
   assert.ok((await m.promise).coverage.reason_codes.includes('CONVERSION_TIMEOUT_PARTIAL'));
 });
 testAsync('own timeout pipe closure preserves timeout without inventing input flush or extending termination', async () => {
   for(const code of ['EOF','EPIPE','ERR_STREAM_DESTROYED']) for(const via of ['callback','event']) for(const flush of [false,true]) {
     const m=parentModel({flush});m.send(frame());m.tick(1000);m.inputError(code,via);
     assert.equal(m.killed(),1);assert.deepEqual([...m.timers.values()].map(timer=>timer.ms),[1500]);
-    m.close(null);
+    m.close(125);
     if(flush)assert.ok((await m.promise).coverage.reason_codes.includes('CONVERSION_TIMEOUT_PARTIAL'));
     else await assert.rejects(m.promise,{code:'CONVERSION_TIMEOUT'});
   }
@@ -262,6 +228,100 @@ testAsync('actual parent cancellation wins before or after a late output fault',
     assert.equal(m.killed(), 1);
   }
 });
+
+for (const platform of ['win32', 'darwin', 'linux']) {
+  testAsync(`${platform}: output read errors are hard before/after checkpoints and during timeout`, async () => {
+    for (const checkpoint of [false, true]) for (const timeout of [false, true]) for (const confirmed of [false, true]) {
+      const m = parentModel({ platform });
+      if (checkpoint) m.send(frame());
+      if (timeout) m.tick(1000);
+      assert.doesNotThrow(() => m.child.stdout.emit('error', Object.assign(new Error('private read failure'), { code: 'EIO' })));
+      m.close(confirmed ? 125 : null, confirmed ? null : 'SIGKILL');
+      await assert.rejects(m.promise, error => {
+        assert.equal(error.code, confirmed ? 'CONVERSION_RESPONSE_INVALID' : 'CONVERSION_TERMINATION_UNCONFIRMED');
+        if (!confirmed) assert.deepEqual(error.cause, { code: 'CONVERSION_RESPONSE_INVALID' });
+        return true;
+      });
+      assert.equal(m.killed(), 1); assert.equal(m.timers.size, 0);
+    }
+  });
+  testAsync(`${platform}: optional diagnostic read errors cannot discard valid output or forgive overflow`, async () => {
+    const valid = parentModel({ platform });
+    assert.doesNotThrow(() => valid.child.stderr.emit('error', new Error('private diagnostic failure')));
+    valid.send(bytes(response(unit()))); valid.close(0);
+    assert.deepEqual(await valid.promise, unit()); assert.equal(valid.killed(), 0);
+    assert.doesNotThrow(() => valid.child.stdout.emit('error', new Error('late own stream event')));
+    assert.equal(valid.timers.size, 0);
+    const overflow = parentModel({ platform }); overflow.send(frame());
+    overflow.child.stderr.emit('data', Buffer.alloc(64 * 1024 + 1));
+    overflow.child.stderr.emit('error', new Error('diagnostic failure after hard overflow')); overflow.close(125);
+    await assert.rejects(overflow.promise, { code: 'CONVERSION_OUTPUT_LIMIT' });
+  });
+  testAsync(`${platform}: output read failure still needs a bounded end witness`, async () => {
+    const m = parentModel({ platform }); m.send(frame()); m.child.stdout.emit('error', new Error('read failed'));
+    m.tick(1500);
+    await assert.rejects(m.promise, error => error.code === 'CONVERSION_TERMINATION_UNCONFIRMED' &&
+      error.cause.code === 'CONVERSION_RESPONSE_INVALID');
+    assert.equal(m.killed(), 1); assert.equal(m.timers.size, 0);
+  });
+  testAsync(`${platform}: diagnostic read failure cannot retain an unconfirmed frame budget reserve`, async () => {
+    const { MAX_STDERR_BYTES, FRAME_PREFIX } = require('../plugins/data-secure/server/core/conversion-timing-contract');
+    for (const confirmed of [true, false]) {
+      const m = parentModel({ platform }); m.send(frame());
+      m.child.stderr.emit('data', Buffer.alloc(MAX_STDERR_BYTES, 'x'));
+      m.child.stderr.emit('data', Buffer.from(FRAME_PREFIX));
+      assert.equal(m.killed(), 0, 'only an unconfirmed bounded frame borrows the reserve');
+      m.child.stderr.emit('error', new Error('diagnostic transport failed'));
+      m.send(bytes(response(unit()))); m.close(confirmed ? 0 : null, confirmed ? null : 'SIGKILL');
+      await assert.rejects(m.promise, error => error.code === (confirmed ? 'CONVERSION_OUTPUT_LIMIT' : 'CONVERSION_TERMINATION_UNCONFIRMED') &&
+        (confirmed || error.cause.code === 'CONVERSION_OUTPUT_LIMIT'));
+    }
+  });
+  testAsync(`${platform}: a failed spawn retains its real start cause without claiming an inner worker`, async () => {
+    const m = parentModel({ platform, spawned: false });
+    m.child.emit('error', Object.assign(new Error('private vendor detail'), { code: 'EACCES' }));
+    m.close(-2);
+    await assert.rejects(m.promise, { code: 'CONVERSION_EXECUTABLE_DENIED' });
+    assert.equal(m.killed(), 0); assert.equal(m.timers.size, 0);
+  });
+  testAsync(`${platform}: timeout never hides a complete hard terminal response`, async () => {
+    const m = parentModel({ platform }); m.send(frame()); m.tick(1000);
+    m.send(bytes(failure('CONVERSION_POLICY_FAILED'))); m.close(2);
+    await assert.rejects(m.promise, { code: 'CONVERSION_POLICY_FAILED' });
+  });
+  testAsync(`${platform}: signal termination and native wait failures never publish checkpoints`, async () => {
+    for (const timeout of [false, true]) for (const [code, signal] of [[null, 'SIGTERM'], [null, 'SIGKILL'], [124, null], [0, 'SIGKILL']]) {
+      const m = parentModel({ platform }); m.send(frame());
+      if (timeout) m.tick(1000);
+      m.close(code, signal);
+      await assert.rejects(m.promise, { code: 'CONVERSION_TERMINATION_UNCONFIRMED' });
+      assert.equal(m.timers.size, 0);
+    }
+  });
+  testAsync(`${platform}: a known native end preserves timeout races but an unknown exit does not`, async () => {
+    for (const code of [0, 2, 125]) {
+      const m = parentModel({ platform }); m.send(frame());
+      if (code === 2) m.send(bytes(failure('PDF_EXTRACTION_FAILED')));
+      m.tick(1000); m.close(code);
+      assert.ok((await m.promise).coverage.reason_codes.includes('CONVERSION_TIMEOUT_PARTIAL'));
+    }
+    const m = parentModel({ platform }); m.send(frame()); m.tick(1000); m.close(1);
+    await assert.rejects(m.promise, { code: 'CONVERSION_TERMINATION_UNCONFIRMED' });
+  });
+  testAsync(`${platform}: unknown end stops further work and retains the fixed original cause`, async () => {
+    for (const cause of ['REQUEST_CANCELLED', 'CONVERSION_INPUT_INCOMPLETE', 'CONVERSION_OUTPUT_LIMIT', 'CONVERSION_RESPONSE_INVALID']) {
+      const m = parentModel({ platform }); m.send(frame()); m.tick(1000);
+      if (cause === 'REQUEST_CANCELLED') m.controller.abort();
+      else if (cause === 'CONVERSION_INPUT_INCOMPLETE') m.inputError('EIO', 'event');
+      else if (cause === 'CONVERSION_OUTPUT_LIMIT') m.child.stderr.emit('data', Buffer.alloc(64 * 1024 + 1));
+      else m.send(Buffer.from('{"bad":}\n'));
+      m.close(null, 'SIGKILL');
+      await assert.rejects(m.promise, error => error.code === 'CONVERSION_TERMINATION_UNCONFIRMED' &&
+        error.cause.code === cause && Object.isFrozen(error.cause) && Object.keys(error.cause).join(',') === 'code');
+      assert.equal(m.killed(), 1); assert.equal(m.timers.size, 0);
+    }
+  });
+}
 testAsync('actual parent late output fault does not relax the original termination grace', async () => {
   const m = parentModel(); m.send(frame()); m.tick(1000);
   m.child.stderr.emit('data', Buffer.alloc(64 * 1024 + 1)); m.tick(1500);

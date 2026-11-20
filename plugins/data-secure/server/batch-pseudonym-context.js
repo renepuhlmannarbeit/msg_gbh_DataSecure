@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const { PRIVACY_RULESET_VERSION } = require('./privacy/policy');
 const { CORE_POLICY_FINGERPRINT, STANDALONE_POLICY_FINGERPRINT } = require('./core-policy-fingerprint');
+const { isOwnershipControlFailure } = require('./gateway/prepublication-error');
 const {
   SECRET_BYTES,
   CONTRACT_VERSION,
@@ -86,6 +87,7 @@ async function withBatchPseudonymRegistry(state, action, options = {}) {
   if (typeof action !== 'function') throw unavailable();
   let seed;
   let registry;
+  let primary;
   try {
     seed = validateBatchPseudonymState(state);
     registry = createBatchPseudonymRegistry(seed, {
@@ -99,6 +101,7 @@ async function withBatchPseudonymRegistry(state, action, options = {}) {
       exportState: registry.exportState });
     return await action(registry);
   } catch (error) {
+    primary = error;
     // Processing failures retain their domain-specific error. Only context
     // setup/validation is normalized to a fixed, content-free failure.
     if (registry || error?.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE') throw error;
@@ -106,6 +109,9 @@ async function withBatchPseudonymRegistry(state, action, options = {}) {
   } finally {
     try {
       if (registry) {
+        // A lost acquisition cannot authorize the final registry write, and
+        // its exact control refusal must survive the refused-commit cleanup.
+        if (isOwnershipControlFailure(primary)) throw primary;
         if (registryOwners.get(registry)?.commitRefused === true)
           throw Object.assign(new Error('DOCUMENT_REVIEW_CONFLICT'), { code: 'DOCUMENT_REVIEW_CONFLICT' });
         const snapshot = registry.exportState();

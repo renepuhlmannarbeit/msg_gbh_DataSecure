@@ -2,6 +2,7 @@
 
 const { batchReviewReady } = require('./batch-next-action');
 const { isMarkdownBatch } = require('./processing-mode');
+const { CONTENT_BATCH_SCHEMAS } = require('./content-options');
 
 function formatRemainingTime(seconds) {
   if (seconds < 60) return 'unter 1 Minute';
@@ -79,7 +80,7 @@ function progressFacts(state, config = {}, localProcessing = false) {
   const processingIndex = items.findIndex((item) => item.status === 'processing');
   const pendingIndex = items.findIndex((item) => item.status === 'pending');
   return {
-    ...(['datasecure-batch/5', 'datasecure-batch/7'].includes(state.schema) && isMarkdownBatch(state) ? { processing_mode: 'markdown-only',
+    ...(['datasecure-batch/5', ...CONTENT_BATCH_SCHEMAS].includes(state.schema) && isMarkdownBatch(state) ? { processing_mode: 'markdown-only',
       warning_count: items.filter((item) => item.status === 'released' && item.extraction_grade === 'incomplete').length } : {}),
     batch_token: state.token,
     batch_total: items.length,

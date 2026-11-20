@@ -1,5 +1,913 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+**BL-050.6 · echter Startup-Befund29.10.nach13:41UTC:** Nutzer startet exakt
+Methodenreview-ZIP2b227eab…/EXEfefad9e8…; alle1198 entpackten Dateien passen.
+Bestandsprofil verweigert STARTUP_RECOVERY_FAILED. Kausal bestätigt:
+private /4-Artefakte mit Producer-RC169/176 werden wegen aktueller VERSION
+abgewiesen; zwei abgelaufene terminale Journale erhöhen Recovery.failures.
+Neun Journal-/Manifestbindungen sind unverändert. Keine Profilmutation oder
+Umgehung des Recovery-/Ownershipgates. Read-only Gegenprobe und zwei getrennte
+Quellreviews: dist/rc177-startup-user-profile-review-20261029.
+
+Implementiert: kompatibles historisches Lesen ausschließlich nach unabhängiger
+exakter Manifestbytebindung; unterstützte Schema-/Policy-IDs, Zweck, Quelle,
+Optionen und tatsächlicher Dokumenthash bleiben hart. Aktuelle Konstruktion,
+Codecache und Runtimeintegrität unverändert current-only. Neue echte
+Fresh-process-/Journal-/Recovery-/Bootstrap-Regressionen einschließlich
+privater Korruption:38PASS. Neues create-only Windows-Paket und frische
+Gesamt-/Paketbelege vor Übergabe noch offen. Alter Kandidat bleibt erhalten,
+aber ist nicht zur Großabnahme geeignet. Keine automatische Aufgabe oder UI.
+
+Getrennt offen dokumentiert: Cross-version-Replay unfertiger vorbereiteter
+Publikationen hat einen eigenen Operations-/Bytevertrag. Kein Nachweis solcher
+Intents als Ursache dieser neun terminalen Nutzerjournale; nicht stillschweigend
+historische Produzenteneingaben in neue Publikationen übernehmen.
+
+**BL-050.6 · QA27-Vorbereitung29.10.nach11:41UTC:** Automatik PAUSED,
+aktueller Chat arbeitet weiter. QA26 beendet: Docs/NativeQA/Konverter8/
+Paketszenarien4 PASS/stabil; Headless ROT/stabil11:35:03.551UTC in Datei149/357.
+Der alte Macmodelltimeout wurde im ganzen aktuellen Parent erfolgreich passiert.
+Neuer Befund ist ein veralteter statischer Testanschluss: end('g') erwartete
+keinen Callback, aktueller QA-Elternaufruf meldet Schreibfehler korrekt weiter.
+
+Enge zwei QAquellen angepasst, alle Rollen-/Outside-/Nativeassertions erhalten.
+Layout63/0, actualParentVM10/0 und fünf kausale Oraclezeilen tatsächlich PASS;
+keine Produkt-/Deadline-/Workflow-/Schutzänderung oder Macausführung. Neuer
+Marker-Gegenfall und echter modellierter Callbackfehler verhindern, dass bloß
+der Textvergleich gelockert wird. Quellen- und Testpins stehen im25Evidenzordner.
+Unabhängiger Deltagegenreview GO6043044a… und statischer Konsumentenscan
+bb78b8ca… ohne weiteren bestätigten Anschlussfehler liegen vor. Offen vor
+Übergabe: neuer endlicher QA27-Freeze, frische fünf Gesamtgates und eigenes Register.
+AppFP3b658e1f…/395 und Build23ZIP2b227eab… unverändert;26 bleibt eigener roter
+Gesamtbeleg. Kein globaler Repository-/Desktop-/NativeMac-Abschluss. Spätere
+echte27-FINALs entscheiden, keine Mainintegration/Actions/Veröffentlichung.
+
+Die folgenden QA26-/25-Stände bleiben historische Vorläufe.
+
+**BL-050.6 · QA26-Vorbereitung29.10.nach10:37UTC:** Automatik bleibt
+nutzergewünscht pausiert. QA25 vier tatsächliche Gates PASS/stabil, vollständiger
+Headlesslauf ROT/stabil am gemeinsamen120s-Macmodellbudget. Alle Originalbelege
+bleiben unverändert. Beobachtungsprobe mit ursprünglichen Asserts und IO:
+7/0 bei129855ms, kein bestätigter App- oder Verifierfehler.
+
+Enge QA-Fallaufteilung übernommen: build5 und verify2 je ursprüngliche120s,
+strikte Part-/Count-/Quellhash-/NOT_RUN-Receipts und Gegenfälle. Alle sieben
+ursprünglichen Callbackkörper und sieben Fixture-/VM-Funktionskörper gleich.
+ActualParent18/0/Exit0/stabile1784Inputs, unabhängiger Delta-GO06facfaf….
+Keine Produkt-/Workflow-/Appdeadline locker gemacht.
+
+Postprocessing: typisierte Bindung der einen generierten Policy statt falschem
+physischen Pin;394 andere Pins/Rust bleiben strikt,395Rollen+10Negativen grün,
+unabhängiges GO2e064719…. Alte eigene falsche Entwürfe bleiben ausgeschlossen.
+
+Aktiv abschließen: neue genaue QA26-Allowlist/Capture, frischer kanonischer357-
+Gesamtlauf und übrige Endgates, eigenes aktuelles Inventar/Register und create-only
+lokaler Windowskandidat mit Testplan/Proofs/Quellmanifest. AppFP3b658e1f… und
+geprüftes ZIP2b227eab… bleiben unverändert; kein Appneubau für diese QA-Deltas.
+Keine Mainintegration/Actions/Veröffentlichung. Echte Windows-/Mac-Zielhost-
+abnahmen und ausdrücklich begrenzte optionale/Legacy-QArollen bleiben offen.
+
+Die folgenden Zwischenstände bleiben historische Arbeitsnachweise.
+
+**BL-050.6 · Abschlussvorbereitung25,29.10.nach09:14UTC:** Nacht-Automation
+auf Nutzerwunsch pausiert; aktueller Chat arbeitet weiter. Standalone-App-
+Quellumfang vollständig gebunden (328 Wholekörper,22 Rustquellen/4666Objekte,
+38 Nichtmethodenrollen;388physisch/395Member), keine globale Legacy-/Cowork-/
+Optionalregister-Vollständigkeit behaupten. App und Build23-ZIP unverändert.
+
+Alle zusätzlichen Windows6-/Mac3-/Workflowalias5-Wholeleselücken geschlossen.
+Enge QA-Close-/Spawn-/dauerhafte Primärfehler-/Idleprotokollkorrekturen übernommen:
+Mac8/0, Windows16/0, kausale16Vorher-/Nachherzeilen plus4 echte Succestail-
+Sourcefälle grün/stabil. Launcher-Primärfehler mit eigenständigen bekannten
+Teardownstufen: vorher9/5, AfterPS7/PS5.1 je9/0. Kein Desktop-/NativeMac-PASS.
+Ungültiger früher Getterfixturebeleg bleibt rot; Getterthrow NOT_COVERED.
+
+Aktiv: endgültige Gegenreview-/Register-Nachbindung, finite genaue v2-Allowlist,
+frischer eingefrorener Headless357-/Docs-/NativeQA-/Konverter-/Paketabschluss;
+danach create-only lokaler Windowskandidat mit Plan/Hashes/Quellmanifest.
+Keine Mainintegration/Actions/Veröffentlichung. Zielhostabnahmen bleiben offen.
+
+Begrenzte nicht blockierende Reviewnachträge: WA5-O1 portableOCR-Modell soll
+künftig Kill-/Closecounts und Pending-vor-Close unabhängig messen; aktuelle
+Produktimplementierung wartet selbst Close. WA5-O2 deaktivierter Statuspilot
+prüft Lizenzhashsyntax, nicht tatsächliche einzelne Lizenzsektionbytes;
+Wortlaut später präzisieren oder Sektionen hashen. Kein falscher Lizenz- oder
+aktueller Standalonefehler belegt. F1-partielle Pipes: vorhandener Streamfehler
+wird früh beobachtet; ohne Childerror/Close kann dessen Setup noch das bestehende
+120s-Budget nutzen, keine Sofort-Wakeupbehauptung. Keine Schutzlockerung nötig.
+
+Die folgenden Zeitstände bleiben historische Fortschrittsbelege.
+
+**BL-050.6 · Neuer Vorrangstand29.10.nach07:35UTC:** Ganze Standalone-
+Quellkörper und aktuelle Konfig-/Workflowrollen sind gebunden; Rust22/4666
+bleibt separat. Zusätzliche QA-Root-, Close-, Primärfehler- und Oraclekorrekturen
+sind übernommen und unabhängig gegengelesen. Kein neuer normaler Appbug daraus
+bestätigt; AppFP3b658e1f… und WindowsZIP2b227eab… bleiben exakt unverändert.
+
+Echter FinalFixes6-Lauf PASS/Exit0/stabile1781Inputs Ende07:23:50.374UTC,
+inklusive vollständigem Node/Rust-Publisher. Session-OS-nextTick-Fall Before16/2,
+After18/0; Root202/0 und Direct10/0. Der wirkliche Node-parent.disconnect-
+Closeausfall bleibt als roter Beleg erhalten; eigener Test verwendet jetzt
+childseitigen IPCverlust und verlangt weiterhin echtes Close. Die frühere
+Quellenverbrauchserwartung für zwei explizite interne Requests ist fachlich
+veraltet; unveränderte Quellen, getrennte Pakete und Capabilities werden geprüft.
+
+Kleines tatsächliches B3-Callercounterset13/0 und einmalige Registrierung fertig.
+Aktiv abschließen: genaue Whole-/
+Deltaregisterkonsolidierung und aktive Rollenprüfung, endliche23→25-Allowlist,
+frische eingefrorene Gesamt-/Dokument-/Konverter-/Native-QA-/Paketszenarien.
+Erst dann lokaler Windows-Testkandidat mit Testplan und tatsächlichen Proofs.
+Keine Mainintegration/Actions/Veröffentlichung. GUIwerkzeug vor Init blockiert;
+Mac-/Finder-/TCC-/Anwenderabnahmen bleiben eigenständige offene Zielhostgates.
+
+Die folgenden früheren Zeitstände sind historische Fortschrittsbelege.
+
+**BL-050.6 · Vorrangstand29.10.nach06:11UTC:** Alle fünf Working24-Gates
+tatsächlich PASS/Exit0/stabileInputs; Headless349 Ende05:52:52.750UTC.
+Kein spekulativer EPERM-Fix, ursprüngliche rote Diagnose erhalten. App und
+WindowsZIP weiter unverändert; noch keine lokale Kandidatenübergabe.
+
+Ganzes QA-Review A/B4/C durch Main und B1/B2 durch Experten ergänzt. Neue
+bestätigte QA-Befunde: geerbte/default fremde Daten-/Resultroots in älteren
+Testeltern, tatsächlicher Childclose statt Exit/Error, endliche ACK-/Child-
+Wartephasen, eigenständige Oracles statt verschluckter Callback-/Setupfehler.
+Kein daraus bestätigter neuer normaler Appfehler. Format5, Nullstdio und eigene
+UAT-Scopes übernommen/sieben Tests grün; vier B2-Eltern grün. Kausale
+Before-/Afterproben getrennt vom gesunden Lauf, eigene ungültige erste
+Injektionsprobe erhalten. Einzelne neue Calleränderungen noch nicht geprüft.
+
+Aktiv abschließen: B3-Whole-Review, Rootquerprüfung/enge Fixes,
+Session-/MCP-/Pickerteardown, unabhängige tatsächliche Deltagegenreviews und
+dauerhafte Gegenfälle, aktuelle Registerbindung und frischer QA25-Abschluss.
+Danach create-only Windowskandidat mit Plan/Hashes/genauer Quellenmanifest-
+bindung. Keine Actions/Main-/Release-/Mac-/GUI-Abnahme impliziert;
+Desktop weiterhin technisch BLOCKED vor Init. Kein Aufwandsabbruch.
+
+**BL-050.6 · Abschlussvorbereitung24 nach04:53UTC:** Kontrollierte Diagnose
+Long31/0/Short31/0/stabil mit vor Rename leeren eigenen IO-Ledgern. Alte
+EPERM-Setupursache offen/unklassifiziert, kein spekulativer Fix oder Skip.
+Ein frischer349er-Gesamtlauf enthält weiterhin das strenge unveränderte Modell.
+Danach aktuelle Gatebelege/Registerbindungen und lokaler Testkandidat mit Plan;
+keine Desktop-/Mac-/globale Registerabnahme erfinden. Übernommene23-Build-
+und neue24-QA-Belege getrennt ausweisen. Keine neue Appbyteänderung.
+
+**BL-050.6 · 29.10., nach04:42UTC:** SMALL nach Quellengegenreview umgesetzt,
+echte Eltern/11Gegenfälle0/stabil. Neue QA-Modellrename-EPERM-Diagnose offen,
+77/1Integrität rot erhalten; kein bestätigter Appfehler. Danach genauer349er-
+Gesamtdurchlauf, Registerkonsolidierung und lokaler Kandidat. Noch kein24Freeze.
+
+**BL-050.6 · 29.10., nach04:30UTC:** Tatsächliche aktuelle Lifecycleproben
+6+4Gruppen,8native Wiederanläufe,261Besitzassertions,76Konvertergruppen0/stabil.
+Eigener fehlgebundener Erstaufruf rot erhalten, explizite Guardbindung danach
+separat grün. SMALL-Fixture, konsolidierte Reviewcredits, genauer24-Endlauf
+und lokaler Testkandidat noch offen. Keine Appänderung/GUI-/Macabnahme.
+
+**BL-050.6 · 29.10., nach04:19UTC:** Vier QA-Lifecyclepatches nach tatsächlichem
+Staging-v2 und unabhängigem Quellengegenreview übernommen,17Hashbindungen
+passend. Staging17Syntax0 und drei Unit-/CLI-Gruppen0/stabil; aktuelle
+Quelltests noch auszuführen. QRF16 reale Negative0/stabil. Portable
+FastIPC-/Intake-CLI-Gegenprobe, Reviewcredit-Konsolidierung und genauer
+Working24-Endlauf samt lokalem Testkandidat offen. Anwendungsbytes unverändert.
+
+**BL-050.6 · Nacht29.10., nach03:48UTC:** SCB-H1 und geforderter8s-Probeabschluss
+umgesetzt; gültiger kausaler Beforefehler/After0 und echter200+200-Writertest0,
+stabileInputs. Getter-/Proxy-/Sink-Orakel eng verstärkt, tatsächliche5/0;
+Network-P3-Quellorakel verstärkt, tatsächliche5/0. Keine Appbyteänderung.
+
+Noch: drei vorbereitete Lifecyclepatches nicht übernehmen, bevor die neue
+CLI-Fixture auf Windows korrekt geprüft ist. Staging17Syntax0/Helper0/
+Nullstdio0, CLI1: später Childbeleg fehlt nach Parentende; libuv-Windowsjobs
+können dies regulär verursachen. Kein Detach/Schutzbypass/erfundener Join.
+Echte Parentende-/Fehler-/Stageteilbelege erhalten, portable Gegenprobe reparieren.
+Zusätzlich enger FastIPC-/IntakeReservation- und QRF-H1-QueueRefusal-Cleanup-
+abschluss (16 Negative unverändert) sowie passende tatsächliche Verifikation.
+Breite R6-Ganzurteile aktuell zusammenführen, exakte QA-Whitelist und endliche
+Predecessor-/Snapshotbindung vor24Capture; danach frische aktuelle Tests und
+lokaler Engineeringkandidat/Testplan. Alte23-FINALs/ZIP nicht umetikettieren.
+
+**BL-050.6 · Nacht29.10., nach02:52UTC:** Endlauf23 vollständig PASS/stabil,
+sieben Gates beendet, Headless343; Native321Rust/3ignored, acht Konverter,
+Qualität72jeZweck und Package8/100MD0Fehler. Produkt395/FP3b658e1f…;
+zwei gleiche ZIPs SHA2b227eab…/113582194Bytes. Alte Belege unverändert.
+Nachher nur QA-PACK-F1/F2/F3 eng umgesetzt und unabhängig akzeptiert:
+sichtbarer OCR-Text/volle Faktenzeile, echter Plattformskip, alle eigenen
+Clientcleanups versuchen/Runtimebelege behalten. Kausale Gegenfälle und
+echte Package17/Path18/Integrity78/Isolation4 grün/stabil. Kein neues
+Gesamtgrün des danach veränderten Testbaums oder neuer OCR-Szenariolauf.
+
+Offen in derselben Reviewaufgabe: Fehler-/Close-/Setupgrenzen der eigenen
+Testprozesse vollständig korrigieren und tatsächlich gegenprüfen, besonders
+Nullstdio bei Spawnfehler, begrenzte CLI-Beendigung nach allen Teardowns,
+ArtifactcrashAt und SCB-H1 Diagnostic-Concurrency. Keine Aufweichung von
+Produkt-/Inhaltsassertionen; keine universelle Writerjoinbehauptung. Weitere
+R6-Ganzquellenurteile exakt zusammenführen (Working23 bisher478/24057,
+globalfalse), aktuelle passende Endprüfung und lokale Engineeringübergabe
+mit Testplan. GUI technisch vor Init BLOCKED; keine erfundene Zielhostabnahme.
+
+**BL-050.6 · Nacht29.10., nach01:15UTC:** Alle sieben Endlauf22-FINALs PASS/
+stabil, Headless342 beendet01:06:44.013UTC. Alte21-ENOSPC-Belege bleiben rot.
+Working21 tatsächlich425 volle Dateieurteile/20189JSobjekte; bloße521Rollen
+bleiben keine vollständige R6-/R9-Freigabe. R2/R4/R5-Übergänge konsolidiert.
+
+OfficeMath-Profilparameter berichtigt; Workspace/History/Highlightoracles
+unabhängig präzisiert, sechs tatsächliche Suiten stabil/0, Actual80d5e7b0….
+Office-OCR-Testcleanup endlich/ursprüngliche falsy Fehler erhalten/Runtime
+immer behalten; PDF nur eigenen Erfolgsscratch identitätsgebunden entfernen.
+Neue reale Helpergegenfälle einschließlich same-path-Replacement kanonisch
+registriert. Vier gezielte Suiten stabil/0, echtePDFvisibility und57Office-
+Nativgruppen, Actual32050d55… unabhängig geschlossen. Kein neuer beobachteter
+Produktlogikfehler aus diesen QA-Findings; reine Closekommentarkorrektur
+ändert ProduktFP auf3b658e1f395a9e666a328e0c7e3e5f01d8b02ee41020355a5568d9e07805dbac/395.
+
+Noch: neue23-Bindungen und tatsächliche passende Endgates, lokale Engineering-
+Übergabe mit Testplan; weitere begrenzte vollständige Worker-/Format-,
+Backendeditor-/Zuordnungs- und Prozessrecovery-Elternreviews. Breiteren R6-
+Registerumfang ehrlich offen halten. Desktop freigegeben, Tool technisch vor
+Init BLOCKED; keine UI/Mac-PASS, neue Version, Actions, Main-/Releaseaktion.
+
+**BL-050.6 · Nacht29.10.:** Nutzer autorisiert vollständige eigenständige
+Fortsetzung/Testkandidat und Desktop; neue Heartbeatfortsetzung im selbenChat.
+Desktoptool jedoch schon vor Initialisierung technisch BLOCKED (kernel assets,
+OSerror3; einReset/zweiterVersuch identisch); keine UI- oder Zielhostbelege.
+QBD/PRMD eng unabhängig geschlossen. Volle neue Elternsichten1777Native-
+Integrity/948Sidecar und Main-Qualitätstests265/351Zeilen ergänzen R6.
+NSI-F1/P3: äußerer Windowsguard plus ausdrückliches nichtgezähltesSKIP,
+Registrierungsgegenprobe3Modelle+Windows75/0, unabhängiggeschlossen.
+SCP-F1/P2: tatsächlicher positiver Dokumentstart konsumiert nun gejointen
+Exitcode0, allgemeiner Fehlerjoin/Cleanup unverändert; gültig77/1 ->78/0,
+Actualgegenreview läuft. Kein entsprechender Produktfehler gemessen.
+Noch: aktuellen Ledger/Scopes und Fixtureketten konsolidieren, frischen
+Endlauf22 tatsächlich schließen, dann passenden lokalen Testkandidaten mit
+Testplan bereitstellen. Keine pauschale R0–R9-/521Testmethodenfreigabe aus
+Rollen/AST/Grün. Alte Endlauf21-ENOSPC- und ungültige Vorproben erhalten.
+
+**BL-050.6 · Fortschritt 28.10., nach 19:02 UTC:** Autorisierte lokale
+Bereinigung abgeschlossen (537 alte RC98–176-Apparchive/59,4 GB;
+vollhashgeprüfter Rustcache auf E:, rund91 GB C: frei). Keine weiteren
+unbeauftragten Löschungen; aktuelle RC177-Pakete und Nutzerdaten erhalten.
+CVD-F1 und Q-F1 nach kausalen Gegenfällen unabhängig geschlossen.
+NDE-F1: tatsächliche Diagnose-Rotationsnamen 2–8 und Reihenfolge im Testleser
+korrigiert, 1/5 -> 6/0 plus71 Integrity, unabhängiger Actualreview vorhanden.
+QBD-F1/F2: Readerquellbindung und Belegerhalt statt automatischer
+Benchmarkscope-Löschung korrigiert; vollständiges Quellmodell1/9 ->10/0,
+Report15/0+Benchmark30/0 stabil, Actualgegenreview läuft. Keine universelle
+First-error-/Prozessbaum-/Nativeabnahme daraus ableiten.
+
+PRMD-F1/P2 neu: Paketierter Markdown-Inhaltstest erkennt bisher den Verlust
+vorhandener Firma/IBAN/Preistabelle nicht zuverlässig; erwartete vollständige
+Fixturefakten unabhängig prüfen, kausale Inhaltsmutationen und positive
+Formatfälle ergänzen, bestehenden Unicode-/OCR-/Privacyvertrag erhalten.
+Kein entsprechender aktueller Produktverlust gemessen. Danach R6-Rollen und
+exakt aktuelle Registerbelege konsolidieren, frischen Endlauf22 ausführen.
+Endlauf21 bleibt wegen ENOSPC bei Headless/Korpus rot. Produkt395/FPdae947ff…
+unverändert. Weiterhin keine Desktoptests, Actions, Mainintegration oder
+neue Release-/Übergabebehauptung.
+
+**Fortsetzung28.10., nach18:19UTC · BL-050.6:**Endlauf21 stabilbeendet,
+Docs/Native/Conversion/WindowsbuildPASS; Headless+letzterPaketkorpus real
+ENOSPC/FAIL, keinGesamtPASS. BeideechtenneuenZIPs/verifier/FC undzweiSmokes
+vorherPASS, SHA10f5ed89…; ProduktFPdae947ff…/395unverändert.
+ReadinessTesthostR-F1/2 gezieltkorrigiert(68/3→71/0+12)/unabhängiggeschlossen
+2afca29e…; PKG04-F1zweiFrischziele(16/1→17/0+71)/Actual3d6abb9b…,
+keinPKG04Native-/Desktoplauf. CVD-F1Docindexpfad/Regulärdatei engkorrigiert,
+3Testdateiengrün/stabil, unabhängigerActualreviewläuft. Q-F1/P2imQuality-
+Evaluator:vorhandenerSachanker42→-42unbemerkt; engerTests-zuerst-Fixnochin
+Arbeit. KeinentsprechenderProduktkonvertierungsfehlerbeobachtet. R6Matrix/
+eigeneTest-/Hilfswerkzeugurteile undfrischeRegisterbindung weiterabschließen,
+danachfrischenpassendenEndlauf, alteFINALsnieumschreiben.
+
+NutzerhatjetztalteAppZIPs ausdrücklichfürBereinigungfreigegeben:537RC98–176/
+59,4GBentfernt;8084Dateien/6,8GBRustincrementalcacheverlustfrei/hashgeprüft
+nachE:verschoben. KeinegetracktenQuellen,RC177,Testdaten,Profile,Diagnosen,
+OriginaleoderErgebnisseentfernt. NachBereinigungrund91GBaufC:frei; ursprünglicher
+CacheDeletepolicyblockundneueFreigabe/Belegegetrennt. AlteArchivehierbewusst
+nichtneuherstellen;ihrehistorischenHash-/Testbelegelokalweitererhalten.
+KeineDesktoptests/Actions/Automation/Mainintegration/neueVersion/Release.
+
+**Fortsetzung28.10., nach17:30UTC · BL-050.6:**NGB-F1–F3/CI-F1–F2 sowie
+95–97 jetzt gezielt umgesetzt und unabhängig tatsächlich gegengelesen.
+Neue PTO-F1-Testorakelgrenze geschlossen (61/5→66/0/stabil, exakter
+Heldreader/Größe vor Read/kleiner Fehlertext), keine Produktion-/Guardlockerung.
+Echte frische Offlinegraphicsinstallation und5PowerShell-Syntaxproben grün;
+keine behauptete nativeCI/FC/Mac-/Desktopabnahme. Alte eigene Probe-Setup-
+Fehler/PS-Pins/Scopes erhalten, V3 bindet aktuelle7.6.9-Bytes separat.
+
+Jetzt frischer21Endlauf mit geprüftem create-onlyDriver:342Headless/
+Docs/Native/8Konverter, danach prerequisitegebunden Winbuild/Paket8 mit
+2echtenneuenArchiven/beidenVerifiern/realemFC+Hashvergleich/3Smokes.
+Alle6FINALs/inputs_unchanged nötig; alte20ZIP/FINALs nicht umetikettieren.
+Danach aktuelle Register-/R6-Oraclematrix und Ausschlussrollen schließen;
+P3Linux/Legacy-/Zielhostgrenzen ehrlich erhalten. KeineDesktoptests/Actions/
+Automation/Mainintegration/neueVersion/Veröffentlichung.
+
+**Fortsetzung28.10., nach17:05UTC · BL-050.6:**92V2 gezielte6Dateien grün/
+stabil, unabhängiges Actualcounterreview abgeschlossen.98 TAR-MinMax/
+Callermaximum mit kausalem Before und Runtime17/Integrity17 geschlossen;
+eigener falscher Smokeaufruf ohne Pflichtarchiv bleibt separat rot.
+95–97 Maccreate-only/sourceMarker/two-build/ERE tatsächlich umgesetzt;
+Paket16/FP15/Integrity17/Runtime17 grün, alter Closeanker im Workflowtest
+und nullcode-Positive an aktuellen echten Supervisorvertrag angeschlossen,
+6Signal-/Nullcodegegenfälle hinzugefügt, separater Workflowtest danach grün.
+Kein nativer Mac-/Desktopnachweis.
+
+Neue endliche aktive Anschlussaufgaben aus echten Vollquellenreviews:
+NGB-F1/P3 ursprünglichen Launcherbuildfehler trotz Cleanupfehler erhalten;
+NGB-F2/P3 cmdMetapfade vor Spawn sicher verweigern;
+NGB-F3/P2 Guardbuildleaf exklusiv anlegen/keinen konkurrierenden Stageadoptieren.
+CI-F1/P2 zwingende graphics-Dependency im frischen Windowsjob installieren
+(identischer kleiner Linuxanschluss); CI-F2/P2 zweites frisches Windows-
+Engineeringziel, beide positionalVerifier und echter Vergleich.
+Test-/Produktvorschläge noch unangewandt; Gegenfälle zuerst. PS-F1/P3
+LinuxParentdeath/Subreaper separat dokumentiert, nicht als Win/Macbug behandeln.
+42Config/13CI sowie native-/Build-/Lizenzenrollenreview ergänzt; R6Register
+und neue Gesamt-/Native-/Build-/Paketbelege bleiben offen. Keine
+Desktoptests/Actions/Automation/Mainintegration/neueVersion/Veröffentlichung.
+
+**Fortsetzung28.10., nach16:04UTC · BL-050.6:**93/94/Legacy89 unabhängig
+geschlossen, tatsächliche Autorenrollen separat berichtigt.92V2 noch offen.
+95Macpackage muss vorhandeneStage/ZIP/SHA erhalten und nur neue gebundene
+Stage/exklusiveOutputziele verwenden; tatsächlicher CI-Doppelbuild/cmp bleibt
+mit getrenntem Engineeringziel und identischem innerem Root bestehen.
+96Macverifier muss Manifestsourcefingerprint an tatsächlichen archivierten
+Desktopmarker binden, Core-/Artefaktmarker sind andere Belege.97P3 portable
+ERE-Gruppe im zusätzlichen Shellpfadgate; finalesJSPaketgate bleibt erhalten.
+95/96 unabhängig quellenbestätigt, noch unangewendet/keine neueMacausführung.
+Danach frische Endintegration/Archivprüfung und finale Registerbindung;
+Desktoptests/Actions/Automationen bleiben ausdrücklich aus.
+
+**Fortsetzung28.10., nach15:51UTC · BL-050.6:**Replayworker im tatsächlichen
+ZIP20 entfernt;1198Einträge/113581799Bytes/SHA56bc3517… unverändert erhalten.
+20Docs/Native321+3ignoriert/Build/Konverter/Paket5+100MD PASS/stabil;
+Headless gezielt durch Main beendet, FINAL FAIL/Exit1/stabil, kein Assertion-
+oder GesamtPASS. Neue Quellbefunde erforderten frischen Stand.81–88 unabhängig
+geschlossen;82/83-Autorenrollen separat korrigiert, keine Belegumschreibung.
+
+89/90/91/93/94 angewendet, vorhandene Tests zuerst kausal rot, After sieben
+Dateien Exit0/stabil15:51:11.101UTC.89 ehrliche fehlende Teilnamen,90 reservierte
+Nichtdateien unvollständig ohne Lesen/Löschen,91 Undo-Dokumentfilter,93 aktueller
+Legacyrequestowner,94 echtes Fünferfenster, separate Legacy89-Teilanzeige.
+89–91 unabhängig geschlossen;93/94/Legacy89 Actualcounter noch offen.
+92P2 direkte neuere Readyepoche: alte Admission-/Privatansicht invalidieren,
+Status-/Contextantworten an echte Epoche/Owner binden, Snapshotsetter ebenfalls
+einbeziehen. V1 unangewendet wegen bestätigter Entwurfslücken, neuer enger
+Entwurf unter Review. Kein zweiter Bootstrapoverride/keine nativen Schutzlockerungen.
+Danach frische unveränderte Gesamt-/Native-/Build-/Paketprüfung und tatsächlicher
+Archivausschluss. Restregister/R0–R9/Build/Test/Frontend sauber schließen;
+Working19Core/Worker11059/11059 ist nur dieser Teilumfang. Keine Desktoptests,
+Actions, Automation, Mainintegration, Commit/Push oder Veröffentlichung.
+
+**Fortsetzung 28.10., nach 15:00 UTC · BL-050.6:**Replayworker im echtenZIP19
+entfernt, alter Review-/MCPexport ebenfalls abwesend. 19Docs/Native/Build/
+Konverter/Paket grün/stabil; Headless bleibt historisch ROT an Test88, gültiger
+Base32-Hash endete zufällig dreistellig. Regex jetzt auf vollständiges altes
+Zählertoken begrenzt, deterministischer Gegenfall plus Registry41/State28 grün.
+
+Neue Quellbefunde81/86/87 eng korrigiert: Audit-/Evidence-Fehltemps ohne
+ursprüngliche Deletebindung erhalten, kein zweiter Close nach Closefehler;
+Before/After tatsächlich getrennt, alte kanonische Belege geschützt.84/85
+OPC-Kontrollparser erhält kumulative Struktur-/Namespacearbeitsgrenzen vor
+Kopien, Limit bleibt technischer SOURCE_CONTAINER_LIMIT, keine Active-Content-
+Umdeutung; chartEx-ID-Dedupe nutzt Set bei gleicher Reihenfolge/Refusals.
+82/83SmartArt atomar pro gültigem Modell statt Geschwisterverlust, gemeinsames
+Einbettungsbudget vor Expansion und gebundener Presence-/Augmentcache.
+Gezielte Afterdateien stabil grün, Details/Counter/Pins in followup3 und
+source-prefix-Belegen. Eigener falscher Zusatztestname im ersten SmartArt-After
+unverändert als Fehlerbeleg erhalten; After-v2 ausschließlich existierende
+Tests, keine Schutzänderung. Unabhängige tatsächliche Deltareviews noch offen.
+
+Rest: letzte Runtime-/Frontend-/Build-/Test-/R0–R9-Reviews exakt ans aktuelle
+Register binden, Legacy-Windowsvisual-Erreichbarkeit gesondert klassifizieren,
+dann vollständige neue Regression/Native/Build/Paket und tatsächliche
+Archivabwesenheit. ZIP19 nicht auf spätere Fixes umetikettieren. Keine
+Desktoptests/Actions/Automation/Mainintegration/Commit/Push/neueVersion.
+
+**Fortsetzung 28.10., nach 13:43 UTC · BL-050.6:**77 sichere Anzeigeprojektion
+eingebaut/gezielt fünf Dateien stabil grün/unabhängig01a28e24… geschlossen.
+78Kommentartextleaf stabil sechs Dateien grün/unabhängig2625077e… geschlossen;
+80enger PNGauslassungsfix tatsächlich gegengeprüft.79Test-/Obserververbindung
+auf tatsächliche SnapshotAttempt-/Windowkette erweitert: Before rot, After vier
+Dateien Exit0/stabil, Produktreader/Retrylimits unverändert. Race-/Observer-
+Gegenreviews noch offen, keinPASS bei Kapazitätsfehler. Alter Runner verweigerte
+CJS vor Testbeginn; neuer enger ignorierter Runner mit separaten echten Belegen.
+ZIP18 ohneReplay bleibt alter Paketnachweis, nicht auf neue Produktbytes binden.
+Weitere Vollmethodenreviews/aktuelles Register/R0–R9 und neuer Gesamt-/Native-/
+Build-/Paketfreeze offen. Keine Desktoptests/Actions/Automation/Mainintegration/
+Commit/Push/neueVersion/Release.
+
+**Fortsetzung 28.10., nach 13:39 UTC · BL-050.6:**18Paket5/100MD0Fehler+
+Docs/Native321+3ignoriert/Build/KonverterPASS/stabil. Tatsächlicher Replay-
+Ausschluss imZIP18/62aad7c2… bestätigt. Headless18 bleibtROT,79Testhookfix
+gezielt21PASS/1ehrlicherWindows-NOT_RUN/0FAIL, Gegenreview/Observeradapter offen.
+80typisierte originalePNG-Auslassung eng geschlossen,57/30/25/64PASS/unabhängig;
+keinDecoder-/Policy-/GenericRecoveryabbau.78moderneKommentarleaves repariert,
+sechsDateienAfterv4PASS/217Counterfälle/Gegenreviewoffen. DreiNEUERoleoracles
+hatten falscheCodes; präzise6CaseAPI-Diagnose, nurneueErwartungenkorrigiert,
+alteRots/Produktguardsbewahrt.77Anzeigeprojektion fürOCR/Fundstellen bei
+zulässigen unsicherenAnzeigenamen nochoffen/Tests-zuerst. Weitere Volllektüren/
+Register/R0–R9 und neuer finalerIntegrationsfreeze/Build/Paket offen. Kein
+Desktop/Automation/Actions/Mainintegration/Commit/Push/neueMacarchive/Release.
+
+**Fortsetzung 28.10., nach 13:04 UTC · BL-050.6:**17Docs/Native321+3ignoriert/
+Releasebuild/achtKonverterdateien PASS/stabil;17Headless ROT durch veralteten
+ganzen Kommentarmodul-Teststub.75nur Testeinbindung korrigiert,7Fehlerfälle/
+Assertions erhalten,22Officecontext/29Kommentare PASS/stabil13:02:32.775UTC.
+Unabhängiger Abschluss läuft. Paket17 bewusst nicht gestartet.18Gesamtgates/
+Working17/aktuelles Paket/100MD sowie Restmethoden/Sprachen/R0–R9 offen.
+Working16voll227Dateien/8618JSobjekte,Standalone8108/11014,22Rust/4666 separat.
+TP-F1/P3 skalierendes Piecearray: MainProbe76 bestätigt exakte Daten bei
+500/2000/8000Vorkommen, bis264msfür2Schritte/8000; tatsächliche Engine-/Maximal-
+auswirkung und robuste Optimierung gesondert bewerten, kein Zeit-Testlimit/
+Schutzabbau/ungeprüfter Umbau. Keine Desktoptests/Automation/Actions/
+Mainintegration/Commit/Push/neueMacarchive/Release.
+
+**Fortsetzung 28.10., nach 12:47 UTC · BL-050.6:**72/73/74 unabhängig am
+tatsächlichen Code geschlossen.74 Producer-FD-/Namedbindinggleichheit vor
+Capabilityausgabe, Firsterror/falsy und Closeonce; alte Tests unverändert.
+Before55/41, After96/8/35/121 PASS/stabil12:47:03.691UTC. Keine neuen Cleanup-/
+Retryrechte, native Zielgrenzen offen dokumentiert. Berichte31f43f45…/07a9eaae…/
+b6dc8e98… unter Followup3. Neue unveränderte Gesamtintegration17, Working16,
+Releasebuild/Paket/100MD sowie verbleibende Methoden/Sprachen/R0–R9 offen.
+Weitere Fachreviews nur read-only. Keine Desktoptests, Automation, Actions,
+Mainintegration, Commit/Push oder Release.
+
+**Fortsetzung 28.10., nach 12:44 UTC · BL-050.6:**72MCPexporttrennung
+umgesetzt/sechsgezielteDateienPASS/stabil12:38:21.806UTC, Gegenreview offen.
+73erworbeneLegacy-Bufferreferenz aufallenAusgängen genullt, vierDateienPASS/
+stabil12:43:44.872UTC, Gegenreview offen.74P2Intake.create muss eigenesWriter-
+FDobjekt mit späterem Namedbinding vergleichen, bevor Deletecap ausgegeben;
+Tests-zuerst-Entwurf/engeFirsterror-Closekorrektur in Vorbereitung. Keine
+nativeRacebehauptung. Restregister/Methoden/Sprachen/R0–R9/17Endgates/Build/
+Paket/100Dateien offen. KeinDesktop/Automation/Actions/Main/Commit/Push/Release.
+
+**Fortsetzung 28.10., nach 12:28 UTC · BL-050.6:**69/70/71 unabhängig
+geschlossen.70/71 alter API-Gegenlauf29bestätigteFehler, nach minimalem
+Produktdelta sechsDateien PASS/stabil12:19:43.158UTC; kein falsches
+Lösch-/Ziel-/Native-Recht.72P3: tatsächlichen ungenutzten MCP-Programmevidence-
+export aus neutralem Loggergraph auslagern, echte Windows/2Mac-Collector- und
+Inventory/rehash-Gegenfälle, LegacygatewayAPI und Rust-Desktopdiagnose erhalten.
+GuardC/Header/Adapter vollständig gegengelesen, keine neue nativeAusführung.
+Working16/Register/Integration17/Build/Paket/100Dateien/Restmethoden offen.
+Keine Desktoptests/Automation/Mainintegration/Commit/Push/Actions/Release.
+
+**Fortsetzung 28.10., nach 12:10 UTC · BL-050.6:** 65 final unabhängig
+geschlossen/gezielt grün bis12:02:49.672UTC. 69Regexliteralfix gezielt grün
+51/9/164/stabil12:09:21.546UTC, Gegenreview offen. Neu70P2 vier fremdobjekt-
+ungebundene Tempnamens-Unlinks und71P3 fehlender Legacy-/1 deny-only-Quellen-
+ausschluss nach Rootersatz; Quelle bestätigt, keine native Raceausführung.
+Enge Tests-zuerst-Korrektur ohne Settings-/Binding-/Schutzlockerung folgt.
+Neue Volllektüren separat im Followup3, noch kein Working16-Fertigregister.
+Restmethoden/Sprachen/R0–R9/Integration17/Build/neuesZIP/100Dateien offen.
+Keine Desktoptests, Automation, Mainintegration, Commit/Push/Actions/Release.
+
+**Fortsetzung 28.10., nach 11:51 UTC · BL-050.6:** 67 und 68 unabhängig tatsächlich
+geschlossen. 66 eng implementiert, 269 gezielte Gruppen und zusätzlicher echter
+Windows-Guard-/Leasefinish PASS, unabhängiger Abschluss vorhanden. Mac-Mismatch
+bleibt bei lebendem PID konservativ blockierend, kein nativer Macnachweis.
+65 dokumentweites XML-/expandiertes Kommentarbudget implementiert; direkte,
+Reply-, Autoren-, Token-, XML- und Zweifolienfälle grün. Neue Embedded-Testfixture
+verlangt unerlaubtes PPTX-in-PPTX, bestehendes OPCgate verweigert korrekt;
+Fixture-/Coveragekorrektur und unabhängiger Deltaabschluss offen. Kein Produktgate
+zum Bestehen des Tests lockern. Neue Register/Integration17/Releasebuild/Paket,
+100-Datei-Korpus und verbleibende Vollreviews offen. Keine Desktoptests/Release.
+
+**Fortsetzung 28.10., nach 11:35 UTC · BL-050.6:** Replay und alter Reviewpfad
+fehlen nach tatsächlicher Prüfung im neuen Windows-ZIP (SHA2c373e45…). Docs,
+Native321/3 ignoriert, Konverter, Releasebuild und Paket-Sidecar-Smoke PASS;
+Gesamtintegration16 bleibt wegen Headless-/Fast-content-Oracle rot erhalten.
+67 nur alte Test-Tempnamensprämisse korrigiert, zwei Race-/34 Snapshotfälle
+PASS/stabil; unabhängiger Abschluss offen. 68 CSV-Oracle/Originalabgleich offen.
+65 P2 Kommentar-Projektionsbudget und66 P2 zeitzonenabhängige Mac-Birthidentity
+mit konservativer Altjournal-Kompatibilität vor neuem Freeze abarbeiten.
+196 Dateien vollständig gelesen; restliche Methoden/Sprachen/R0–R9 und frische
+Endgates offen. Legacy-COM-Script klassifiziert technische Showfehler als Cancel;
+aktuelle native Standalone-RFD-UI verwendet diesen Pfad nicht, separat P3.
+Keine Desktoptests/Automation/Release/Main/Commit/Push/Actions.
+
+**Fortsetzung 28.10., nach 11:08 UTC · BL-050.6:** 63/64 mit Gegenfällen und
+unabhängigem tatsächlichem Review geschlossen. 62 gezielt grün: primärer
+Schreib-/fsyncfehler bleibt trotz zweitem Schließfehler erkennbar, Close-only
+und harte Cleanupfehler bleiben Fehler. Vier Testdateien Exit0/stabil,
+11:08:31.969 UTC; unabhängiger 62-Abschluss noch erforderlich. Frische
+Integration16, Releasebuild, echtes ZIP ohne Replay-/Altproduktreview sowie
+restliche Einzelmethoden/Register/R0–R9 offen. Alte Belege bleiben erhalten.
+Keine Desktoptests, Automation, Mainintegration, Commit/Push oder Release.
+
+**Fortsetzung28.10.nach10:48UTC · BL-050.6:**58/59,60 final unabhängig grün.
+61 Altproduktreviewgraph über kleinen Appadapter getrennt, sechsDateienPASS/
+stabil10:48:07.689UTC/Gegenreview16ebca3d…. ActualWindowsZIP nochzuprüfen.
+62StoreFirsterror/Close sowie63/64Pickerkurzread/Close sind konkret offen;
+Restmethoden/Register/R0–R9/Gesamtintegration/Build/Paket bleiben Arbeit.
+Keine Desktoptests/Automation/Main/Commit/Push/Version/Release.
+
+**Fortsetzung28.10.nach10:30UTC · BL-050.6:**52/53–56gezieltundunabhängiggrün.
+58/59eng umgesetzt;3roteAfterfälleals echteEPERM-vorRenamebelegt, nurTestorakel
+ehrlichgetrennt/stärkereObjekt-/Bytekontrollen+3Preopenpositives. Migration31/
+Bound32PASSstabil10:28:44.697UTC.60neuer2FD-Closebefund gefixt, vorher9/3rot,
+6DateienAfterPASSstabil10:30:50.813UTC. Finale58/59-/60Gegenreviewsnoch offen;
+61P3AltproduktreviewladungsrestkleinerAdapter inVorbereitung. Restmethoden/
+Register/R0–R9/Gesamtintegration/Build/Paket bleiben offen. Keine Desktoptests.
+
+**Fortsetzung28.10.nach10:03UTC · BL-050.6:**52gemeinsamer4MiB-Planvertrag
+mit Vorabreserve/atomischem SafeWriter/sechs Readern umgesetzt, echter
+Before-Historyfehler und Afterleser belegt; alte defizitäre Testplatzhalter
+ergänzt/rote Receipts erhalten. Letzter gezielter3Dateienlauf PASS/stabil
+10:03:20.542UTC. Unabhängiger52Gegenabschluss noch offen;53–56/58–59,
+übrige Methoden/R0–R9/Gesamtintegration/Build/Paket bleiben Arbeit. Keine UI.
+
+**Fortsetzung28.10.nach09:42UTC · BL-050.6:**47–50 tatsächlicher Gegenreview
+abgeschlossen;51 vollständige Stylekettenlänge vor Cachehit/Kopie, identische
+Unit-/OPC-Orakel vorher rot/nachher grün. Fünf Dateien55/39/36/50/15Gruppen
+PASS/stabil09:42:28.112UTC.57 nur falsche Literal-/Kanonisierungs-Testannahmen
+mit echtem Scanner/Bindungsgegenfällen korrigiert, frühere Kontrollen erhalten,
+erster falscher Ersatzvorschlag und Gegenprobes separat aufbewahrt. Tatsächliche
+unabhängige Abschlüsse dokumentiert.52–56/58–59 und Restreview/R0–R9/frische
+Register/Gesamtintegration/Windowsbuild/Paket weiter offen. Keine Desktoptests/
+Main/Push/Actions/Version/Release/Automation.
+[Details](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach09:28UTC · BL-050.6:** Integration15 drei PASS/stabil,
+Headless echter Residualpersonenoraclefehler57/stabileInputs. Falsche positive
+Literal-Escapeannahme und frühere Kanonisierung anhand tatsächlichem Code/RAM-
+Gegenproben weiter prüfen; keine Assertion pauschal lockern. Nach allen Jobs
+47–50 implementiert/geprüft: gemeinsames Diagnosebudget, Profil vor Diagnose-
+CLI, Smokeevidenz behalten, MacOS-Parent.19Bundle/4Smoke/Clippy und39/60Node-
+Gruppen PASS/stabil; echtes unabhängiges Deltaabschlussreview noch angefragt.
+
+Neu offen51 Wordstylecache verletzt volle Tiefengrenze,52 zulässiger Unicode-
+Exportplan größer als eigene Readergrenze,53–56 Paket-/Buildbytebindungen und
+Defaultstage-Sicherheit,58–59 History-Primärfehler-/enge Retryklassifikation.
+Zu jedem Befund liegen gehashte Vollquellen-/Designberichte vor.22eigene
+Rustdateien vollständig gelesen, weitere JSmethoden voll gelesen; R0–R9/
+Restmethoden/neue Bindungen/Gesamtintegration/Windowsbuild/Paket fehlen weiter.
+Keine Desktop-/Main-/Push-/Actions-/Versions-/Release-/Automationsaktion.
+[Genaue Grenzen](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach08:26UTC · BL-050.6:**46 Standalone-Seeds bereinigt,
+beide nur-MCP-Replayeinstiege im Sourcegraph und gemeinsamen Paketprüfer
+ausgeschlossen; synchrone neutrale Fachlogik bleibt. Vollständig passende
+Manipulationsinventare, Windows-/Macpfade und nachträgliche require-Wiederein-
+führung gezielt geprüft, Before rot/After grün, Inputs stabil. Kein fertiges
+neues Archiv aus bloßer Sourceprojektion behauptet.
+
+44 native Mutationsreconciliation bestätigt beide gehaltenen Parents und
+Zielidentity vor Complete/ACK;43Rustfälle+Clippy PASS/stabil, unabhängig
+revalidiert.45 Batch-/Intakehandler sperren nichtdiagnostische Wirkungen nach
+failed/ended, aktiver Pause-/Journalfallback bleibt;107Startupfälle und sechs
+Testdateien PASS/stabil, unabhängiger tatsächlicher Review. Einzelmethoden-
+volllektüren erweitert, Gesamt-R0–R9/Register/Gesamtintegration/Commits/
+Windowsbuild/Paket bleiben offen. Keine Desktoptests/Version/Main/Push/
+Actions/Release/Automation; Nutzer hat Desktop erneut ausgeschlossen.
+[Bindungen](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach06:45UTC · BL-050.6:** Integration14 Headless ROT/stabil
+im ungültigen positiven OPCfixture, drei andere Gates PASS. Minimaler Testfix42
+mit unveränderten Assertions und neuen Namespacegegenfällen, kein Runtimefix.
+40 Unicodecredential-Rohpositionen und41 unbeschränkte Headerlisten tatsächlich
+korrigiert/gezielt geprüft; neue permanente Fälle im kanonischen Plan.
+43 Metadaten-IO: kein unbesessener Temp-Unlink, kein Closewiederholen und kein
+Verdrängen des Primärfehlers; sieben tatsächliche Testdateien PASS/stabil.
+
+Offen:44 native Transaktionsbestätigung darf fehlgeschlagenen Parentfsync nicht
+ohne Nachholung zu Completed/ACK machen; sourcebestätigter Pfad, keine native
+EIO-/Powerlossprobe. Weitere tatsächliche JS-/Rustvollreviews und kleine feste
+Verträge dokumentiert, vollständiger R0–R9-Abschluss weiter offen. Frische
+Register/Gesamtintegration/Topiccommits/Windowsbuild/Paket nötig. Keine neue
+Version/Main/Push/Actions/Release/Automation/Desktopübernahme.
+[Belege](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach05:56UTC · BL-050.6:** Integration13 Headless ROT/stabil
+im zweiten isolierten VMimportseam, übrige drei Gates PASS. Nach Jobende echte
+zwei Helperimporte nachgeführt, keine Assertions gelockert.38/P3 Reloadcatch
+und39/P2 zweifach unterbrochene Rawdraft-Recovery tatsächlich reproduziert und
+eng behoben; gehaltene Identität/Connection/Draft und explizites Verwerfen
+beachten. Vier gezielte Dateien307/489/367/148Gruppen PASS/stabil05:56:32.889UTC.
+Unabhängige tatsächliche Reviews separat; historische rote Belege erhalten.
+
+Offen: Integration14/frische Register/übrige Methoden/R0–R9/Topiccommits/
+aktueller Windowsbuild/Paket. Weitere tatsächliche JS-/Rustvolllektüren liegen
+vor, keine pauschale Gesamt-/Mac-/Desktopabnahme. Keine Version/Main/Push/
+Actions/Release/Automation/Desktopübernahme.
+[Details](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach05:40UTC · BL-050.6:** Integration12 Headless tatsächlich
+ROT/stabil im bestehenden Feldoracle, übrige drei Gates PASS. Eigene34-Regression
+nach vollständigem Jobende eng korrigiert: Singlecell nur in erkanntem Tabellen-
+body/Ambiguitätskontext, keine neue Header-/Proseautorität; Breitenprüfung bleibt.
+VM-Testseam um tatsächliche neue Helperimporte ergänzt, Assertions unverändert.
+Gezielt sechs Dateien148Feldfälle/7Geometriegruppen+Line/Credential/PII/Trace
+PASS/stabil05:40:42.054UTC. Neues vollständiges Integration13-Grün erforderlich.
+
+Offen: frische Registerbindung/Restmethoden/R0–R9/Topiccommits/Windowsbuild und
+Paket. Keine Version/Main/Push/Actions/Release/Automation/Desktopübernahme.
+[Details](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach05:32UTC · BL-050.6:**34 tatsächlicher Lexer-/Rawrange-
+Fix in sieben Consumern plus reinem Helper, alle aktuellen Pins exakt zum
+geprüften V3-Kandidaten. Sechs gezielte Dateien PASS/stabil; fachliche Gates
+bleiben unabhängig.37 kausale private Cleanupmarke/Originalfehlerpriorität und
+sticky Eintrittsverweigerung tatsächlich korrigiert; vier Dateien PASS/stabil,
+unabhängiges Quell-/Testgegenlesen. Keine native Doppelfehler-/Mac-/GUIabnahme.
+
+Offen: neue Integration12/aktuelle Registerbindung, restliche Methoden/R0–R9,
+Topiccommits und aktueller Windowsbuild/Paket. Historische Integration11 ROT
+erhalten;35/36 gezielte neue Belege bleiben separat. Keine neue Version/Main/
+Push/Actions/Release/Automation/Desktopbedienung.
+[Details](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach05:24UTC · BL-050.6:**35/36 tatsächliche getrennte
+Telefon-GFM-/Officeklammerfälle korrigiert, unabhängige Quellen-/Designreviews
+und gezielte Dreidateien-/Fünfdateienläufe PASS/stabil.36 tatsächliche Word-
+Extraktion, Sourcepositionsverweigerung und Transformreplay eingeschlossen;
+keine generelle Entescapung/Timeout-/Schutzabschwächung.33 tatsächlicher
+Commitcleanup zusätzlich unabhängig ohne neuen Blocker gegengelesen.
+
+Offen:34 kohärente Tabellengeometrie und37 Originalfehler-/Cleanupunsicherheit
+fertigstellen; frische Register/Integration12, übrige Methoden/R0–R9,
+Topiccommits/Windowsbuild/Paket. Historische Integration11 bleibt ROT.
+Keine Version/Main/Push/Actions/Release/Automation/Desktopbedienung.
+[Belege und Grenzen](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach04:50UTC · BL-050.6:** Integration11 HeadlessROT/stabil
+erhalten; übrige drei Gates PASS.33 tatsächlicher enger Storecommit-Cleanupfix
+mit Originalfehlererhalt, drei Dateien27/12/79Gruppen PASS/stabil.32 tatsächlich
+übernommen/gegengelesen, fünf Dateien inklusive neuer Metadaten-/Locatorfälle,
+PIIregression, Policy-Goldens/Contentoperation/Buildfingerprint PASS/stabil.
+34 echter GFM-Endpipe-/Backslash-/Phantomidentitätsfehler offen, zusammenhängender
+Lexerfix statt dritter Grammatik vorbereiten.35 ContactURI-Spandelta echte
+Consumergegenprobe, C1/PDFannotation unbestätigt. Keine alten Belege umetikettieren.
+
+Offen:34/ggf.35 gezielt lösen/revalidieren, frisches Register/Integration12,
+restliche Methoden/R0–R9, Topiccommits und aktueller Windowsbuild/Paket. Neue
+Native-Rustinventur22Dateien/4615Objekte, drei Mainvollmodule/48Objekte separat;
+keine Macabnahme daraus. Keine Version/Main/Push/Actions/Release/Automation/UI.
+[Detaillierte Bindungen](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach04:27UTC · BL-050.6:** Integration10 drei tatsächliche
+Gates PASS/stabil, Headless ROT wegen veraltetem erfolgreichem Mac-Spawnmodell
+ohne spawn-Event. Reiner Testfix31 nach Jobende, getrennte Prestart-/Running-
+Abortkontrolle, Zweidateiengegenlauf PASS/stabil. Kein Produkt-/Timeoutdelta,
+Fingerprint weiteracc14c1e…/388. Zusatz-Agentenreview31 automatisch abgewiesen,
+kein erfundenes PASS. Native Mac-/Desktop weiterhin getrennt.
+
+Offen: frisches Working10-Register/Integration11, übrige Methoden/R0–R9,
+Topiccommits und heutiger Windows-Build/Paket. Keine Version/Main/Push/Actions/
+Release/Automation/Desktopbedienung. Alle roten/grünen Belege erhalten.
+[Fortschritt](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach04:18UTC · BL-050.6:** Tatsächliche Korrekturen23–30
+gezielt PASS/stabil: sechs Dateien23/24/25/28, sieben Dateien26/27/29, sechs
+Dateien30; Timer23 separat27Gruppen grün. Neue Story/MC-/Namespace-/PPTowner-
+Gegenfälle und Parent/FDbindung vor erstem privaten Write im allgemeinen
+Workstore, jeweils reale eigene synthetische FS-/ZIPinputs. Vollständiger
+Officechartreview ohne neuen bestätigten Fehler. Zusatz-Agentengegenreview30
+automatisch abgewiesen, nicht als PASS gezählt; ursprünglicher unabhängiger
+Vollreview/Design und Main-Deltaprüfung/Tests sind vorhanden.
+
+Nächste offenen Schritte: frisches Working10-Inventar/semantische Bindung,
+Integration10 auf exakt diesen Bytes, restliche Einzelmethoden und R0–R9,
+Topiccommits, aktueller Windowsreleasebuild/Paket. Integration9-/Working9-
+Belege bleiben unverändert historisch. Kein Gesamtabschluss/Versionsbau/Main/
+Push/Actions/Release/Automation/Desktop. Nutzerläufe und alte Belege erhalten.
+[Genauer Fortschritt](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung28.10.nach03:34UTC · BL-050.6:** Integration9 vollständig PASS/
+inputs_unchanged=true:333Headlessdateien, Docs,Clippy/316Rust+3ignoriert,
+vier Windows-Waitfälle, acht Konverterdateien/75Workerfälle. Alle Jobs beendet;
+alter Fingerprint0b0c96d8… bleibt historischer Beleg, nicht neu umgebunden.
+
+Weiteres echtes Vollreview77Voll-/3Teilmodule/3853ASTobjekte, keine Methoden-
+oder R0–R9-Gesamtabnahme. Befunde23–28 lokal mit Quell-/Gegenbelegen erfasst:
+Legacy-Nostreamstart, CSV-Endrecord/Appendseparator, Intentparent vor Write,
+PPTquarantäneeigner, Wordrelation-Namespace, unnötige volle Reviewbodyretention.
+23v2/24/25/28 jetzt tatsächlich unabhängig gegengelesen übernommen, genaue
+Kandidatengleichheit nachgewiesen; neue gezielte Tests noch in Arbeit.
+OOXML26/27 noch nicht übernommen, V1-Kandidatenblocker erhalten/korrigiert;
+zusätzliche geerbte MC-Headerauswahl gerade konkret prüfen. C1/PDFannotation-
+Diagnosebeobachtung weiterhin unbestätigt. Kein nativer Mac-/GUI-/OOM-/
+RSS-/Speedupbeweis aus Modellen oder Sourcelektüre.
+
+Offen: Deltas/Gegenfälle fertigstellen, unabhängige tatsächliche Nachprüfung,
+neuer unveränderter Gesamtlauf, frische Register-/Quellbindung, übriges R0–R9,
+Topiccommits und aktueller Windowsreleasebuild/Paket. Keine Version/Main/Push/
+Actions/Release/Automation/Desktopübernahme. Originale/Altläufe/Temps erhalten.
+[Reviewplan und Befunde](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung 28.10.2026, nach 02:45 UTC · BL-050.6:**
+Integration8 vollständig PASS/stabil:331Headlessdateien, Docs, Native/Clippy/
+316Rust+3ignoriert, vier tatsächliche Windows-Waitfälle, acht Konverterdateien/
+75Workerfälle. Danach bestätigte Befunde18–22 tatsächlich behoben: unsichere
+Legacy-Paketlinks keine Missing-/Intentlöschautorität; gebundenes Workparent-/
+Leafcleanup ohne Folgen eines Redirects; Testreihenfolge mit echten Indizes;
+No-stream-Nodefehler korrekt klassifizieren; Sourcekopie erst bei belegtem
+Inputend-/stdincloseabschluss nullen. Kein vorzeitiger Childclose-Wipe.
+Tatsächliche Produktionsdeltas unabhängig gegengelesen; kein weiterer Blocker.
+
+Letzter gezielter Elfdateienlauf PASS/alle0/inputs_unchanged=true02:45:47.480UTC.
+Echte eigene Windowsjunction-/Outbox-/Store-/Journal-/Finalizergegenfälle;
+33 ausdrücklich nur Source-Modellfälle für drei Plattform-/Archkontexte.
+Erster RAM-Loader-FAIL und verworfene Erstkandidaten bleiben erhalten, eng
+korrigierte Tests statt Produktionsfallback für Mocks. Fingerprint
+`0b0c96d8ce8daad77b7352098e60f2e3f6c8faf728a564c2f71c3a8ad2869980` /388,
+uncommittet auf7a59a091. **Offen:** Integration9 mit333Headlessdateien/Docs/Native/
+Konverter, frische semantische Registerbindung, restliches R0–R9, Topiccommits,
+neuer Windows-Build/Paket sowie native Mac-/Desktopgates. Keine neue Version,
+Mainintegration, Push, Actions, Release, Automation oder Desktopübernahme.
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung 28.10.2026, nach 01:48 UTC · BL-050.6:**
+Integration7 vollständig PASS/stabil: 331 Headlessdateien, Docs, Native/Clippy/
+313 Rust (3 ignoriert), vier tatsächliche Windows-Waitfälle und acht Konverter-
+dateien mit 75 Workerfällen. Danach Befunde11–17 tatsächlich behoben und am
+Produktionsdelta unabhängig gegengelesen: ursprüngliche Sourcebuffer abschließen,
+reservierte Nichtdatei-Journaltokens sperren Retention, rohe Rust-Optionsform und
+Sourcepairpresence bewahren, Ownershipprimärfehler über Deferredmapping,
+Contentauthority und abschließenden Registryscope erhalten. Kein späterer Persist
+nach ungeschlucktem Ownershiprefusal; normale/falsy Fehlerverträge unverändert.
+
+Erster gezielter Zehndateienlauf 9PASS/1FAIL/stabil bleibt erhalten: echte neue
+Registryprobe fand einen weiteren finally-Anschlussfehler. Vorher/Nachher mit
+realem eigenen Lock/Journal belegt; zweiter Elfdateienlauf PASS/alle Exit0/stabil
+am28.10.01:48:02.552 UTC. Zehn tatsächliche Rustdecoderfälle PASS. Fingerprint
+`c4d0ddb7ecca2fa0233b1a48be953486d70fc17e8dcf97e66c1be4baeee9c7ee` / 388 Inputs,
+weiter uncommittet auf `7a59a091`.
+
+**Offen:** vollständige Integration8, neue semantische Registerbindung für
+geänderte Quellen, restliches R0–R9, Topiccommits und neue Windows-Build-/
+Paketbelege. Historische Working7-Nachweiskette in V3 berichtigt, keine alten
+Zähler addiert. Native Mac-/Desktopgates bleiben getrennt. Keine neue Version,
+Mainintegration, Push, Actions, Release, Automation oder Desktopsteuerung.
+[Reviewplan und Befunde](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung 28.10.2026, nach 00:44 UTC · BL-050.6:**
+PUBLICATION-CONTROL-09/P2 und IDENTITY-MATERIALIZE-10/P2 eng behoben, tatsächliche
+Produktionsdeltas unabhängig gegengelesen. Ownershiprefusals über Postcommit und
+beide Mappingcatches unverändert priorisiert, gewöhnliche Recovery und harte
+Cleanupfehler außerhalb dieser selektiven Ausnahme erhalten. Private Ursachen
+werden nicht in öffentliche Fehler übernommen. Legacyzuordnung einmal lesen und
+rendern, ehrlicher Footer/complete, vorherige Directoryadmission, alte Datei bei
+null gültigen Snapshots erhalten. Alte öffentliche Kopien/Marker bleiben erhalten;
+bestehender privater Fallback bei abweichendem TXT-Hash. Moderne Beilagen separat.
+
+Zweiter gezielter Achtdateienlauf PASS/alle Exit0/inputs_unchanged=true. Erster
+gezielter Lauf und Integration6-Headless tatsächlich rot wegen jeweils fehlender
+expliziter neuer Importanbindung im strikten RAM-Loader, eng ergänzt und rote
+Belege bewahrt. Integration6 Docs/Native/313 Rust (3 ignoriert)/acht Konverter-
+dateien mit 75 Workerfällen PASS/stabil. Kein Gesamt-PASS.
+
+Fingerprint `ac623ea6dcd30429b22276464d460481cc6b5c1ee74ad46ae8080037722afec7`
+/ 388 Inputs, weiter uncommittet auf `7a59a091`. **Offen:** Integration7 vollständig,
+erneute Registerbindung für geänderte Methoden, restliches R0–R9, Topiccommits und
+neue Windows-Build-/Paketbelege; native Mac-/Desktopgates getrennt. Keine neue
+Version, Main, Push, Actions, Release, Automation oder Desktopsteuerung.
+[Reviewplan und Befunde](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung 28.10.2026, nach 23:47 UTC am 27.10. · BL-050.6:**
+SIDECAR-LABEL-08/P2 aus vollständigem tatsächlichem Methodenreview behoben:
+optionale Namensdetails nun mit nativ identischer UTF8-/Controlgrenze; keine
+Umbenennung oder Freigabe ungeeigneter Quellen, ursprünglicher Auswahlfehler
+bleibt erhalten. Reale synthetische Sidecarprobe vorher/nachher mit gesundem
+Folgerequest/Close0; zwei gezielte JS-Dateien stabil und ein echter Rustfall
+PASS. Erster Nulltest-Cargofilter ausdrücklich nicht als Nachweis gewertet.
+Native Produktionsprüfung unverändert. Fingerprint
+`66aef5fa5f5370acab5a531028f592b7e5463185794934837cef01ac70f8c860` / 388 Inputs,
+weiter uncommittet auf `7a59a091`.
+
+Integration5 Docs/Native/Clippy/312 Rust (3 ignoriert)/acht Konverterdateien
+PASS/stabil; Headless gezielt vor Fix beendet, FAIL/Exit4294967295 und
+inputs_unchanged=true erhalten. **Offen:** create-only Integration6 mit 331
+Headlessdateien, Docs/Native/Konverter, Topiccommits, neue Windows-Build-/
+Paketbelege und vollständiges R0–R9. Mac-/Desktopgates separat. Keine neue Version,
+Mainintegration, Actions, Veröffentlichung, Automation oder Desktopbedienung.
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung 28.10.2026, nach 23:39 UTC am 27.10. · BL-050.6:**
+Uncommitteter Produktfingerprint
+`00e5ce2e75ecaf253a6cee35ca0ac6ef03ef90ae9af9a660eddbd9e50b9e8cae` / 388 Inputs,
+Base `7a59a091`. BROKER-LIFECYCLE-07/P2 tatsächlich reproduziert und eng behoben:
+späte Drafts/ACKs können Failed-/Retired-Instanzen nicht wiederbeleben; Claim
+bleibt bis Exit und wird einmalig über Originalbeleg freigegeben. Echte No-PID-
+Startfehlerpräzisierung bleibt attemptgebunden. Ergänzende Pre-Abort-Guards für
+drei Workerrollen verhindern die vorher nachweisbare unnötige Startsendung;
+kein vorzeitiger Lease-/Reservationrelease. 97 Startup-/15 Broker-/91 Standalone-
+23 Boundary-/3 Executorgruppen grün/stabil. Zwei alte Fixtures eng angebunden.
+Vorheriger echter Review-/Fast-OCR-/Sidecarabschluss grün/stabil, nach zusätzlichen
+Guards frische vollständige Integration5 erforderlich.
+
+Integration4 beendet: Docs/Native/Clippy/312 Rust (3 ignoriert)/alle acht
+Konverterdateien PASS/stabil. Headless vor Brokerfix gezielt beendet; Original-
+FAIL/Exit4294967295/inputs_unchanged=true und CANCEL-REQUEST bleiben erhalten.
+Unabhängige tatsächliche Broker-/Executor-Gegensichten und weitere begrenzte
+Methodenurteile dokumentiert. **Offen:** Integration5 mit 331 Headlessdateien,
+Docs/Native/Konverter, Topiccommits, neue Windows-Build-/Paketbelege und vollständige
+R0–R9-Abdeckung. Native Mac-/Desktopgates bleiben separat. Keine Mainintegration,
+Actions, Version, Veröffentlichung, Automation oder Desktopbedienung.
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Aktuell27.10.2026 nach22:54UTC · BL-050.6:**
+Fingerprint`ba0d19c5f609205ba6a7de025975a39b0d2d6f55444c89a1c8c7423431d24567`/388Inputs,
+weiter uncommittet auf`7a59a091`. Integration3 beendet: Docs/Native/Clippy/
+312Rust(3ignoriert) grün/stabil; Konverter ROT an veralteter CSV-Headerassertion,
+eng auf neutralen Header aktualisiert. Headless gezielt vor Quellenänderung am
+eigenen kindlosen Testprozess beendet; tatsächliches FAIL/Exit4294967295 und
+CANCEL-REQUEST erhalten, Inputs unverändert.125Generationsfälle waren grün,
+kein Gesamt-PASS.
+
+- **CONTACT-SCAN-05/P2:** Quadratische OCR-E-Mailsuche tatsächlich gemessen;
+  äquivalente lineare Checks/Iterator ohne neue Nichtkontaktarrays eingebaut.
+  38197 echte Vorfunktionsvergleiche und21OCR-Review-/Bild-/Flow-/16CSVgruppen
+  grün/stabil. Kein App-Speedupverhältnis aus unterschiedlicher Hostlast behauptet.
+- **CONTACT-IMAGE-06/P3:** Private PNG-Chunknamen nun byteexakt. CRC-valide
+  Highbits vorher angenommen, danach verweigert;12 feste Negativfälle und
+  vorhandene Budgets/positive Fälle erhalten. Kein gewöhnlicher Quelldatei-
+  Trigger oder Privacybypass behauptet; eigener Crop-Encoder war bereits fest.
+- **Einzelreview:**11Module/174AST-Objekte mit expliziten Urteilen gebunden;
+  zusätzliche unabhängige Codec-/Status-/Hinweis-/TXT-XLSX-/Timinggegensichten
+  abgeschlossen. Neue Hashes nicht ungeprüft mit alten Urteilen gleichsetzen.
+
+**Offen:** create-only Gesamt331/Native/Konverter/Docs in
+`dist/rc177-method-integration4-20261027`, neue Commit-/Build-/Paketbelege und
+fortgesetztes R0–R9-Review. Native Mac-/Desktopgates bleiben separat. Keine neue
+Version, Mainintegration, Mac-Actions oder Automatisierung. [Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Aktuell27.10.2026 nach22:24UTC · BL-050.6:** CSV-Gegenreviews abgeschlossen;
+ein dabei tatsächlich reproduzierter P1-Qualifier-Rollenverlust wurde vor Commit
+eng korrigiert. Metadatenstatus und Spaltenpflicht sind getrennt, private
+Qualifier und alle folgenden Feldwerte bleiben geschützt; neutrale Nachbarn
+bleiben neutral. Zwei finale tatsächliche Quellgegenreviews ohne weiteren
+bestätigten Deltablocker;16CSV-/22Extraktions-/148Feld-/12Reviewgruppen grün,
+aktuelle echte Windowskonverter-/Privatprojektion ebenfalls grün/stabil.
+Fingerprint`a9181c6ffb64b11b07eab241371bad19cfa65b9a391244fa86eba2c8174aef45`/388Inputs,
+weiter uncommittet auf`7a59a091`. Nächster unveränderter Integrationsschnitt331/
+Native/Konverter/Docs unter`dist/rc177-method-integration3-20261027`.
+R0–R9, Commit-/Build-/Paket- und native Mac-/Desktopgates bleiben offen.
+
+**Fortsetzung27.10.2026 nach22:19UTC · BL-050.6:** Arbeitsbaum weiterhin auf
+`7a59a091`, aktueller Produktfingerprint
+`fd3b6d1532733005be7c8306bdc0fc3b30da933f928fdbafbd610607faf460f3`/388Inputs.
+Der zweite Full330 endete ROT an einer veralteten Exportlistenassertion;
+Inputs unverändert, Originalevidenz erhalten. Enger Testanschluss15/15 grün.
+Native/Clippy/312Rust(3ignoriert)/acht Konverterdateien/Docs dieses alten Schnitts
+PASS/stabil, kein Gesamt-PASS.
+
+- **STREAM-ERROR-03/P2:** Eigene Stdout-/Stderr-Pipefehler und Parserstdoutfehler
+  kontrolliert behandeln. Optionale Stderrmetrik fällt aus, hartes Streambudget
+  bleibt aktiv. Realer injizierter Node-Socket-Vorher/Nachhervergleich sowie
+  69Checkpoint-/92Timing-/21Parser-/15Vertragsgruppen PASS/stabil; unabhängiger
+  letzter Budgetgegenreview abgeschlossen. Kein tatsächlicher OS-Readfehlerbeleg.
+- **CSV-PROJECTION-04/P2:** Führende Leerrecords und unbekannte erste Datenwerte
+  müssen im privaten Anonymisierungspfad erhalten bleiben. Gemeinsame reine
+  Breitenprüfung, Headerbeleg pro Spalte und exakte lokale Restprüfspannen;
+  geschützte Nachbarfelder bleiben hart. Zwölf neue CSV-Gruppen und vier
+  bestehende Testdateien PASS/stabil. Echter isolierter Windowskonverter mit
+  Projektion/Review/Finalize/Tracereplay für fünf synthetische Fälle grün.
+
+**Offen:** drei laufende begrenzte Quellengegenreviews zum CSV-Delta; danach neuer
+Full331/Native/Konverter/Docs und frische Build-/Paketbelege, Topiccommits sowie
+fortgesetztes R0–R9-Einzelreview. Keine Mac-Actions/Desktop-/Releasefreigabe.
+Details und erhaltene rote Befunde im [Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Fortsetzung27.10.2026 nach21:40UTC · BL-050.6, Arbeitsbaum:** Aktuell
+`1b37e41ec0baff3b905303fb315a11d45024573c987eaa4a555bfe147fcd0cba`/387Produktinputs,
+weiter Basis`7a59a091`, noch kein neuer Commit oder Download.
+
+- **CR-CONTEXT-01/P2:** CR-Prose-/Kopfzeilenlücke tatsächlich reproduziert und
+  korrigiert. Lokale Discovery erhält bestehenden Tabellenbesitz; keine globale
+  Textnormalisierung.15neue/148unveränderte Feld-/164PII-Gruppen PASS/stabil,
+  unabhängiger tatsächlicher Quellengegenreview abgeschlossen.
+- **NATIVE-END-02/P2:** Unbekanntes inneres Prozessende kann kein125-/Timeout-
+  Teilergebnis mehr begründen oder hinter Transport-/Abbruchcode verschwinden.
+  Eigener Windows-Wait und fünf POSIX-Reap-Pfade gehärtet; Parent/Cause/SafeError/
+  Zweiquellen-Stopp gegengeprüft. Harte vollständige Exit2-Ablehnung bleibt hart.
+  57Checkpoint-/9Policy-/15Runner-/12Anonymisierungswrappergruppen grün; eigener
+  nativer Windows-Vierfallvergleich und Source/Binary-Reproduktion grün.
+  Native Mac-Ausführung des geänderten Supervisors bleibt separat offen.
+- **Reiner Testanschluss:** Full329 tatsächlich ROT21:21UTC bei14VM-Kompositions-
+  fällen wegen fehlendem neuem Konstantenimport. Fester Import eng ergänzt,
+  14/14 danach PASS; keine Assertion oder unbekannte Importverweigerung gelockert.
+
+**Offen:** neuer vollständiger330er-Lauf und aktuelle Native-/Konverter-/Docs-/
+Build-/Paketbelege, danach Topiccommits mit expliziter Manifestzuordnung. Frühere
+FINALs/Belege nicht umschreiben. R0–R9 bleibt offen; CR-Tabellengrammatik und native
+Mac-/Desktopbelege werden durch diese begrenzten Gegenfälle nicht geschlossen.
+Keine Mainintegration, Mac-Actions, neue Version oder Automatisierung.
+Details im [Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Aktiver Arbeitsschnitt27.10.2026 nach20:55UTC · BL-050.6:**
+SOURCE-PREFIX-01/P2 im Arbeitsbaum korrigiert, noch nicht committed. Neue `/8`-
+Quellsnapshots besitzen einen expliziten gebundenen Plain-Storagevertrag; alte
+`/2`–`/7`, rohe verschlüsselte Bestände, Originale und Nutzerprofile bleiben erhalten.
+Aktueller Fingerprint`8e84b5245b0cfa8db172340457e8c43920263fbf6de77e8325449f9f3acfb88e`/387Inputs.
+Keine Präfixausnahme oder Schema-/Storage-Downgradefreigabe. Status-/Aktionsreader
+getrennt, Maintenance auf Headerklassifikation begrenzt, beide Payloadhashes vor
+Inhaltsverwendung zwingend. Der mitgefundene Teilread-Nullungsfehler ist ebenfalls
+eng korrigiert. Drei unabhängige tatsächliche Deltagegensichten; gezielte Tests,
+Produktisolation4/4 und Policy-/Fach9/9 grün. **Offen:** frische vollständige329er-
+Integration, Docs, passende Native-/Konverter-/Build-/Paketprüfung und exakte
+Commitbindung; danach weiter vollständiges Einzelmethodenreview R0–R9. Kein
+neuer Release-, Main-, Mac-Actions-, Desktop- oder Automatisierungsauftrag.
+Nachweise und ehrliche Prüfhelferfehler im
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
 **Aktueller Quellenreview 27.10.2026:** Produktcommit `6265f46e1bbec00b6307044d9f39c42e2e60fa08`, Fingerprint
 `4bb2b2fe40ece368de4affd2ab7c0183372828d62616fe7e29f0246e2ffe1331` /386 Inputs.
 Unveröffentlichter Reviewbranch; keine Mainintegration oder neue Version.

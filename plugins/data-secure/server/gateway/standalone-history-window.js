@@ -7,7 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { dataRoot } = require('../runtime');
 const { ensurePrivateDirectory } = require('./common');
-const { bindDirectory, assertDirectory, readBoundFileRecord, sameFile } = require('../core/bound-file-io');
+const { bindDirectory, assertDirectory, readBoundFileSnapshotAttemptRecord, sameFile } = require('../core/bound-file-io');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const { createBatchActiveLock } = require('./batch-active-lock');
 const { withSynchronousDocumentControl } = require('./standalone-document-control');
@@ -44,24 +44,33 @@ function select(rows) {
 }
 function read(directory) {
   const target = path.join(directory.path, 'recent.json');
+  const retrySnapshot = Symbol('history window snapshot changed');
   for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
     try {
       // A legitimate publisher can atomically replace the index between the
       // leaf's lstat/open/postcheck. Retry the whole boundary, never its bytes
       // alone, and keep the original directory binding on every attempt.
-      const record = readBoundFileRecord(target, { directory, maximum: 4096, minimum: 1 });
+      const record = readBoundFileSnapshotAttemptRecord(target,
+        { directory, maximum: 4096, minimum: 1 }, () => { throw retrySnapshot; });
       const value = JSON.parse(record.bytes);
       if (value?.schema !== SCHEMA || Object.keys(value).sort().join(',') !== 'entries,schema' ||
           !Array.isArray(value.entries) || value.entries.length > LIMIT ||
           JSON.stringify(select(value.entries)) !== JSON.stringify(value.entries)) throw fail();
       return { entries: value.entries, record };
     } catch (error) {
-      if (error?.code === 'BOUND_FILE_CHANGED' && attempt + 1 < READ_ATTEMPTS) continue;
+      if (error === retrySnapshot && attempt + 1 < READ_ATTEMPTS) continue;
       if (error?.code === 'ENOENT' && attempt === 0) {
         // Only an initially absent leaf in this unchanged namespace permits
         // first-install migration. A changed-then-missing leaf must not scan
         // old runs, create a lock or repair an index on a read-only retry.
-        try { assertDirectory(directory); return null; } catch { throw fail(); }
+        let absent = false;
+        try {
+          assertDirectory(directory);
+          try { fs.lstatSync(target, { bigint: true }); }
+          catch (current) { if (current?.code !== 'ENOENT') throw current; absent = true; }
+          assertDirectory(directory);
+        } catch { throw fail(); }
+        if (absent) return null;
       }
       // Unsafe/close/schema errors and sustained changes remain unavailable.
       throw fail();
@@ -87,7 +96,12 @@ function publish(directory, previous, entries) {
   const temporary = `${target}.${process.pid}.${crypto.randomBytes(12).toString('hex')}.tmp`;
   const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
     (fs.constants.O_NOFOLLOW || 0), 0o600);
-  try { writeFully(fd, bytes, fs); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  let failed = false, primary;
+  try { writeFully(fd, bytes, fs); fs.fsyncSync(fd); }
+  catch (error) { failed = true; primary = error; }
+  try { fs.closeSync(fd); }
+  catch (error) { if (!failed) { failed = true; primary = error; } }
+  if (failed) throw primary;
   assertDirectory(directory);
   if (previous) {
     const current = read(directory);

@@ -5,6 +5,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { processingModeForBatch } = require('../core/processing-mode');
 const { resultNamingModeForBatch } = require('../core/result-naming-mode');
+const { BATCH_SCHEMA, MAX_HEADER_BYTES, PREFIX_BYTES, validateStorageItem,
+  encodeSourceSnapshot, decodeSourceSnapshot } = require('../core/source-snapshot-storage');
 const { SafeError } = require('../runtime');
 const {
   LIMITS,
@@ -20,13 +22,15 @@ const { batchRoot, workPath } = require('./batch-private-store');
 
 const STAGING_HEADROOM_BYTES = 64 * 1024 * 1024;
 
-function assertStagingCapacity(queue, statfs = fs.statfsSync) {
+function assertStagingCapacity(queue, statfs = fs.statfsSync, storageOverhead = 0) {
+  if (!Number.isSafeInteger(storageOverhead) || storageOverhead < 0 || storageOverhead > 200 * (MAX_HEADER_BYTES + PREFIX_BYTES))
+    throw new SafeError('Die Speicherreserve für private Quellen ist ungültig.');
   const inputBytes = queue.reduce((total, entry) => total + entry.stat.size, 0);
   // A batch consisting only of preflight stops creates no private source
   // snapshot. The tiny atomic journal is guarded by its own write operation;
   // do not manufacture a 64-MiB staging requirement for zero copied bytes.
   if (inputBytes === 0) return { inputBytes: 0, required: 0, available: null };
-  const required = inputBytes * 2 + STAGING_HEADROOM_BYTES;
+  const required = inputBytes * 2 + STAGING_HEADROOM_BYTES + storageOverhead;
   let stats;
   try {
     stats = statfs(batchRoot());
@@ -136,6 +140,7 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
   const noFollow = io.constants.O_NOFOLLOW || 0;
   let input;
   let plaintext;
+  let stored;
   let destinationCreated = false;
   let primaryFailed = false;
   // DS-070: the preflight hash is the authoritative content gate of the copy.
@@ -178,9 +183,12 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
     if (!crypto.timingSafeEqual(Buffer.from(copiedSha256, 'hex'), Buffer.from(expectedSha256, 'hex'))) {
       throw new SafeError('Eine ausgewählte Datei wurde zwischen Prüfung und lokaler Übernahme verändert.');
     }
-    privateWorkStore.writeFile(destination, plaintext);
+    const framed = deps.sourceSnapshot ? encodeSourceSnapshot(deps.sourceSnapshot.state, deps.sourceSnapshot.item, plaintext) : null;
+    stored = framed?.bytes;
+    privateWorkStore.writeFile(destination, stored || plaintext);
     destinationCreated = true;
-    return { size: position, sha256: copiedSha256 };
+    return { size: position, sha256: copiedSha256,
+      ...(framed ? { source_snapshot_storage: framed.descriptor } : {}) };
   } catch (error) {
     primaryFailed = true;
     throw error;
@@ -191,6 +199,7 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
       try { io.closeSync(input); } catch (error) { closeFailed = true; closeError = error; }
     }
     if (plaintext) plaintext.fill(0);
+    if (stored) stored.fill(0);
     if (closeFailed) {
       try { if (destinationCreated && io.existsSync(destination)) io.unlinkSync(destination); } catch { /* outer cleanup remains the guard */ }
       // Preserve the writer's exact private-error channel, including a
@@ -207,24 +216,30 @@ function exactPendingEntry(state, item, deps = {}) {
   if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item?.work_name || ''))) {
     throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
   }
-  if (['datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema)) processingModeForBatch(state);
-  if (['datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema)) resultNamingModeForBatch(state);
-  if (!['datasecure-batch/2', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema) ||
+  if (['datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7', BATCH_SCHEMA].includes(state.schema)) processingModeForBatch(state);
+  if (['datasecure-batch/6', 'datasecure-batch/7', BATCH_SCHEMA].includes(state.schema)) resultNamingModeForBatch(state);
+  if (!['datasecure-batch/2', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7', BATCH_SCHEMA].includes(state.schema) ||
       Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
       /\.dsart$/iu.test(item.work_name) ||
-      (['datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema) && item.private_artifact_plain !== true)) {
+      (['datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7', BATCH_SCHEMA].includes(state.schema) && item.private_artifact_plain !== true)) {
     const error = new SafeError('Eine alte verschlüsselte oder unbekannte Arbeitskopie bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.');
     error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';
     throw error;
   }
   const privateWorkStore = deps.privateWorkStore;
+  validateStorageItem(state, item);
   if (!privateWorkStore || typeof privateWorkStore.readFile !== 'function') {
     throw new SafeError('Der lokale Speicher privater Stapelkopien ist nicht verfügbar.');
   }
   const full = pathApi.join(pathForWork(state.token), item.work_name);
   statRegularFile(full);
-  const privateBytes = privateWorkStore.readFile(full);
-  if (privateBytes.subarray(0, 8).equals(Buffer.from('DSARTF01'))) {
+  const storedBytes = privateWorkStore.readFile(full);
+  let privateBytes;
+  if (state.schema === BATCH_SCHEMA) {
+    try { privateBytes = decodeSourceSnapshot(state, item, storedBytes); }
+    finally { storedBytes.fill(0); }
+  } else privateBytes = storedBytes;
+  if (state.schema !== BATCH_SCHEMA && privateBytes.subarray(0, 8).equals(Buffer.from('DSARTF01'))) {
     privateBytes.fill(0);
     const error = new SafeError('Eine alte verschlüsselte Arbeitskopie bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.');
     error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';

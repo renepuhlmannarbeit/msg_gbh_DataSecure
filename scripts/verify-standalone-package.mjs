@@ -10,6 +10,8 @@ import crypto from 'node:crypto';
 import { verifyWindowsCrtPolicy, verifyWindowsNativeContract } from './lib/windows-native-contract.mjs';
 import { verifyOwnershipGuardPackage } from './lib/ownership-guard-artifact.mjs';
 import { windowsPackagePrefix } from './lib/standalone-windows-layout.mjs';
+import { readContract } from './lib/bundled-runtime.mjs';
+import { verifyWindowsPackageBindings } from './lib/standalone-windows-package.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -52,6 +54,7 @@ assert.equal(manifest.requires_rust_install, false);
 assert.equal(manifest.requires_visual_cpp_redistributable, false);
 assert.equal(manifest.windows_crt, 'static');
 verifyStandaloneInventory(relative, manifest);
+verifyWindowsPackageBindings(relative, manifest, readContract(root));
 verifyOwnershipGuardPackage(relative, 'windows-x64');
 const windowsPolicyBytes = relative.get('WINDOWS-NATIVE-POLICY.json');
 const windowsPolicy = verifyWindowsCrtPolicy(JSON.parse(windowsPolicyBytes));

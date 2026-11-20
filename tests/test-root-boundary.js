@@ -18,7 +18,52 @@ const privacy = require('../plugins/data-secure/server/gateway/privacy-config');
 const result = require('../plugins/data-secure/server/gateway/result-folder-config');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const reservations = require('../plugins/data-secure/server/gateway/root-reservations');
-let passed = 0;
+let passed = 0, fixtureCleanupAllowed = true;
+
+// Serialized into a separate, bounded test launcher. Only direct ChildProcess
+// close permits this parent's fixture cleanup; exit/error/kill are not close.
+async function runReservationWriters(selected, worker, helperPath) {
+  const { spawn } = require('child_process');
+  const { ownChild, within, firstFailure, endTestCliFailure } = require(helperPath);
+  const failure = firstFailure(), children = [];
+  let reportFault;
+  const fault = new Promise(resolve => { reportFault = resolve; });
+  const record = error => { failure.record(error); reportFault({ error }); };
+  try {
+    for (const root of selected) {
+      failure.throwIfFailed();
+      const child = spawn(process.execPath, ['-e', worker, root], {
+        stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true
+      });
+      const owned = ownChild(child, record); children.push(owned);
+      child.stderr.on('error', record);
+      child.stderr.on('data', () => record(new Error('RESERVATION_WRITER_STDERR')));
+    }
+    const complete = Promise.all(children.map(owned => owned.done.then(result => {
+      if (result.code !== 0 || result.signal || owned.failure.failed) {
+        if (owned.failure.failed) throw owned.failure.value;
+        throw new Error('RESERVATION_WRITER_FAILED');
+      }
+      return result;
+    })));
+    await within(Promise.race([complete, fault.then(({ error }) => { throw error; })]),
+      25000, 'RESERVATION_WRITERS_DEADLINE');
+  } catch (error) { record(error); }
+  finally {
+    for (const owned of children) if (!owned.closed) {
+      try { owned.terminate('SIGKILL'); } catch (error) { record(error); }
+    }
+    try { await within(Promise.all(children.map(owned => owned.done)), 1500, 'RESERVATION_WRITERS_CLOSE_UNCONFIRMED'); }
+    catch (error) { record(error); }
+  }
+  const unconfirmedChildren = children.some(owned => !owned.closed);
+  endTestCliFailure({ failed: failure.failed, error: failure.value,
+    retainedRoots: selected, unconfirmedChildren });
+  failure.throwIfFailed();
+  const binding = require('crypto').createHash('sha256').update(JSON.stringify(selected)).digest('hex');
+  process.stdout.write(JSON.stringify({ schema: 'datasecure-reservation-writers/1', binding,
+    closed: children.map(owned => ({ code: owned.exitCode, signal: owned.signal })) }) + '\n');
+}
 
 function fixture() {
   const scope = fs.mkdtempSync(path.join(base, 'case-'));
@@ -792,9 +837,15 @@ try {
     const selected = Array.from({ length: 4 }, (_, i) => path.join(f.scope, `public-${i}`));
     selected.forEach(root => fs.mkdirSync(root));
     const worker = `require(${JSON.stringify(require.resolve('../plugins/data-secure/server/gateway/root-boundary'))}).reserveRootSeparation({resultRoot:process.argv[1]});`;
-    const launcher = `const {spawn}=require('child_process'); Promise.all(${JSON.stringify(selected)}.map(root=>new Promise(resolve=>{ const child=spawn(process.execPath,['-e',${JSON.stringify(worker)},root],{stdio:['ignore','ignore','pipe'],windowsHide:true}); child.stderr.on('data',bytes=>process.stderr.write(bytes)); child.on('error',()=>resolve(99)); child.on('exit',code=>resolve(code)); }))).then(codes=>{process.exitCode=codes.some(code=>code!==0)?1:0;});`;
+    const launcher = `(${runReservationWriters.toString()})(${JSON.stringify(selected)},${JSON.stringify(worker)},${JSON.stringify(require.resolve('./helpers/qa-parent-lifecycle.cjs'))}).catch(()=>process.exit(1));`;
+    fixtureCleanupAllowed = false;
     const child = spawnSync(process.execPath, ['-e', launcher], { env: { ...process.env }, encoding: 'utf8', timeout: 30000, windowsHide: true });
+    assert.ifError(child.error); assert.strictEqual(child.signal, null);
     assert.strictEqual(child.status, 0, child.stderr);
+    const binding = require('crypto').createHash('sha256').update(JSON.stringify(selected)).digest('hex');
+    assert.deepStrictEqual(JSON.parse(child.stdout), { schema: 'datasecure-reservation-writers/1', binding,
+      closed: selected.map(() => ({ code: 0, signal: null })) });
+    fixtureCleanupAllowed = true;
     const recorded = reservations.readReservations(f.data).filter(item => item.kind === 'public').map(item => item.root);
     for (const root of selected) assert.ok(recorded.includes(boundary.canonicalPath(root)), 'a competing selection must not erase a reserved result location');
     assert.strictEqual(fs.existsSync(result.configPath()), false, 'reservation alone never changes the selected result root');
@@ -842,5 +893,6 @@ try {
   console.log(`ROOT BOUNDARY: ${passed} real-filesystem cases passed`);
 } finally {
   for (const [key, value] of saved) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
-  removeFixtureTree(base);
+  if (fixtureCleanupAllowed) removeFixtureTree(base);
+  else console.error('ROOT_BOUNDARY_FIXTURE_RETAINED: direct writer close unconfirmed');
 }

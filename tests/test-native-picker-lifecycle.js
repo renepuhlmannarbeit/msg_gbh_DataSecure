@@ -13,7 +13,19 @@ const { pickSourcesAsync, PICKER_CANCELLED, batchQueueFromSelection } = require(
 const { pickSourceFolderAsync, SOURCE_FOLDER_CANCELLED } = require('../plugins/data-secure/server/companion/source-folder');
 const { pickFolderAsync, FOLDER_PICKER_CANCELLED } = require('../plugins/data-secure/server/companion/folder-picker');
 const completed = require('../plugins/data-secure/server/companion/completed-batch-picker');
-const { test, testAsync, assert, done } = createSuite('Native picker lifecycle');
+const { ownChild, within, firstFailure, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
+const suite = createSuite('Native picker lifecycle');
+const { test, assert, done } = suite;
+const pickerChildren = [];
+let pickerCloseUnconfirmed = false;
+async function testAsync(name, action) {
+  await suite.testAsync(name, action);
+  if (pickerCloseUnconfirmed) {
+    const failure = suite.failure();
+    if (failure.failed) throw failure.error;
+    throw new Error('PICKER_CHILD_CLOSE_UNCONFIRMED');
+  }
+}
 
 const selectedPath = path.resolve(__dirname, 'synthetic-not-read.txt');
 const syntheticStat = { size: 12, isFile: () => true, isSymbolicLink: () => false };
@@ -475,7 +487,8 @@ if (process.platform === 'win32') {
       const execFile = childProcess.execFile;
       const controller = new AbortController();
       let child;
-      let closed;
+      let owned;
+      const failure = firstFailure();
       let aborted = false;
       childProcess.execFile = (_command, _args, options, callback) => {
         assert.strictEqual(options.signal, controller.signal);
@@ -484,24 +497,35 @@ if (process.platform === 'win32') {
         assert.strictEqual(options.env.NODE_OPTIONS, undefined);
         // Never execute a native picker in this test. Only this synthetic
         // timer process is created, using the real async child implementation.
-        child = execFile(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], options, callback);
-        closed = new Promise((resolve) => child.once('close', resolve));
+        child = execFile(process.execPath, ['-e', 'setTimeout(()=>process.exit(78),3000);setInterval(() => {}, 1000)'], options, callback);
+        owned = ownChild(child, error => { if (error?.code !== 'ABORT_ERR') failure.record(error); });
+        pickerChildren.push(owned);
+        child.kill = signal => owned.terminate(signal);
         return child;
       };
       let timer;
       try {
         const pending = picker({ ...validation, signal: controller.signal, env: { ...process.env, NODE_OPTIONS: '--invalid-host-option' } });
         timer = setTimeout(() => { aborted = true; controller.abort(); }, 100);
-        await assert.rejects(pending, (error) => error.code === cancelCode);
+        await assert.rejects(within(pending, 2500, 'PICKER_ABORT_NOT_SETTLED'), (error) => error.code === cancelCode);
         assert.strictEqual(aborted, true);
-        await closed;
+        assert.ok(owned, 'the actual test child must be observed');
+        await within(owned.done, 2000, 'PICKER_CHILD_CLOSE_UNCONFIRMED');
         assert.ok(child.exitCode !== null || child.signalCode !== null);
-      } finally {
+        assert.notStrictEqual(owned.exitCode, 78, 'the independent guard is a failure, never successful cancellation');
+        failure.throwIfFailed();
+      } catch (error) { failure.record(error); }
+      finally {
         clearTimeout(timer);
         childProcess.execFile = execFile;
-        if (child && child.exitCode === null && child.signalCode === null) child.kill();
-        if (closed) await closed;
+        if (owned && !owned.closed) {
+          try { owned.terminate('SIGKILL'); } catch (error) { failure.record(error); }
+          try { await within(owned.done, 2000, 'PICKER_CHILD_CLOSE_UNCONFIRMED'); }
+          catch (error) { failure.record(error); }
+          if (!owned.closed) pickerCloseUnconfirmed = true;
+        }
       }
+      failure.throwIfFailed();
     });
   }
 
@@ -591,4 +615,5 @@ if (process.platform === 'win32') {
   done();
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+main().catch(error => endTestCliFailure({ failed: true, error,
+  unconfirmedChildren: pickerChildren.some(owned => !owned.closed) }));

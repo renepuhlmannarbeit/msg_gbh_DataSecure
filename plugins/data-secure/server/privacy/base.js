@@ -1,4 +1,5 @@
 'use strict';
+const { scanTableCells, unescapeMarkdownPunctuation } = require('./markdown-table-cells');
 
 const crypto = require('crypto');
 const { PERSON_LABEL, LEGACY_PERSON_FIELD_POLICY, CONTENT_PERSON_FIELD_POLICY, personFieldPattern, isPersonFieldLabel } = require('../core/person-field-policy');
@@ -845,32 +846,19 @@ function previousLabelLine(text, index) {
   return null;
 }
 
-function splitTableRow(line) {
+function splitTableRow(line, allowSingleColumn = false) {
   const source = String(line || '').trim();
   if (!source.includes('|')) return null;
-  const leading = source.startsWith('|') ? 1 : 0;
-  const body = source.slice(leading).replace(/\|$/u, '');
   const cells = [];
-  let value = '';
-  let escaped = false;
-  for (const char of body) {
-    if (escaped) {
-      value += char;
-      escaped = false;
-    } else if (char === '\\') {
-      escaped = true;
-    } else if (char === '|') {
-      cells.push(value.trim());
-      value = '';
-    } else {
-      value += char;
-    }
-  }
-  if (escaped) value += '\\';
-  cells.push(value.trim());
-  // One-column GFM tables have an explicit outer pipe pair. Requiring both
-  // boundaries keeps arbitrary prose ending in a pipe from becoming context.
-  return cells.length >= 2 || (leading === 1 && source.length > 1 && source.endsWith('|')) ? cells : null;
+  const geometry = scanTableCells(source, (start, end) => {
+    cells.push(unescapeMarkdownPunctuation(source.slice(start, end)).trim());
+  });
+  if (!geometry.separators) return null;
+  // Generic/header discovery requires an outer pair for a sole column.
+  // An established table body must retain its real one-cell rows so the
+  // existing header-width/ambiguity checks can decide their actual owner.
+  return cells.length >= 2 || (geometry.leadingPipe && geometry.trailingPipe && source.length > 1) ||
+    (allowSingleColumn && cells.length === 1) ? cells : null;
 }
 
 // One pass per text: for every data row of a Markdown table, remember the
@@ -927,7 +915,8 @@ const CREDENTIAL_FRAGMENT_PAIRS = [
 ];
 
 function hasCredentialHeaderFragmentSequence(rows) {
-  const width = Math.max(0, ...rows.map((row) => row.length));
+  let width = 0;
+  for (const row of rows) width = Math.max(width, row.length);
   for (let column = 0; column < width; column++) {
     const parts = rows.map((row) => normalizeSensitiveLabel(row[column] || '').toLowerCase())
       .filter(Boolean);
@@ -966,12 +955,13 @@ function buildTableIndex(text, personFieldPolicy) {
         const preceding = splitTableRow(rows[index - distance]);
         if (!preceding) break;
         if (preceding.every((cell) => /^:?-{3,}:?$/u.test(cell))) break;
-        precedingRows.unshift(preceding);
+        precedingRows.push(preceding);
       }
+      precedingRows.reverse();
       if (precedingRows.flat().some((header) =>
         isSensitiveTableHeader(header) || sensitiveFragment(header))) {
         let unsafeRow = index + 1;
-        while (unsafeRow < rows.length && splitTableRow(rows[unsafeRow])) {
+        while (unsafeRow < rows.length && splitTableRow(rows[unsafeRow], true)) {
           ambiguousSensitiveLines.add(unsafeRow++);
         }
         index = unsafeRow - 1;
@@ -985,9 +975,10 @@ function buildTableIndex(text, personFieldPolicy) {
       const preceding = splitTableRow(rows[headerCursor]);
       if (!preceding) break;
       if (preceding.every((cell) => /^:?-{3,}:?$/u.test(cell))) break;
-      headerBlock.unshift(preceding);
+      headerBlock.push(preceding);
       headerCursor--;
     }
+    headerBlock.reverse();
     const mismatchedHeaderWidth = headerBlock.some((row) => row.length !== immediate.length);
     const candidates = [];
     for (let candidate = headerBlock.length - 1; candidate >= 0 && candidates.length < 3; candidate--) {
@@ -1026,7 +1017,7 @@ function buildTableIndex(text, personFieldPolicy) {
       (mismatchedHeaderWidth && headerHasSensitiveFragment);
     let row = index + 1;
     while (row < rows.length) {
-      const cells = splitTableRow(rows[row]);
+      const cells = splitTableRow(rows[row], true);
       if (!cells) break;
       if (unresolvedSensitiveHeader || overlongSensitiveHeader ||
           (hasSensitiveHeader && cells.length !== immediate.length)) {

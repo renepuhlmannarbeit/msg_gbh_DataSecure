@@ -361,8 +361,11 @@ test('production relocation has no JavaScript path-mutating fallback; the native
     assert.ok(workflow.includes('node tests/manual/standalone-macos-relocator-native.mjs'));
     const probe = fs.readFileSync(path.join(root, 'tests/manual/standalone-macos-relocator-native.mjs'), 'utf8');
     for (const regression of ['destination_parent', 'source_parent', 'canvas_destination_parent',
-      'sandbox_source_parent', 'outsideSnapshot', "child.stdin.end('g')"])
+      'sandbox_source_parent', 'outsideSnapshot'])
       assert.ok(probe.includes(regression));
+    // Match the fixed resume marker with or without an error callback. Its actual
+    // delivery/failure behavior is covered by the parent lifecycle source model.
+    assert.match(probe, /\bchild\.stdin\.end\(\s*(['"])g\1\s*(?:,|\))/u);
     const projected = collectStandaloneRuntime(path.join(root, 'plugins/data-secure/server'), null);
     assert.equal(projected.some(file => /datasecure-relocate-native|relocate-bundle-native\.c|macos-build-relocator/u.test(file.relative)), false);
   } finally { value.cleanup(); }

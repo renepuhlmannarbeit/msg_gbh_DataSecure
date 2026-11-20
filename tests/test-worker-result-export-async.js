@@ -203,6 +203,22 @@ async function main() {
   count(fs.readFileSync(path.join(run, 'Vertraulich/Dateizuordnung.csv'), 'utf8').includes(record.items[0].file));
   count(fs.readFileSync(path.join(run, 'Vertraulich/Pseudonym-Zuordnung.txt'), 'utf8').includes('VERTRAULICH'));
   count(fs.readFileSync(path.join(run, 'Vertraulich/Pseudonym-Zuordnung.xlsx')).subarray(0, 2).toString() === 'PK');
+
+  const companionRun = await fixture();
+  const expected = companionRun.review.publicationExpectation(companionRun.token, companionRun.id);
+  const selection = [{ document_id: companionRun.id, revision: 0, output_sha256: expected.document_sha256 }];
+  const files = [{ name: 'Dokument_01.md', sha256: expected.document_sha256 }];
+  const engine = req('pii-engine'), scan = engine.scanResidual;
+  let scans = 0;
+  try {
+    engine.scanResidual = (...args) => { scans++; return scan(...args); };
+    await companionRun.review.prepareResultCompanionsAsync(companionRun.token, selection, files);
+    assert.equal(scans, 2, 'one basis check and one fresh automatic candidate check');
+    engine.scanResidual = () => [{}];
+    await assert.rejects(companionRun.review.prepareResultCompanionsAsync(companionRun.token, selection, files),
+      { code: 'DOCUMENT_REVIEW_RESIDUAL_PII' });
+    checks += 2;
+  } finally { engine.scanResidual = scan; }
   count(fs.readFileSync(exporter.privateResultLedger(f.token), 'utf8').includes('synthetic.txt'));
   assert.deepEqual(fs.readFileSync(f.source), f.bytes); checks++;
   count(!fs.existsSync(exporter._test.claimPath(exporter.recordPath(f.token))));

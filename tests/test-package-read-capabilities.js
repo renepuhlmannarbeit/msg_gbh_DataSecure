@@ -6,9 +6,13 @@ const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-read-capability-'));
+const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-read-capability-'));
+const root = path.join(testRootScope, 'privacy');
+fs.mkdirSync(root, { mode: 0o700 });
 process.env.EU_PRIVACY_ROOT = root;
-process.env.LOCALAPPDATA = path.join(root, 'localapp');
+process.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');
 
 const {
   issueReadCapability,

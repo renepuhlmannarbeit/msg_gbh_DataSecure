@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 
 const comparable = value => {
   let resolved = path.resolve(value);
@@ -39,7 +40,17 @@ export function verifyExtractedCandidate(directory, entries, modes = new Map()) 
     assert.ok(stat.isFile(), 'CANDIDATE_FILE_TYPE_INVALID');
     assert.equal(stat.nlink, 1, 'CANDIDATE_HARDLINK_FORBIDDEN');
     assert.ok(entries.has(relative), `CANDIDATE_FILE_UNEXPECTED:${relative}`);
-    assert.deepEqual(fs.readFileSync(target), entries.get(relative), `CANDIDATE_FILE_CHANGED:${relative}`);
+    const expected = entries.get(relative), changed = `CANDIDATE_FILE_CHANGED:${relative}`;
+    assert.equal(stat.size, expected.length, changed);
+    let actual;
+    try {
+      actual = boundFileIo.readBoundFile(target, { minimum: expected.length, maximum: expected.length,
+        maxLinks: 1, checkCtime: true });
+    } catch (error) {
+      if (typeof error?.code === 'string' && error.code.startsWith('BOUND_FILE_')) assert.fail(changed);
+      throw error;
+    }
+    assert.ok(actual.equals(expected), changed);
     if (modes.has(relative)) {
       assert.equal(modes.get(relative) & 0o170000, 0o100000, `CANDIDATE_ARCHIVE_FILE_TYPE_INVALID:${relative}`);
     }

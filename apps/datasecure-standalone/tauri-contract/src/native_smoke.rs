@@ -101,6 +101,7 @@ fn validate(
         }
         PackageLayout::Macos => {
             executable.file_name().and_then(|name| name.to_str()) == Some("datasecure-standalone")
+                && executable.parent().and_then(Path::file_name).and_then(|name| name.to_str()) == Some("MacOS")
                 && executable
                     .parent()
                     .and_then(Path::parent)
@@ -500,6 +501,17 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(selected.diagnostics, profile.diagnostics);
+        for relative in [
+            "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents/Other/datasecure-standalone",
+            "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents/MacOS/Nested/datasecure-standalone",
+        ] {
+            let wrong = root.join(relative);
+            std::fs::create_dir_all(wrong.parent().unwrap()).unwrap();
+            std::fs::write(&wrong, b"synthetic wrong bundle component").unwrap();
+            assert!(validate(&root, &wrong, PackageLayout::Macos, |key| variables.get(key).cloned()).is_err());
+            std::fs::remove_file(&wrong).unwrap();
+            std::fs::remove_dir(wrong.parent().unwrap()).unwrap();
+        }
         let wrong = root.join(
             "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents/MacOS/not-the-app",
         );

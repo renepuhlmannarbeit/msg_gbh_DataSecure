@@ -189,8 +189,13 @@ function createWordNumberingSession(model) {
   function style(name, seen=new Set()) {
     if(name===undefined)return {chain:[],pr:{}};
     if(typeof name!=='string'||!name||name.length>253)throw failure();
-    if(styleCache.has(name))return styleCache.get(name);
-    if(seen.has(name)||seen.size>=LIMITS.styleDepth)throw failure(); seen.add(name);
+    if(seen.has(name)||seen.size>=LIMITS.styleDepth)throw failure();
+    if(styleCache.has(name)) {
+      const cached=styleCache.get(name);
+      if(seen.size+cached.chain.length>LIMITS.styleDepth)throw failure();
+      return cached;
+    }
+    seen.add(name);
     const own=data.styles.get(name); if(!own)return {chain:[name],pr:{},unmodeled:true};
     const parent=own.based===undefined?{chain:[],pr:{}}:style(own.based,seen);
     const result={chain:[name,...parent.chain],pr:{...parent.pr,...own.pr},unmodeled:parent.unmodeled||own.pr.unmodeled,type:own.type};

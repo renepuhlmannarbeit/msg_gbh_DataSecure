@@ -12,6 +12,19 @@ const { bindDirectory, assertDirectory, fileIdentity, sameFile, readHeldBytes } 
 const SCHEMA = 'datasecure-native-ownership-guard/1';
 const NATIVE_KEYS = ['abi', 'assertHeld', 'closeRoot', 'createRoot', 'release', 'tryAcquire'];
 const loaded = new Map();
+// Causal cleanup debt is private and never represented by caller-supplied fields.
+const unconfirmedCleanupErrors = new WeakSet();
+function weakKey(value) {
+  return value !== null && (typeof value === 'object' || typeof value === 'function');
+}
+function hasUnconfirmedCleanup(error) {
+  return weakKey(error) && unconfirmedCleanupErrors.has(error);
+}
+function cleanupBeforeRefusal(error, cleanup) {
+  let confirmed = false;
+  try { confirmed = cleanup() === true; } catch { /* Keep the original refusal primary. */ }
+  if (!confirmed && weakKey(error)) unconfirmedCleanupErrors.add(error);
+}
 const fail = code => Object.assign(new Error(code), { code });
 function dataObject(value, keys) {
   if (!value || typeof value !== 'object' || types.isProxy(value) ||
@@ -128,14 +141,14 @@ function createOwnershipGuard(supplied) {
   assertRoot();
   const nativeRoot = api.createRoot(directory.real);
   try { assertRoot(); }
-  catch (error) { api.closeRoot(nativeRoot); throw error; }
+  catch (error) { cleanupBeforeRefusal(error, () => api.closeRoot(nativeRoot)); throw error; }
   return Object.freeze({
     tryAcquire() {
       assertRoot();
       const nativeGuard = api.tryAcquire(nativeRoot);
       if (nativeGuard === null) return null;
       try { assertRoot(); api.assertHeld(nativeGuard); }
-      catch (error) { try { api.release(nativeGuard); } catch {} throw error; }
+      catch (error) { cleanupBeforeRefusal(error, () => api.release(nativeGuard)); throw error; }
       // Keep this returned capability strongly reachable for the entire critical
       // section. No DTO, PID, token or serialized object can recreate it.
       return Object.freeze({
@@ -146,4 +159,4 @@ function createOwnershipGuard(supplied) {
     close() { return api.closeRoot(nativeRoot); }
   });
 }
-module.exports = Object.freeze({ SCHEMA, createOwnershipGuard });
+module.exports = Object.freeze({ SCHEMA, createOwnershipGuard, hasUnconfirmedCleanup });

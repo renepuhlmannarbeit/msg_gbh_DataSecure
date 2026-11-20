@@ -11,6 +11,8 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.XDG_DATA_HOME = path.join(base, 'xdg-data');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 const { roots, privacyRoot, storageStatus, ensurePrivateDirectory } = require('../plugins/data-secure/server/gateway/common');
 const { beginBatch: beginBatchFromQueue, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, listBatchResults, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, readBatchProgress, runLocalBatchExecutor, recoverBatches, cleanupExpiredBatchSnapshots, _test } = require('../plugins/data-secure/server/gateway/batch');
 const { startLocalBatchExecutor } = require('../plugins/data-secure/server/gateway/batch-executor');
@@ -18,8 +20,103 @@ const { csvField } = require('../plugins/data-secure/server/gateway/mapping');
 const { evidencePath, SCHEMA, validateEvidenceRecord } = require('../plugins/data-secure/server/gateway/batch-evidence');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
+const { firstFailure, within, ownChild, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
 
-const { testAsync, done, assert } = createSuite('Server-bound batch session');
+const sessionSuite = createSuite('Server-bound batch session');
+const { done, assert } = sessionSuite;
+
+const sessionFailure = firstFailure();
+const sessionChildren = [];
+const sessionTeardowns = new WeakMap();
+let sessionCloseUnconfirmed = false;
+let reportSessionFailure;
+const sessionFailureObserved = new Promise(resolve => { reportSessionFailure = resolve; });
+function recordSessionFailure(error) {
+  sessionFailure.record(error);
+  process.exitCode = 1; // Also covers an observed late error after direct close.
+  reportSessionFailure({ error }); // Presence is independent of a falsy value.
+}
+function ownSessionChild(child) {
+  const owned = ownChild(child, recordSessionFailure);
+  sessionChildren.push(owned);
+  // The product observer and this test's cleanup share one actual signal.
+  // ownChild already captured the original method before this local binding.
+  child.kill = signal => owned.terminate(signal);
+  return owned;
+}
+function sessionMayMutateRoot() {
+  return !sessionFailure.failed && !sessionCloseUnconfirmed && sessionChildren.every(owned => owned.closed);
+}
+function sessionMayContinue() {
+  sessionFailure.throwIfFailed();
+  if (!sessionMayMutateRoot()) {
+    recordSessionFailure(Object.assign(new Error('SESSION_CHILD_CLOSE_UNCONFIRMED'), { code: 'SESSION_CHILD_CLOSE_UNCONFIRMED' }));
+    sessionFailure.throwIfFailed();
+  }
+}
+async function waitForSessionClose(owned) {
+  const outcome = await Promise.race([
+    owned.done.then(result => ({ kind: 'close', result })),
+    owned.error.then(error => ({ kind: 'error', error }))
+  ]);
+  if (outcome.kind === 'error') recordSessionFailure(outcome.error);
+  if (owned.failure.failed) recordSessionFailure(owned.failure.value);
+  sessionFailure.throwIfFailed();
+  return outcome.result;
+}
+function stopSessionChild(owned) {
+  if (sessionTeardowns.has(owned)) return sessionTeardowns.get(owned);
+  const teardown = Promise.resolve().then(async () => {
+    if (owned.closed) return;
+    try { owned.terminate(); } catch (error) { recordSessionFailure(error); }
+    try { await within(owned.done, 5_000, 'SESSION_CHILD_CLOSE_UNCONFIRMED'); }
+    catch (error) { recordSessionFailure(error); }
+    if (!owned.closed) sessionCloseUnconfirmed = true;
+  });
+  sessionTeardowns.set(owned, teardown);
+  return teardown;
+}
+async function observedSessionCall(owned, action, timeoutCode) {
+  let result;
+  try {
+    result = await within(Promise.race([
+      Promise.resolve().then(() => { sessionFailure.throwIfFailed(); return action(); }),
+      sessionFailureObserved.then(({ error }) => { throw error; })
+    ]), 180_000, timeoutCode);
+  } catch (error) { recordSessionFailure(error); }
+  if (!owned.closed && !sessionFailure.failed) {
+    recordSessionFailure(Object.assign(new Error('SESSION_CHILD_CLOSE_UNCONFIRMED'), { code: 'SESSION_CHILD_CLOSE_UNCONFIRMED' }));
+  }
+  if (sessionFailure.failed || !owned.closed) await stopSessionChild(owned);
+  sessionFailure.throwIfFailed();
+  return result;
+}
+async function testAsync(name, action) {
+  sessionMayContinue();
+  await sessionSuite.testAsync(name, async () => {
+    try { await action(); }
+    catch (error) { recordSessionFailure(error); throw error; }
+  });
+  const failure = sessionSuite.failure();
+  if (failure.failed) recordSessionFailure(failure.error);
+  sessionMayContinue();
+}
+async function finishSession(error, failed = false) {
+  if (failed) recordSessionFailure(error);
+  for (const owned of sessionChildren) {
+    try { await stopSessionChild(owned); }
+    catch (secondary) { recordSessionFailure(secondary); sessionCloseUnconfirmed = true; }
+  }
+  try { await done(); } catch (secondary) { recordSessionFailure(secondary); }
+  const failure = sessionSuite.failure();
+  if (failure.failed) recordSessionFailure(failure.error);
+  const unconfirmedChildren = sessionChildren.some(owned => !owned.closed);
+  if (unconfirmedChildren && !sessionFailure.failed) {
+    recordSessionFailure(Object.assign(new Error('SESSION_CHILD_CLOSE_UNCONFIRMED'), { code: 'SESSION_CHILD_CLOSE_UNCONFIRMED' }));
+  }
+  endTestCliFailure({ failed: sessionFailure.failed, error: sessionFailure.value,
+    retainedRoots: [base], unconfirmedChildren });
+}
 
 function resetInput() {
   const input = path.join(privacyRoot(), 'test-picker-sources');
@@ -84,47 +181,55 @@ async function processAndAcknowledge(token, options = deps) {
 }
 
 async function crashDetachedExecutor(token, crashAt) {
-  const child = fork(path.join(__dirname, 'lib', 'crash-batch-worker.js'), [], {
+  const owned = ownSessionChild(fork(path.join(__dirname, 'lib', 'crash-batch-worker.js'), [], {
     windowsHide: true,
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     env: { ...process.env, DATASECURE_TEST_CRASH_AT: String(crashAt) }
-  });
-  const exited = new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (code, signal) => resolve({ code, signal }));
-  });
-  child.send({ type: 'run-crash-test', batch_token: token });
-  return exited;
+  }));
+  return observedSessionCall(owned, async () => {
+    await new Promise((resolve, reject) => {
+      owned.child.send({ type: 'run-crash-test', batch_token: token }, error => error ? reject(error) : resolve());
+    });
+    return waitForSessionClose(owned);
+  }, 'SESSION_CRASH_WORKER_TIMEOUT');
 }
 
 async function mcpBatchCalls(calls, { supportMode = false } = {}) {
-  const child = spawn(process.execPath, [
+  const owned = ownSessionChild(spawn(process.execPath, [
     path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'index.js')
   ], {
     windowsHide: true,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env, ...(supportMode ? { EU_PRIVACY_SUPPORT_MODE: '1' } : {}) }
-  });
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', (chunk) => { stdout += chunk; });
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
-  const closed = new Promise((resolve, reject) => {
-    child.once('error', reject);
-    child.once('close', (code) => {
-      if (code !== 0) reject(new Error(`MCP restart probe failed (${code}): ${stderr}`));
-      else resolve();
-    });
-  });
-  for (const [index, call] of calls.entries()) {
-    child.stdin.write(`${JSON.stringify({
-      jsonrpc: '2.0', id: index + 1, method: 'tools/call',
-      params: { name: call.name, arguments: call.arguments }
-    })}\n`);
-  }
-  child.stdin.end();
-  await closed;
-  return stdout.split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line));
+  }));
+  return observedSessionCall(owned, async () => {
+    const child = owned.child;
+    let stdout = '', stderr = '';
+    if (!child.stdin || !child.stdout || !child.stderr) {
+      // A failed spawn can return null pipes before its nextTick OS error.
+      // Preserve that observed cause under the existing outer call deadline.
+      await waitForSessionClose(owned);
+      throw new Error('MCP probe stdio is unavailable');
+    }
+    for (const stream of [child.stdin, child.stdout, child.stderr]) {
+      assert.ok(stream && typeof stream.on === 'function', 'MCP probe stdio is unavailable');
+      stream.on('error', recordSessionFailure);
+    }
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    for (const [index, call] of calls.entries()) {
+      sessionFailure.throwIfFailed();
+      child.stdin.write(`${JSON.stringify({
+        jsonrpc: '2.0', id: index + 1, method: 'tools/call',
+        params: { name: call.name, arguments: call.arguments }
+      })}\n`);
+    }
+    sessionFailure.throwIfFailed();
+    child.stdin.end();
+    const closed = await waitForSessionClose(owned);
+    if (closed.code !== 0 || closed.signal !== null) throw new Error(`MCP restart probe failed (${closed.code}): ${stderr}`);
+    return stdout.split(/\r?\n/u).filter(Boolean).map(line => JSON.parse(line));
+  }, 'SESSION_MCP_WORKER_TIMEOUT');
 }
 
 async function main() {
@@ -316,9 +421,14 @@ async function main() {
       assert.strictEqual(blocked.next_cursor, null);
       assert.strictEqual(blocked.next_action, 'wait_for_local_release_before_continue_in_chat');
       assert.doesNotMatch(JSON.stringify(blocked), /still-processing|Alice|read_capability|package_id|\.txt/u);
+    } catch (error) {
+      recordSessionFailure(error);
+      throw error;
     } finally {
-      releaseLocalBatchExecutor(begun.batch_token, process.pid);
-      discardIncompleteBatches();
+      if (sessionMayMutateRoot()) {
+        releaseLocalBatchExecutor(begun.batch_token, process.pid);
+        discardIncompleteBatches();
+      }
     }
   });
 
@@ -368,66 +478,59 @@ async function main() {
     // observes the durable state directly and must not wait for a human GUI
     // action in CI.
     const lifecycleEvents = [];
-    let workerChild;
+    let workerOwned;
     let workerExit;
     const forkObservedWorker = (_productWorker, args, options) => {
       const child = fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options);
-      workerChild = child;
-      workerExit = new Promise((resolve, reject) => {
-        child.once('error', reject);
-        child.once('exit', (code, signal) => resolve({ code, signal }));
-      });
+      workerOwned = ownSessionChild(child);
+      workerExit = workerOwned.done;
       return child;
     };
     const cleanFailedWorker = async () => {
-      try { workerChild?.kill(); } catch { /* only the observed test worker is targeted */ }
-      await Promise.race([
-        Promise.resolve(workerExit).catch(() => undefined),
-        new Promise((resolve) => setTimeout(resolve, 5_000))
-      ]);
-      try { discardIncompleteBatches(); } catch { /* preserve the primary assertion */ }
+      if (workerOwned) await stopSessionChild(workerOwned);
     };
-    const started = startLocalBatchExecutor(begun.batch_token, {
-      showBatchStateNotice: () => true,
-      showLocalIntakeNotice: () => true,
-      recordWorkflowEvent: (event) => lifecycleEvents.push(event),
-      forkProcess: forkObservedWorker
-    });
-    assert.strictEqual(started.local_processing_started, true);
-    assert.ok(workerExit, 'detached worker exit observation was not installed');
     let watchdog;
     let exited;
     try {
+      const started = startLocalBatchExecutor(begun.batch_token, {
+        showBatchStateNotice: () => true,
+        showLocalIntakeNotice: () => true,
+        recordWorkflowEvent: (event) => lifecycleEvents.push(event),
+        forkProcess: forkObservedWorker
+      });
+      assert.strictEqual(started.local_processing_started, true);
+      assert.ok(workerExit, 'detached worker exit observation was not installed');
       exited = await Promise.race([
-        workerExit,
+        waitForSessionClose(workerOwned),
         new Promise((_, reject) => {
           watchdog = setTimeout(() => reject(new Error(`detached worker exceeded test watchdog: ${JSON.stringify(lifecycleEvents)}`)), 180_000);
         })
       ]);
+      clearTimeout(watchdog);
+      assert.strictEqual(exited.code, 0, JSON.stringify({ exited, lifecycleEvents }));
+      let progress = started;
+      // The worker commits its durable state before exit. Keep a short grace
+      // window for Windows filesystem visibility rather than guessing at total
+      // worker duration while the child is still legitimately running.
+      const deadline = Date.now() + 5_000;
+      while ((!progress.complete || progress.local_processing_active) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        progress = readBatchProgress(begun.batch_token);
+      }
+      assert.strictEqual(progress.local_processing_active, false, JSON.stringify(lifecycleEvents));
+      assert.strictEqual(progress.complete, true, JSON.stringify(lifecycleEvents));
+      assert.strictEqual(progress.released, 1);
+      const listed = listBatchResults(begun.batch_token, { limit: 1 });
+      assert.strictEqual(listed.results.length, 1);
+      assert.doesNotMatch(JSON.stringify(listed), /detached|Mustermann|example\.test/u);
+      acknowledgeDeliveredPackage(begun.batch_token, listed.results[0].package_id);
     } catch (error) {
+      recordSessionFailure(error);
       await cleanFailedWorker();
-      throw error;
+      sessionFailure.throwIfFailed();
     } finally {
       clearTimeout(watchdog);
     }
-    if (exited.code !== 0) await cleanFailedWorker();
-    assert.strictEqual(exited.code, 0, JSON.stringify({ exited, lifecycleEvents }));
-    let progress = started;
-    // The worker commits its durable state before exit. Keep a short grace
-    // window for Windows filesystem visibility rather than guessing at total
-    // worker duration while the child is still legitimately running.
-    const deadline = Date.now() + 5_000;
-    while ((!progress.complete || progress.local_processing_active) && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      progress = readBatchProgress(begun.batch_token);
-    }
-    assert.strictEqual(progress.local_processing_active, false, JSON.stringify(lifecycleEvents));
-    assert.strictEqual(progress.complete, true, JSON.stringify(lifecycleEvents));
-    assert.strictEqual(progress.released, 1);
-    const listed = listBatchResults(begun.batch_token, { limit: 1 });
-    assert.strictEqual(listed.results.length, 1);
-    assert.doesNotMatch(JSON.stringify(listed), /detached|Mustermann|example\.test/u);
-    acknowledgeDeliveredPackage(begun.batch_token, listed.results[0].package_id);
   });
 
   await testAsync('result cursors are batch-bound and tampering fails closed', async () => {
@@ -809,7 +912,11 @@ async function main() {
 
   await testAsync('default storage uses local application data and known sync roots are refused', async () => {
     const configured = process.env.EU_PRIVACY_ROOT;
+    const configuredDataRoot = process.env.EU_PRIVACY_DATA_ROOT, originalHomedir = os.homedir;
+    try {
     delete process.env.EU_PRIVACY_ROOT;
+    delete process.env.EU_PRIVACY_DATA_ROOT;
+    os.homedir = () => path.join(base, 'default-home');
     const applicationData = process.platform === 'win32'
       ? process.env.LOCALAPPDATA
       : process.platform === 'darwin'
@@ -821,10 +928,15 @@ async function main() {
     );
     assert.strictEqual(path.basename(path.dirname(privacyRoot())), 'SecureDataMsg');
     assert.strictEqual(storageStatus().mode, 'local_app_data');
+    process.env.EU_PRIVACY_DATA_ROOT = configuredDataRoot;
     process.env.EU_PRIVACY_ROOT = path.join(base, 'OneDrive - Example', 'Privacy');
     assert.strictEqual(storageStatus().safe, false);
     assert.throws(() => beginBatch({ expectedCount: 1 }), /nicht freigegeben/i);
-    process.env.EU_PRIVACY_ROOT = configured;
+    } finally {
+      os.homedir = originalHomedir;
+      if (configured === undefined) delete process.env.EU_PRIVACY_ROOT; else process.env.EU_PRIVACY_ROOT = configured;
+      if (configuredDataRoot === undefined) delete process.env.EU_PRIVACY_DATA_ROOT; else process.env.EU_PRIVACY_DATA_ROOT = configuredDataRoot;
+    }
   });
 
   await testAsync('a configured privacy root behind a local link is refused before a batch starts', async () => {
@@ -1817,4 +1929,4 @@ async function main() {
   done();
 }
 
-main().catch((error) => { console.error(error); process.exit(1); });
+main().then(() => finishSession(), error => finishSession(error, true));

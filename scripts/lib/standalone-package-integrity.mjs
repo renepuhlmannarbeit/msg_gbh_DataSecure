@@ -41,7 +41,21 @@ function verifyInventory(entries, records, excluded, code) {
 // everything except SHA256SUMS. These explicit exclusions avoid impossible
 // self-hashes; they must not become a blanket exception for runtime files.
 export function verifyStandaloneInventory(entries, manifest) {
-  for (const name of entries.keys()) checkedPath(name, 'STANDALONE_ZIP_PATH_INVALID');
+  for (const name of entries.keys()) {
+    checkedPath(name, 'STANDALONE_ZIP_PATH_INVALID');
+    assert.ok(!/(?:^|\/)server\/gateway\/automatic-local-review\.js$/iu.test(name),
+      'STANDALONE_COWORK_REVIEW_FORBIDDEN');
+    assert.ok(!/(?:^|\/)server\/gateway\/result-export-replay(?:-worker)?\.js$/iu.test(name),
+      'STANDALONE_COWORK_REPLAY_FORBIDDEN');
+    assert.ok(!/(?:^|\/)server\/gateway\/mcp-diagnostic-export\.js$/iu.test(name),
+      'STANDALONE_COWORK_DIAGNOSTIC_FORBIDDEN');
+    const bytes = entries.get(name);
+    // The regular inventory below still rejects every non-Buffer payload.
+    if (/(?:^|\/)server\/gateway\/diagnostics\.js$/iu.test(name) && Buffer.isBuffer(bytes)) {
+      assert.ok(!/\b(?:digestArtifact|diagnosticExportPath|exportDiagnosticPackage)\b|data-secure-diagnostic-export\/1/u.test(bytes.toString('utf8')),
+        'STANDALONE_COWORK_DIAGNOSTIC_FORBIDDEN');
+    }
+  }
   assert.ok(entries.has(MANIFEST) && entries.has(SUMS), 'STANDALONE_INVENTORIES_MISSING');
   verifyInventory(entries, manifest.files, new Set([MANIFEST, SUMS]), 'STANDALONE_MANIFEST');
   const text = entries.get(SUMS).toString('utf8');

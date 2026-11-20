@@ -37,11 +37,7 @@ class MarkdownExtractionError extends Error {
 
 function extractCsv(source, literalGfm) {
   const { rows } = parseCsvDialect(source, { preserveRecords: true });
-  if (!rows.length) throw new MarkdownExtractionError('CSV_EMPTY');
-  const width = rows.reduce((maximum, row) => Math.max(maximum, row.length), 0);
-  if (rows.some((row) => row.length !== width && !(row.length === 1 && row[0] === ''))) {
-    throw new MarkdownExtractionError('CSV_ROW_WIDTH_INVALID');
-  }
+  const width = require('../core/csv-table-shape').csvTableWidth(rows);
   const lines = [];
   let chars = 0;
   function append(line) {

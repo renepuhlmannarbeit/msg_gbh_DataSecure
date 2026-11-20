@@ -23,15 +23,20 @@ const { contactQuality } = require('./ocr-quality');
 const { readableText, readableNotice } = require('./readable-markdown');
 const { refineOcr } = require('./ocr-refinement');
 const { assessExtraOfficeOcrRaster, createOfficeOcrWorkLedger } = require('../core/office-ocr-work-plan');
+const { readSparseOfficeGraphic } = require('./office-ocr-sparse-graphics');
 const { contactSpans } = require('../core/ocr-contact-review');
 const { attachContactCrops } = require('./ocr-contact-crops');
 const { sourceCropBlocks } = require('./ocr-crop-geometry');
-const { nativeTextSeparator, nativeColumnOrder, taggedPdfTextLayout, renderPdfOcrLayer, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText } = require('./pdf-text-layout');
+const { nativeTextSeparator, nativeColumnOrder, taggedPdfTextLayout, renderPdfOcrLayer, paintedTextGeometryAvailable,
+  nativeTextRegions, nativeSingleTokenRegions, nativePaintedPhraseRegions, coincidentNativePhraseCandidates,
+  uncoveredOcrText } = require('./pdf-text-layout');
 const { projectTaggedPdf } = require('./pdf-structure-projection');
 const { classifyPdfTextVisibility } = require('./pdf-text-visibility');
 const { renderPdfNativeWordEvidence } = require('./pdf-ocr-native-words');
+const { observePdfArtifactPrefix, provePdfArtifactWords } = require('./pdf-artifact-ocr');
+const { pdfOcrRaster } = require('./pdf-ocr-raster');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
-const { decodeRasterPng } = require('./png-raster-decoder');
+const { decodeRasterPng, PngUnsupportedFeatureError } = require('./png-raster-decoder');
 const { decodeBmp } = require('../images/bmp');
 const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../images/common');
 const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
@@ -90,20 +95,27 @@ async function createOcr() {
   } finally { measured(); }
 }
 
-async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = false, officeWork) {
+async function readOcr(raster, ocr, encodeRaster) {
+  let value;
+  try {
+    value = await conversionTimings.measureAsync('ocr', () =>
+      ocr.recognize(encodeRaster ? encodeRaster(raster) : raster.toBuffer('image/png'), {}, { text: true, blocks: true }));
+  } catch (cause) {
+    if (cause?.code !== undefined) throw cause;
+    fail('CONVERSION_OCR_FAILED');
+  }
+  if (typeof value?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
+  if (value.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
+  return value;
+}
+
+async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = false, officeWork, pdfWork) {
   // Keep word confidence local to this isolated worker. A high whole-page
   // confidence does not establish that a contact value was read correctly.
   let result, enlarged, selectedCanvas = canvas, rasterDisagreement = false;
-  const read = async raster => {
-    let value;
-    try { value = await conversionTimings.measureAsync('ocr', () => ocr.recognize(raster.toBuffer('image/png'), {}, { text: true, blocks: true })); }
-    catch (cause) { if (cause?.code !== undefined) throw cause; fail('CONVERSION_OCR_FAILED'); }
-    if (typeof value?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
-    if (value.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-    return value;
-  };
+  const read = raster => readOcr(raster, ocr);
   try {
-    result = await read(canvas);
+    result = pdfWork?.primary ?? await read(canvas);
     if (officeWork?.facts.kind && !nativeRegions.length) {
       // These geometry-only records come from this exact primary OCR/raster.
       // The model never receives filenames, expected words or confidence scores.
@@ -134,16 +146,28 @@ async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = fals
         if (additional.data.text.trim()) { result = additional; selectedCanvas = enlarged; }
       }
     }
+    if (officeWork?.sourceCanvas && !enlarged && !nativeRegions.length) {
+      const combined = await readSparseOfficeGraphic(result.data, selectedCanvas,
+        officeWork, ocr, read, canvasApi().createCanvas);
+      if (combined !== result.data) {
+        result = { ...result, data: combined };
+        rasterDisagreement = true;
+      }
+    }
+    const refinementOptions = officeWork ? { contactOnly: true } :
+      singleTokenOnly ? { candidateOnly: true, encodeRaster: pdfWork ? pdfOcrRaster : undefined } : undefined;
     const data = nativeRegions.length ? result.data : await conversionTimings.measureAsync('refinement', () =>
-      refineOcr(result.data, selectedCanvas, ocr, canvasApi().createCanvas, officeWork ? { contactOnly: true } : undefined));
+      refineOcr(result.data, selectedCanvas, ocr, canvasApi().createCanvas, refinementOptions));
     if (data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-    const recognized = cleanExtractedSymbolText(nativeRegions.length ? uncoveredOcrText(data, nativeRegions, { singleTokenOnly }) : data.text);
+    const evidence = pdfWork ? await pdfWork.resolveEvidence(data) : {};
+    const retainedText = uncoveredOcrText(data, nativeRegions, { singleTokenOnly, ...evidence });
+    const recognized = cleanExtractedSymbolText(retainedText);
     const readingDisagreement = rasterDisagreement || (Array.isArray(data.blocks) && data.blocks.some(block =>
       Array.isArray(block?.paragraphs) && block.paragraphs.some(paragraph =>
         Array.isArray(paragraph?.lines) && paragraph.lines.some(line => line?.reading_disagreement === true))));
     return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks,
       readingDisagreement, rasterWidth: selectedCanvas.width, rasterHeight: selectedCanvas.height,
-      cropText: nativeRegions.length ? null : data.text };
+      cropText: nativeRegions.length || retainedText !== data.text ? null : data.text };
   } finally { if (enlarged) { enlarged.width = 1; enlarged.height = 1; } }
 }
 
@@ -251,7 +275,7 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
       ocr = ownedOfficeSession?.ocr || await createOcr();
       if (ownedOfficeSession) ownedOfficeSession.ocr = ocr;
       const officeWork = ownedOfficeSession?.workLedger ? {
-        ledger: ownedOfficeSession.workLedger, assetId: ownedOfficeSession.assetId,
+        ledger: ownedOfficeSession.workLedger, assetId: ownedOfficeSession.assetId, sourceCanvas: sourceCanvas || canvas,
         facts: { kind: ownedOfficeSession.rasterKind, width: (sourceCanvas || canvas).width, height: (sourceCanvas || canvas).height,
           primaryWidth: canvas.width, primaryHeight: canvas.height, initialScale: ownedOfficeSession.ocrScale || 1, downsampled }
       } : undefined;
@@ -302,6 +326,10 @@ function imageOmission(cause) {
 }
 
 function visualOmission(cause,type){
+  // Only a typed source-PNG feature refusal is an isolated Office omission.
+  // Generated decoder output, forged codes and policy failures keep their owner.
+  if(type==='png'&&cause?.code==='PNG_FEATURE_UNSUPPORTED'&&cause instanceof PngUnsupportedFeatureError)
+    return 'OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED';
   return officeVisualOmission(cause?.code,type)||imageOmission(cause);
 }
 async function* officeRasters(item){
@@ -482,7 +510,8 @@ function additionalOcrText(nativeText, ocrText) {
 async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, contentOptions, checkpoint) {
   if (bytes.length > 25 * 1024 * 1024) fail('INPUT_FORMAT_LIMIT');
   const pdfRoot = path.join(root, 'node_modules', 'pdfjs-dist');
-  const { getDocument, OPS, AnnotationMode, setDataSecureTextPaintObserver } = await conversionTimings.measureAsync('runtime_init', () => import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href));
+  const { getDocument, OPS, AnnotationMode, setDataSecureTextPaintObserver, setDataSecureOperatorObserver } =
+    await conversionTimings.measureAsync('runtime_init', () => import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href));
   // Actual painted operators, not merely image resources declared in the PDF.
   // These are the image operations of the bundled PDF.js display API.
   const imageOperations = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject,
@@ -566,6 +595,9 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
     // Explicit document-wide work cap. Exhaustion retains uncertain text; it
     // never guesses at missing letters or extends the existing worker deadline.
     const visibilityBudget = { remainingPixels: 32_000_000, remainingProbes: 128 };
+    const focusedPhraseBudget = { remainingPixels: 128_000_000, remainingProbes: 256 };
+    const artifactBudget = { remainingPixels: 64_000_000, remainingProbes: 32 };
+    const priorArtifactGroups = new Set();
     if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
     function pageUnit(number, markdown, pageContacts = []) {
       const codes = new Set(reasons);
@@ -686,40 +718,97 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           // Only an already selected OCR operation may spend raster-probe
           // work. No extra visibility rendering for ordinary PDF text reads.
           canvas = canvasApi().createCanvas(width, height);
-          const directRegions = contentOptions && hasNativeText ? await conversionTimings.measureAsync('paint_probe', () => renderPdfNativeWordEvidence({ page, canvas, viewport,
-            annotationMode: AnnotationMode.DISABLE, textItems: content.items, styles: content.styles,
-            operators, ops: OPS, setTextPaintObserver: setDataSecureTextPaintObserver })) : null;
-          if (contentOptions && !hasNativeText) await conversionTimings.measureAsync('pdf_raster', () => renderPdfOcrLayer({ page, canvas, viewport, annotationMode: AnnotationMode.DISABLE }));
-          if (!contentOptions) await conversionTimings.measureAsync('pdf_raster', () => page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white',
-            annotationMode: AnnotationMode.DISABLE }).promise);
-          const paintAnalysis = hasNativeText && directRegions === null ? await conversionTimings.measureAsync('paint_probe', () => classifyPdfTextVisibility({ page, textItems: content.items,
+          const artifactPrefix = contentOptions && hasNonTextGraphicPaint && width * height <= artifactBudget.remainingPixels &&
+            artifactBudget.remainingProbes > 0 ? observePdfArtifactPrefix(OPS) : null;
+          if (artifactPrefix) setDataSecureOperatorObserver(artifactPrefix.observe);
+          let directRegions = null;
+          try {
+            if (contentOptions && hasNativeText) directRegions = await conversionTimings.measureAsync('paint_probe', () => renderPdfNativeWordEvidence({
+              page, canvas, viewport, annotationMode: AnnotationMode.DISABLE, textItems: content.items, styles: content.styles,
+              operators, ops: OPS, setTextPaintObserver: setDataSecureTextPaintObserver }));
+            else await conversionTimings.measureAsync('pdf_raster', () => renderPdfOcrLayer({ page, canvas, viewport, annotationMode: AnnotationMode.DISABLE }));
+          } finally { if (artifactPrefix) setDataSecureOperatorObserver(null); }
+          const artifactPlan = artifactPrefix?.plan(viewport, priorArtifactGroups);
+          const analyzePaint = async () => hasNativeText && directRegions === null ? conversionTimings.measureAsync('paint_probe', () => classifyPdfTextVisibility({ page, textItems: content.items,
             viewport: page.getViewport({ scale: 1 }), createCanvas: canvasApi().createCanvas,
             setTextPaintObserver: setDataSecureTextPaintObserver, annotationMode: AnnotationMode.DISABLE,
             budget: visibilityBudget })) : { wordRegions: [] };
+          // AUTO can omit vector-only lettering, so retain the existing
+          // layout policy and restore SINGLE_BLOCK after every OCR page.
+          const pageMode = markdownOutput === 'content-v1' ? pdfOcrLayoutMode({ hasRawNativeText,
+            hasPaintedImage: Boolean(hasPaintedImage), hasNonTextGraphicPaint: Boolean(hasNonTextGraphicPaint) }) : '6';
+          const reuseSingleBlock = contentOptions && ocr && pageMode === '6';
+          // Initialization and mode changes retain their order after the
+          // visibility probe. Only an established SINGLE_BLOCK session can
+          // read concurrently, without a parameter change during the probe.
+          const preparedPaint = reuseSingleBlock ? null : await analyzePaint();
           ocr ??= await createOcr(); // One session per document, never across customers.
-          const legacyRegions = hasNativeText && directRegions === null && paintedTextGeometryAvailable(operators, OPS, { strictMarkedContent: Boolean(contentOptions) })
-            ? (contentOptions ? nativeSingleTokenRegions : nativeTextRegions)(content.items, content.styles, viewport) : [];
-          // These extra per-word regions come from actual glyph positions and
-          // final pixel differences, never a proportional split of a line box.
-          // Visibility uses scale1; OCR uses scale2 of the same page viewport.
-          const provenRegions = hasNativeText ? paintAnalysis.wordRegions.map(region => ({ text: region.text,
-            x0: region.x0 * 2, y0: region.y0 * 2, x1: region.x1 * 2, y1: region.y1 * 2 })) : [];
-          // The OCR raster retains every original paint operation. Remove a
-          // transcript word only AFTER OCR supplies exact text and bounded
-          // geometry; a different visible glyph/ToUnicode value must survive.
-          const regions = [...(directRegions || []), ...provenRegions, ...legacyRegions];
+          const finishRecognition = (paintAnalysis, primary) => {
+            const legacyRegions = hasNativeText && directRegions === null && paintedTextGeometryAvailable(operators, OPS, { strictMarkedContent: Boolean(contentOptions) })
+              ? (contentOptions ? nativeSingleTokenRegions : nativeTextRegions)(content.items, content.styles, viewport) : [];
+            // These extra per-word regions come from actual glyph positions and
+            // final pixel differences, never a proportional split of a line box.
+            // Visibility uses scale1; OCR uses scale2 of the same page viewport.
+            const provenRegions = hasNativeText ? paintAnalysis.wordRegions.map(region => ({ text: region.text,
+              x0: region.x0 * 2, y0: region.y0 * 2, x1: region.x1 * 2, y1: region.y1 * 2 })) : [];
+            // The OCR raster retains every original paint operation. Remove a
+            // transcript word only AFTER OCR supplies exact text and bounded
+            // geometry; a different visible glyph/ToUnicode value must survive.
+            const regions = [...(directRegions || []), ...provenRegions, ...legacyRegions];
+            // The retained native transcript must contain the complete run. A
+            // tagged projection may restructure the same words, so it continues
+            // to use only the existing per-word evidence path.
+            const phrases = contentOptions && hasNativeText && !taggedProjection && !omittedSymbols && paintAnalysis.paintedPhraseIndices?.size
+              ? nativePaintedPhraseRegions(content.items, content.styles, viewport, paintAnalysis.paintedPhraseIndices, nativeText) : [];
+            const resolvePhrases = async data => {
+              if (!hasNativeText || directRegions !== null || taggedProjection || omittedSymbols) return phrases;
+              const proofViewport = page.getViewport({ scale: 1 });
+              const pixels = Math.ceil(proofViewport.width) * Math.ceil(proofViewport.height);
+              const maximum = Math.min(8, focusedPhraseBudget.remainingProbes,
+                Math.floor(focusedPhraseBudget.remainingPixels / pixels));
+              if (maximum < 4) return phrases;
+              // A coincident OCR transcription can schedule a probe, but cannot
+              // itself grant authority to suppress the original optical reading.
+              const candidates = coincidentNativePhraseCandidates(data, content.items, content.styles, viewport,
+                nativeText, paintAnalysis.paintedPhraseIndices);
+              const first = candidates.find(index => content.items[index].str.trim().split(/\s+/u).length + 2 <= maximum);
+              if (first === undefined) return phrases;
+              const focused = await conversionTimings.measureAsync('paint_probe', () => classifyPdfTextVisibility({
+                page, textItems: content.items, viewport: proofViewport, createCanvas: canvasApi().createCanvas,
+                setTextPaintObserver: setDataSecureTextPaintObserver, annotationMode: AnnotationMode.DISABLE,
+                budget: focusedPhraseBudget, maxProbes: maximum, phraseIndices: new Set([first])
+              }));
+              const wordBoxes = focused.paintedPhraseWords.get(first);
+              if (!wordBoxes) return phrases;
+              const scaled = wordBoxes.map(({ x0, y0, x1, y1 }) => ({ x0: x0 * 2, y0: y0 * 2, x1: x1 * 2, y1: y1 * 2 }));
+              return [...phrases, ...nativePaintedPhraseRegions(content.items, content.styles, viewport, [first], nativeText,
+                new Map([[first, scaled]]))];
+            };
+            const resolveEvidence = async data => {
+              const phrases = await resolvePhrases(data);
+              const artifactWords = artifactPlan && await conversionTimings.measureAsync('paint_probe', () => provePdfArtifactWords({
+                data, plan: artifactPlan, page, viewport, canvas, createCanvas: canvasApi().createCanvas,
+                annotationMode: AnnotationMode.DISABLE, setOperatorObserver: setDataSecureOperatorObserver, budget: artifactBudget
+              }));
+              return { phrases, artifactWords };
+            };
+            return recognize(canvas, ocr, regions, Boolean(contentOptions), undefined, primary && { primary, resolveEvidence });
+          };
           let recognized;
           if (contentOptions) {
-            // AUTO's page-layout classifier can discard large vector-outline
-            // lettering as a graphic despite explicit whole-page OCR consent.
-            // Use the existing SINGLE_BLOCK reading, without altering pixels,
-            // removing native/search text or inventing column semantics. Exact
-            // geometry/text dedup still runs only after independent recognition.
-            try { await ocr.setParameters({ tessedit_pageseg_mode: markdownOutput === 'content-v1' ? pdfOcrLayoutMode({ hasRawNativeText,
-              hasPaintedImage: Boolean(hasPaintedImage), hasNonTextGraphicPaint: Boolean(hasNonTextGraphicPaint) }) : '6' }); }
-            catch (cause) { if (errors.has(cause?.code) && !imageOmission(cause)) throw cause; fail('CONVERSION_POLICY_FAILED'); }
+            if (!reuseSingleBlock) {
+              try { await ocr.setParameters({ tessedit_pageseg_mode: pageMode }); }
+              catch (cause) { if (errors.has(cause?.code) && !imageOmission(cause)) throw cause; fail('CONVERSION_POLICY_FAILED'); }
+            }
+            // A parallel paint failure settles the read first, but nothing
+            // uses its result and the worker stays in the already set mode.
+            const [paint, primary] = await Promise.allSettled([preparedPaint ?? analyzePaint(), readOcr(canvas, ocr, pdfOcrRaster)]);
+            if (paint.status === 'rejected') throw paint.reason;
             let recognitionFailed = false, recognitionError;
-            try { recognized = await recognize(canvas, ocr, regions, true); }
+            try {
+              if (primary.status === 'rejected') throw primary.reason;
+              recognized = await finishRecognition(paint.value, primary.value);
+            }
             catch (cause) { recognitionFailed = true; recognitionError = cause; }
             try { await ocr.setParameters({ tessedit_pageseg_mode: '6' }); }
             catch (cause) {
@@ -730,7 +819,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
               fail('CONVERSION_POLICY_FAILED');
             }
             if (recognitionFailed) throw recognitionError;
-          } else recognized = await recognize(canvas, ocr, regions, false);
+          } else recognized = await finishRecognition(preparedPaint);
           omittedSymbols ||= recognized.omitted;
           // New contracts require visible geometric/exact duplication evidence.
           // No lexical/casefold suppression of equal text elsewhere on the page.

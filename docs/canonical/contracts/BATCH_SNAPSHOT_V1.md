@@ -9,6 +9,25 @@ eindeutig von alten verschlüsselten V3-Beständen. Details und Altbestandsschut
 [lokaler Speichervertrag](PRIVATE_WORK_STORAGE_V1.md). Original- und
 Integritätsbindungen dieses Vertrags bleiben erhalten.
 
+27.10.2026, unveröffentlichter Standalone-Reviewschnitt: Neue Contentläufe verwenden
+`datasecure-batch/8` und `datasecure-plain-source-snapshot/1`. Eine begrenzte lokale
+Klartexthülle bindet Zweck, Inhaltsoptionen, Stapel-/Itemkennung, Arbeitsnamen und
+Originalgröße/-hash. Der Descriptor bindet außerdem physische Größe und Hash.
+Parser/OCR erhalten ausschließlich die einmal ausgepackten, bytegleichen
+Originaldaten. Die maximal780 zusätzlichen Speicherbytes senken oder erhöhen
+keine formatspezifische Quellgrenze. Alte `/2`–`/7`-Kopien werden nicht umhüllt
+oder umgedeutet. Ein zufälliger Originaltextbeginn `DSARTF01` ist in einer neuen
+gebundenen Hülle Nutzinhalt; rohe verschlüsselte Altbestände bleiben verweigert.
+
+Statusprojektionen lesen frisches gebundenes Journal und Zweckanker, keine
+Quellkörper. Maintenance klassifiziert den begrenzten Header am gehaltenen
+Deskriptor; dies bestätigt keine Nutzlastintegrität. Vor jeder Inhaltsverwendung
+prüft der Decoder vollständigen Speicherhash und Originalhash. Schreibende
+Verlaufsaktionen lesen ihren Aktionszustand separat und übernehmen keine
+Schreibberechtigung aus einer Statusprojektion. Bestehende Besitz-, Objekt-,
+Link-, Cleanup- und Durabilityregeln gelten weiterhin. Die Storagefamilie ist
+innerhalb des bestehenden Journal-Schreibvertrags unveränderlich.
+
 ## Sicherheitsziel
 
 Ein gestarteter Auftrag verarbeitet ausschließlich private Arbeitskopien, deren Bytes

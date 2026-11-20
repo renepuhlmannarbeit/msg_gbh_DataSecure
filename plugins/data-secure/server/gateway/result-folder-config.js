@@ -142,7 +142,7 @@ function recordedResultRootPath() {
   try {
     const file = configPath();
     const value = JSON.parse(readBoundFile(file, { maximum: MAX_CONFIG_BYTES, minimum: 1 }));
-    return [SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA, EXACT_SCHEMA, EXACT_EXPORT_SCHEMA].includes(value?.schema) && typeof value.root === 'string' && path.isAbsolute(value.root) ? path.resolve(value.root) : '';
+    return [LEGACY_SCHEMA, SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA, EXACT_SCHEMA, EXACT_EXPORT_SCHEMA].includes(value?.schema) && typeof value.root === 'string' && path.isAbsolute(value.root) ? path.resolve(value.root) : '';
   } catch { return ''; }
 }
 // Canonical, case-folded comparison path: the real path of the longest existing
@@ -253,8 +253,9 @@ async function prepareConfiguredNativeExportBinding(prepare) {
     reserveRootSeparation({ resultRoot: record.root });
     const target = configPath(), temporary = path.join(configDirectory(), `${CONFIG_NAME}.${crypto.randomBytes(16).toString('hex')}.tmp`);
     fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    try { unchanged(); renameWithTransientRetry(temporary, target); }
-    finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+    // A former temporary pathname grants no authority to remove a replacement.
+    // Preserve failed private writes; successful rename needs no cleanup.
+    unchanged(); renameWithTransientRetry(temporary, target);
   });
   return structuredClone(binding);
 }
@@ -291,8 +292,8 @@ async function prepareConfiguredInitialOutputRoot(prepare) {
     const target = initialOutput.receiptPath(record.root);
     const temporary = `${target}.${crypto.randomBytes(16).toString('hex')}.tmp`;
     fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    try { unchanged(); initialOutput.assertBinding(binding); renameWithTransientRetry(temporary, target); }
-    finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+    // Preserve uncertain private writes; never unlink an unbound temporary name.
+    unchanged(); initialOutput.assertBinding(binding); renameWithTransientRetry(temporary, target);
   });
   const receipt = initialOutput.readReceipt(record.root, { required: true });
   if (!receipt.bytes.equals(Buffer.from(payload))) throw refused();
@@ -335,8 +336,8 @@ function saveConfiguredResultRoot(root, options = {}) {
   } });
   if (Buffer.byteLength(payload, 'utf8') > MAX_CONFIG_BYTES) throw new Error('RESULT_ROOT_UNSAFE');
   fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try { renameWithTransientRetry(temporary, target); }
-  finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+  // After rename this name is no longer ours; failed writes remain for diagnosis.
+  renameWithTransientRetry(temporary, target);
   });
 }
 function consumeConfiguredResultNotices() {
@@ -358,8 +359,8 @@ function consumeConfiguredResultNotices() {
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.${Date.now()}.tmp`);
   const payload = JSON.stringify({ ...record, schema: [NATIVE_SCHEMA, EXPORT_SCHEMA, EXACT_SCHEMA, EXACT_EXPORT_SCHEMA].includes(record.schema) ? record.schema : SCHEMA, notices: { sync: false, network: false } });
   fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  try { renameWithTransientRetry(temporary, target); }
-  finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+  // A later object at this name is not an owned cleanup target.
+  renameWithTransientRetry(temporary, target);
   return notices;
   });
 }

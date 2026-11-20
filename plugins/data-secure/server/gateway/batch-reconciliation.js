@@ -84,13 +84,20 @@ function createBatchReconciliation(options = {}) {
       }
     }
     if (!/^ds_[a-f0-9]{32}$/i.test(String(packageId || ''))) return record('unsafe');
-    let output;
-    try { output = storageRoots().output; } catch { return record('unsafe'); }
+    let output, parent;
+    try { output = storageRoots().output; parent = bindDirectory(output, { io }); }
+    catch { return record('unsafe'); }
     const target = pathApi.join(output, packageId);
     if (pathApi.dirname(target) !== output) return record('unsafe');
-    if (!io.existsSync(target)) return record('missing');
+    let folder;
+    try { folder = io.lstatSync(target); }
+    catch (error) {
+      try {
+        assertDirectory(parent);
+        return record(error?.code === 'ENOENT' ? 'missing' : 'unsafe');
+      } catch { return record('unsafe'); }
+    }
     try {
-      const folder = io.lstatSync(target);
       if (!folder.isDirectory() || folder.isSymbolicLink()) return record('structurally_unsafe');
       const manifestPath = pathApi.join(target, 'manifest.json');
       const documentPath = pathApi.join(target, `${packageId}.md`);
@@ -108,6 +115,7 @@ function createBatchReconciliation(options = {}) {
       const verified = supportedSchema && manifest.package_id === packageId && manifest.document === `${packageId}.md` &&
         /^[a-f0-9]{64}$/i.test(String(manifest.document_sha256 || '')) &&
         hashBytes(documentBytes) === manifest.document_sha256;
+      assertDirectory(parent);
       return verified ? record('verified', documentResult) : record('unsafe');
     } catch { return record('unsafe'); }
   }

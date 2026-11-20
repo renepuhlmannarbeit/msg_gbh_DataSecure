@@ -8,6 +8,9 @@ const { createSuite } = require('./helpers');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-companion-processor-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
+process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 
 const { createJob, jobStatus, readEvents } = require('../plugins/data-secure/server/companion/job-store');
 const { processCompanionJob } = require('../plugins/data-secure/server/companion/processor');

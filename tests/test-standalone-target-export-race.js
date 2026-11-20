@@ -89,11 +89,25 @@ function publish(root) {
   fs.renameSync = function(from, to, ...args) {
     const result = Reflect.apply(rename, fs, [from, to, ...args]);
     if (to === target) {
+      try {
       assert.equal(path.dirname(from), path.dirname(target));
-      assert.match(path.basename(from), new RegExp(`^${path.basename(target).replace(/\./gu, '\\.')}\\.${process.pid}\\.[a-f0-9]{8}\\.tmp$`, 'u'));
+      assert.match(path.basename(from), new RegExp(`^${path.basename(target).replace(/\./gu, '\\.')}\\.tmp_[a-f0-9]{16}$`, 'u'));
       const checked = assertBoundRecord(exporter, target, state);
       publications.push({ sha256: checked.sha256, identity: checked.identity,
         complete: checked.record.complete, exported: checked.row.exported_count });
+      } catch (error) {
+        // This observer runs after the real rename. Preserve its own original
+        // assertion, rather than attributing its failure to the product reader.
+        try { fs.writeFileSync(path.join(root, 'PUBLISHER-ASSERTION.json'), JSON.stringify({
+          schema: 'datasecure-target-export-publisher-assertion/1', root,
+          source_sha256: sha(fs.readFileSync(__filename)), from, to,
+          code: error?.code || null, name: error?.name || null,
+          message: error?.message || null, stack: error?.stack || null,
+          actual: error?.actual, expected: String(error?.expected), operator: error?.operator
+        }, null, 2), { flag: 'wx', mode: 0o600 }); }
+        catch { process.stderr.write('TARGET_EXPORT_ASSERTION_RECEIPT_FAILED\n'); }
+        throw error;
+      }
     }
     return result;
   };
@@ -127,6 +141,7 @@ async function counteroracle(phase, readerRole = 'history') {
   delete process.env.NODE_OPTIONS;
   delete process.env.NODE_PATH;
   verifyScope(root, true);
+  process.stdout.write(`TARGET_EXPORT_RACE_SCOPE:${root}\n`);
   const sourceFiles = ['gateway/result-export.js', 'core/bound-file-io.js', 'gateway/batch-journal-io.js'];
   const sourcePins = Object.fromEntries(sourceFiles.map(name => [name, sha(fs.readFileSync(path.join(product, name)))]));
   const bound = require(path.join(product, 'core/bound-file-io'));
@@ -187,6 +202,11 @@ async function counteroracle(phase, readerRole = 'history') {
     const child = cp.spawnSync(process.execPath, [__filename, '--publisher', root], {
       cwd: repository, env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8',
       timeout: 15000, maxBuffer: 256 * 1024, windowsHide: true });
+    fs.writeFileSync(path.join(root, 'PUBLISHER-CHILD.json'), JSON.stringify({
+      schema: 'datasecure-target-export-publisher-child/1', root, phase, reader_role: readerRole,
+      status: child.status, signal: child.signal, error_code: child.error?.code || null,
+      stdout: child.stdout, stderr: child.stderr
+    }, null, 2), { flag: 'wx', mode: 0o600 });
     try {
       assert.ifError(child.error);
       assert.equal(child.signal, null);

@@ -69,11 +69,13 @@ test('every forbidden permission individually blocks parser import and input rea
 });
 
 test('missing, false, mutable and accessor network markers do not prove a loaded guard', () => {
+  let reads = 0;
   for (const marker of [null, { value: false }, { value: 'true' },
     { value: true, writable: true }, { value: true, configurable: true },
-    { get() { throw new Error('marker getter must not be executed'); } }]) {
+    { get() { reads++; throw new Error('marker getter must not be executed'); } }]) {
     assertRejectedBeforeImport({ marker });
   }
+  assert.strictEqual(reads, 0, 'the worker catch must not hide a marker getter read');
   assertRejectedBeforeImport({ marker: null, env: {
     DATASECURE_SELF_CONTAINED_RUNTIME: '1', DATASECURE_NETWORK_DENY_ACTIVE: '1',
     __DATASECURE_NETWORK_DENY_ACTIVE__: 'true'

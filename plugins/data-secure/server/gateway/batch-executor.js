@@ -266,6 +266,7 @@ function observeWorker(child, onFailure, onExit, classifyNativeError) {
   let ended = false;
   let failed = false;
   let terminationRequested = false;
+  let nativeErrorObserved = false;
   function end(code) {
     if (ended) return;
     ended = true;
@@ -285,6 +286,15 @@ function observeWorker(child, onFailure, onExit, classifyNativeError) {
     }
   }
   (child.on || child.once).call(child, 'error', (error) => {
+    if (nativeErrorObserved) return;
+    nativeErrorObserved = true;
+    if (ended || failed) {
+      // No-PID spawn errors arrive after the synchronous PID refusal. Their
+      // first native reason may refine only the original opaque start attempt;
+      // it never revives a worker or releases another claim.
+      if (pid === null) classifyNativeError?.(error);
+      return;
+    }
     const classified = classifyNativeError?.(error);
     fail(classified || (pid === null ? 'LOCAL_WORKER_SPAWN_FAILED' : 'LOCAL_IPC_FAILED'));
   });
@@ -544,6 +554,7 @@ function startLocalBatchExecutor(token, options = {}) {
         if (diagnostic) { try { lifecycle(diagnostic); } catch { /* observational only */ } }
         return;
       }
+      if (worker.ended || worker.failed) return;
       if (acceptance.accept(message)) return;
       if (message?.type === 'local-batch-rejected' && Object.keys(message).length === 2 && PURPOSE_ERROR_CODES.includes(message.error_code)) {
         acceptance.reject(ipcAcknowledgementError(message.error_code, message.error_code));
@@ -562,6 +573,7 @@ function startLocalBatchExecutor(token, options = {}) {
             ? message.error_code : 'LOCAL_WORKER_EXITED' });
       }
     });
+    if (worker.ended || worker.failed) throw new Error('worker ended before start dispatch');
     child.send(startMessage, (error) => {
       if (worker.ended || worker.failed) return;
       if (error) { worker.fail('LOCAL_IPC_FAILED'); return; }
@@ -758,6 +770,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         if (diagnostic) { try { lifecycle(diagnostic); } catch { /* observational only */ } }
         return;
       }
+      if (worker.ended || worker.failed) return;
       if (Object.keys(message).length === 1 && message.type === 'local-review-paused') {
         intake.noticeShown = true;
         return;
@@ -798,6 +811,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       settleIpc(ipcAcknowledgementError(errorCode));
       lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount, error_code: errorCode });
     };
+    if (worker.ended || worker.failed) throw new Error('worker ended before intake dispatch');
     child.send({
         type: contentOptions ? processingMode === MODES.MARKDOWN ? 'start-local-content-markdown-intake' : 'start-local-content-anonymize-intake'
           : processingMode === MODES.MARKDOWN ? 'start-local-markdown-intake' : 'start-local-intake',
@@ -896,11 +910,17 @@ function startLocalReviewExecutor(token, options = {}) {
   let onWorkerExit = (code, failed, pid) => {
     if (pid !== null) lifecycle({ event: 'review_worker_exited', outcome: 'stopped', exit_code: code,
       error_code: 'LOCAL_REVIEW_WORKER_EXITED' });
-    if (claimedLease) releaseWorkerOwnership(() => releaseClaimedExecutor(claimedLease), lifecycle, true);
+    releaseReviewClaim();
     if (pendingReviews.get(token) === child) pendingReviews.delete(token);
     options.appReview?.release(child, { failed: code !== 0 || failed, errorCode: 'LOCAL_REVIEW_WORKER_EXITED' });
   };
   let claimedLease = null;
+  function releaseReviewClaim() {
+    const proof = claimedLease;
+    if (!proof) return;
+    claimedLease = null;
+    releaseWorkerOwnership(() => releaseClaimedExecutor(proof), lifecycle, true);
+  }
   try {
     attempt = options.appReview?.beginAttempt?.(token);
     child = launchBackgroundRole('review', { forkProcess, env: batchWorkerEnvironment({ ...(options.env || process.env), DATASECURE_RUN_ID: runId }) });
@@ -913,6 +933,7 @@ function startLocalReviewExecutor(token, options = {}) {
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
     }
+    if (worker.ended || worker.failed) throw new Error('worker ended before review claim');
     lifecycle({ event: 'review_worker_spawned', outcome: 'ok' });
     const claimed = claimExecutor(token, child.pid);
     if (claimed.ok === false) {
@@ -921,7 +942,10 @@ function startLocalReviewExecutor(token, options = {}) {
       return contentFreeReviewStart(claimed, false);
     }
     claimedLease = claimed;
+    if (worker.ended) { releaseReviewClaim(); throw new Error('worker ended during review claim'); }
+    if (worker.failed) throw new Error('worker failed during review claim');
     options.appReview?.begin?.(child, token);
+    if (worker.ended || worker.failed) throw new Error('worker ended before review binding');
     acceptance = createWorkerAcceptance(worker, 'local-review-accepted', options);
     pendingReviews.set(token, child);
     child.on?.('message', (message) => {
@@ -933,6 +957,7 @@ function startLocalReviewExecutor(token, options = {}) {
         if (diagnostic) { try { lifecycle(diagnostic); } catch { /* observational only */ } }
         return; // never a review draft, acceptance, terminal state or retry grant
       }
+      if (worker.ended || worker.failed) return;
       if (acceptance.accept(message)) return;
       if (message?.type === 'local-review-rejected' && Object.keys(message).length === 2 &&
           PURPOSE_ERROR_CODES.includes(message.error_code)) {
@@ -955,11 +980,12 @@ function startLocalReviewExecutor(token, options = {}) {
       acceptance.reject(ipcAcknowledgementError('LOCAL_REVIEW_WORKER_EXITED', 'worker ended before IPC acknowledgement'));
       lifecycle({ event: 'review_worker_exited', outcome: code === 0 && !failed ? 'ok' : 'stopped', exit_code: code,
         error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
-      if (claimedLease) releaseWorkerOwnership(() => releaseClaimedExecutor(claimedLease), lifecycle, true);
+      releaseReviewClaim();
       if (pendingReviews.get(token) === child) pendingReviews.delete(token);
       options.appReview?.release(child, { failed: code !== 0 || failed,
         errorCode: 'LOCAL_REVIEW_WORKER_EXITED' });
     };
+    if (worker.ended || worker.failed) throw new Error('worker ended before review dispatch');
     child.send({ type: 'start-local-review', batch_token: token,
       ...(options.appReview ? { ui: 'standalone-app' } : {}) }, (error) => {
       if (worker.ended || worker.failed) return;
@@ -968,7 +994,7 @@ function startLocalReviewExecutor(token, options = {}) {
         error_code: error ? 'LOCAL_IPC_FAILED' : 'NONE' });
       child.unref?.();
     });
-    if (worker.failed) throw new Error('worker start failed');
+    if (worker.ended || worker.failed) throw new Error('worker start failed');
     const response = contentFreeReviewStart(claimed, true);
     Object.defineProperty(response, 'ipcAcknowledgement', { value: acceptance.promise, enumerable: false });
     return response;

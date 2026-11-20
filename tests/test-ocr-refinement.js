@@ -88,6 +88,17 @@ test('only explicit contactOnly true filters ordinary entries before they can co
   assert.equal(manyContacts.length, 16);
   assert.ok(manyContacts.every(entry => entry.contact && entry.margins.length === 2));
 });
+test('PDF text-change planning keeps contact crops and skips lines without a correctable vowel', () => {
+  const data = source(['Pflicht bleibt', 'Muller bleibt', 'Kontakt: qa12@quality.example.invalid']);
+  const block = data.blocks[0], paragraph = block.paragraphs[0];
+  block.text = paragraph.text = data.text;
+  for (const line of paragraph.lines) for (const word of line.words) word.symbols = [{ text: word.text[0] }];
+  assert.equal(refinementPlan(data, 500, 200).length, 3);
+  const plan = refinementPlan(data, 500, 200, { candidateOnly: true });
+  assert.deepEqual(plan.map(entry => [entry.literal, entry.contact]), [
+    ['Muller bleibt', false], ['Kontakt: qa12@quality.example.invalid', true]
+  ]);
+});
 test('consensus is never guessed from different readings or malformed/multiline contact output', () => {
   const entry = refinementPlan(source(), 500, 200)[0];
   assert.equal(refinedValue(entry, ['qa12@quality.example.invalid\n', 'qa12@quality.example.invalid\n']), entry.target);
@@ -200,6 +211,17 @@ async function main() {
     const result = await refineOcr(data, canvas, worker, () => { throw new Error('unexpected crop'); }, { contactOnly: true });
     assert.equal(result, data); assertPrimary(result, data, before);
     assert.equal(lines(result)[0].reading_disagreement, undefined);
+  });
+  await testAsync('PDF text-change mode leaves unbindable ordinary lines alone and still reads contacts', async () => {
+    const data = freeze(source(['Muller bleibt', 'Kontakt: qa12@quality.example.invalid']));
+    const readings = [];
+    const worker = { setParameters: async () => {}, recognize: async () => {
+      readings.push(true);
+      return { data: { text: 'qa12@quality.example.invalid\n' } };
+    } };
+    const result = await refineOcr(data, canvas, worker, createCanvas, { candidateOnly: true });
+    assert.equal(readings.length, 2);
+    assert.equal(result, data);
   });
   await testAsync('undefined and nontrue options preserve default ordinary consistency rereads', async () => {
     for (const options of [undefined, null, {}, true, { contactOnly: false }, { contactOnly: 1 }, { contactOnly: 'true' }]) {

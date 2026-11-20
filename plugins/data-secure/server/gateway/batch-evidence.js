@@ -1,6 +1,7 @@
 'use strict';
 const { readHeldBytes } = require('../core/bound-file-io');
 const { assertAnonymizationBatch } = require('../core/processing-mode');
+const { CONTENT_BATCH_SCHEMAS } = require('../core/content-options');
 
 const fs = require('fs');
 const path = require('path');
@@ -25,8 +26,8 @@ const OLDEST_LEGACY_SCHEMA = 'datasecure-batch-evidence/1';
 const FILE_NAME = 'DataSecure-Batch-Nachweis.json';
 const OUTBOX_PREFIX = 'batch_evidence_pending_';
 const RECEIPT_ID_RE = /^[a-f0-9]{32}$/;
-const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6', 'datasecure-batch/7']);
-const LEGACY_BATCH_SNAPSHOT_SCHEMAS = new Set([...BATCH_SNAPSHOT_SCHEMAS].filter(schema => schema !== 'datasecure-batch/7'));
+const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6', ...CONTENT_BATCH_SCHEMAS]);
+const LEGACY_BATCH_SNAPSHOT_SCHEMAS = new Set([...BATCH_SNAPSHOT_SCHEMAS].filter(schema => !CONTENT_BATCH_SCHEMAS.includes(schema)));
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const LEGACY_V2_RECORD_KEYS = [
   'schema', 'receipt_id', 'recorded_at', 'batch_started_at', 'batch_finished_at', 'profile', 'image_handling',
@@ -172,7 +173,7 @@ function validateEvidenceRecord(record) {
     !exactKeys(record.grade_counts, GRADE_COUNT_KEYS) ||
     !Object.values(record.grade_counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= RESOURCE_LIMITS.MAX_BATCH_FILES) ||
     Object.values(record.grade_counts).reduce((sum, value) => sum + value, 0) !== record.counts.total ||
-    (['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6', 'datasecure-batch/7'].includes(record.batch_snapshot_schema) &&
+    (['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6', ...CONTENT_BATCH_SCHEMAS].includes(record.batch_snapshot_schema) &&
       (record.grade_counts.complete + record.grade_counts.usable_with_omissions !== record.counts.released ||
        record.grade_counts.not_processed !== record.counts.stopped ||
        record.grade_counts.unavailable !== record.counts.retryable + record.counts.pending)) ||
@@ -269,13 +270,19 @@ function atomicWriteJson(target, value, options = {}) {
     descriptor = io.openSync(temporary, io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL, 0o600);
     writeFully(descriptor, Buffer.from(`${JSON.stringify(value, null, 2)}\n`, 'utf8'), io);
     io.fsyncSync(descriptor);
-    io.closeSync(descriptor);
-    descriptor = undefined;
+    const closing = descriptor;
+    descriptor = undefined; // Consume the close attempt even if the syscall throws.
+    io.closeSync(closing);
     renameWithTransientRetry(temporary, target, io);
     syncParentDirectory(target, io, options.platform || process.platform);
   } catch (error) {
-    try { if (descriptor !== undefined) io.closeSync(descriptor); } catch { /* preserve the primary failure */ }
-    try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch { /* retain the previous atomic file */ }
+    if (descriptor !== undefined) {
+      const closing = descriptor;
+      descriptor = undefined;
+      try { io.closeSync(closing); } catch { /* preserve the primary failure */ }
+    }
+    // Failed exclusive open or changed names do not grant deletion authority.
+    // Preserve uncertain private temps; a successful rename consumes its own.
     throw error;
   }
 }

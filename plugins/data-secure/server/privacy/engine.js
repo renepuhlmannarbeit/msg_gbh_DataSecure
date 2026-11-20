@@ -1,4 +1,5 @@
 'use strict';
+const { scanTableCells, unescapeMarkdownPunctuation } = require('./markdown-table-cells');
 const { LEGACY_PERSON_FIELD_POLICY, CONTENT_PERSON_FIELD_POLICY, personFieldContextForConsumer, personFieldPattern, isPersonFieldLabel } = require('../core/person-field-policy');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 
@@ -79,21 +80,7 @@ function uppercasePresentationHypothesis(seed) {
     /\p{Lu}/u.test(seed.value) && !/\p{Ll}/u.test(seed.value);
 }
 
-function sortedCredentialIntervals(spans) {
-  return spans.filter((span) => span.type === 'CREDENTIAL')
-    .sort((left, right) => left.start - right.start || left.end - right.end);
-}
-
-function overlapsCredential(intervals, start, end) {
-  let low = 0;
-  let high = intervals.length;
-  while (low < high) {
-    const middle = (low + high) >> 1;
-    if (intervals[middle].start < end) low = middle + 1;
-    else high = middle;
-  }
-  return low > 0 && intervals[low - 1].end > start;
-}
+const { credentialIntervals: sortedCredentialIntervals, overlapsCredential } = require('./credential-interval-coverage');
 
 function isProtectedProfessionalDomain(text, start, end, credentialRanges) {
   const visibleCredentialLabel = text[start - 1] === '[' && text[end] === ']' &&
@@ -263,7 +250,8 @@ function residualTablePersonCandidates(text, personFieldPolicy = LEGACY_PERSON_F
         if (words.length === 2 && candidate.length <= 160 && looksName(candidate) && !ratedProfessionalPhrase) {
           const raw = all[index];
           const cells = raw.trim().replace(/^\|/u, '').replace(/\|$/u, '').split('|');
-          if (reviewableColumns && !raw.includes('\\|') && value === candidate && cells.length === row.length &&
+          const neutralContentColumn = personFieldPolicy === CONTENT_PERSON_FIELD_POLICY && headers[column] === `Spalte ${column + 1}`;
+          if ((reviewableColumns || neutralContentColumn) && !raw.includes('\\|') && value === candidate && cells.length === row.length &&
               !cells[column].includes('\\') && raw.trim().startsWith('|')) {
             const start = lineOffsets[index] + raw.indexOf('|') + 1 +
               cells.slice(0, column).reduce((sum, cell) => sum + cell.length + 1, 0) + cells[column].indexOf(candidate);
@@ -888,7 +876,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
         grammar.ID_LABEL_HEADER_RE, grammar.CREDENTIAL_LABEL_HEADER_RE,
         /^(?:Firma|Unternehmen|Organisation|Organization|Company(?:\s+Name)?|Employer|Arbeitgeber)$/iu
       ].map(pattern => unanchor(pattern.source)), 'Geschützter Tabellenwert', grammar.STRUCTURED_LABEL_VALUE_PATTERN].join('|') + ')$', 'giu');
-      const unescapeLabel = value => value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1');
+      const unescapeLabel = unescapeMarkdownPunctuation;
       const rawPoints = (raw, requested) => {
         const mapped = new Map(); let at = 0, logicalAt = 0;
         for (const point of [...new Set(requested)].sort((a,b) => a-b)) {
@@ -977,15 +965,8 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
         const tableHeader = cells && separator && cells.length === separator.length && separator.every(value => /^:?-{3,}:?$/u.test(value));
         const table = grammar.tableHeadersAt(text, position, personFieldPolicy);
         if (tableHeader || table) {
-          const ranges = []; let from = 0, escaped = false;
-          for (let index = 0; index < line.length; index++) {
-            if (escaped) { escaped = false; continue; }
-            if (line[index] === '\\') { escaped = true; continue; }
-            if (line[index] === '|') { ranges.push([from, index]); from = index + 1; }
-          }
-          ranges.push([from, line.length]);
-          if (line.trimStart().startsWith('|')) ranges.shift();
-          if (line.trimEnd().endsWith('|')) ranges.pop();
+          const ranges = [];
+          scanTableCells(line, (start, end) => ranges.push([start, end]));
           if (cells && ranges.length === cells.length && (!table || ranges.length === table.headers.length)) {
             for (const [start, end] of ranges) {
               const raw = line.slice(start, end);

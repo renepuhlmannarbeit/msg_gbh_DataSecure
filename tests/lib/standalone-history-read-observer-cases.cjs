@@ -11,7 +11,8 @@ const checkFiles = ['tests/lib/standalone-history-read-observer.cjs', 'tests/lib
   'tests/lib/standalone-history-read-observer-cases.cjs', 'plugins/data-secure/server/gateway/result-export.js',
   'plugins/data-secure/server/gateway/batch-journal-store.js', 'plugins/data-secure/server/core/bound-file-io.js',
   'plugins/data-secure/server/standalone/run-history.js', 'plugins/data-secure/server/gateway/standalone-history-store.js',
-  'plugins/data-secure/server/gateway/standalone-document-review-store.js'];
+  'plugins/data-secure/server/gateway/standalone-document-review-store.js',
+  'plugins/data-secure/server/gateway/standalone-history-window.js'];
 const pins = Object.fromEntries(checkFiles.map(file => [file, hash(fs.readFileSync(path.join(repository, file)))]));
 function parentAt(server, relative) {
   const parent = new Module(path.join(server, relative)); parent.filename = parent.id;
@@ -241,6 +242,51 @@ if (process.argv[2] === '--publish') {
     } finally { raw.initialResultPublication = method; restore(); }
   });
 
+  await test('actual projected history-window attempt reads delegate identical IO and become inert after restore', () => {
+    for (const key of Object.keys(require.cache)) if (key.startsWith(server + path.sep)) delete require.cache[key];
+    const isolated = path.join(caseRoot, 'private-attempt-adapter'), directory = path.join(isolated, 'standalone-history-window');
+    fs.mkdirSync(isolated); fs.mkdirSync(directory);
+    const file = path.join(directory, 'recent.json'), entries = [{ batch_id: '4'.repeat(64), created_at: '2026-10-19T00:00:00.000Z' }];
+    const bytes = Buffer.from(JSON.stringify({ schema: 'datasecure-standalone-history-window/1', entries }));
+    fs.writeFileSync(file, bytes, { flag: 'wx', mode: 0o600 });
+    const previousRoot = process.env.EU_PRIVACY_DATA_ROOT, load = Module._load;
+    let text = '', hashes = 0, heldWindow, restoreAdapter;
+    const methods = ['lstatSync', 'realpathSync', 'openSync', 'fstatSync', 'readSync', 'closeSync'];
+    function trace(action) {
+      const original = Object.fromEntries(methods.map(name => [name, fs[name]])), calls = [];
+      try {
+        for (const name of methods) fs[name] = function (...args) {
+          const value = Reflect.apply(original[name], this, args);
+          calls.push([name, name === 'readSync' ? value : null]); return value;
+        };
+        return { value: action(), calls };
+      } finally { for (const name of methods) fs[name] = original[name]; }
+    }
+    process.env.EU_PRIVACY_DATA_ROOT = isolated;
+    try {
+      restoreAdapter = observer.install({ caseRoot, server, write: line => { text += line; }, identityHash(value) { hashes++; return hash(value); } });
+      heldWindow = storeParent.require('./standalone-history-window');
+      const raw = require(path.join(server, 'gateway/standalone-history-window.js'));
+      const stored = historyParent.require('../gateway/standalone-history-store');
+      const noMigration = () => { throw Error('existing bound window must not migrate'); };
+      const baseline = trace(() => raw.readRecentHistory(noMigration));
+      const actual = trace(() => stored.readRecentHistory());
+      assert.deepEqual(actual.value, entries); assert.deepEqual(actual.calls, baseline.calls);
+      assert.equal(actual.calls.filter(row => row[0] === 'openSync').length, 1);
+      assert.equal(actual.calls.filter(row => row[0] === 'closeSync').length, 1);
+      assert.equal(actual.calls.filter(row => row[0] === 'readSync').reduce((sum, row) => sum + row[1], 0), bytes.length);
+      const events = lines(text);
+      assert.ok(events.some(row => row.phase === 'history_window' && row.operation === 'readRecentHistory' && row.outcome === 'return'));
+      assert.ok(events.some(row => row.phase === 'history_window' && row.operation === 'readBoundFileSnapshotAttemptRecord' && row.outcome === 'return'));
+      assert.equal(events.filter(row => row.kind === 'io').length, 0, 'success does not promote private ring points');
+      assert.ok(hashes > 0); assert.deepEqual(fs.readFileSync(file), bytes);
+      assert.ok(!text.includes(isolated) && !text.includes(PRIVATE) && !text.includes(entries[0].batch_id));
+      const previous = text; restoreAdapter(); hashes = 0;
+      assert.equal(Module._load, load);
+      assert.deepEqual(heldWindow.readRecentHistory(noMigration), entries);
+      assert.equal(text, previous); assert.equal(hashes, 0, 'fresh retained window/attempt wrappers are inert');
+    } finally { restoreAdapter?.(); process.env.EU_PRIVACY_DATA_ROOT = previousRoot; }
+  });
   await test('fresh unused-budget retained wrappers are inert after restore', () => {
     // A fresh empty output budget prevents exhaustion from hiding live hooks.
     // Cached product modules are intentionally removed only in this test host.

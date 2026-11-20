@@ -2,7 +2,7 @@
 
 const { createSuite } = require('./helpers');
 const { createReviewBroker } = require('../plugins/data-secure/server/standalone/review-broker');
-const { buildReviewDraft } = require('../plugins/data-secure/server/companion/text-review');
+const { buildReviewDraft } = require('../plugins/data-secure/server/core/local-review-model');
 const { encodeFrame, FrameDecoder, MAX_FRAME_BYTES } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const { MAX_STANDALONE_REVIEW_FINDINGS } = require('../plugins/data-secure/server/gateway/standalone-review-budget');
 
@@ -35,6 +35,7 @@ function child() {
 test('a private draft is chunked and one complete answer reaches only its owning worker', () => {
   const broker = createReviewBroker();
   const owner = child();
+  broker.begin(owner, batchId);
   assert.strictEqual(broker.receive(owner, { type: 'standalone-review-draft', review_id: reviewId,
     batch_token: batchId, draft }), true);
   const session = broker.session();
@@ -62,6 +63,7 @@ test('a private draft is chunked and one complete answer reaches only its owning
 test('a combined ambiguity id cannot acknowledge two Standalone review decisions', () => {
   const broker = createReviewBroker();
   const owner = child();
+  broker.begin(owner, batchId);
   const credentialDraft = buildReviewDraft('Microsoft Amazon', 'Microsoft Amazon', 'personnel_profile', [
     { ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
       original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9 },
@@ -87,6 +89,7 @@ test('overlapping drafts are deferred, and worker exit discards only its draft',
   const broker = createReviewBroker();
   const first = child();
   const second = child();
+  broker.begin(first, batchId);
   broker.receive(first, { type: 'standalone-review-draft', review_id: reviewId,
     batch_token: batchId, draft });
   broker.receive(second, { type: 'standalone-review-draft', review_id: 'b'.repeat(32),
@@ -105,6 +108,7 @@ test('only an explicitly enabled Standalone draft carries a company choice throu
   for (const enabled of [false, true]) {
     const broker = createReviewBroker();
     const owner = child();
+    broker.begin(owner, batchId);
     const ownedDraft = { ...draft, ...(enabled ? { allow_organization_review: true } : {}) };
     broker.receive(owner, { type: 'standalone-review-draft', review_id: reviewId,
       batch_token: batchId, draft: ownedDraft });
@@ -185,6 +189,7 @@ test('a late native error from an older spawn attempt cannot fail a new attempt 
 test('a malformed draft is deferred without appearing in the UI', () => {
   const broker = createReviewBroker();
   const owner = child();
+  broker.begin(owner, batchId);
   broker.receive(owner, { type: 'standalone-review-draft', review_id: reviewId,
     batch_token: batchId, draft: { ...draft, ambiguities: undefined } });
   assert.deepStrictEqual(owner.messages[0].answer, { action: 'deferred' });
@@ -194,14 +199,60 @@ test('a malformed draft is deferred without appearing in the UI', () => {
 test('review continuation identity is not borrowed from a malformed or deferred draft', () => {
   const broker = createReviewBroker();
   const owner = child();
+  broker.begin(owner, batchId);
   broker.receive(owner, { type: 'standalone-review-draft', review_id: reviewId, draft });
   assert.deepStrictEqual(owner.messages[0].answer, { action: 'deferred' });
   assert.strictEqual(broker.lastReviewedBatchId(), null);
+  broker.release(owner);
   const valid = child();
+  broker.begin(valid, batchId);
   broker.receive(valid, { type: 'standalone-review-draft', review_id: reviewId,
     batch_token: batchId, draft });
   broker.submit(reviewId, { action: 'deferred' });
   assert.strictEqual(broker.lastReviewedBatchId(), null);
+});
+
+test('unbound and retired workers cannot manufacture a ready review session', () => {
+  const broker = createReviewBroker(), owner = child();
+  const message = { type: 'standalone-review-draft', review_id: reviewId, batch_token: batchId, draft };
+  broker.receive(owner, message);
+  assert.deepEqual(broker.session(), { ready: false });
+  broker.beginAttempt(batchId); broker.begin(owner, batchId); broker.receive(owner, message);
+  assert.equal(broker.session().ready, true);
+  broker.release(owner, { failed: true, errorCode: 'LOCAL_REVIEW_WORKER_EXITED' });
+  const released = broker.session();
+  broker.receive(owner, message);
+  assert.deepEqual(broker.session(), released);
+  assert.throws(() => broker.chunk(reviewId, 0), { code: 'STANDALONE_REVIEW_SESSION_INVALID' });
+  assert.throws(() => broker.begin(owner, batchId), { code: 'STANDALONE_REVIEW_SESSION_INVALID' });
+  const next = child(); broker.beginAttempt(batchId); broker.begin(next, batchId); broker.receive(next, message);
+  const current = broker.session(); broker.receive(owner, message);
+  assert.deepEqual(broker.session(), current);
+  assert.equal(broker.session().ready, true);
+});
+
+for (const hadDraft of [false, true]) test(`failed worker never reopens a draft; hadDraft=${hadDraft}`, () => {
+  const broker = createReviewBroker(), owner = child();
+  broker.beginAttempt(batchId); broker.begin(owner, batchId);
+  const message = { type: 'standalone-review-draft', review_id: reviewId, batch_token: batchId, draft };
+  if (hadDraft) broker.receive(owner, message);
+  broker.failed(owner, 'LOCAL_REVIEW_FAILED');
+  const failed = broker.session();
+  assert.equal(failed.ready, false); assert.equal(failed.phase, 'failed'); assert.equal(failed.worker_active, true);
+  broker.receive(owner, message); assert.deepEqual(broker.session(), failed);
+  assert.throws(() => broker.submit(reviewId, { action: 'deferred' }), { code: 'STANDALONE_REVIEW_SESSION_INVALID' });
+  assert.throws(() => broker.beginAttempt(batchId), { code: 'STANDALONE_REVIEW_SESSION_INVALID' });
+  broker.release(owner, { failed: true, errorCode: 'LOCAL_REVIEW_WORKER_EXITED' });
+  assert.equal(broker.session().worker_active, false);
+  assert.equal(broker.session().error_code, 'LOCAL_REVIEW_FAILED');
+});
+
+test('a release retires even a child whose exit preceded its explicit binding', () => {
+  const broker = createReviewBroker(), owner = child();
+  broker.beginAttempt(batchId); broker.release(owner);
+  assert.throws(() => broker.begin(owner, batchId), { code: 'STANDALONE_REVIEW_SESSION_INVALID' });
+  broker.startFailed(batchId, 'LOCAL_REVIEW_START_FAILED', null, Object.freeze({}));
+  assert.equal(broker.session().phase, 'preparing', 'an unrelated failed attempt still has no authority');
 });
 
 done();

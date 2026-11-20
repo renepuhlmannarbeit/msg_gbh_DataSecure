@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { types } = require('node:util');
+const { compareProcessBirth } = require('./process-identity');
 
 function createBatchExecutorLease(deps) {
   const {
@@ -36,7 +37,7 @@ function createBatchExecutorLease(deps) {
         !processAlive(state.local_executor_pid)) return false;
     if (typeof state.local_executor_birth_id !== 'string') return true;
     const actual = processInstanceIdentity(state.local_executor_pid);
-    return !actual || actual === state.local_executor_birth_id;
+    return compareProcessBirth(actual, state.local_executor_birth_id, process.platform) !== 'different';
   };
   // DS-022: at most one batch is processed per user. The per-journal lease
   // alone cannot enforce that; a claim must also fail closed while any other

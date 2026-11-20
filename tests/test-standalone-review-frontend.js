@@ -251,6 +251,82 @@ testAsync('one explicit OCR correction proposal fills exact duplicates across do
   assert.equal(correctionValue(h, 0), '+49 30 5551009', 'the user-owned source correction remains');
 });
 
+for (const embedded of [false, true]) testAsync(`Undo reveals a contact decision after changing the document filter (${embedded ? 'embedded' : 'native'})`, async () => {
+  const h = harness(null, false, false, { embedded, modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, contactBatchDraft(['first@old.invalid', 'second@old.invalid'], ['email', 'email']));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  const [firstId, secondId] = h.draft.ambiguities.map(item => item.ambiguity_id);
+  const initialCalls = h.calls.map(call => call.command);
+  h.element('matrix-document').value = '1'; h.callbacks.get('matrix-document:change')();
+  editContact(h, 'first@new.invalid'); applyCurrent(h, 'redact');
+  h.element('matrix-document').value = '2'; h.callbacks.get('matrix-document:change')();
+  assert.deepStrictEqual(h.element('matrix-body').children.map(row => row.dataset.row), [secondId]);
+  assert.equal(correctionValue(h, 0), undefined, 'the earlier document really is outside the current view');
+
+  h.callbacks.get('undo')();
+  assert.ok(h.element('matrix-body').children.some(row => row.dataset.row === firstId),
+    'Undo must reveal the document whose decision was actually reverted');
+  assert.equal(h.element('matrix-detail').hidden, false);
+  assert.equal(h.element('exact-text').textContent, 'first@old.invalid');
+  assert.match(h.element('document-position').textContent, /Dokument 1 von 2/u);
+  assert.equal(correctionValue(h, 0), 'first@new.invalid', 'the user-owned correction is retained as an open input');
+  assert.match(h.element('output-context').textContent, /first@new\.invalid/u);
+  assert.equal(h.element('release').disabled, true);
+  h.callbacks.get('release')();
+  assert.deepStrictEqual(h.calls.map(call => call.command), initialCalls,
+    'filter changes, Undo and incomplete release must not submit or restart a private decision');
+
+  h.element('matrix-document').value = '2'; h.callbacks.get('matrix-document:change')();
+  editContact(h, 'second@new.invalid', 1); applyCurrent(h, 'redact');
+  assert.equal(h.element('release').disabled, true, 'document 1 remains open after Undo');
+  h.element('matrix-document').value = '1'; h.callbacks.get('matrix-document:change')();
+  applyCurrent(h, 'redact');
+  assert.equal(h.element('release').disabled, false);
+  assert.deepStrictEqual(h.calls.map(call => call.command), initialCalls, 'restaging still has no handoff');
+  h.callbacks.get('release')(); await new Promise(resolve => setImmediate(resolve));
+  const submissions = h.calls.filter(call => call.command === 'submit_review');
+  assert.equal(submissions.length, 1, 'only the explicit complete final save transmits');
+  assert.deepStrictEqual(Array.from(submissions[0].args.answer.decisions,
+    item => [item.ambiguity_id, item.decision, item.replacement]), [
+    [firstId, 'correct_contact', 'first@new.invalid'], [secondId, 'correct_contact', 'second@new.invalid']
+  ]);
+  assert.equal(h.calls.some(call => call.command === 'continue_review_session'), false);
+});
+
+for (const embedded of [false, true]) testAsync(`Undo reveals every reverted cross-document correction proposal (${embedded ? 'embedded' : 'native'})`, async () => {
+  const h = harness(null, false, false, { embedded, modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, contactBatchDraft(Array(3).fill('same@old.invalid'), Array(3).fill('email')));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  const ids = h.draft.ambiguities.map(item => item.ambiguity_id);
+  const initialCalls = h.calls.map(call => call.command);
+  editContact(h, 'proposed@new.invalid');
+  const copy = copyButton(h);
+  assert.equal(copy?.hidden, false);
+  h.callbacks.get('matrix-body')({ target: { closest: () => copy } });
+  assert.equal(correctionValue(h, 1), 'proposed@new.invalid');
+  assert.equal(correctionValue(h, 2), 'proposed@new.invalid');
+  h.element('matrix-document').value = '1'; h.callbacks.get('matrix-document:change')();
+  assert.deepStrictEqual(h.element('matrix-body').children.map(row => row.dataset.row), [ids[0]]);
+
+  h.callbacks.get('undo')();
+  const visible = h.element('matrix-body').children.map(row => row.dataset.row);
+  assert.ok(visible.includes(ids[1]) && visible.includes(ids[2]),
+    'one Undo affecting multiple documents must reveal all of its reverted rows');
+  assert.equal(correctionValue(h, 0), 'proposed@new.invalid', 'the original typed proposal is independent of copied targets');
+  assert.equal(correctionValue(h, 1), '');
+  assert.equal(correctionValue(h, 2), '');
+  assert.match(h.element('document-position').textContent, /Dokument 2 von 3/u);
+  assert.match(h.element('matrix-progress').textContent, /0 von 3 OCR-Kontaktwerten vorgemerkt/u);
+  assert.equal(h.element('release').disabled, true, 'a proposal and its Undo confirm no source image');
+  h.callbacks.get('release')();
+  assert.deepStrictEqual(h.calls.map(call => call.command), initialCalls,
+    'cross-document proposal Undo never submits, continues or closes the review');
+});
+
 testAsync('identical OCR values expose document and finding context on each accessible control', async () => {
   const h = harness(null, false, false, { modifyDraft(draft) {
     for (const key of Object.keys(draft)) delete draft[key];

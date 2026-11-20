@@ -105,10 +105,15 @@ function code(expected) { return (error) => error?.code === expected; }
     const documentData = { processing_mode: 'markdown-only', documents: [{ document_id: '1'.repeat(32), name: 'good.txt' }],
       unavailable: [{ document_id: '2'.repeat(32), name: 'missing.txt' }],
       not_processed_documents: [{ document_id: '3'.repeat(32), name: 'nested/scan.png', reason_code: 'IMAGE_OCR_REQUIRED' }] };
+    const documentDataBefore = JSON.stringify(documentData), documentInputs = [];
     let projectedState = presentationState, projectedDocuments = documentData;
     const projectionHistory = createRunHistory({ readStates: () => projectedState ? [projectedState] : [] });
     const projectionService = new StandaloneApplicationService({ dependencies: {
-      documentReviews: { list: () => structuredClone(projectedDocuments) }, runHistory: projectionHistory } });
+      documentReviews: { list: () => {
+        const data = structuredClone(projectedDocuments);
+        documentInputs.push({ data, before: JSON.stringify(data) });
+        return data;
+      } }, runHistory: projectionHistory } });
     assert.equal(projectionService.documentReviews(presentationState.token).not_processed_documents[0].classification, 'ocr_omission');
     assert.equal(projectionService.documentReviews(presentationState.token).conversion_feedback.ocr_enabled, false);
     projectedState = { ...presentationState, items: presentationState.items.map((item, index) => index === 0 ?
@@ -130,7 +135,9 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(projectionService.documentReviews(presentationState.token).conversion_feedback, undefined, 'retired evidence never infers OCR-off');
     projectedState = { ...presentationState, content_options: { ...presentationState.content_options, imageOcr: true, scanOcr: true } };
     assert.equal(projectionService.documentReviews(presentationState.token).not_processed_documents[0].classification, 'error');
-    assert.equal(JSON.stringify(documentData), JSON.stringify(projectedDocuments), 'display merge does not mutate saved data');
+    assert.equal(JSON.stringify(documentData), documentDataBefore, 'display merge does not mutate saved data');
+    for (const input of documentInputs) assert.equal(JSON.stringify(input.data), input.before,
+      'display merge does not mutate document review input');
     };
     assert.deepEqual(conversionFeedback(displayState), { schema: 'datasecure-conversion-feedback/1', ocr_enabled: false,
       selected_count: 133, result_count: 116, not_converted_count: 17, ocr_omitted_count: 17, error_count: 0,
@@ -386,6 +393,16 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(history.find(completed.token).identity_mapping_available, true);
     assert.doesNotMatch(JSON.stringify(history.history()), /Synthetischer Testname/u,
       'history returns only the availability bit, never an identity value');
+    const actionRefusal=Object.assign(new Error('invalid bound source header'),{code:'STANDALONE_HISTORY_UNAVAILABLE'});
+    let actionReads=0, mappingWrites=0;
+    const guardedHistory=createRunHistory({readStates:batch.readStandaloneHistoryStates,readExports:exportsApi.readStandaloneExportHistory,
+      recoverableStates:batch.standaloneRecoverableStates,liveExecutor:batch._test.liveLocalExecutor,
+      readActionState(batchId){assert.equal(batchId,completed.token);actionReads++;throw actionRefusal;}});
+    const originalMaterialize=identityLedger.materialize;
+    identityLedger.materialize=()=>{mappingWrites++;throw Error('unexpected mutation from status projection');};
+    try { assert.throws(()=>guardedHistory.resolveIdentityMapping(completed.token),error=>error===actionRefusal);
+      assert.equal(actionReads,1);assert.equal(mappingWrites,0);
+    } finally {identityLedger.materialize=originalMaterialize;}
     const identityTarget = history.resolveIdentityMapping(completed.token);
     assert.equal(identityTarget.target_kind, 'file');
     assert.equal(identityTarget.local_path, path.join(originalRun, 'VERTRAULICH-NICHT-HOCHLADEN',
@@ -765,6 +782,25 @@ function code(expected) { return (error) => error?.code === expected; }
       error => error.code === 'ERR_ASSERTION' && /^MD_OPTIONS_WORKFLOW_TIMEOUT:/u.test(error.message));
       assert.equal(inFlightCalls, 1, 'an in-flight IPC cannot add its own 45/60-second timeout to this budget');
       process.stdout.write('STANDALONE MARKDOWN FEEDBACK SNAPSHOT COMPOSITION PASS\n');
+    }
+    // Actual journal writer/status reader accepts this relative label. The
+    // display filter must not turn missing local details into a complete list.
+    for (const colon of [true, false]) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const stopped = name => ({ id: crypto.randomBytes(16).toString('hex'), name: 'source.txt',
+        source_label: name, status: 'stopped', error_code: 'PARSE_FAILED', checkpoint: 'stopped' });
+      const value = { schema: 'datasecure-batch/1', token, product_channel: 'standalone', profile: 'general',
+        created_at: new Date(now).toISOString(), expires_at: new Date(now + 86400000).toISOString(),
+        items: [stopped('nested/visible.txt'), stopped(colon ? 'nested/report:alt.txt' : 'nested/second.txt')],
+        ...createBatchPseudonymState({ productChannel: 'standalone' }) };
+      batch._test.writeState(value);
+      const journal = path.join(batch._test.batchRoot(), token + '.json'), before = fs.readFileSync(journal);
+      const details = makeHistory().failures(token);
+      assert.equal(details.total, 2);
+      assert.equal(details.available, !colon, 'availability describes every counted failure, not only surviving labels');
+      assert.equal(details.files.length, colon ? 1 : 2);
+      assert.deepEqual(details.files.map(row => row.name), colon ? ['nested/visible.txt'] : ['nested/visible.txt', 'nested/second.txt']);
+      assert.deepEqual(fs.readFileSync(journal), before, 'failure projection does not mutate its original owning journal');
     }
     process.stdout.write('STANDALONE HISTORY PASS\n');
   } finally {

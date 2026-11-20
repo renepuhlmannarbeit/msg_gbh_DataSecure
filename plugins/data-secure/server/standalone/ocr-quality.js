@@ -5,7 +5,9 @@
 // module only produces local warning locations; it never repairs, removes or
 // logs source text and does not decide whether an identity is anonymized.
 const CONTACT_LABEL = /\b(?:e[ -]?mail|kontakt|contact|telefon|tel\.?|phone|mobil(?:telefon)?|fax)\s*[:=]\s*\S/iu;
-const EMAIL_SHAPE = /[^\s@]+@[^\s@]+/u;
+// Existence needs only the immediate allowed neighbours. Variable runs here
+// repeatedly rescanned long noncontact words without changing this predicate.
+const EMAIL_SHAPE = /[^\s@]@[^\s@]/u;
 const INTERNATIONAL_PHONE_SHAPE = /\+\d[\d ()./-]{6,}\d/u;
 const LOW_WORD_CONFIDENCE = 90;
 const comparable = value => value.normalize('NFKC').replace(/\s+/gu, ' ').trim();

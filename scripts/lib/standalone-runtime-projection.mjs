@@ -12,7 +12,6 @@ const ENTRYPOINTS = Object.freeze([
   'standalone/conversion-worker-child.js',
   'gateway/batch-worker.js',
   'gateway/review-worker.js',
-  'gateway/result-export-replay-worker.js',
   'parser-worker.js',
   'network-deny.cjs'
 ]);
@@ -31,10 +30,11 @@ const ADAPTER_SOURCES = Object.freeze({
   'background-role-launcher.js': 'background-role-launcher.js',
   'core-policy-fingerprint.js': 'core-policy-fingerprint.js',
   'gateway/local-review-adapter.js': 'gateway/local-review-adapter.js',
+  'gateway/product-automatic-review.js': 'gateway/product-automatic-review.js',
   'gateway/product-read-capability.js': 'gateway/product-read-capability.js',
   'gateway/product-terminal-notice.js': 'gateway/product-terminal-notice.js'
 });
-const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)|^durable-runtime-cache\.js$|^companion\/|^gateway\/(?:worker-terminal-presentation|package-store)\.js$/iu;
+const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)|^durable-runtime-cache\.js$|^companion\/|^gateway\/(?:worker-terminal-presentation|package-store|result-export-replay(?:-worker)?|automatic-local-review|mcp-diagnostic-export)\.js$/iu;
 
 function regular(file) {
   const stat = fs.lstatSync(file);
@@ -75,6 +75,11 @@ export function collectStandaloneRuntime(serverRoot, productTarget) {
       ? path.join(adapterRoot, ...ADAPTER_SOURCES[current.relative].split('/')) : current.resolved;
     regular(sourceFile);
     const bytes = boundFileIo.readBoundFile(sourceFile, { maximum: 128 * 1024 * 1024, checkCtime: true });
+    // Reject the known MCP exporter if it is copied back into the allowed logger.
+    if (current.relative === 'gateway/diagnostics.js' &&
+        /\b(?:digestArtifact|diagnosticExportPath|exportDiagnosticPackage)\b|data-secure-diagnostic-export\/1/u.test(bytes.toString('utf8'))) {
+      throw new Error('STANDALONE_COWORK_DIAGNOSTIC_FORBIDDEN');
+    }
     files.set(current.relative, { relative: current.relative, source: sourceFile, bytes });
     if (!/\.(?:c?js)$/iu.test(current.relative)) continue;
     const source = bytes.toString('utf8');

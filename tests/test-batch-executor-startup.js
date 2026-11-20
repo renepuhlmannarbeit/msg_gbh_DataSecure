@@ -34,6 +34,7 @@ function fakeChild(pid = 4321, options = {}) {
     send(message, callback) {
       child.messages.push(message);
       if (options.sendThrows) throw privateError();
+      if (options.exitDuringSend) child.exit(0);
       child.callbacks.push(callback);
       return true;
     },
@@ -97,6 +98,7 @@ function fixture(role, firstChild, faults = {}) {
       claims.push({ token, pid });
       const proof = leaseModel.claimLocalBatchExecutor(token, pid);
       claimMetadata.set(proof, { token, pid }); claimProofs.push(proof);
+      if (faults.exitDuringClaim) firstChild.exit(0);
       return proof;
     },
     releaseLocalBatchExecutor() { assert.fail('a parent may never invoke legacy/self release'); },
@@ -1186,6 +1188,7 @@ async function main() {
         // Existing start refusal stays synchronous; the typed failure is still
         // recorded, and no live worker's lease is released by an abort signal.
         assert.throws(() => f.start({ requireIpcAcknowledgement: true, signal: controller.signal }), SafeError);
+        assert.strictEqual(child.messages.length, 0, 'pre-abort must not dispatch work after failure');
       } else {
         started = f.start({ requireIpcAcknowledgement: true, signal: controller.signal });
         controller.abort();
@@ -1223,6 +1226,111 @@ async function main() {
       assertBoundedDiagnostics(f);
     });
   }
+  for (const role of ['batch', 'intake']) for (const phase of ['ended', 'failed']) {
+    await testAsync(`${role}: ${phase} worker cannot publish late UI progress or checkpoint observations`, async () => {
+      const child = fakeChild(), f = fixture(role, child); let checkpoints = 0;
+      const started = f.start({ requireIpcAcknowledgement: true, env: { DATASECURE_PRODUCT_CHANNEL: 'standalone' },
+        onIntakeCheckpoint() { checkpoints++; } });
+      child.emit('message', { type: role === 'intake' ? 'local-intake-accepted' : 'local-batch-accepted' });
+      await started.ipcAcknowledgement;
+      if (phase === 'ended') child.exit(0); else child.emit('error', privateError());
+      const events = f.records.length;
+      try {
+        if (phase === 'failed') assertRetainedWhileAlive(f, child, role);
+        child.emit('message', { type: 'local-intake-checkpoint-created' });
+        child.emit('message', { type: 'local-intake-processing-started' });
+        child.emit('message', { type: role === 'intake' ? 'local-intake-state' : 'local-batch-state',
+          complete: true, batch_phase: 'complete', batch_total: 1, released: 1, stopped: 0,
+          result_grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+          result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 }, result_grades_verified: true });
+        assert.equal(checkpoints, 0);
+        assert.equal(f.records.length, events, 'late non-diagnostic envelopes have no status or notice effect');
+        assert.equal(f.api.pendingStandaloneTerminalNoticeGeneration(), null);
+      } finally { if (child.alive) child.exit(1); f.drain(); }
+      assert.equal(f.api.localWorkerActive(), false);
+    });
+    await testAsync(`${role}: ${phase} worker cannot suppress durable fallback with a late pause envelope`, async () => {
+      const child = fakeChild(), f = fixture(role, child);
+      const started = f.start({ requireIpcAcknowledgement: true, env: { DATASECURE_PRODUCT_CHANNEL: 'standalone' } });
+      child.emit('message', { type: role === 'intake' ? 'local-intake-accepted' : 'local-batch-accepted' });
+      await started.ipcAcknowledgement;
+      if (phase === 'ended') child.exit(0); else child.emit('error', privateError());
+      child.emit('message', { type: 'local-review-paused' });
+      if (child.alive) child.exit(1); f.drain();
+      assert.equal(f.records.filter(event => event.event === 'completion_notice_delegated_to_product_ui').length, 1);
+      assert.equal(f.api.localWorkerActive(), false);
+    });
+  }
+  for (const role of ['batch', 'intake']) await testAsync(`${role}: an active paused review still suppresses a duplicate fallback`, async () => {
+    const child = fakeChild(), f = fixture(role, child);
+    const started = f.start({ requireIpcAcknowledgement: true, env: { DATASECURE_PRODUCT_CHANNEL: 'standalone' } });
+    child.emit('message', { type: role === 'intake' ? 'local-intake-accepted' : 'local-batch-accepted' });
+    await started.ipcAcknowledgement;
+    child.emit('message', { type: 'local-review-paused' }); child.exit(0); f.drain();
+    assert.equal(f.records.filter(event => event.event === 'completion_notice_delegated_to_product_ui').length, 0);
+    assert.equal(f.api.localWorkerActive(), false);
+  });
+  for (const phase of ['ended', 'failed']) await testAsync(`review: ${phase} worker cannot deliver a late draft, ACK or native start error`, async () => {
+    const child = fakeChild(), broker = createReviewBroker(), f = fixture('review', child);
+    let forwarded = 0;
+    const appReview = { ...broker, receive(...args) { forwarded++; return broker.receive(...args); } };
+    const started = f.start({ appReview, requireIpcAcknowledgement: true });
+    child.emit('message', { type: 'local-review-accepted' }); await started.ipcAcknowledgement;
+    if (phase === 'ended') child.exit(0);
+    else child.emit('error', Object.assign(privateError(), { code: 'EPERM' }));
+    const before = broker.session(), receives = forwarded;
+    const { buildReviewDraft } = require('../plugins/data-secure/server/core/local-review-model');
+    const original = 'Anna Berger';
+    const draft = buildReviewDraft(original, original, 'general', [{ ambiguity_id: 'person:v1:000001',
+      type: 'person_prose_ambiguous', replacement_kind: 'PERSON', original_start: 0, original_end: 11,
+      anonymized_start: 0, anonymized_end: 11 }], { allowDefer: true });
+    child.emit('message', { type: 'standalone-review-draft', review_id: 'c'.repeat(32), batch_token: TOKEN, draft });
+    child.emit('message', { type: 'local-review-accepted' });
+    child.emit('error', Object.assign(privateError(), { code: 'ENOENT' }));
+    assert.equal(forwarded, receives, 'ended/failed messages never reach the broker');
+    assert.deepEqual(broker.session(), before);
+    assert.equal(broker.session().ready, false);
+    if (phase === 'failed') {
+      assertRetainedWhileAlive(f, child, 'review');
+      assert.equal(f.releases.length, 0); child.exit(1);
+    }
+    f.drain(); assert.equal(f.active(), false); assert.equal(f.releases.length, 1);
+    assert.strictEqual(f.releases[0].proof, f.claimProofs[0]); assert.equal(f.releases[0].alive, false);
+  });
+  test('review: a never-started instance refines its native reason only once and cannot hit a newer attempt', () => {
+    const child = fakeChild(null), broker = createReviewBroker(), f = fixture('review', child);
+    assertSafeStartFailure(() => f.start({ appReview: broker }));
+    child.emit('error', Object.assign(privateError(), { code: 'ENOENT' }));
+    assert.equal(broker.session().error_code, 'LOCAL_REVIEW_START_MISSING');
+    child.emit('error', Object.assign(privateError(), { code: 'EPERM' }));
+    assert.equal(broker.session().error_code, 'LOCAL_REVIEW_START_MISSING');
+    const next = broker.beginAttempt(TOKEN), expected = broker.session();
+    child.emit('error', Object.assign(privateError(), { code: 'EACCES' }));
+    assert.deepEqual(broker.session(), expected);
+    broker.startFailed(TOKEN, 'LOCAL_REVIEW_START_FAILED', null, next);
+    assert.equal(f.claims.length, 0); assert.equal(f.releases.length, 0); assert.equal(child.kills, 0);
+  });
+  test('review: the first native error of an old never-started child cannot change a new attempt', () => {
+    const child = fakeChild(null), broker = createReviewBroker(), f = fixture('review', child);
+    assertSafeStartFailure(() => f.start({ appReview: broker }));
+    const attempt = broker.beginAttempt(TOKEN), expected = broker.session();
+    child.emit('error', Object.assign(privateError(), { code: 'ENOENT' }));
+    assert.deepEqual(broker.session(), expected);
+    assert.equal(f.claims.length, 0); assert.equal(f.releases.length, 0); assert.equal(child.kills, 0);
+    broker.startFailed(TOKEN, 'LOCAL_REVIEW_START_FAILED', null, attempt);
+  });
+  for (const boundary of ['claim', 'send']) test(`review: reentrant engineering exit during ${boundary} never revives a slot and releases the original claim once`, () => {
+    const child = fakeChild(4321, { exitDuringSend: boundary === 'send' }), broker = createReviewBroker();
+    const f = fixture('review', child, { exitDuringClaim: boundary === 'claim' });
+    assertSafeStartFailure(() => f.start({ appReview: broker }));
+    f.drain();
+    assert.equal(f.active(), false); assert.equal(f.api.localWorkerActive(), false);
+    assert.equal(broker.session().ready, false); assert.equal(broker.session().worker_active, false);
+    assert.equal(f.claims.length, 1); assert.equal(f.releases.length, 1);
+    assert.strictEqual(f.releases[0].proof, f.claimProofs[0]); assert.equal(f.releases[0].alive, false);
+    if (boundary === 'claim') assert.equal(child.messages.length, 0);
+    child.emit('exit', 0, null); assert.equal(f.releases.length, 1);
+  });
   test('real ENOENT children for all three starts cannot crash an isolated parent process', () => {
     const { spawnSync } = require('node:child_process');
     const result = spawnSync(process.execPath, [__filename, '--enoent-probe'], {

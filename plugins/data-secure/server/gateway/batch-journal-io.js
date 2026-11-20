@@ -21,14 +21,15 @@ function syncParentDirectory(target, io = fs, platform = process.platform) {
   // file itself is flushed by the caller; POSIX additionally persists rename
   // metadata before a state transition is reported as durable.
   if (platform === 'win32') return false;
-  let descriptor;
-  try {
-    descriptor = io.openSync(path.dirname(target), io.constants.O_RDONLY);
-    io.fsyncSync(descriptor);
-    return true;
-  } finally {
-    if (descriptor !== undefined) io.closeSync(descriptor);
-  }
+  const descriptor = io.openSync(path.dirname(target), io.constants.O_RDONLY);
+  let failed = false, primary;
+  try { io.fsyncSync(descriptor); }
+  catch (error) { failed = true; primary = error; }
+  // Close once; a secondary cleanup failure cannot replace the sync failure.
+  try { io.closeSync(descriptor); }
+  catch (error) { if (!failed) { failed = true; primary = error; } }
+  if (failed) throw primary;
+  return true;
 }
 
 // Windows real-time scanners briefly hold freshly written temporary files; the

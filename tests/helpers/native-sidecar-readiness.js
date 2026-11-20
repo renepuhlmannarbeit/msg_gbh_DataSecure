@@ -21,7 +21,9 @@ const BATCH_CODES = new Set([...DESKTOP_ERROR_CODES,
   ...require('../../plugins/data-secure/server/core/document-result-grade').REASON_CODES]);
 const BATCH_PHASES = new Set(['item_epoch_release', 'registry_finalize', 'local_delivery_verify',
   'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim',
-  'result_export_plan', 'result_export_copy', 'result_export_claim_release']);
+  'result_export_plan', 'result_export_copy', 'result_export_claim_release',
+  'mapping_publication', 'mapping_intent', 'mapping_recheck', 'mapping_csv',
+  'mapping_csv_root', 'mapping_csv_lock', 'mapping_csv_read', 'mapping_csv_write', 'mapping_intent_finish']);
 const BATCH_FIELDS = new Set(['schema', 'time_ms', 'component', 'event', 'outcome', 'error_code', 'phase']);
 const error = code => Object.assign(Error(code), { code });
 const validTime = value => Number.isSafeInteger(value) && value >= 0;
@@ -128,6 +130,7 @@ function readNativeSidecarReadiness(inputDirectory, desktopFile,
     const leaves = [];
     let scanned = 0;
     const stream = fs.opendirSync(directory.path);
+    let scanFailed = false, scanFailure;
     try {
       for (let entry; (entry = stream.readSync()) !== null;) {
         if (++scanned > MAX_DIRECTORY_ENTRIES) throw error('NATIVE_SMOKE_LOG_LIMIT');
@@ -136,7 +139,13 @@ function readNativeSidecarReadiness(inputDirectory, desktopFile,
         if (leaves.length === MAX_LEAVES) throw error('NATIVE_SMOKE_LOG_LIMIT');
         leaves.push({ name: entry.name, generation: match[1], segment: Number(match[2] || 1) });
       }
-    } finally { stream.closeSync(); }
+    } catch (cause) {
+      scanFailed = true; scanFailure = cause;
+    } finally {
+      try { stream.closeSync(); }
+      catch (cause) { if (!scanFailed) { scanFailed = true; scanFailure = cause; } }
+    }
+    if (scanFailed) throw scanFailure;
     bound.assertDirectory(directory);
     report.conditions.sidecar_leaves = leaves.length > 0;
     const groups = new Map();

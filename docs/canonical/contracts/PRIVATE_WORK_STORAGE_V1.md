@@ -17,6 +17,25 @@ Es gibt keinen Secret-Store-Fallback und keine Schlüsselbundinitialisierung.
 
 ## Versionierung und Wiederaufnahme
 
+Unveröffentlichte Standalone-Ergänzung27.10.2026: Neue Contentaufträge verwenden
+Batchschema `/8` und das explizite Klartext-Storageformat
+`datasecure-plain-source-snapshot/1`; `/2`–`/7` behalten ihre bisherige Bedeutung.
+Ein begrenzter Header mit nachfolgenden Originalbytes verhindert die Verwechslung
+gewöhnlichen Textes mit altem `DSARTF01`-Magic. Es handelt sich um Framing, nicht
+Verschlüsselung oder Authentifizierung gegen den berechtigten lokalen Eigentümer.
+Es gibt keinen Magic-gesteuerten Fallback und keine automatische Nachrüstung alter
+Arbeitskopien. Alte Leser verweigern die neue Journalversion vor Invalidation und
+Ablaufbereinigung. Ein alter bereits blockierter Rohtextlauf benötigt neue
+Aufnahme seiner unveränderten Originaldateien.
+
+Der allgemeine private Reader und der Schutz roher `.dsart`-/`DSARTF01`-Dateien
+bleiben erhalten. Die neue Hülle kann solche Bytes ausschließlich als ausdrücklich
+neu aufgenommenen, zweck-/identitäts-/hashgebundenen Originalinhalt enthalten.
+Originalgröße und Speichergröße sind getrennt. Inhaltsleser prüfen beide Hashes;
+Statusanzeige und Headerklassifikation erfinden keine Inhaltsfreigabe. Ein
+teilweise fehlgeschlagener gehaltener Read leert seinen eigenen Buffer und erhält
+den ursprünglichen Fehler. Dies ist keine Garantie vollständiger Speicherlöschung.
+
 - Neues Batchschema: `datasecure-batch/4`.
 - Snapshot-Item: `private_artifact_plain: true`; kein
   `private_artifact_encrypted`-Feld. Plainbytes werden nicht unter `.dsart` abgelegt.

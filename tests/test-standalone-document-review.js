@@ -194,6 +194,55 @@ test('run-wide entity Keep checks a later unsafe candidate before committing the
   const input = entityRequest(f, 0, 'keep', 'run');
   assertCandidateBlocked(f, input, [{ name: f.items[1].name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }]);
 });
+
+test('run-wide projection precedes the next private body read while only one common decision commits', () => {
+  const f = fixture(true, true, null, entityFields({ original: 'Anna Beispiel\nProjekt erledigt.' }));
+  const input = entityRequest(f, 0, 'person', 'run');
+  const entities = require('../plugins/data-secure/server/gateway/standalone-entity-review');
+  const apply = entities.applyEntityDecisions, open = fs.openSync, events = []; let calls = 0;
+  const second = path.join(f.data, 'document-reviews', f.batchId, f.items[1].id, 'base.json');
+  entities.applyEntityDecisions = function(...args) {
+    calls++; events.push(`apply:${calls}`); return apply.apply(this, args);
+  };
+  fs.openSync = function(file, ...args) {
+    if (calls && typeof file === 'string' && path.resolve(file) === second) events.push('second-body');
+    return open.call(this, file, ...args);
+  };
+  let result;
+  try { result = f.store.decide(f.batchId, input.documentId, input.request); }
+  finally { entities.applyEntityDecisions = apply; fs.openSync = open; }
+  // First apply validates the origin choices before the admission scan; second
+  // is the first actual projection, not an RSS/GC measurement or fake result.
+  assert.ok(events.indexOf('apply:2') >= 0 && events.indexOf('second-body') > events.indexOf('apply:2'));
+  assert.equal(result.ok, true); assert.equal(result.affected_count, 2);
+  const run = path.join(f.data, 'document-reviews', f.batchId);
+  assert.equal(fs.readdirSync(run).filter(name => /^commit-\d{6}\.json$/u.test(name)).length, 1);
+  assert.deepEqual(f.create().list(f.batchId).documents.map(row => row.revision), [1, 1]);
+});
+
+test('run-wide deferred projection preserves even falsy throws while still admitting the later body without a partial commit', () => {
+  for (const thrown of [undefined, null, false, 0, '', Object.freeze(new Error('synthetic projection'))]) {
+    const f = fixture(true, true, null, entityFields({ original: 'Anna Beispiel\nProjekt erledigt.' }));
+    const input = entityRequest(f, 0, 'person', 'run'), pins = persistentDecisionPins(f);
+    const entities = require('../plugins/data-secure/server/gateway/standalone-entity-review');
+    const apply = entities.applyEntityDecisions, open = fs.openSync; let calls = 0, laterBody = false, observed = false;
+    const second = path.join(f.data, 'document-reviews', f.batchId, f.items[1].id, 'base.json');
+    entities.applyEntityDecisions = function(...args) {
+      if (++calls === 2) throw thrown;
+      return apply.apply(this, args);
+    };
+    fs.openSync = function(file, ...args) {
+      if (calls >= 2 && typeof file === 'string' && path.resolve(file) === second) laterBody = true;
+      return open.call(this, file, ...args);
+    };
+    try {
+      try { f.store.decide(f.batchId, input.documentId, input.request); }
+      catch (error) { observed = true; assert.equal(error, thrown); }
+    } finally { entities.applyEntityDecisions = apply; fs.openSync = open; }
+    assert.equal(observed, true); assert.equal(laterBody, true); assert.equal(calls, 2);
+    assert.deepEqual(persistentDecisionPins(f), pins);
+  }
+});
 test('all refused entity candidates are named and a policy mismatch grants no decision', () => {
   const f = fixture(true, true, null, entityFields()), input = entityRequest(f, 0, 'keep', 'run');
   assertCandidateBlocked(f, input, f.items.map(row => ({ name: row.name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' })));

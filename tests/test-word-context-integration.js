@@ -36,6 +36,19 @@ const numbering=wrap('numbering',`<w:abstractNum w:abstractNumId="0"><w:lvl w:il
 const comments=body=>wrap('comments',body);
 const comment=(id,text,author='Anna Berger')=>`<w:comment w:id="${id}" w:author="${esc(author)}">${p(text)}</w:comment>`;
 
+test('actual package-bound style chains have the same complete depth limit in both paragraph orders',()=>{
+ const styles=wrap('styles',Array.from({length:33},(_,i)=>`<w:style w:type="paragraph" w:styleId="S${i}">${i===0?'<w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr>':`<w:basedOn w:val="S${i-1}"/>`}</w:style>`).join(''));
+ const paragraph=i=>`<w:p><w:pPr><w:pStyle w:val="S${i}"/></w:pPr>${run(`Quellabsatz${i}`)}</w:p>`;
+ const valid=doc(Array.from({length:32},(_,i)=>paragraph(i)).join(''),{parts:{styles,numbering}});
+ const before=hash(valid),md=extract(valid).markdown;
+ for(let i=0;i<32;i++)assert.ok(md.includes(`Quellabsatz${i}`));assert.equal(hash(valid),before);
+ for(const order of [Array.from({length:33},(_,i)=>i),[32]]) {
+  const bytes=doc(order.map(paragraph).join(''),{parts:{styles,numbering}}),pin=hash(bytes);
+  assert.throws(()=>strict(bytes),{code:'DOCX_STRUCTURE_UNSAFE'},'warming by actual paragraphs must not turn depth33 into a valid numbering model');
+  assert.equal(hash(bytes),pin);
+ }
+});
+
 test('actual simple and nested complex fields retain stored results once, never instructions',()=>{
  const b=doc(`<w:p>${run('BEFORE ')}${simple('SIMPLE')}${run(' MIDDLE ')}${char('begin')}${code('IF ')}${field('NOT_VISIBLE_INSTRUCTION_RESULT')}${char('separate')}${run('OUTER ')}${field('INNER')}${char('end')}${run(' AFTER HTTP/2')}</w:p>`),before=hash(b),md=extract(b).markdown;
  for(const value of ['BEFORE','SIMPLE','MIDDLE','OUTER','INNER','AFTER HTTP/2'])count(md,value);

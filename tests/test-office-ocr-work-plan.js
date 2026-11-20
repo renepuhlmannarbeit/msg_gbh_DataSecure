@@ -152,6 +152,26 @@ test('base work exceeding 120MP is never presented as spare budget', () => {
   const value = ledger(bases(120_000_000)); assert.equal(value.snapshot().reason, 'BASE_LIMIT');
   assert.equal(value.snapshot().remainingPixels, 0);
 });
+test('the sparse diagram pass charges filtering and the full 2x raster, once per asset', () => {
+  const value = ledger(bases());
+  assert.deepEqual(value.reserveDiagram(0, 936, 364), { admitted: true, chargedPixels: 1_703_520 });
+  assert.equal(value.snapshot().optionalPixels, 1_703_520);
+  assert.equal(value.reserveDiagram(0, 900, 300).reason, 'DIAGRAM_ALREADY_RESERVED');
+  assert.equal(value.reserveUpscale(0, plan()).reason, 'DIAGRAM_ALREADY_RESERVED');
+});
+test('sparse diagrams cannot borrow base work, add a second upscale, or exceed the smaller cumulative cap', () => {
+  const mismatch = ledger([{ assetId: 0, basePixels: 100_000, bounded: true }]);
+  assert.equal(mismatch.reserveDiagram(0, 936, 364).reason, 'BASE_ASSET_MISMATCH');
+  assert.equal(mismatch.reserveDiagram(0, 1000, 451).reason, 'DIAGRAM_PLAN_INVALID');
+  const used = ledger(bases());
+  assert.equal(used.reserveUpscale(0, plan()).admitted, true);
+  assert.equal(used.reserveDiagram(0, 936, 364).reason, 'UPSCALE_ALREADY_RESERVED');
+  assert.equal(used.reserveDiagram(1, 1000, 450).reason, 'NO_EXTRA_BUDGET');
+  const eight = ledger(Array.from({ length: 8 }, (_, assetId) => ({ assetId, basePixels: 400_000, bounded: true })));
+  for (let id = 0; id < 4; id++) assert.equal(eight.reserveDiagram(id, 1000, 400).admitted, true);
+  assert.equal(eight.reserveDiagram(4, 1000, 400).reason, 'NO_EXTRA_BUDGET');
+  assert.equal(eight.snapshot().optionalPixels, 8_000_000);
+});
 test('constructor snapshots inputs; later caller mutation cannot lower the reservation', () => {
   const input = bases(), value = ledger(input); input[1].basePixels = 0; input.length = 0;
   assert.equal(value.snapshot().baseReservedPixels, 110_000_000);

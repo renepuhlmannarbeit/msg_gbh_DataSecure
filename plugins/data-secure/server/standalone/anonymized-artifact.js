@@ -117,12 +117,28 @@ function validateExpectation(value) {
       profile: value.profile, document_sha256: value.document_sha256, manifest_sha256: value.manifest_sha256 });
   });
 }
-function validateAnonymizedArtifact(manifest, markdown) {
+function supportedProducerVersion(value) {
+  // Producer metadata is not the reader's runtime identity. Compatibility is
+  // still governed by the exact persistent schema and all three policy IDs.
+  // Accept canonical releases no newer than this reader; never arbitrary
+  // labels, aliases or future producer claims.
+  const component = '(0|[1-9][0-9]{0,5})';
+  const release = new RegExp(`^${component}\\.${component}\\.${component}(?:-rc([1-9][0-9]{0,5}))?$`, 'u');
+  const stored = typeof value === 'string' && release.exec(value), current = release.exec(VERSION);
+  if (!stored || stored[0] !== value || !current || current[0] !== VERSION) return false;
+  for (let index = 1; index <= 3; index++) {
+    if (Number(stored[index]) !== Number(current[index])) return Number(stored[index]) < Number(current[index]);
+  }
+  return (stored[4] === undefined ? Infinity : Number(stored[4])) <=
+    (current[4] === undefined ? Infinity : Number(current[4]));
+}
+function validateArtifactRecord(manifest, markdown, historical) {
   return checked(() => {
     guardGraph(manifest);
     if (!exact(manifest, MANIFEST_KEYS) || manifest.schema !== SCHEMA || manifest.product_channel !== 'standalone' ||
         manifest.processing_mode !== 'markdown-and-anonymize' || manifest.anonymized !== true ||
-        manifest.privacy_scope !== 'extracted-markdown-only' || manifest.gateway_version !== VERSION ||
+        manifest.privacy_scope !== 'extracted-markdown-only' ||
+        (historical ? !supportedProducerVersion(manifest.gateway_version) : manifest.gateway_version !== VERSION) ||
         manifest.privacy_ruleset !== PRIVACY_RULESET_VERSION || manifest.credential_context_policy !== CREDENTIAL_CONTEXT_POLICY_VERSION ||
         manifest.person_field_policy !== CONTENT_PERSON_FIELD_POLICY || manifest.document !== `${manifest.package_id}.md` ||
         typeof manifest.document_sha256 !== 'string' || !SHA.test(manifest.document_sha256) || !Number.isSafeInteger(manifest.document_bytes) || manifest.document_bytes < 1 ||
@@ -147,11 +163,19 @@ function validateAnonymizedArtifact(manifest, markdown) {
     return manifest;
   });
 }
+function validateAnonymizedArtifact(manifest, markdown) {
+  return validateArtifactRecord(manifest, markdown, false);
+}
 function validateAnonymizedArtifactForExpectation(manifest, markdown, expected, manifestBytes) {
   return checked(() => {
     const context = validateExpectation(expected);
-    validateAnonymizedArtifact(manifest, markdown);
-    if (types.isProxy(manifestBytes) || !Buffer.isBuffer(manifestBytes) || digest(manifestBytes) !== context.manifest_sha256 ||
+    // Admit historical producer metadata only after the independent private
+    // expectation matches the exact held manifest, never by a caller flag.
+    if (types.isProxy(manifestBytes) || !Buffer.isBuffer(manifestBytes) || digest(manifestBytes) !== context.manifest_sha256) throw invalid();
+    validateArtifactRecord(manifest, markdown, true);
+    // All /4 producers serialize this closed manifest canonically. Bind the
+    // supplied parsed object too, rather than accepting unrelated held bytes.
+    if (digest(Buffer.from(JSON.stringify(manifest), 'utf8')) !== context.manifest_sha256 ||
         manifest.package_id !== context.package_id || manifest.profile !== context.profile || manifest.source_type !== context.source_type ||
         manifest.document_sha256 !== context.document_sha256 ||
         serializeContentOptions(manifest.content_options) !== serializeContentOptions(context.content_options)) throw invalid();

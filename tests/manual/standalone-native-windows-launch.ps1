@@ -486,13 +486,8 @@ function Merge-NativeNetworkEvidence($Current, $Observation) {
     }
 }
 
-function Remove-TestRoot {
-    # A launched process must actually have exited before accepting its one
-    # known Windows cache junction. Failed setup retains strict link rejection.
-    if ($null -ne $process -and -not $process.HasExited) { throw 'STANDALONE_NATIVE_CLEANUP_PROCESS_RUNNING' }
-    Remove-NativeTestTree $cleanupContext -AllowCacheJunction:($null -ne $process -and $process.HasExited)
-}
-
+$nativeBodyFailurePresent = $false
+$nativeBodyFailureRecord = $null
 try {
     foreach ($relative in @('candidate', 'profile', 'profile\Local', 'profile\Roaming', 'profile\Xdg',
         'profile\Documents', 'temp', 'temp\SecureDataMsg-Standalone', 'webview', 'webview\main')) {
@@ -625,21 +620,69 @@ try {
         Write-Output ('STANDALONE NATIVE EVIDENCE ' + ($evidence | ConvertTo-Json -Compress))
     }
     Write-Output 'STANDALONE NATIVE WINDOWS LAUNCH PASS (load + successful IPC only; no review decisions)'
+} catch {
+    # Presence is independent of the ErrorRecord's message or target value.
+    $nativeBodyFailurePresent = $true
+    $nativeBodyFailureRecord = $_
 } finally {
-    if ($null -ne $process -and -not $process.HasExited) {
-        # Closing the owned window lets Tauri drop/stop its sidecar. A forced
-        # parent kill could orphan workers or WebView2 and lock the test root.
-        $process.CloseMainWindow() | Out-Null
-        if (-not $process.WaitForExit(35000)) {
-            Stop-Process -Id $process.Id -ErrorAction Stop
-            if (-not $process.WaitForExit(3000)) { throw 'STANDALONE_NATIVE_CLEANUP_PROCESS_RUNNING' }
+    # Teardown and evidence retention are separate. Preserve this exact owned
+    # engineering root even when readiness or teardown fails; no deletion is
+    # authorized by a successful readiness observation alone.
+    $nativeTeardownFailures = [System.Collections.Generic.List[object]]::new()
+    try {
+        Write-Output ('STANDALONE NATIVE EVIDENCE RETAINED: ' + $testRoot)
+    } catch {
+        $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'RETENTION_NOTICE'; ErrorRecord = $_ })
+    }
+    if ($null -ne $process) {
+        $nativeProcessMayBeRunning = $true
+        try {
+            $nativeProcessMayBeRunning = -not $process.HasExited
+        } catch {
+            $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'PROCESS_STATE'; ErrorRecord = $_ })
+        }
+        if ($nativeProcessMayBeRunning) {
+            # Attempt each known owned-process stage once, even if an earlier
+            # request failed. Keep the original wait budgets and stop target.
+            try {
+                $process.CloseMainWindow() | Out-Null
+            } catch {
+                $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'WINDOW_CLOSE'; ErrorRecord = $_ })
+            }
+            $nativeProcessExitObserved = $false
+            try {
+                $nativeProcessExitObserved = $process.WaitForExit(35000)
+            } catch {
+                $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'EXIT_WAIT_35000'; ErrorRecord = $_ })
+            }
+            if (-not $nativeProcessExitObserved) {
+                try {
+                    Stop-Process -Id $process.Id -ErrorAction Stop
+                } catch {
+                    $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'PROCESS_STOP'; ErrorRecord = $_ })
+                }
+                try {
+                    if (-not $process.WaitForExit(3000)) { throw 'STANDALONE_NATIVE_CLEANUP_PROCESS_RUNNING' }
+                } catch {
+                    $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'EXIT_WAIT_3000'; ErrorRecord = $_ })
+                }
+            }
+        }
+        # Tauri exit alone does not mean Chromium has finished its own profile
+        # work. This separate observation never grants deletion or a writer join.
+        try {
+            Wait-NativeWebViewProfileExit (Join-Path $testRoot 'webview\main') $rootStartedUtc
+        } catch {
+            $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'WEBVIEW_PROFILE'; ErrorRecord = $_ })
         }
     }
-    # Tauri exit alone does not mean Chromium has finished removing profile
-    # lockfiles. Prove the exact isolated profile is quiescent BEFORE inventory;
-    # never hide vanished paths during deletion or kill unrelated WebViews.
-    if ($null -ne $process) {
-        Wait-NativeWebViewProfileExit (Join-Path $testRoot 'webview\main') $rootStartedUtc
+    foreach ($nativeTeardownFailure in $nativeTeardownFailures) {
+        # Fixed, bounded stage labels only. A diagnostic write must not replace
+        # the original error or prevent the remaining owned attempts.
+        try {
+            [Console]::Error.WriteLine('STANDALONE_NATIVE_TEARDOWN_FAILURE:' + $nativeTeardownFailure.Stage)
+        } catch { }
     }
-    Remove-TestRoot
+    if ($nativeBodyFailurePresent) { throw $nativeBodyFailureRecord }
+    if ($nativeTeardownFailures.Count -gt 0) { throw ($nativeTeardownFailures[0].ErrorRecord) }
 }

@@ -1,7 +1,7 @@
 'use strict';
 
 const { types } = require('node:util');
-const { CONTENT_BATCH_SCHEMA, validateContentOptions, contentOptionsForBatch } = require('./content-options');
+const { CONTENT_BATCH_SCHEMAS, validateContentOptions, contentOptionsForBatch } = require('./content-options');
 const invalid = () => { throw Object.assign(Error('STANDALONE_REVIEW_POLICY_INVALID'), { code: 'STANDALONE_REVIEW_POLICY_INVALID' }); };
 
 // Absence belongs to the guided workflow. There is deliberately no coercion,
@@ -23,7 +23,7 @@ function reviewPolicyForBatch(state) {
         'standalone_review_policy' in state && !Object.hasOwn(state, 'standalone_review_policy')) invalid();
     const descriptor = Object.getOwnPropertyDescriptor(state, 'standalone_review_policy');
     if (!descriptor) return undefined;
-    if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable || state.schema !== CONTENT_BATCH_SCHEMA) invalid();
+    if (!Object.hasOwn(descriptor, 'value') || !descriptor.enumerable || !CONTENT_BATCH_SCHEMAS.includes(state.schema)) invalid();
     return validateReviewPolicy(descriptor.value, { productChannel: state.product_channel,
       processingMode: state.processing_mode, documentReview: state.standalone_document_review,
       contentOptions: contentOptionsForBatch(state) });

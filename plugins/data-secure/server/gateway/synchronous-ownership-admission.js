@@ -32,6 +32,7 @@ async function admitSynchronousOwnership(controlled, action, options = {}) {
     } catch (error) {
       const remaining = deadline - now();
       if (entered || ownErrorCode(error) !== 'OWNERSHIP_GUARD_BUSY' ||
+          (options.isRetryableBusy && !options.isRetryableBusy(error)) ||
           attempt >= BACKOFF_MS.length || remaining <= 0) throw error;
       await delay(Math.min(BACKOFF_MS[attempt], remaining));
       if (now() >= deadline) throw error;

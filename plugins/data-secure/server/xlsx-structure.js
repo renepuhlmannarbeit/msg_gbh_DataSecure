@@ -281,9 +281,12 @@ function createXlsxReader(decode, options = {}) {
   }
   function threadedComments(xml, persons) {
     if (Buffer.byteLength(xml, 'utf8') > 2 * 1024 * 1024 || !(persons instanceof Map)) throw structureError(true);
-    const result = [], ids = new Set(); let comment = null, chunks = [], chars = 0;
+    const result = [], ids = new Set(); let comment = null, textNode = null, textSeen = false, chunks = [], chars = 0;
     const root = parse(xml, {
       start(node) {
+        // A single typed text field owns its XML events. Child markup must
+        // never hide payload or join a new Xstring around an unknown element.
+        if (textNode) throw structureError();
         if (node.namespaceURI === COMMENTS_NS && node.localName === 'threadedComment' &&
             node.parent?.namespaceURI === COMMENTS_NS && node.parent.localName === 'ThreadedComments') {
           const id = attr(node, 'id')?.toUpperCase(), personId = attr(node, 'personId')?.toUpperCase(),
@@ -296,16 +299,22 @@ function createXlsxReader(decode, options = {}) {
           }
           if (!GUID.test(id || '') || (parentId !== undefined && !GUID.test(parentId)) || ids.has(id) || !persons.has(personId) || !validRef) throw structureError();
           if (result.length >= 10000) throw structureError(true);
-          ids.add(id); comment = { node, id, parentId, ref, author: persons.get(personId) }; chunks = [];
+          ids.add(id); comment = { node, id, parentId, ref, author: persons.get(personId) }; chunks = []; textSeen = false;
+        } else if (comment && node.namespaceURI === COMMENTS_NS && node.localName === 'text' && node.parent === comment.node) {
+          if (textSeen) throw structureError();
+          textSeen = true; textNode = node;
         }
       },
       text(value, node) {
-        if (comment && node.namespaceURI === COMMENTS_NS && node.localName === 'text' && node.parent === comment.node) {
+        if (node === textNode) {
           chars += value.length; if (chars > 1000000) throw structureError(true); chunks.push(value);
         }
       },
-      end(node) { if (comment?.node === node) { result.push({ id: comment.id, parentId: comment.parentId,
-        ref: comment.ref, author: comment.author, text: schemaXstring(chunks.join('')) }); comment = null; } }
+      end(node) {
+        if (node === textNode) textNode = null;
+        if (comment?.node === node) { result.push({ id: comment.id, parentId: comment.parentId,
+          ref: comment.ref, author: comment.author, text: schemaXstring(chunks.join('')) }); comment = null; }
+      }
     });
     if (root.namespaceURI !== COMMENTS_NS || root.localName !== 'ThreadedComments') throw structureError();
     const byId = new Map(result.map(value => [value.id, value]));

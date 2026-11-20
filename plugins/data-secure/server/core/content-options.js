@@ -2,6 +2,10 @@
 
 const CONTENT_OPTIONS_SCHEMA = 'datasecure-content-options/1';
 const CONTENT_BATCH_SCHEMA = 'datasecure-batch/7';
+// /8 retains the same purpose/options contract but owns explicitly framed
+// source snapshots. Old /7 work is never silently reinterpreted or migrated.
+const SOURCE_SNAPSHOT_BATCH_SCHEMA = 'datasecure-batch/8';
+const CONTENT_BATCH_SCHEMAS = Object.freeze([CONTENT_BATCH_SCHEMA, SOURCE_SNAPSHOT_BATCH_SCHEMA]);
 const FIELDS = Object.freeze(['schema', 'markdownOutput', 'scanOcr', 'imageOcr']);
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
@@ -97,7 +101,7 @@ function contentOptionsForBatch(state) {
   // not smuggle the new contract into readers with historical semantics.
   if (!state || typeof state !== 'object' || Array.isArray(state)) fail('CONTENT_OPTIONS_INVALID');
   if (Object.hasOwn(state, 'contentOptions')) fail('CONTENT_OPTIONS_INVALID');
-  if (state.schema !== CONTENT_BATCH_SCHEMA) {
+  if (!CONTENT_BATCH_SCHEMAS.includes(state.schema)) {
     if (Object.hasOwn(state, 'content_options')) fail('CONTENT_OPTIONS_INVALID');
     return undefined;
   }
@@ -118,6 +122,6 @@ function contentOptionsForConsumer(owner, productChannel) {
   return optionalContentOptions(owner, 'contentOptions', productChannel);
 }
 
-module.exports = Object.freeze({ CONTENT_OPTIONS_SCHEMA, CONTENT_BATCH_SCHEMA, validateContentOptions,
+module.exports = Object.freeze({ CONTENT_OPTIONS_SCHEMA, CONTENT_BATCH_SCHEMA, SOURCE_SNAPSHOT_BATCH_SCHEMA, CONTENT_BATCH_SCHEMAS, validateContentOptions,
   optionalContentOptions, serializeContentOptions, contentOptionsForBatch, contentOptionsForConsumer,
   assertLegacyContentOperation, assertStandaloneContentStart, assertMarkdownContentStart });

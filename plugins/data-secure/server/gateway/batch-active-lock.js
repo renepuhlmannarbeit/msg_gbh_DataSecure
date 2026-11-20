@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const { SafeError, dataRoot } = require('../runtime');
 const { batchRoot, TOKEN_RE } = require('./batch-private-store');
 const { processAlive: probeProcessAlive } = require('./process-liveness');
-const { processInstanceIdentity } = require('./process-identity');
+const { processInstanceIdentity, compareProcessBirth } = require('./process-identity');
 const { writeFully, syncParentDirectory, linkWithTransientRetry, renameWithTransientRetry } = require('./batch-journal-io');
 const { ownErrorCode } = require('./batch-execution-diagnostic');
 const { ownershipErrorCode } = require('../core/ownership-diagnostics');
@@ -219,12 +219,11 @@ function createBatchActiveLock(deps = {}) {
   function liveLocalExecutor(state) {
     if (!Number.isSafeInteger(state?.local_executor_pid) || state.local_executor_pid <= 0 ||
         !processAlive(state.local_executor_pid)) return false;
-    // Legacy/unknown identities remain conservatively live. A positively
-    // observed different birth identity proves PID reuse and makes the old
-    // journal lease stale without treating an observer failure as death.
+    // Observer uncertainty stays live. Mac's unversioned local-time hashes
+    // cannot prove PID reuse even after the provider starts requesting UTC.
     if (typeof state.local_executor_birth_id !== 'string') return true;
     const actual = processInstanceIdentity(state.local_executor_pid);
-    return !actual || actual === state.local_executor_birth_id;
+    return compareProcessBirth(actual, state.local_executor_birth_id, process.platform) !== 'different';
   }
 
   function validActiveLock(value) {
@@ -473,14 +472,14 @@ function createBatchActiveLock(deps = {}) {
     assertSynchronousActiveAction(action);
     return controlled(guard => withSynchronousActiveLockInternal(token, action, guard));
   }
-  function withSynchronousActiveLockAdmitted(token, action) {
+  function withSynchronousActiveLockAdmitted(token, action, options = {}) {
     assertSynchronousActiveAction(action);
     const root = dataRoot();
     const control = deps.withOwnershipControl || require('../core/ownership-control').withOwnershipControl;
     return require('./synchronous-ownership-admission').admitSynchronousOwnership(
       callback => control(root, callback),
       guard => withSynchronousActiveLockInternal(token, action, guard),
-      { delay: deps.admissionDelay, monotonicNow: deps.monotonicNow });
+      { delay: deps.admissionDelay, monotonicNow: deps.monotonicNow, isRetryableBusy: options.isRetryableBusy });
   }
   const acquireActiveLock = token => controlled(guard => acquireActiveLockInternal(token, guard));
   // Internal async-lifetime admission: no publication/unlink backoff while held.

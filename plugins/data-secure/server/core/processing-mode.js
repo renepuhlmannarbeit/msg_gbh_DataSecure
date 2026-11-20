@@ -1,5 +1,5 @@
 'use strict';
-const { CONTENT_BATCH_SCHEMA, contentOptionsForBatch } = require('./content-options');
+const { CONTENT_BATCH_SCHEMAS, contentOptionsForBatch } = require('./content-options');
 
 // Processing purpose is distinct from MCP delivery mode (local_only/analysis).
 // A converter is not a privacy-gate bypass: its durable v5 lifecycle belongs
@@ -31,7 +31,7 @@ function processingModeForBatch(state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) fail('PROCESSING_MODE_INVALID');
   contentOptionsForBatch(state);
   const channel = state.product_channel === undefined ? 'plugin' : state.product_channel;
-  if (state.schema === CONTENT_BATCH_SCHEMA) {
+  if (CONTENT_BATCH_SCHEMAS.includes(state.schema)) {
     if (!Object.hasOwn(state, 'schema') || !Object.hasOwn(state, 'processing_mode') ||
         !Object.hasOwn(state, 'product_channel') || !Object.hasOwn(state, 'standalone_document_review') ||
         state.standalone_document_review !== true) fail('PROCESSING_MODE_INVALID');

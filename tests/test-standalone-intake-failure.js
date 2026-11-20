@@ -21,6 +21,9 @@ const { StandaloneApplicationService } = require('../plugins/data-secure/server/
 const executor = require('../plugins/data-secure/server/gateway/batch-executor');
 const { batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
 const { createSuite } = require('./helpers');
+const { firstFailure, within, ownChild, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
+const secondary = () => { try { process.stderr.write('INTAKE_TEST_SECONDARY_CLEANUP_FAILURE\n'); } catch {} };
+const cliChildren = [];
 const SOURCE = path.resolve(__dirname, 'PRIVATE-synthetic-source.txt');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
@@ -111,7 +114,9 @@ function assertNoJournalAuthority(state) {
 }
 
 async function main() {
-  const { testAsync, done } = createSuite('Standalone journal-independent intake failure receipt');
+  const { testAsync, done, failure: suiteFailure } = createSuite('Standalone journal-independent intake failure receipt');
+  const parentFailure = firstFailure(secondary);
+  let childLifetimeUnknown = false, childLifetimeFailure;
   const oldSetTimeout = global.setTimeout, oldClearTimeout = global.clearTimeout;
   const noticeTimers = new Set();
   global.setTimeout = (callback, milliseconds, ...args) => {
@@ -122,7 +127,7 @@ async function main() {
   const expireNotices = () => { for (const timer of [...noticeTimers]) { noticeTimers.delete(timer); timer.callback(); } };
   try {
     await testAsync('accepted intake before checkpoint stays visible after child exit and notice timeout; rendered ACK grants no history/output rights', async () => {
-      const f = createFixture();
+      const f = createFixture(), primary = firstFailure(secondary);
       try {
         const started = await f.start(), state = f.fail(started), generation = state.presentation_generation;
         assertNoJournalAuthority(state); assert.equal(state.intake_failure.intake_id, started.response.batch_id);
@@ -141,11 +146,14 @@ async function main() {
         assert.throws(() => f.service.resolveResults(), { code: 'STANDALONE_HISTORY_MISSING' });
         await assert.rejects(f.service.continueCurrentBatch(), { code: 'STANDALONE_HISTORY_MISSING' });
         assert.equal(f.starts.length, 1, 'receipt cannot restart or resume anything');
-      } finally { f.close(); }
+      } catch (error) { primary.record(error); }
+      finally { try { f.close(); } catch (error) { primary.record(error); } }
+      primary.throwIfFailed();
     });
     await testAsync('real worker accepts IPC then beginBatch throws before any journal; actual Service retains the failure after real process exit', async () => {
       const { fork } = require('node:child_process');
-      let child, closed, exitCode;
+      let child, owned, closed, exitCode;
+      const primary = firstFailure(secondary);
       const f = createFixture({ launchWorker() {
         child = fork(__filename, ['--begin-failure-child'], { windowsHide: true,
           execArgv: [`--require=${path.resolve(__dirname, '../plugins/data-secure/server/network-deny.cjs')}`],
@@ -153,20 +161,16 @@ async function main() {
             DATASECURE_PRODUCT_CHANNEL: 'standalone' }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
         child.alive = true;
         child.once('exit', code => { child.alive = false; exitCode = code; });
-        closed = new Promise(resolve => child.once('close', resolve));
-        child.exit = () => { if (child.exitCode === null && child.signalCode === null) child.kill(); };
+        owned = ownChild(child, error => primary.record(error)); cliChildren.push(owned); closed = owned.done;
+        child.exit = () => owned.terminate('SIGTERM');
         return child;
       } });
-      let deadline;
-      const bounded = promise => Promise.race([promise, new Promise((_, reject) => {
-        deadline = setTimeout(() => reject(Error('bounded real intake failure probe timed out')), 10000);
-      })]);
+      const bounded = promise => within(promise, 10000, 'STANDALONE_INTAKE_TEST_CLOSE_UNCONFIRMED');
       try {
         await f.admit();
         const result = await bounded(f.service.startAdmittedBatch({ processingMode: 'markdown-only' }));
-        clearTimeout(deadline);
         assert.equal(result.event, 'batch_accepted');
-        await bounded(closed); clearTimeout(deadline);
+        await bounded(closed);
         assert.equal(exitCode, 1); assert.equal(executor.localIntakeActive(), false);
         const state = f.service.status({ localUi: true }); assertNoJournalAuthority(state);
         assert.equal(state.intake_failure.intake_id, result.batch_id); assert.equal(state.intake_failure.worker_active, false);
@@ -174,23 +178,35 @@ async function main() {
         expireNotices(); assert.equal(f.service.status({ localUi: true }).presentation_generation, state.presentation_generation);
         assert.equal(f.service.acknowledgeTerminalPresented(state.presentation_generation).acknowledged, true);
         assert.equal(f.historyCalls, 0); assert.equal(f.osDialogs, 0);
-      } finally {
-        clearTimeout(deadline); child?.exit();
-        if (closed) { await bounded(closed); clearTimeout(deadline); }
-        f.close();
+      } catch (error) { primary.record(error); }
+      finally {
+        for (const step of [
+          () => child?.exit(),
+          async () => { if (closed) await bounded(closed); },
+          () => f.close()
+        ]) { try { await step(); } catch (error) { primary.record(error); } }
       }
+      if (owned && !owned.closed) {
+        childLifetimeUnknown = true; childLifetimeFailure = primary.value;
+      }
+      primary.throwIfFailed();
     });
+    // createSuite records case failures instead of rejecting testAsync.
+    // Do not begin another fixture against the same executor while this child is live.
+    if (childLifetimeUnknown) throw childLifetimeFailure;
     await testAsync('busy failed child remains conservative: a new start cannot replace its receipt before confirmed exit', async () => {
-      const f = createFixture();
+      const f = createFixture(), primary = firstFailure(secondary);
       try {
         const started = await f.start(), state = f.fail(started);
         f.service.admittedQueue = [{ name: 'synthetic.txt', full: SOURCE, sourceBytes: 16 }];
         await assert.rejects(f.service.startAdmittedBatch({ processingMode: 'markdown-only' }), { code: 'STANDALONE_BUSY' });
         assert.equal(f.starts.length, 1); assert.equal(f.service.status({ localUi: true }).presentation_generation, state.presentation_generation);
-      } finally { f.close(); }
+      } catch (error) { primary.record(error); }
+      finally { try { f.close(); } catch (error) { primary.record(error); } }
+      primary.throwIfFailed();
     });
     await testAsync('new selection/new attempt invalidates old callbacks and ACKs without erasing the new receipt', async () => {
-      const f = createFixture();
+      const f = createFixture(), primary = firstFailure(secondary);
       try {
         const first = await f.start(), old = f.fail(first); first.child.exit();
         await f.admit();
@@ -204,10 +220,12 @@ async function main() {
         assert.equal(current.intake_failure.intake_id, next.token);
         assert.equal(f.service.acknowledgeTerminalPresented(old.presentation_generation).acknowledged, false);
         assert.equal(f.service.status({ localUi: true }).presentation_generation, current.presentation_generation);
-      } finally { f.close(); }
+      } catch (error) { primary.record(error); }
+      finally { try { f.close(); } catch (error) { primary.record(error); } }
+      primary.throwIfFailed();
     });
     await testAsync('late acceptance after cancellation cannot bind or revive a superseded attempt', async () => {
-      const f = createFixture();
+      const f = createFixture(), primary = firstFailure(secondary);
       try {
         await f.admit();
         const pending = f.service.startAdmittedBatch({ processingMode: 'markdown-only' });
@@ -218,11 +236,13 @@ async function main() {
         f.fail(old); old.child.exit(); await tick();
         assert.equal(f.service.status({ localUi: true }).state, 'ready');
         assert.equal(f.service.status({ localUi: true }).presentation_generation, undefined);
-      } finally { f.close(); }
+      } catch (error) { primary.record(error); }
+      finally { try { f.close(); } catch (error) { primary.record(error); } }
+      primary.throwIfFailed();
     });
     for (const checkpointEnvelope of [false, true]) await testAsync(
       `real checkpoint ${checkpointEnvelope ? 'callback' : 'exact public observation'} permanently overrides the early receipt`, async () => {
-        const f = createFixture();
+        const f = createFixture(), primary = firstFailure(secondary);
         try {
           const started = await f.start(), failed = f.fail(started);
           if (checkpointEnvelope) f.checkpoint(started);
@@ -232,10 +252,12 @@ async function main() {
           assert.equal(f.service.acknowledgeTerminalPresented(failed.presentation_generation).acknowledged, false);
           assert.equal(started.options.onIntakeFailure(started.token, failed.presentation_generation + 100), false);
           assert.equal(f.service.status({ localUi: true }).intake_failure, undefined);
-        } finally { f.close(); }
+        } catch (error) { primary.record(error); }
+        finally { try { f.close(); } catch (error) { primary.record(error); } }
+        primary.throwIfFailed();
       });
     await testAsync('malformed, foreign and duplicate callbacks cannot refresh or re-arm the rendered receipt', async () => {
-      const f = createFixture();
+      const f = createFixture(), primary = firstFailure(secondary);
       try {
         const started = await f.start();
         for (const [token, generation] of [[started.token, 0], [started.token, NaN], [started.token, '1'], ['f'.repeat(64), 1], [{}, 1]])
@@ -247,19 +269,24 @@ async function main() {
         assert.equal(started.options.onIntakeFailure(started.token, state.presentation_generation + 1), false);
         assert.equal(f.service.status({ localUi: true }).presentation_generation, undefined);
         assert.equal(f.service.status({ localUi: true }).state, 'start_failed');
-      } finally { f.close(); }
+      } catch (error) { primary.record(error); }
+      finally { try { f.close(); } catch (error) { primary.record(error); } }
+      primary.throwIfFailed();
     });
     await testAsync('callbacks before return are held behind the actual returned token binding, never a foreign checkpoint claim', async () => {
       const f = createFixture({ beforeReturn(options) {
         options.onIntakeCheckpoint('f'.repeat(64));
       } });
+      const primary = firstFailure(secondary);
       try {
         const started = await f.start(), state = f.fail(started);
         assertNoJournalAuthority(state); assert.equal(state.intake_failure.intake_id, started.token);
-      } finally { f.close(); }
+      } catch (error) { primary.record(error); }
+      finally { try { f.close(); } catch (error) { primary.record(error); } }
+      primary.throwIfFailed();
     });
     await testAsync('an older journal notice cannot suppress a successor intake receipt or borrow its local render ACK', async () => {
-      const f = createFixture();
+      const f = createFixture(), primary = firstFailure(secondary);
       try {
         const old = await f.start(); f.checkpoint(old);
         old.child.emit('message', { type: 'local-intake-state', complete: true, batch_phase: 'complete',
@@ -274,24 +301,42 @@ async function main() {
         assert.equal(executor.pendingStandaloneTerminalNoticeGeneration(old.token), oldGeneration);
         assert.equal(old.child.sent.filter(message => message.type === 'local-terminal-notice-claimed').length, 0);
         assert.equal(next.child.sent.filter(message => message.type === 'local-terminal-notice-claimed').length, 0);
-      } finally { f.close(); expireNotices(); }
+      } catch (error) { primary.record(error); }
+      finally {
+        for (const step of [() => f.close(), expireNotices]) {
+          try { step(); } catch (error) { primary.record(error); }
+        }
+      }
+      primary.throwIfFailed();
     });
     await testAsync('the legacy direct Standalone intake uses the same attempt-bound receipt rather than an external dialog', async () => {
-      const f = createFixture();
+      const f = createFixture(), primary = firstFailure(secondary);
       try {
         const pending = f.service.anonymize();
         await tick(); const started = f.starts.at(-1); assert.ok(started);
         started.child.emit('message', { type: 'local-intake-accepted' });
         const result = await pending; assert.equal(result.operation_accepted, true);
         assertNoJournalAuthority(f.fail(started));
-      } finally { f.close(); }
+      } catch (error) { primary.record(error); }
+      finally { try { f.close(); } catch (error) { primary.record(error); } }
+      primary.throwIfFailed();
     });
-  } finally {
-    expireNotices(); global.setTimeout = oldSetTimeout; global.clearTimeout = oldClearTimeout;
-    await done();
+  } catch (error) {
+    const suite = suiteFailure(); if (suite.failed) parentFailure.record(suite.error);
+    parentFailure.record(error);
   }
+  finally {
+    const suite = suiteFailure(); if (suite.failed) parentFailure.record(suite.error);
+    for (const step of [expireNotices,
+      () => { global.setTimeout = oldSetTimeout; },
+      () => { global.clearTimeout = oldClearTimeout; }, () => done()]) {
+      try { await step(); } catch (error) { parentFailure.record(error); }
+    }
+  }
+  parentFailure.throwIfFailed();
 }
 
 module.exports = { createFixture };
-if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
+if (require.main === module) main().catch(error => endTestCliFailure({ failed: true, error,
+  retainedRoots: [], unconfirmedChildren: cliChildren.some(owned => !owned.closed) }));
 }

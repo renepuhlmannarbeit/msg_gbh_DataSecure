@@ -201,9 +201,20 @@ function csvPrivacyMarkdown(bytes) {
   const { literalTableCell } = require('./markdown-literal-content');
   try {
     const { rows } = parseCsvDialect(decodeStandaloneTextSource(bytes), { preserveRecords: true });
-    if (!rows.length) throw new Error('CSV_EMPTY');
-    const width = rows[0].length;
-    if (rows.some(row => row.length !== width && !(row.length === 1 && row[0] === ''))) throw new Error('CSV_ROW_WIDTH_INVALID');
+    const width = require('./csv-table-shape').csvTableWidth(rows);
+    const { isFieldHeaderMetadata, isProtectedFieldHeader } = require('../privacy/field-value-coverage');
+    const { normalizeText } = require('../privacy/base');
+    // Header evidence belongs to each column, never its unknown neighbours.
+    // Empty records are retained; this is not a claim about physical lines or
+    // quote spelling. Inspect only the first record with any authored value.
+    const candidate = rows.findIndex(values => values.some(value => value.length > 0));
+    const values = Array.from({ length: width }, (_, column) => candidate < 0 ? '' : normalizeText(rows[candidate][column] ?? ''));
+    const labels = values.map(value => isFieldHeaderMetadata(value, CONTENT_PERSON_FIELD_POLICY));
+    // A private qualifier is data, but must not erase the column's field duty.
+    // Keep it in a protected data cell under a fixed nonprivate field owner.
+    const header = labels.map((known, column) => known ? rows[candidate][column] :
+      isProtectedFieldHeader(values[column], CONTENT_PERSON_FIELD_POLICY) ? 'Geschützter Tabellenwert' : `Spalte ${column + 1}`);
+    const wholeHeader = candidate >= 0 && labels.some(Boolean) && rows[candidate].every((value, column) => !value.length || labels[column]);
     const lines = []; let chars = 0;
     const append = line => {
       chars += line.length + 1;
@@ -211,10 +222,12 @@ function csvPrivacyMarkdown(bytes) {
       lines.push(line);
     };
     const row = values => '| ' + Array.from({ length: width }, (_, column) => literalTableCell(values[column] ?? '', true)).join(' | ') + ' |';
-    // Privacy semantics use the actual first record as header. Never trim,
-    // normalize, deduplicate, synthesize labels or discard blank data records.
-    append(row(rows[0])); append('| ' + Array.from({ length: width }, () => '---').join(' | ') + ' |');
-    for (const values of rows.slice(1)) append(row(values));
+    append(row(header)); append('| ' + Array.from({ length: width }, () => '---').join(' | ') + ' |');
+    for (let index = 0; index < rows.length; index++) {
+      if (index === candidate && wholeHeader) continue; // Every nonempty value is already in its own header.
+      const values = index === candidate ? rows[index].map((value, column) => labels[column] ? '' : value) : rows[index];
+      append(row(values));
+    }
     return lines.join('\n');
   } catch (error) {
     const code = new Set(['CSV_EMPTY', 'CSV_ROW_WIDTH_INVALID', 'CSV_QUOTE_INVALID', 'CSV_DELIMITER_AMBIGUOUS',

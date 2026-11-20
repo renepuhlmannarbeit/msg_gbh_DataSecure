@@ -9,10 +9,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { isolatedSidecarEnvironment, removePackageSmokeScope } from '../helpers/standalone-package-scope.mjs';
+import { isolatedSidecarEnvironment } from '../helpers/standalone-package-scope.mjs';
 import { fastContentFixtures, assertFastContentOracle, fastContentOracleSelfTest } from '../helpers/standalone-fast-content-oracle.mjs';
 import { windowsPackagePrefix } from '../../scripts/lib/standalone-windows-layout.mjs';
 const require = createRequire(import.meta.url);
+const { firstFailure, within, ownChild, endTestCliFailure } = require('../helpers/qa-parent-lifecycle.cjs');
 const { readZip } = require('../../plugins/data-secure/server/zip-reader.js');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -43,47 +44,88 @@ if (process.argv.length === 3 && process.argv[2] === '--self-test') {
   assert.equal(manifestName, prefix + 'STANDALONE-MANIFEST.json');
   const scope = fs.mkdtempSync(path.join(repo, '.tmp-standalone-package-'));
   const install = path.join(scope, 'Paket ü mit Leerzeichen'), sources = path.join(scope, 'Quellen'), results = path.join(scope, 'Ergebnisse');
-  let child, closePromise, closed = true, sequence = 0, request, primaryFailure, pendingRequests = 0;
+  let child, owned, sequence = 0, request, pendingRequests = 0, report;
+  const children = [], retirements = new WeakMap(), failure = firstFailure();
+  let abortRequests = () => {};
+  const note = value => { try { process.stderr.write(value); } catch { /* preserve the exact first failure */ } };
+  const recordFailure = error => { failure.record(error); process.exitCode = 1; abortRequests(); };
   const frames = value => { const bytes = Buffer.from(JSON.stringify(value)), header = Buffer.alloc(4);
     header.writeUInt32BE(bytes.length); return Buffer.concat([header, bytes]); };
-  const waitForClose = milliseconds => new Promise(resolve => {
-    const timer = setTimeout(() => resolve(false), milliseconds);
-    closePromise.then(() => { clearTimeout(timer); resolve(true); });
-  });
-  async function stop(expectGraceful = false) {
-    if (!child || closed) { assert.equal(expectGraceful, false, 'FAST_CONTENT_CHILD_EXITED_BEFORE_SHUTDOWN'); return; }
-    let acknowledged = false;
-    // Do not queue shutdown behind an uncertain outstanding product mutation.
-    // No test-side replay or unbounded wait is allowed during retirement.
-    if (pendingRequests === 0) {
-      try { await request('shutdown', {}, 5000); acknowledged = true; } catch { /* bounded retirement below */ }
+  const waitForClose = async (record, milliseconds) => {
+    try { await within(record.done, milliseconds, 'FAST_CONTENT_CLOSE_WAIT_TIMEOUT'); return true; }
+    catch (error) { if (error?.code === 'FAST_CONTENT_CLOSE_WAIT_TIMEOUT') return false; throw error; }
+  };
+  async function stop(expectGraceful = false, record = owned) {
+    if (!record) { assert.equal(expectGraceful, false, 'FAST_CONTENT_CHILD_EXITED_BEFORE_SHUTDOWN'); return; }
+    // A late close cannot erase an earlier unconfirmed retirement.
+    if (retirements.has(record)) return retirements.get(record);
+    if (record.closed) {
+      record.failure.throwIfFailed();
+      assert.equal(expectGraceful, false, 'FAST_CONTENT_CHILD_EXITED_BEFORE_SHUTDOWN');
+      return;
     }
-    await waitForClose(10000);
-    if (!closed) { child.kill(); await waitForClose(5000); }
-    assert.equal(closed, true, 'FAST_CONTENT_CHILD_RETIREMENT_FAILED');
-    if (expectGraceful) {
-      assert.equal(acknowledged, true, 'FAST_CONTENT_SHUTDOWN_NOT_ACKNOWLEDGED');
-      assert.equal(child.exitCode, 0, 'FAST_CONTENT_SHUTDOWN_EXIT_INVALID');
-    }
+    const retirement = (async () => {
+      const cleanup = firstFailure();
+      let acknowledged = false;
+      // Do not queue shutdown behind a failed or uncertain product mutation.
+      if (record === owned && !failure.failed && pendingRequests === 0) {
+        try { await request('shutdown', {}, 5000); acknowledged = true; }
+        catch (error) { cleanup.record(error); }
+      }
+      try { await waitForClose(record, 10000); } catch (error) { cleanup.record(error); }
+      if (!record.closed) {
+        if (record.child.exitCode === null && record.child.signalCode === null) {
+          try {
+            if (!record.terminate()) throw Error('FAST_CONTENT_CHILD_STOP_REFUSED');
+          } catch (error) { cleanup.record(error); }
+        }
+        // A failed stop or exit without close never skips this true-close wait.
+        try { await waitForClose(record, 5000); } catch (error) { cleanup.record(error); }
+      }
+      if (record.failure.failed) cleanup.record(record.failure.value);
+      try {
+        assert.equal(record.closed, true, 'FAST_CONTENT_CHILD_RETIREMENT_FAILED');
+        if (expectGraceful) {
+          assert.equal(acknowledged, true, 'FAST_CONTENT_SHUTDOWN_NOT_ACKNOWLEDGED');
+          assert.equal(record.exitCode, 0, 'FAST_CONTENT_SHUTDOWN_EXIT_INVALID');
+          assert.equal(record.signal, null, 'FAST_CONTENT_SHUTDOWN_SIGNAL_INVALID');
+        }
+      } catch (error) { cleanup.record(error); }
+      cleanup.throwIfFailed();
+    })();
+    retirements.set(record, retirement);
+    return retirement;
   }
   const launch = async environment => {
-    assert.ok(closed, 'FAST_CONTENT_PREVIOUS_CHILD_ACTIVE');
+    failure.throwIfFailed();
+    assert.ok(children.every(record => record.closed), 'FAST_CONTENT_PREVIOUS_CHILD_ACTIVE');
     const sidecar = path.join(install, 'server', 'standalone');
     child = childProcess.spawn(path.join(install, 'datasecure-core-x86_64-pc-windows-msvc.exe'),
       ['--require=../network-deny.cjs', 'desktop-sidecar.js'],
       { cwd: sidecar, env: environment, windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
-    closed = false;
-    closePromise = new Promise(resolve => child.once('close', code => { closed = true; resolve(code); }));
-    let buffer = Buffer.alloc(0), protocolError = null;
+    owned = ownChild(child, recordFailure);
+    children.push(owned);
+    for (const stream of [child.stdin, child.stdout, child.stderr]) stream?.on('error', recordFailure);
+    if (!child.stdin || !child.stdout || !child.stderr) {
+      // The existing first-request budget lets the actual OS error win.
+      await within(Promise.race([
+        owned.error.then(error => { throw error; }),
+        owned.done.then(() => { failure.throwIfFailed(); throw Error('FAST_CONTENT_STDIO_UNAVAILABLE'); })
+      ]), 120000, 'FAST_CONTENT_SETUP_TIMEOUT');
+    }
+    let buffer = Buffer.alloc(0);
     const pending = new Map(); pendingRequests = 0;
-    const fail = error => { protocolError = error;
-      for (const item of pending.values()) { clearTimeout(item.timer); item.reject(error); } pending.clear(); pendingRequests = 0; };
+    abortRequests = () => {
+      for (const item of pending.values()) { clearTimeout(item.timer); item.reject(failure.value); }
+      pending.clear(); pendingRequests = 0;
+    };
+    const fail = error => recordFailure(error);
     child.stderr.on('data', () => { /* drain; no path-bearing vendor stderr enters evidence */ });
-    child.once('error', () => fail(Error('FAST_CONTENT_CORE_SPAWN_FAILED')));
-    child.once('exit', code => { if (pending.size) fail(Error(`FAST_CONTENT_CORE_EXIT:${code}`)); });
-    child.stdin.on('error', () => fail(Error('FAST_CONTENT_STDIN_FAILED')));
+    child.once('exit', (code, signal) => {
+      if (pending.size || code !== 0 || signal !== null) fail(Error(`FAST_CONTENT_CORE_EXIT:${code}`));
+    });
     child.stdout.on('data', bytes => {
-      if (protocolError) return;
+      if (failure.failed) return;
       try {
         buffer = Buffer.concat([buffer, bytes]);
         while (buffer.length >= 4) {
@@ -98,17 +140,22 @@ if (process.argv.length === 3 && process.argv[2] === '--self-test') {
       } catch { fail(Error('FAST_CONTENT_RESPONSE_INVALID')); }
     });
     request = async (action, fields = {}, timeout = 120000) => {
-      if (protocolError) throw protocolError;
-      assert.equal(pending.size, 0, 'FAST_CONTENT_TEST_REQUIRES_SERIAL_REQUESTS');
-      const requestId = (++sequence).toString(16).padStart(16, '0');
-      const response = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { pending.delete(requestId); pendingRequests = pending.size;
-          protocolError = Error(`FAST_CONTENT_REQUEST_TIMEOUT:${action}`); reject(protocolError); }, timeout);
-        pending.set(requestId, { resolve, reject, timer }); pendingRequests = pending.size;
-        child.stdin.write(frames({ schema: 'datasecure-standalone-private-ipc/1', request_id: requestId, action, ...fields }));
-      });
-      assert.equal(response.ok, true, `${action}:${response.error_code || 'UNCONFIRMED'}`);
-      return response.result;
+      failure.throwIfFailed();
+      try {
+        assert.equal(pending.size, 0, 'FAST_CONTENT_TEST_REQUIRES_SERIAL_REQUESTS');
+        const requestId = (++sequence).toString(16).padStart(16, '0');
+        const response = await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => { fail(Error(`FAST_CONTENT_REQUEST_TIMEOUT:${action}`)); }, timeout);
+          pending.set(requestId, { resolve, reject, timer }); pendingRequests = pending.size;
+          try {
+            child.stdin.write(frames({ schema: 'datasecure-standalone-private-ipc/1', request_id: requestId, action, ...fields }),
+              error => { if (error !== null && error !== undefined) fail(error); });
+          } catch (error) { fail(error); }
+        });
+        failure.throwIfFailed();
+        assert.equal(response.ok, true, `${action}:${response.error_code || 'UNCONFIRMED'}`);
+        return response.result;
+      } catch (error) { recordFailure(error); throw failure.value; }
     };
     assert.equal((await request('get_public_state')).product_channel, 'standalone');
   };
@@ -162,6 +209,12 @@ if (process.argv.length === 3 && process.argv[2] === '--self-test') {
       assert.equal(digest(Buffer.from(markdown)), row.output_sha256, 'FAST_CONTENT_CHUNK_HASH_MISMATCH');
       outputTexts.set(row.name, markdown); outputBytes.set(row.output_sha256, Buffer.from(markdown));
     }
+    fs.writeFileSync(path.join(scope, 'FAST-CONTENT-OBSERVATION.json'), JSON.stringify({
+      schema: 'datasecure-fast-content-observation/1', package_sha256: expectedSha256,
+      source_fingerprint: manifest.source_fingerprint,
+      inputs: [...inputs].map(([name, bytes]) => ({ name, sha256: digest(bytes) })),
+      outputs: Object.fromEntries(outputTexts)
+    }, null, 2) + '\n', { flag: 'wx' });
     const oracle = assertFastContentOracle(outputTexts);
     await stop(true); await launch(environment);
     const recovered = await request('get_document_reviews', { batch_id: batchId });
@@ -191,17 +244,27 @@ if (process.argv.length === 3 && process.argv[2] === '--self-test') {
     assert.equal(finalSummary.automatically_approved_count, 3);
     for (const [name, bytes] of inputs) assert.deepEqual(fs.readFileSync(path.join(sources, name)), bytes, 'FAST_CONTENT_ORIGINAL_CHANGED');
     await stop(true);
-    process.stdout.write(`${JSON.stringify({ schema: 'datasecure-packaged-fast-content-oracle/1',
+    report = { schema: 'datasecure-packaged-fast-content-oracle/1',
       package_version: manifest.version, package_sha256: expectedSha256, source_fingerprint: manifest.source_fingerprint,
       product_code: 'exact_extracted_package_only', profile: 'isolated_fresh', mode: 'automatic-conservative',
       automatic_first_approval_persisted: true, source_originals_unchanged: true, export_bytes_equal_reviewed_bytes: true,
       export_ack_and_history_survive_restart: true, semantic_oracle: oracle,
       native_rust_publication_channel: 'NOT_RUN: no safe headless native bridge; production sidecar local export adapter exercised',
-      native_ui: 'NOT_RUN', macos_m2: 'NOT_RUN', ocr_accuracy: 'NOT_RUN' })}\n`);
-  } catch (error) { primaryFailure = error; throw error; }
+      native_ui: 'NOT_RUN', macos_m2: 'NOT_RUN', ocr_accuracy: 'NOT_RUN' };
+  } catch (error) { recordFailure(error); }
   finally {
-    try { await stop(); } catch (error) { if (!primaryFailure) throw error; process.stderr.write('FAST_CONTENT_CLEANUP_FAILED\n'); }
-    if (closed) removePackageSmokeScope(repo, scope);
-    else process.stderr.write('FAST_CONTENT_SCOPE_RETAINED_CHILD_NOT_RETIRED\n');
+    try { abortRequests(); } catch (error) { recordFailure(error); }
+    for (const record of children) {
+      try { await stop(false, record); }
+      catch (error) { recordFailure(error); note('FAST_CONTENT_CLEANUP_FAILED\n'); }
+    }
+    // Core close does not join autonomous descendants across every generation.
+    // Preserve exact synthetic inputs/results on both success and failure.
+    note(`FAST_CONTENT_SCOPE_KEPT:${scope}; child_closed=${children.every(record => record.closed)}; writer_quiescence=UNCONFIRMED; deletion=NOT_ATTEMPTED\n`);
   }
+  if (!failure.failed) {
+    try { process.stdout.write(`${JSON.stringify(report)}\n`); } catch (error) { recordFailure(error); }
+  }
+  endTestCliFailure({ failed: failure.failed, error: failure.value, retainedRoots: [scope],
+    unconfirmedChildren: children.some(record => !record.closed) });
 }

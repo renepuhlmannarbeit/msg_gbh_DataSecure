@@ -6,7 +6,7 @@ const {
   sameDocumentResult
 } = require('./document-result-grade');
 const { validateCoverage } = require('../standalone/markdown-contract');
-const { verifyMarkdownItem } = require('../standalone/markdown-store');
+const { verifyMarkdownItem, publicationFailureCause: markdownPublicationFailureCause } = require('../standalone/markdown-store');
 const { isMarkdownBatch } = require('../core/processing-mode');
 const { contentOptionsForBatch } = require('../core/content-options');
 const { bindContentDependencies, bindContentReviewDependencies } = require('./content-consumer-dependencies');
@@ -285,7 +285,8 @@ function createBatchItemProcessor(options = {}) {
         if (contentOptions) await require('./standalone-anonymized-mapping').ensurePrivateMappingIntentAsync(state, item);
         else ensureMappingOutbox(item.source_label || item.name, expectedPackageId, item.document_result);
         item.mapping_outbox_persisted = true;
-      } catch {
+      } catch (error) {
+        if (isOwnershipControlFailure(error)) throw error;
         return {
           ok: false,
           error: 'LOCAL_MAPPING_EXPORT_PENDING',
@@ -299,7 +300,8 @@ function createBatchItemProcessor(options = {}) {
       catch { item.work_copy_cleanup_pending = true; }
       try {
         await commitPendingMapping(item, expectedPackageId, state);
-      } catch {
+      } catch (error) {
+        if (isOwnershipControlFailure(error)) throw error;
         // Preserve cleanup debt on this early return; the ordinary path
         // includes it in the final durable delivery checkpoint below.
         writeState(state);
@@ -327,7 +329,8 @@ function createBatchItemProcessor(options = {}) {
     } catch (error) {
       // A failed ownership boundary is not a decision about this document and
       // cannot authorize another journal write or source-copy cleanup here.
-      if (isOwnershipControlFailure(error)) throw error;
+      const controlCause = converting ? markdownPublicationFailureCause(error) : error;
+      if (isOwnershipControlFailure(controlCause)) throw controlCause;
       if (packagePublished) {
         return publishedFailure(state, item, expectedPackageId, error);
       }

@@ -4,14 +4,14 @@
 // candidate identifier corridors, not unrelated literal entities such as an
 // example of "&amp;". Boundary maps keep those edits in SOURCE coordinates.
 function normalizeEncodedIdentifiers(source, decodeEntity, candidateRanges) {
-  if (!/\\?&(?:#(?:x[0-9a-f]+|\d+)|[a-z][a-z0-9]+);|\\[&.'’+\/-]/iu.test(source)) return source;
+  if (!/\\?&(?:#(?:x[0-9a-f]+|\d+)|[a-z][a-z0-9]+);|\\[&.'’+()\/-]/iu.test(source)) return source;
   let text = source, boundaries = Int32Array.from({ length: source.length + 1 }, (_value, index) => index);
   for (let depth = 0; depth < 16; depth++) {
     const pieces = [], next = new Int32Array(text.length + 1); let from = 0, offset = 0, changed = false;
     const appendUnchanged = end => { pieces.push(text.slice(from, end)); next.set(boundaries.subarray(from, end + 1), offset); offset += end - from; };
-    for (const match of text.matchAll(/\\?&(?:#(?:x[0-9a-f]{1,6}|[0-9]{1,7})|[a-z][a-z0-9]{1,31});|\\[&.'’+\/-]/giu)) {
+    for (const match of text.matchAll(/\\?&(?:#(?:x[0-9a-f]{1,6}|[0-9]{1,7})|[a-z][a-z0-9]{1,31});|\\[&.'’+()\/-]/giu)) {
       const entity = match[0].replace(/^\\/u, '');
-      const punctuationEscape = /^\\[&.'’+\/-]$/u.test(match[0]);
+      const punctuationEscape = /^\\[&.'’+()\/-]$/u.test(match[0]);
       const replacement = punctuationEscape ? entity : decodeEntity(entity);
       // Removing a Markdown escape is not entity decoding. Unknown named
       // entities must retain their original one-to-one coordinate map.

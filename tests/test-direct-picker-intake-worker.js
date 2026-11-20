@@ -5,18 +5,23 @@ const os = require('os');
 const path = require('path');
 const { fork } = require('child_process');
 const { createSuite } = require('./helpers');
+const { firstFailure, within, ownChild, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intake-worker-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'localapp', 'SecureDataMsg');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const { readBatchProgress, _test } = require('../plugins/data-secure/server/gateway/batch');
 const { startLocalIntakeExecutor, localBatchStateProgress, terminalIntakeProgress } = require('../plugins/data-secure/server/gateway/batch-executor');
 const { IO_SUMMARY_SCHEMA, validatePrivateIoSummary } = require('../plugins/data-secure/server/gateway/performance');
 const workflowDiagnostics = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
-const { testAsync, done, assert } = createSuite('Direct picker intake worker');
-const activeChildren = new Set();
+const suite = createSuite('Direct picker intake worker');
+const { testAsync, done, assert } = suite;
+const primary = firstFailure(), children = [];
+let stopCompletion, rootRemoved = false;
 
 
 function pause(milliseconds) {
@@ -24,21 +29,52 @@ function pause(milliseconds) {
 }
 
 function trackChild(child) {
-  activeChildren.add(child);
-  // `close` follows every `exit` listener and stdio shutdown. Waiting for it
-  // prevents a later executor exit handler from recreating an empty batch root
-  // after this test has already removed its private temporary directory.
-  child.once('close', () => activeChildren.delete(child));
+  // Observe the returned handle before setup or any asynchronous child event.
+  const owned = ownChild(child, error => primary.record(error));
+  children.push({ owned, stopAttempted: false, stopAccepted: undefined });
   return child;
 }
 
-async function stopTestChildren() {
-  for (const child of activeChildren) {
-    try { if (child.connected) child.disconnect(); } catch {}
-    try { child.kill(); } catch {}
-  }
-  const deadline = Date.now() + 5_000;
-  while (activeChildren.size > 0 && Date.now() < deadline) await pause(25);
+function stopTestChildren() {
+  if (stopCompletion) return stopCompletion;
+  stopCompletion = (async () => {
+    const failure = firstFailure();
+    // Every owned stop is attempted before any bounded close wait.
+    for (const record of children) {
+      const { owned } = record, child = owned.child;
+      // Keep IPC attached through our stop: explicit parent disconnect can
+      // suppress Node's actual close event (nodejs/node#65646).
+      try {
+        if (!owned.closed && child.exitCode === null && child.signalCode === null) {
+          record.stopAttempted = true;
+          record.stopAccepted = owned.terminate('SIGKILL');
+          assert.equal(record.stopAccepted, true, 'DIRECT_INTAKE_STOP_REFUSED');
+        }
+      } catch (error) { failure.record(error); }
+    }
+    for (const record of children) {
+      const { owned } = record;
+      try {
+        const result = await within(owned.done, 5000, 'DIRECT_INTAKE_CLOSE_UNCONFIRMED');
+        assert.ok(result.code === 0 && result.signal === null ||
+          record.stopAttempted && record.stopAccepted === true &&
+          result.code === null && result.signal === 'SIGKILL', 'DIRECT_INTAKE_CHILD_END_FAILED');
+      } catch (error) { failure.record(error); }
+      if (owned.failure.failed) failure.record(owned.failure.value);
+      if (!owned.closed) failure.record(Object.assign(Error('DIRECT_INTAKE_CLOSE_UNCONFIRMED'),
+        { code: 'DIRECT_INTAKE_CLOSE_UNCONFIRMED' }));
+    }
+    failure.throwIfFailed();
+  })();
+  return stopCompletion;
+}
+
+async function intakeCase(name, action) {
+  await testAsync(name, async () => {
+    try { await action(); }
+    catch (error) { primary.record(error); throw error; }
+  });
+  primary.throwIfFailed();
 }
 
 async function waitForSettledProgress(token, noticeStage) {
@@ -97,10 +133,14 @@ async function waitForSettledProgress(token, noticeStage) {
 
 async function removeTestRoot() {
   await stopTestChildren();
+  assert.ok(children.every(record => record.owned.closed), 'DIRECT_INTAKE_CLOSE_UNCONFIRMED');
+  // Direct close is not a writer-tree join; a failed or uncertain scope stays.
+  if (primary.failed || suite.failure().failed) return;
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       fs.rmSync(base, { recursive: true, force: true, maxRetries: 2, retryDelay: 25 });
       if (fs.existsSync(base)) throw new Error('TEST_ROOT_CLEANUP_INCOMPLETE');
+      rootRemoved = true;
       return;
     } catch (error) {
       if (attempt === 7) throw error;
@@ -110,7 +150,8 @@ async function removeTestRoot() {
 }
 
 async function main() {
-  await testAsync('the direct picker completion envelope contains only bounded terminal counters', async () => {
+  try {
+  await intakeCase('the direct picker completion envelope contains only bounded terminal counters', async () => {
     const completion = terminalIntakeProgress({ type: 'local-intake-complete', batch_total: 3, released: 2, stopped: 1 });
     assert.deepStrictEqual(completion, {
       complete: true, batch_total: 3, released: 2, stopped: 1,
@@ -157,7 +198,7 @@ async function main() {
     }
   });
 
-  await testAsync('a real intake worker claims its lease and reaches a terminal or resumable content-free checkpoint', async () => {
+  await intakeCase('a real intake worker claims its lease and reaches a terminal or resumable content-free checkpoint', async () => {
     const source = path.join(base, 'source.txt');
     fs.writeFileSync(source, 'Kunde: Beispielperson\nE-Mail: beispiel@example.test\nVertragliche Leistung', 'utf8');
     let localNotice = null;
@@ -219,7 +260,7 @@ async function main() {
     assert.strictEqual(fs.existsSync(sentinelPath()), false, 'the worker never opens a second window beside a live parent');
   });
 
-  await testAsync('closing parent IPC after start still produces exactly one terminal notice', async () => {
+  await intakeCase('worker-side IPC closure after start still produces exactly one terminal notice', async () => {
     const source = path.join(base, 'source-orphan.txt');
     fs.writeFileSync(source, 'Kunde: Beispielperson\nE-Mail: beispiel@example.test\nVertragliche Leistung', 'utf8');
     let child = null;
@@ -229,19 +270,11 @@ async function main() {
       name: path.basename(source), full: source, sourceBytes: fs.statSync(source).size
     }], 'customer', {
       forkProcess: (_modulePath, args, options) => {
-        child = trackChild(fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args, options));
-        // Cowork may end the MCP parent right after the tool response. Closing
-        // the private IPC channel once processing has started reproduces that
-        // without killing this test process.
-        child.on('message', (message) => {
-          if (message?.type === 'local-intake-processing-started') setImmediate(() => {
-            // A graceful Linux disconnect can still flush a terminal envelope
-            // already queued by the child. A process that has actually ended
-            // cannot consume it, so stop observing before closing the channel.
-            child.removeAllListeners('message');
-            child.disconnect();
-          });
-        });
+        // Fixture-only flag, appended after the real product environment
+        // allowlist. The child closes IPC after its actual started envelope.
+        // This is IPC loss, not a claim that this still-live parent exited.
+        child = trackChild(fork(path.join(__dirname, 'lib', 'detached-batch-worker.js'), args,
+          { ...options, env: { ...options.env, DATASECURE_QA_CHILD_DISCONNECT_AFTER_START: '1' } }));
         return child;
       },
       showLocalIntakeNotice: (stage) => { parentNotices.push({ type: 'failure', stage }); },
@@ -256,6 +289,7 @@ async function main() {
     const state = _test.readState(started.batch_token);
     assert.ok(['parent', 'worker'].includes(state.terminal_notice?.presenter), 'the durable journal records one presenter');
     const workerPresented = fs.existsSync(sentinelPath());
+    assert.strictEqual(workerPresented, true, 'the fixture closes IPC before terminal presentation');
     assert.strictEqual(parentNotices.length + Number(workerPresented), 1,
       'closing a graceful IPC channel results in exactly one terminal notice');
     if (workerPresented) {
@@ -281,16 +315,19 @@ async function main() {
     }
     assert.doesNotMatch(JSON.stringify(recorded), /source-orphan|beispiel@example\.test|Beispielperson|[a-f0-9]{64}/u);
   });
-  await removeTestRoot();
-  done();
+  } catch (error) { primary.record(error); }
+  finally {
+    const before = suite.failure(); if (before.failed) primary.record(before.error);
+    try { await removeTestRoot(); } catch (error) { primary.record(error); }
+    try { await done(() => primary.throwIfFailed()); } catch (error) { primary.record(error); }
+    const after = suite.failure(); if (after.failed) primary.record(after.error);
+  }
+  primary.throwIfFailed();
 }
 
 function sentinelPath() {
   return path.join(base, 'localapp', 'test-terminal-notice-sentinel.json');
 }
 
-main().catch(async (error) => {
-  await removeTestRoot().catch(() => {});
-  console.error(error);
-  process.exitCode = 1;
-});
+main().catch(error => endTestCliFailure({ failed: true, error, retainedRoots: rootRemoved ? [] : [base],
+  unconfirmedChildren: children.some(record => !record.owned.closed) }));

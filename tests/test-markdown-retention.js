@@ -66,16 +66,22 @@ async function run() {
   await testAsync('denied, linked or replaced empty stores cannot claim an empty successful inspection', async () => {
     const directory = artifactRoot(), held = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'retention-held-store');
     const original = { readdir: fs.readdirSync, lstat: fs.lstatSync };
-    let scans = 0, swapped = false;
+    let scans = 0;
     const getProtection = () => { scans++; return { ids: new Set(), complete: true }; };
     for (const failure of ['denied', 'linked', 'replaced']) {
+      const setupErrors = [];
+      let renamed = false, swapped = false, renameCalls = 0, failed = false, primary;
       try {
         fs.readdirSync = (target, ...args) => {
           if (target !== directory) return original.readdir(target, ...args);
           if (failure === 'denied') throw Object.assign(new Error('denied'), { code: 'EACCES' });
           const entries = original.readdir(target, ...args);
           if (failure === 'replaced' && !swapped) {
-            fs.renameSync(directory, held); fs.mkdirSync(directory); swapped = true;
+            renameCalls++;
+            try {
+              fs.renameSync(directory, held); renamed = true;
+              fs.mkdirSync(directory); swapped = true;
+            } catch (error) { setupErrors.push(error); throw error; }
           }
           return entries;
         };
@@ -87,12 +93,26 @@ async function run() {
           return stat;
         };
         const result = cleanupMarkdownArtifacts({ cutoff: NOW, getProtection });
+        assert.equal(setupErrors.length, 0, 'a setup IO failure is not a successful replacement countercase');
+        if (failure === 'replaced') {
+          assert.equal(renameCalls, 1); assert.equal(renamed, true); assert.equal(swapped, true);
+          assert.ok(fs.lstatSync(held).isDirectory());
+          assert.deepStrictEqual(original.readdir(directory), []);
+        }
         assert.deepStrictEqual(result, { removed: 0, errors: 1, skipped: true }, failure);
         assert.strictEqual(scans, 0);
-      } finally {
+      } catch (error) { failed = true; primary = error; }
+      finally {
         fs.readdirSync = original.readdir; fs.lstatSync = original.lstat;
-        if (swapped) { fs.rmdirSync(directory); fs.renameSync(held, directory); swapped = false; }
+        try {
+          if (renamed) {
+            if (swapped) fs.rmdirSync(directory);
+            else assert.equal(fs.existsSync(directory), false, 'do not remove an unconfirmed replacement directory');
+            fs.renameSync(held, directory); renamed = false; swapped = false;
+          }
+        } catch (error) { if (!failed) { failed = true; primary = error; } }
       }
+      if (failed) throw primary;
     }
   });
   await testAsync('fresh artifacts and unknown names do not trigger lazy protection or deletion', async () => {
@@ -263,6 +283,31 @@ async function run() {
     assert.strictEqual(result.markdown_cleanup_skipped, true);
     assert.ok(fs.existsSync(path.join(artifactRoot(), first.artifact_id)));
     assert.ok(fs.existsSync(path.join(artifactRoot(), second.artifact_id)));
+  });
+  await testAsync('actual nonregular token journals block generated Markdown cleanup while unrelated directories do not', async () => {
+    const originalRoot = process.env.EU_PRIVACY_DATA_ROOT;
+    try {
+      for (const type of ['token-directory', 'token-bad-json', 'unrelated-directory']) {
+        process.env.EU_PRIVACY_DATA_ROOT = path.join(root, type);
+        const item = await fixture(); old(item);
+        const directory = path.join(artifactRoot(), item.artifact_id);
+        const before = Object.fromEntries(fs.readdirSync(directory).map(name => [name, fs.readFileSync(path.join(directory, name))]));
+        const currentJournals = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'batches'); fs.mkdirSync(currentJournals);
+        const token = crypto.randomBytes(32).toString('hex');
+        if (type === 'token-directory') fs.mkdirSync(path.join(currentJournals, `${token}.json`));
+        else if (type === 'token-bad-json') fs.writeFileSync(path.join(currentJournals, `${token}.json`), '{bad}', { flag: 'wx' });
+        else fs.mkdirSync(path.join(currentJournals, 'unrelated.work'));
+        const scanner = createBatchRetentionProtection({ batchRoot: () => currentJournals });
+        const result = cleanupMarkdownArtifacts({ cutoff: NOW - 7 * DAY, getProtection: () => scanner.openBatchPackageProtection() });
+        if (type === 'unrelated-directory') {
+          assert.deepEqual(result, { removed: 1, errors: 0, skipped: false });
+          assert.equal(fs.existsSync(directory), false);
+        } else {
+          assert.deepEqual(result, { removed: 0, errors: 0, skipped: true });
+          assert.deepEqual(Object.fromEntries(fs.readdirSync(directory).map(name => [name, fs.readFileSync(path.join(directory, name))])), before);
+        }
+      }
+    } finally { process.env.EU_PRIVACY_DATA_ROOT = originalRoot; }
   });
 }
 run().finally(() => { safeRemovePrivateTree(path.dirname(root), path.basename(root)); done(); });

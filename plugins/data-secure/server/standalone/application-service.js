@@ -170,7 +170,7 @@ function defaultDependencies(options = {}) {
   const {
     continueMostRecentBatch, openBatchPackageProtection, recoverBatches,
     replayMappingOutbox, cleanupExpiredBatchSnapshots, recoverableBatchStatus, productStatusSnapshot,
-    latestProductBatchStatus, latestProductResultDirectory, readStandaloneHistoryStates, readStandaloneHistoryState,
+    latestProductBatchStatus, latestProductResultDirectory, readStandaloneHistoryStates, readStandaloneHistoryState, readStandaloneHistoryActionState,
     standaloneRecoverableStates, continueStandaloneBatch, requestStandalonePause, skipStandaloneOcrContactReview,
     exportCompletedBatchResults
   } = require('../gateway/batch');
@@ -219,6 +219,7 @@ function defaultDependencies(options = {}) {
   const runHistory = createRunHistory({
     readStates: readStandaloneHistoryStates,
     readState: readStandaloneHistoryState,
+    readActionState: readStandaloneHistoryActionState,
     readExports: readStandaloneExportHistory,
     readExport: readStandaloneExportHistoryEntry,
     recentHistory: require('../gateway/standalone-history-store').readRecentHistory,
@@ -234,6 +235,7 @@ function defaultDependencies(options = {}) {
     runHistory,
     readStates: readStandaloneHistoryStates,
     readState: readStandaloneHistoryState,
+    readActionState: readStandaloneHistoryActionState,
     abandonPendingResultExport,
     documentReviews,
     continueStandaloneBatch,
@@ -830,7 +832,8 @@ class StandaloneApplicationService {
     if (entry.processing_mode !== MODES.ANONYMIZE ||
         !['export_pending', 'export_abandoned'].includes(entry.status))
       throw fixedFailure('RESULT_EXPORT_ABANDON_UNAVAILABLE', 'Nur die offene Bereitstellung eines abgeschlossenen Anonymisierungslaufs kann aufgegeben werden.');
-    const state = typeof this.deps.readState === 'function' ? this.deps.readState(batchId)
+    const actionReader = this.deps.readActionState || this.deps.readState;
+    const state = typeof actionReader === 'function' ? actionReader.call(this.deps, batchId)
       : this.deps.readStates().find(row => row.token === batchId && row.product_channel === PRODUCT_CHANNEL);
     if (!state) throw fixedFailure('RESULT_EXPORT_ABANDON_UNAVAILABLE', 'Der Lauf ist lokal nicht mehr vollständig belegbar.');
     let receipt;

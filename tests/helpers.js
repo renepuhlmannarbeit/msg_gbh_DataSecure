@@ -103,7 +103,12 @@ function createSuite(title) {
   }
 
   console.log(`\n${title}`);
-  return { test, testAsync, done, assert };
+  // Read-only snapshot: done/testAsync consume failures rather than rejecting.
+  // Presence is separate so an undefined/null/false first error stays exact.
+  function failure() {
+    return failures.length ? { failed: true, error: failures[0].err } : { failed: false, error: undefined };
+  }
+  return { test, testAsync, done, assert, failure };
 }
 
 // Asserts that `needle` does not survive anywhere in `text`, case-insensitively.

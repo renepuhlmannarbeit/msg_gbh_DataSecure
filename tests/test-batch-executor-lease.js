@@ -4,6 +4,7 @@ const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchExecutorLease } = require('../plugins/data-secure/server/gateway/batch-executor-lease');
 const batch = require('../plugins/data-secure/server/gateway/batch');
 const { createSuite } = require('./helpers');
+const { loadIdentityPlatform } = require('./lib/process-identity-platform.cjs');
 
 const { test, done, assert } = createSuite('Local batch executor lease');
 const token = 'a'.repeat(64);
@@ -17,14 +18,15 @@ function clone(value) {
 function fixture(options = {}) {
   let persisted = clone(options.state || { token, remaining: 1 });
   const events = [];
+  const identityReads = [];
   const releaseResults = [...(options.releaseResults || [true])];
   const alive = new Set(options.alive || []);
   const identity = (pid) => Object.prototype.hasOwnProperty.call(options.identities || {}, pid)
     ? options.identities[pid] : birth(pid);
-  const liveLocalExecutor = (state) => Number.isSafeInteger(state?.local_executor_pid) &&
+  const liveLocalExecutor = options.liveLocalExecutor || ((state) => Number.isSafeInteger(state?.local_executor_pid) &&
     alive.has(state.local_executor_pid) && (state.local_executor_birth_id === undefined ||
-      state.local_executor_birth_id === identity(state.local_executor_pid));
-  const lease = createBatchExecutorLease({
+      state.local_executor_birth_id === identity(state.local_executor_pid)));
+  const lease = (options.createLease || createBatchExecutorLease)({
     SafeError,
     processAlive(pid) { events.push(`alive:${pid}`); return alive.has(pid); },
     liveLocalExecutor,
@@ -57,12 +59,30 @@ function fixture(options = {}) {
     nowIso: () => fixedTime,
     currentPid: () => options.currentPid ?? 222,
     processInstanceIdentity(pid) {
+      identityReads.push(pid);
       return alive.has(pid) ? identity(pid) : null;
     },
     ...(options.requireProcessInstanceIdentity ? { requireProcessInstanceIdentity: options.requireProcessInstanceIdentity } : {}),
     ...(options.otherLiveExecutor ? { otherLiveExecutor(value) { events.push(`other:${value}`); return options.otherLiveExecutor(value); } } : {})
   });
-  return { lease, events, state: () => clone(persisted) };
+  return { lease, events, identityReads, liveLocalExecutor, state: () => clone(persisted),
+    mutateState(action) { action(persisted); } };
+}
+
+// The actual ActiveLock observer supplies public progress too. No copied
+// hash-equality algorithm decides the expected Darwin result in these cases.
+function platformFixture(platform, options = {}) {
+  const alive = new Set(options.alive || []);
+  const identity = pid => Object.hasOwn(options.identities || {}, pid) ? options.identities[pid] : birth(pid);
+  const activeModule = loadIdentityPlatform('batch-active-lock.js', platform,
+    pid => alive.has(pid) ? identity(pid) : null);
+  const observer = activeModule.createBatchActiveLock({ process: { pid: options.currentPid ?? 222, kill(pid, signal) {
+    assert.equal(signal, 0);
+    if (!alive.has(pid)) throw Object.assign(new Error('synthetic dead process'), { code: 'ESRCH' });
+  } } });
+  return fixture({ ...options,
+    createLease: loadIdentityPlatform('batch-executor-lease.js', platform).createBatchExecutorLease,
+    liveLocalExecutor: observer.liveLocalExecutor });
 }
 
 test('a live executor on any other journal blocks the claim without touching this journal', () => {
@@ -115,18 +135,21 @@ test('a stale marker is durably replaced and the public response exposes no leas
   assert.doesNotMatch(JSON.stringify(result), /local_executor|started_at|batch_token|pid/u);
 });
 
-test('a reused live PID with a different birth identity is a stale lease, not a live owner', () => {
+test('Windows and Linux retain conclusive reused-live-PID recovery', () => {
   const previousBirth = 'a'.repeat(64);
   const currentBirth = 'b'.repeat(64);
-  const { lease, state } = fixture({
-    state: { token, remaining: 1, local_executor_pid: 111,
-      local_executor_started_at: '2026-08-25T11:00:00.000Z', local_executor_birth_id: previousBirth },
-    alive: [111, 222], identities: { 111: currentBirth, 222: birth(222) }
-  });
-  const result = lease.claimLocalBatchExecutor(token, 222);
-  assert.strictEqual(result.ok, true);
-  assert.strictEqual(state().local_executor_pid, 222);
-  assert.strictEqual(state().local_executor_birth_id, birth(222));
+  for (const platform of ['win32', 'linux']) {
+    const { lease, state } = platformFixture(platform, {
+      state: { token, remaining: 1, local_executor_pid: 111,
+        local_executor_started_at: '2026-08-25T11:00:00.000Z', local_executor_birth_id: previousBirth },
+      alive: [111, 222], identities: { 111: currentBirth, 222: birth(222) }
+    });
+    const result = lease.claimLocalBatchExecutor(token, 222);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(state().local_executor_pid, 222);
+    assert.strictEqual(state().local_executor_birth_id, birth(222));
+    assert.equal(result.local_processing_active, true);
+  }
 });
 
 test('an unavailable identity provider blocks a new lease and cannot authorize release', () => {
@@ -263,6 +286,85 @@ test('the batch composition root keeps the public executor facade', () => {
   assert.strictEqual(typeof batch.releaseLocalBatchExecutor, 'function');
   assert.strictEqual(typeof batch.releaseClaimedLocalBatchExecutor, 'function');
   assert.strictEqual(typeof batch.runLocalBatchExecutor, 'function');
+});
+
+test('a living Darwin hash mismatch cannot authorize lease clearing or a replacement claim', () => {
+  const original = { token, remaining: 1, local_executor_pid: 111,
+    local_executor_birth_id: 'a'.repeat(64), local_executor_started_at: fixedTime, local_executor_lease_id: '1'.repeat(32) };
+  const make = () => platformFixture('darwin', { state: original, alive: [111, 222],
+    identities: { 111: 'b'.repeat(64), 222: birth(222) } });
+  const claimant = make();
+  assert.throws(() => claimant.lease.claimLocalBatchExecutor(token, 222), /bereits vollständig lokal verarbeitet/iu);
+  assert.deepEqual(claimant.state(), original); assert.ok(!claimant.events.includes('write'));
+  const accessor = make();
+  assert.throws(() => accessor.lease.assertLocalExecutorAccess(accessor.state(), 222), /bereits vollständig lokal verarbeitet/iu);
+  assert.deepEqual(accessor.state(), original); assert.ok(!accessor.events.includes('write'));
+});
+
+test('Darwin live mismatch remains blocking for the same PID without granting self-release', () => {
+  const original = { token, remaining: 1, local_executor_pid: 222,
+    local_executor_birth_id: 'a'.repeat(64), local_executor_started_at: fixedTime, local_executor_lease_id: '2'.repeat(32) };
+  const value = platformFixture('darwin', { state: original, alive: [222], identities: { 222: 'b'.repeat(64) } });
+  assert.throws(() => value.lease.assertLocalExecutorAccess(value.state(), 222), /bereits vollständig lokal verarbeitet/iu);
+  assert.equal(value.lease.releaseLocalBatchExecutor(token, 222), false);
+  assert.deepEqual(value.state(), original); assert.ok(!value.events.includes('write'));
+});
+
+test('another actual Darwin observer with a live mismatch blocks a cross-journal contender', () => {
+  const otherOriginal = { token: 'b'.repeat(64), remaining: 1, local_executor_pid: 111,
+    local_executor_birth_id: 'a'.repeat(64), local_executor_started_at: fixedTime };
+  const other = platformFixture('darwin', { state: otherOriginal, alive: [111], identities: { 111: 'b'.repeat(64) } });
+  const contender = platformFixture('darwin', { alive: [222],
+    otherLiveExecutor: () => other.liveLocalExecutor(other.state()) });
+  assert.throws(() => contender.lease.claimLocalBatchExecutor(token, 222), /anderer lokaler DataSecure-Stapel/iu);
+  assert.deepEqual(contender.state(), { token, remaining: 1 }); assert.ok(!contender.events.includes('write'));
+  assert.deepEqual(other.state(), otherOriginal); assert.ok(!other.events.includes('write'));
+});
+
+test('Darwin same/dead/unobservable controls preserve exact access and candidate admission', () => {
+  const original = { token, remaining: 1, local_executor_pid: 111,
+    local_executor_birth_id: 'a'.repeat(64), local_executor_started_at: fixedTime };
+  const dead = platformFixture('darwin', { state: original, alive: [222] });
+  assert.equal(dead.lease.claimLocalBatchExecutor(token, 222).ok, true);
+  assert.equal(dead.state().local_executor_pid, 222);
+  const same = platformFixture('darwin', { state: { ...original, local_executor_birth_id: birth(111) }, alive: [111] });
+  same.lease.assertLocalExecutorAccess(same.state(), 111);
+  assert.ok(!same.events.includes('write'));
+  const unavailable = platformFixture('darwin', { state: original, alive: [111, 222], identities: { 111: null } });
+  assert.throws(() => unavailable.lease.claimLocalBatchExecutor(token, 222), /bereits vollständig lokal verarbeitet/iu);
+  assert.deepEqual(unavailable.state(), original); assert.ok(!unavailable.events.includes('write'));
+  const noCandidate = platformFixture('darwin', { alive: [222], identities: { 222: null } });
+  assert.throws(() => noCandidate.lease.claimLocalBatchExecutor(token, 222), { code: 'PROCESS_IDENTITY_UNAVAILABLE' });
+  assert.deepEqual(noCandidate.events, ['alive:222']);
+});
+
+test('Darwin original claim capability releases its exact epoch without a fresh mismatching probe', () => {
+  const identities = { 222: 'a'.repeat(64) };
+  const value = platformFixture('darwin', { alive: [222], identities });
+  const proof = value.lease.claimLocalBatchExecutor(token, 222), committed = value.state();
+  assert.equal(proof.ok, true);
+  assert.equal(value.lease.releaseClaimedLocalBatchExecutor(JSON.parse(JSON.stringify(proof))), false);
+  identities[222] = 'b'.repeat(64);
+  assert.equal(value.lease.releaseLocalBatchExecutor(token, 222), false);
+  assert.deepEqual(value.state(), committed);
+  const probes = value.identityReads.length;
+  assert.equal(value.lease.releaseClaimedLocalBatchExecutor(proof), true);
+  assert.equal(value.identityReads.length, probes, 'the parent uses its original capability, not another birth observation');
+  assert.equal(value.state().local_executor_pid, undefined);
+  assert.equal(value.lease.releaseClaimedLocalBatchExecutor(proof), false);
+});
+
+test('Darwin capability never adopts changed birth, PID or lease ID tuples', () => {
+  for (const [key, changed] of [['local_executor_birth_id', 'f'.repeat(64)],
+    ['local_executor_pid', 333], ['local_executor_lease_id', 'f'.repeat(32)]]) {
+    const value = platformFixture('darwin', { alive: [222] });
+    const proof = value.lease.claimLocalBatchExecutor(token, 222);
+    value.mutateState(state => { state[key] = changed; });
+    const before = value.state(), writes = value.events.filter(event => event === 'write').length;
+    assert.equal(value.lease.releaseClaimedLocalBatchExecutor(proof), false);
+    assert.deepEqual(value.state(), before);
+    assert.equal(value.events.filter(event => event === 'write').length, writes);
+  }
 });
 
 done();

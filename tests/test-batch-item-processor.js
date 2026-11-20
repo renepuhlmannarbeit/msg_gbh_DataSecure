@@ -263,6 +263,54 @@ async function main() {
       assert.equal(value.events.includes('cleanup'), false); assert.equal(value.events.includes('mapping-stopped'), false);
     }
   });
+  await testAsync('mapping boundaries propagate ownership refusal without a later recovery write or cleanup', async () => {
+    const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
+    const source = require.resolve('../plugins/data-secure/server/gateway/batch-item-processor'), local = createRequire(source);
+    const policy = local('./prepublication-error');
+    for (const boundary of ['intent', 'commit']) for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY',
+      'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_BUSY', 'EIO']) {
+      const original = codedError(code), binding = { fixed: 'independent-publication' }, loaded = { exports: {} };
+      let value, refusedWrites, refusedCleanups, intents = 0, commits = 0;
+      const refuse = () => {
+        refusedWrites = value.writes.length;
+        refusedCleanups = value.events.filter(event => event === 'cleanup').length;
+        throw original;
+      };
+      const overrides = {
+        './standalone-anonymized-batch': {
+          expectedPublication: () => binding, confirmPublication: () => ({ publication_binding: binding })
+        },
+        './standalone-document-review-store': { createDocumentReviewStore: () => ({ recordPublication() {} }) },
+        './standalone-anonymized-mapping': { async ensurePrivateMappingIntentAsync() {
+          intents++; if (boundary === 'intent') refuse();
+        } }
+      };
+      vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(source, 'utf8')}\n})`, { filename: source })(
+        request => Object.hasOwn(overrides, request) ? overrides[request] : local(request), loaded, loaded.exports, source, path.dirname(source));
+      value = fixture({ productChannel: 'standalone', createProcessor: loaded.exports.createBatchItemProcessor,
+        awaitMappingBoundary(stage, _item, apply) { if (stage === 'commit') { commits++; refuse(); } return apply(); },
+        runStandaloneItem: async (_token, _id, hooks) => {
+          const result = { package_id: value.expectedPackageId, document_result: COMPLETE_DOCUMENT_RESULT, publication_binding: binding };
+          await hooks.beforePublish(result); await hooks.afterPublish(result); return result;
+        } });
+      Object.assign(value.state, { schema: 'datasecure-batch/7', processing_mode: 'markdown-and-anonymize', token: 'a'.repeat(64),
+        standalone_document_review: true, content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } });
+      const action = () => value.processor.processSingleBatchItem(value.state, value.item, value.entry);
+      if (policy.isOwnershipControlFailure(original)) {
+        await assert.rejects(action, error => error === original);
+        assert.equal(value.writes.length, refusedWrites);
+        assert.equal(value.events.filter(event => event === 'cleanup').length, refusedCleanups);
+      } else {
+        const result = await action();
+        assert.equal(result.error, 'LOCAL_MAPPING_EXPORT_PENDING', 'ordinary mapping debt remains recoverable');
+        assert.equal(value.writes.length, refusedWrites + (boundary === 'commit' ? 1 : 0));
+      }
+      assert.equal(value.item.status, 'mapping_pending');
+      assert.equal(value.events.includes('mapping-stopped'), false);
+      assert.equal(intents, 1); assert.equal(commits, boundary === 'commit' ? 1 : 0);
+      assert.equal(value.state.io_summary.output_packages_committed, 0);
+    }
+  });
   await testAsync('hard ownership failures retain identity and cannot authorize a document stop or cleanup', async () => {
     for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED']) {
       const original = codedError(code), value = fixture({ pipelineError: original });

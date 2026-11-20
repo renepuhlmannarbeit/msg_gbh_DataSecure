@@ -4,8 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { execFileSync } = require('node:child_process');
-const { randomUUID } = require('node:crypto');
+const { execFileSync, spawnSync } = require('node:child_process');
+const { randomUUID, createHash } = require('node:crypto');
 const { test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
@@ -39,7 +39,7 @@ test('Windows build and package gates share the short-root contract without chan
   assert.ok(SOURCE_INPUT_FILES.includes('scripts/lib/standalone-windows-layout.mjs'));
   const build = fs.readFileSync(path.join(root, 'scripts/build-standalone-package.mjs'), 'utf8');
   assert.match(build, /const folderName = WINDOWS_PACKAGE_ROOT/u);
-  assert.match(build, /`\$\{packageName\}\.zip`/u);
+  assert.match(build, /createWindowsPackageStage\(root, packageName, folderName,/u);
   assert.match(build, /name: packageName, documentNamespace:/u);
   for (const file of ['scripts/verify-standalone-package.mjs', 'tests/test-standalone-package-smoke.mjs',
     'tests/manual/standalone-package-corpus.mjs', 'tests/manual/standalone-packaged-fast-content-oracle.mjs']) {
@@ -54,8 +54,9 @@ test('Windows build and package gates share the short-root contract without chan
   assert.match(release, /Resolve-StandaloneProductDirectory \$expanded/u);
 });
 
-test('PowerShell package resolution accepts current and historical roots and rejects ambiguous or mismatched packages', async () => {
-  if (process.platform !== 'win32') return;
+test('PowerShell package resolution accepts current and historical roots and rejects ambiguous or mismatched packages', {
+  skip: process.platform !== 'win32' ? 'requires Windows PowerShell package resolution' : false
+}, async () => {
   const { removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
   const scope = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
   const version = '3.2.0-rc163', historical = `DataSecure-Standalone-${version}-windows-x64`;
@@ -320,6 +321,28 @@ test('release runtime lookup cannot fall back to the developer checkout', () => 
   assert.match(source, /\.current_dir\(child_process_path\(script_directory\)\)/u);
 });
 
+test('PKG-04 binds two fresh engineering builds without reusing the default archive', () => {
+  const source = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
+  const start = source.indexOf("foreach ($label in @('candidate-a', 'candidate-b')) {");
+  const end = source.indexOf("foreach ($field in @('archive_sha256', 'desktop_sha256', 'core_sha256'))");
+  assert.ok(start >= 0 && end > start, 'actual two-candidate loop precedes actual hash comparison');
+  const loop = source.slice(start, end);
+  assert.match(loop, /\$engineeringDirectory = "engineering-pkg04-\$commit-\$label"/u);
+  const build = loop.indexOf("Invoke-Checked 'npm.cmd' @('run', 'build:standalone:windows')");
+  const archive = loop.indexOf("Invoke-Checked 'node.exe' @('scripts/build-standalone-package.mjs', '--engineering-directory', $engineeringDirectory)");
+  const location = loop.indexOf('$sourceArchive = Join-Path $repositoryRoot "dist\\$engineeringDirectory\\$archiveName"');
+  const copy = loop.indexOf('Copy-Item -LiteralPath $sourceArchive -Destination $candidateArchive');
+  const verify = loop.indexOf("Invoke-Checked 'node.exe' @('scripts/verify-standalone-package.mjs', $candidateArchive)");
+  const smoke = loop.indexOf("Invoke-Checked 'node.exe' @('tests/test-standalone-package-smoke.mjs', $candidateArchive)");
+  assert.ok(build >= 0 && archive > build && location > archive && copy > location && verify > copy && smoke > verify,
+    'each candidate is built independently, copied from its own destination, verified and smoked');
+  assert.doesNotMatch(loop, /build:standalone:windows:portable|Remove-Item|Move-Item/u);
+  assert.doesNotMatch(source.slice(0, start), /\$sourceArchive\s*=/u, 'no canonical output is selected outside the loop');
+  assert.match(source, /PKG04_BRANCH_NOT_MAIN/u);
+  assert.match(source, /PKG04_WORKTREE_NOT_CLEAN/u);
+  assert.match(loop, /standalone-native-windows-launch\.ps1/u, 'native acceptance remains a separate required gate');
+});
+
 test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () => {
   const releaseGate = fs.readFileSync(path.join(root, 'scripts', 'run-pkg-04.ps1'), 'utf8');
   const preparation = releaseGate.indexOf("Invoke-Checked 'node.exe' @('scripts/prepare-standalone-runtime.mjs')");
@@ -453,4 +476,58 @@ test('package smoke binds actual review decisions and real restart to the extrac
   for (const [name, bytes] of fixtures) if (name.endsWith('.md')) {
     assert.equal(bytes.toString('utf8').match(/SYNTHETISCHER HÄRTETEST|TESTRUN VERIFIZIERER/gu).length, 1500);
   }
+});
+
+function assertMacModelPart(record, part, expected, helperHash) {
+  assert.deepEqual(Object.keys(record).sort(), ['schema', 'part', 'declared', 'executed', 'cases', 'helper_sha256', 'native_mac'].sort());
+  assert.equal(record.schema, 'datasecure-macos-package-source-model-part/1');
+  assert.equal(record.part, part); assert.equal(record.declared, 7);
+  assert.equal(record.executed, expected); assert.equal(record.cases.length, expected);
+  assert.equal(new Set(record.cases).size, expected); assert.equal(record.helper_sha256, helperHash);
+  assert.equal(record.native_mac, 'NOT_RUN');
+  if (part === 'build') assert.ok(record.cases.every(name => name.startsWith('95 ')));
+  else {
+    assert.equal(part, 'verify'); assert.equal(record.cases.filter(name => name.startsWith('96 ')).length, 1);
+    assert.equal(record.cases.filter(name => name.startsWith('97 ')).length, 1);
+  }
+}
+test('Mac source-model part receipts refuse missing cases, wrong origin and invented native acceptance', () => {
+  const hash = 'a'.repeat(64);
+  const build = { schema: 'datasecure-macos-package-source-model-part/1', part: 'build', declared: 7,
+    executed: 5, cases: ['95 a', '95 b', '95 c', '95 d', '95 e'], helper_sha256: hash, native_mac: 'NOT_RUN' };
+  const verify = { ...build, part: 'verify', executed: 2, cases: ['96 a', '97 b'] };
+  assertMacModelPart(build, 'build', 5, hash); assertMacModelPart(verify, 'verify', 2, hash);
+  for (const mutate of [r => r.cases.pop(), r => { r.helper_sha256 = 'b'.repeat(64); },
+    r => { r.native_mac = 'PASS'; }, r => { r.executed = 4; }, r => { r.cases[0] = r.cases[1]; },
+    r => { r.part = 'verify'; }, r => { r.extra = true; }]) {
+    const changed = structuredClone(build); mutate(changed);
+    assert.throws(() => assertMacModelPart(changed, 'build', 5, hash));
+  }
+  assert.throws(() => assertMacModelPart({ ...verify, cases: ['96 a', '96 b'] }, 'verify', 2, hash));
+});
+test('Mac95-97 actual-source package boundaries retain real filesystem and archive witnesses', () => {
+  const helper = path.join(__dirname, 'lib/macos-package-source-cases.mjs');
+  const hash = createHash('sha256').update(fs.readFileSync(helper)).digest('hex');
+  const cases = [];
+  for (const invalid of [['--part', 'unknown'], ['--part'], ['--part', 'build', '--part', 'verify']]) {
+    const refused = spawnSync(process.execPath, ['--experimental-vm-modules', helper, ...invalid], {
+      cwd: root, encoding: 'utf8', windowsHide: true, shell: false, timeout: 5000, killSignal: 'SIGKILL', maxBuffer: 512 * 1024
+    });
+    assert.equal(refused.error, undefined); assert.equal(refused.signal, null); assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /MAC_PACKAGE_MODEL_PART_INVALID/u);
+    assert.doesNotMatch(refused.stdout, /Mac package95-97 actual-source model/u);
+  }
+  for (const [part, expected] of [['build', 5], ['verify', 2]]) {
+    const child = spawnSync(process.execPath, ['--experimental-vm-modules', helper, '--part', part], {
+      cwd: root, encoding: 'utf8', windowsHide: true, shell: false, timeout: 120000, killSignal: 'SIGKILL', maxBuffer: 512 * 1024
+    });
+    assert.equal(child.status, 0, String(child.error || '') + '\n' + child.stdout + '\n' + child.stderr);
+    assert.equal(child.error, undefined); assert.equal(child.signal, null);
+    const records = child.stdout.split(/\r?\n/u).filter(line => line.startsWith('MAC_PACKAGE_SOURCE_RESULT '));
+    assert.equal(records.length, 1);
+    const record = JSON.parse(records[0].slice('MAC_PACKAGE_SOURCE_RESULT '.length));
+    assertMacModelPart(record, part, expected, hash); cases.push(...record.cases);
+  }
+  assert.equal(cases.length, 7); assert.equal(new Set(cases).size, 7);
+  assert.equal(createHash('sha256').update(fs.readFileSync(helper)).digest('hex'), hash);
 });

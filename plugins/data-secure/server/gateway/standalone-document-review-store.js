@@ -1245,46 +1245,8 @@ function createDocumentReviewStore(options = {}) {
         if (event.operation_id === request.operation_id) throw fail('DOCUMENT_REVIEW_STALE');
       }
       if (request.action === 'entities') entityKey(batchId, true);
-      let rules, values = [{ document_id: documentId, value, request }];
-      if (scope === 'run') {
-        if (request.action !== 'entities' || purpose(value.snapshot) !== ANONYMIZE || !value.entities) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
-        const manifest = runManifest(batchId, false, context), key = entityKey(batchId);
-        if (manifest.processing_mode !== ANONYMIZE || !manifest.documents.some(row => row.document_id === documentId)) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
-        // Validate the closed choice IDs before constructing a durable rule.
-        entityReview.applyEntityDecisions(value.markdown, value.entities, request.entity_decisions, key);
-        rules = request.entity_decisions.map(choice => {
-          const rows = value.entities.filter(row => row.entity_id === choice.entity_id), rule = groupRuleKey(rows, key);
-          if (!rule) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
-          return { key: rule, decision: choice.decision };
-        }).sort((a, b) => a.key.localeCompare(b.key));
-        if (new Set(rules.map(row => row.key)).size !== rules.length) throw fail('DOCUMENT_ENTITY_RUN_CONFLICT');
-        values = []; const blocked = [];
-        for (const member of manifest.documents) {
-          // A later worker capture receives the rule during deterministic
-          // replay. An existing but unreadable snapshot aborts the whole action.
-          if (!fs.existsSync(path.join(context.runDirectory.path, member.document_id, 'base.json'))) continue;
-          try {
-            const candidate = member.document_id === documentId ? value : current(batchId, member.document_id, events, context);
-            if (!candidate.entities) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
-            const matched = ruleDecisions(candidate, rules, key);
-            if (matched.choices.length) values.push({ document_id: member.document_id, value: candidate,
-              request: { ...request, entity_decisions: matched.choices, identities: matched.identities } });
-          } catch (error) {
-            // An unreadable/changed snapshot or failed ownership/I/O boundary
-            // is not a safely inspected candidate. Keep its hard failure.
-            if (!['DOCUMENT_ENTITY_RUN_UNAVAILABLE', 'DOCUMENT_ENTITY_RUN_CONFLICT'].includes(error?.code)) throw error;
-            blocked.push({ name: member.name, reason_code: error.code });
-          }
-        }
-        if (blocked.length) {
-          assertReadOperation(context);
-          return { ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT', blocked_files: blocked,
-            local_ui_only: true, external_disclosure: false };
-        }
-        if (!values.some(row => row.document_id === documentId)) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
-      }
-      const candidateBlocks = [];
-      const targets = values.map(({ document_id: id, value: previousValue, request: action }) => {
+      const candidateBlocks = [], targets = [];
+      const projectTarget = ({ document_id: id, value: previousValue, request: action }) => {
         const projection = deriveProjection(batchId, previousValue, previousValue.snapshot, action), markdown = projection.markdown;
         if (previousValue.revision >= 1000 || markdown.length > RESOURCE_LIMITS.MAX_TEXT_CHARS || Buffer.byteLength(markdown) > MAX_TEXT)
           throw fail('DOCUMENT_REVIEW_LIMIT');
@@ -1302,7 +1264,56 @@ function createDocumentReviewStore(options = {}) {
           parent_sha256: previousValue.output_sha256, output_sha256: hash(markdown), approved: action.action === 'approve',
           action: action.action, ranges: action.ranges, operation_id: request.operation_id, request_sha256: requestHash,
           ...(action.action === 'entities' ? { entity_decisions: action.entity_decisions } : {}) } };
-      });
+      };
+      let rules;
+      if (scope === 'run') {
+        if (request.action !== 'entities' || purpose(value.snapshot) !== ANONYMIZE || !value.entities) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
+        const manifest = runManifest(batchId, false, context), key = entityKey(batchId);
+        if (manifest.processing_mode !== ANONYMIZE || !manifest.documents.some(row => row.document_id === documentId)) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
+        // Validate the closed choice IDs before constructing a durable rule.
+        entityReview.applyEntityDecisions(value.markdown, value.entities, request.entity_decisions, key);
+        rules = request.entity_decisions.map(choice => {
+          const rows = value.entities.filter(row => row.entity_id === choice.entity_id), rule = groupRuleKey(rows, key);
+          if (!rule) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
+          return { key: rule, decision: choice.decision };
+        }).sort((a, b) => a.key.localeCompare(b.key));
+        if (new Set(rules.map(row => row.key)).size !== rules.length) throw fail('DOCUMENT_ENTITY_RUN_CONFLICT');
+        const blocked = [];
+        let originMatched = false, projectionFailed = false, firstProjectionFailure;
+        for (const member of manifest.documents) {
+          // A later worker capture receives the rule during deterministic
+          // replay. An existing but unreadable snapshot aborts the whole action.
+          if (!fs.existsSync(path.join(context.runDirectory.path, member.document_id, 'base.json'))) continue;
+          let targetInput;
+          try {
+            const candidate = member.document_id === documentId ? value : current(batchId, member.document_id, events, context);
+            if (!candidate.entities) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
+            const matched = ruleDecisions(candidate, rules, key);
+            if (matched.choices.length) targetInput = { document_id: member.document_id, value: candidate,
+              request: { ...request, entity_decisions: matched.choices, identities: matched.identities } };
+          } catch (error) {
+            // An unreadable/changed snapshot or failed ownership/I/O boundary
+            // is not a safely inspected candidate. Keep its hard failure.
+            if (!['DOCUMENT_ENTITY_RUN_UNAVAILABLE', 'DOCUMENT_ENTITY_RUN_CONFLICT'].includes(error?.code)) throw error;
+            blocked.push({ name: member.name, reason_code: error.code });
+          }
+          if (targetInput) {
+            if (targetInput.document_id === documentId) originMatched = true;
+            // Keep one candidate body at a time. Projection is noncommitting,
+            // but admission failures retain their original higher priority.
+            if (!projectionFailed) try { targets.push(projectTarget(targetInput)); }
+            catch (error) { projectionFailed = true; firstProjectionFailure = error; }
+          }
+        }
+        if (blocked.length) {
+          assertReadOperation(context);
+          return { ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT', blocked_files: blocked,
+            local_ui_only: true, external_disclosure: false };
+        }
+        if (!originMatched) throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE');
+        // A separate flag preserves even undefined/null/false thrown values.
+        if (projectionFailed) throw firstProjectionFailure;
+      } else targets.push(projectTarget({ document_id: documentId, value, request }));
       if (candidateBlocks.length) {
         assertReadOperation(context);
         return { ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT', blocked_files: candidateBlocks,
@@ -1479,7 +1490,11 @@ function createDocumentReviewStore(options = {}) {
       const value = current(batchId, row.document_id, events);
       if (!member || member.name !== value.snapshot.name || purpose(value.snapshot) !== ANONYMIZE ||
           value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
-      verifyCandidate(value); sources.push(member.name); markdownBytes += Buffer.byteLength(value.markdown);
+      // Only this in-memory revision-0 automatic approval proves that
+      // current() just verified the same Markdown under the same binding.
+      if (!(value.approved && value.revision === 0 && value.snapshot.review_policy === 'automatic-conservative'))
+        verifyCandidate(value);
+      sources.push(member.name); markdownBytes += Buffer.byteLength(value.markdown);
       if (markdownBytes > MAX_RESULT_BYTES) throw fail('DOCUMENT_REVIEW_LIMIT');
       overview.add({ document_id: row.document_id, name: input.files[index].name, revision: row.revision,
         output_sha256: row.output_sha256, markdown: value.markdown, entities: value.entities || null });

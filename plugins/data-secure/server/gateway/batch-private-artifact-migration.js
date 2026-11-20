@@ -4,7 +4,8 @@ const { SafeError } = require('../runtime');
 const { SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, V2_SCHEMA } = require('./batch-journal-store');
 const { exactPendingEntry } = require('./batch-snapshot');
 const { processingModeForBatch } = require('../core/processing-mode');
-const { CONTENT_BATCH_SCHEMA } = require('../core/content-options');
+const { CONTENT_BATCH_SCHEMAS } = require('../core/content-options');
+const { validateStorageItem } = require('../core/source-snapshot-storage');
 
 function unsupported() {
   const error = new SafeError('Eine alte verschlüsselte oder unbekannte Stapelversion bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.');
@@ -15,16 +16,17 @@ function unsupported() {
 // Upgrade only verified plaintext v2 journals. Never decrypt, rename or delete
 // legacy snapshots. Released originals stay independent of private work copies.
 function migrateLegacyBatchState(state, deps = {}) {
-  if (![SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, CONTENT_BATCH_SCHEMA, V2_SCHEMA].includes(state?.schema) || !Array.isArray(state.items)) throw unsupported();
-  if ([MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, CONTENT_BATCH_SCHEMA].includes(state.schema)) processingModeForBatch(state);
+  if (![SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ...CONTENT_BATCH_SCHEMAS, V2_SCHEMA].includes(state?.schema) || !Array.isArray(state.items)) throw unsupported();
+  if ([MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ...CONTENT_BATCH_SCHEMAS].includes(state.schema)) processingModeForBatch(state);
   for (const item of state.items) {
+    validateStorageItem(state, item);
     if (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
         /\.dsart$/iu.test(String(item.work_name || '')) ||
-        (state.schema === CONTENT_BATCH_SCHEMA && item.work_name && item.private_artifact_plain !== true)) throw unsupported();
+        (CONTENT_BATCH_SCHEMAS.includes(state.schema) && item.work_name && item.private_artifact_plain !== true)) throw unsupported();
   }
-  // /7 is already the current purpose/options-bound plaintext journal. It is
+  // /7 and /8 are already purpose/options-bound plaintext journals. Neither is
   // never a candidate for the historical /2 -> /4 migration or its I/O.
-  if ([SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, CONTENT_BATCH_SCHEMA].includes(state.schema)) return state;
+  if ([SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ...CONTENT_BATCH_SCHEMAS].includes(state.schema)) return state;
   if (typeof deps.writeState !== 'function') throw unsupported();
   const next = JSON.parse(JSON.stringify(state));
   for (const item of next.items) {

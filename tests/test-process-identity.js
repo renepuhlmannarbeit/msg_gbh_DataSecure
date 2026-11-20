@@ -33,7 +33,7 @@ test('Windows and macOS adapters accept only bounded exact start metadata', () =
   const mac = _test.macosBirth(42, (file, args, options) => {
     assert.equal(file, '/bin/ps'); assert.deepEqual(args, ['-p', '42', '-o', 'lstart=']);
     assert.equal(options.shell, false); assert.equal(options.timeout, 2000); assert.equal(options.maxBuffer, 256);
-    assert.deepEqual(options.env, { PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C' });
+    assert.deepEqual(options.env, { PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C', TZ: 'UTC0' });
     return { status: 0, stdout: 'Fri Sep  5 12:34:56 2026\n' };
   });
   assert.match(win, /^[a-f0-9]{64}$/u);
@@ -123,7 +123,7 @@ if (process.platform === 'darwin') test('native macOS reads the current process 
 
 test('identity state distinguishes death and PID reuse while observer failure stays unknown', () => {
   const expected = 'a'.repeat(64);
-  const base = { processAlive: () => true };
+  const base = { platform: 'linux', processAlive: () => true };
   assert.strictEqual(processInstanceState(42, expected, { ...base, processInstanceIdentity: () => expected }), 'same');
   assert.strictEqual(processInstanceState(42, expected, { ...base, processInstanceIdentity: () => 'b'.repeat(64) }), 'different');
   assert.strictEqual(processInstanceState(42, expected, { ...base, processInstanceIdentity: () => null }), 'unknown');
@@ -134,6 +134,34 @@ test('identity state distinguishes death and PID reuse while observer failure st
 test('unsupported platforms and dead processes never invent an identity', () => {
   assert.strictEqual(processInstanceIdentity(42, { platform: 'plan9', processAlive: () => true }), null);
   assert.strictEqual(processInstanceIdentity(42, { platform: 'linux', processAlive: () => false }), null);
+});
+
+test('macOS birth requests UTC0 on every probe without changing its caller environment', () => {
+  const envBefore = { ...process.env }, requests = [];
+  const localDisplays = ['Tue Jan  6 13:14:15 2026\n', 'Tue Jan  6 04:14:15 2026\n'];
+  const identities = localDisplays.map(localDisplay => _test.macosBirth(4242, (file, args, options) => {
+    assert.equal(file, '/bin/ps'); assert.deepEqual(args, ['-p', '4242', '-o', 'lstart=']);
+    requests.push({ ...options.env });
+    return { status: 0, stdout: options.env.TZ === 'UTC0' ? 'Tue Jan  6 12:14:15 2026\n' : localDisplay };
+  }));
+  assert.equal(identities[0], identities[1], 'a requested fixed zone must select the same birth representation');
+  assert.deepEqual(requests, Array.from({ length: 2 }, () => ({ PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C', TZ: 'UTC0' })));
+  assert.deepEqual(process.env, envBefore, 'only the child probe environment is selected');
+  const otherBirth = _test.macosBirth(4242, () => ({ status: 0, stdout: 'Tue Jan  6 12:14:16 2026\n' }));
+  assert.notEqual(otherBirth, identities[0], 'hash production still distinguishes another start second');
+});
+
+test('living unversioned macOS birth mismatches stay unknown while Windows and Linux remain conclusive', () => {
+  const expected = 'a'.repeat(64), changed = 'b'.repeat(64);
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const options = { platform, processAlive: () => true, processInstanceIdentity: () => changed };
+    assert.equal(processInstanceState(4242, expected, options), platform === 'darwin' ? 'unknown' : 'different');
+    assert.equal(processInstanceState(4242, expected, { ...options, processInstanceIdentity: () => expected }), 'same');
+    assert.equal(processInstanceState(4242, expected, { ...options, processInstanceIdentity: () => null }), 'unknown');
+    assert.equal(processInstanceState(4242, expected, { ...options, processAlive: () => false }), 'dead');
+    assert.equal(processInstanceState(4242, undefined, options), 'unknown');
+    assert.equal(processInstanceState(4242, 'invalid', options), 'unknown');
+  }
 });
 
 test('every fixed process-probe refusal survives Desktop, Workflow and Sidecar diagnostic projection', () => {

@@ -50,9 +50,17 @@ pub fn decode_start(body: &Value, document_review: bool) -> Result<Option<Value>
             return Err("STANDALONE_REVIEW_POLICY_INVALID".into());
         }
     }
-    match fields.get("contentOptions") {
+    let decoded: Result<Option<Value>, String> = match fields.get("contentOptions") {
         None => Ok(None),
         Some(value) => {
+            // Serde also accepts positional structs and externally tagged
+            // unit enums. Admit the exact wire types before typed decoding.
+            let raw = value.as_object().ok_or(INVALID)?;
+            if raw.len() != 4 || ["schema", "markdownOutput"].iter().any(|key|
+                raw.get(*key).and_then(Value::as_str).is_none()) ||
+                ["scanOcr", "imageOcr"].iter().any(|key| raw.get(*key).and_then(Value::as_bool).is_none()) {
+                return Err(INVALID.into());
+            }
             let content: ContentOptions = serde_json::from_value(value.clone()).map_err(|_| INVALID)?;
             match fields.get("processingMode").and_then(Value::as_str) {
                 Some("markdown-only" | "markdown-and-anonymize") if document_review =>
@@ -61,7 +69,16 @@ pub fn decode_start(body: &Value, document_review: bool) -> Result<Option<Value>
                 _ => Err("PROCESSING_MODE_INVALID".into()),
             }
         }
+    };
+    let decoded = decoded?;
+    // Preserve raw presence before nullable command arguments are used. Both
+    // missing fields are legacy; explicit null is never a select-all request.
+    match (fields.get("sourceIds"), fields.get("catalogueRevision")) {
+        (None, None) => {},
+        (Some(Value::Array(ids)), Some(revision)) if ids.iter().all(Value::is_string) && revision.as_u64().is_some() => {},
+        _ => return Err("STANDALONE_SELECTION_INVALID".into()),
     }
+    Ok(decoded)
 }
 
 #[cfg(test)]
@@ -165,5 +182,64 @@ mod tests {
         assert_eq!(decode_start(&raw, true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
         let mut legacy = request; legacy.as_object_mut().unwrap().remove("contentOptions");
         assert_eq!(decode_start(&legacy, true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
+    }
+
+    #[test]
+    fn positional_structs_and_known_unit_enum_maps_never_normalize_into_content_options() {
+        for output in ["content-v1", "notes-v1"] {
+            for scan in [false, true] {
+                for image in [false, true] {
+                    let positional = json!(["datasecure-content-options/1", output, scan, image]);
+                    assert_eq!(decode_start(&json!({"processingMode":"markdown-only", "contentOptions":positional}), true).unwrap_err(), INVALID);
+                }
+            }
+            for field in ["schema", "markdownOutput"] {
+                let mut content = contract(); content["markdownOutput"] = json!(output);
+                content[field] = if field == "schema" { json!({"datasecure-content-options/1":null}) }
+                    else { serde_json::Value::Object([(output.to_string(), Value::Null)].into_iter().collect()) };
+                assert_eq!(decode_start(&json!({"processingMode":"markdown-and-anonymize", "contentOptions":content}), true).unwrap_err(), INVALID);
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_null_partial_and_wrong_selection_types_are_not_legacy_absence() {
+        let pairs = [
+            (Some(Value::Null), Some(Value::Null)),
+            (Some(json!(["a"])), None), (None, Some(json!(1))),
+            (Some(Value::Null), Some(json!(1))), (Some(json!(["a"])), Some(Value::Null)),
+            (Some(json!("a")), Some(json!(1))), (Some(json!({})), Some(json!(1))),
+            (Some(json!([null])), Some(json!(1))), (Some(json!([1])), Some(json!(1))),
+            (Some(json!(["a"])), Some(json!(-1))), (Some(json!(["a"])), Some(json!(1.5))),
+            (Some(json!(["a"])), Some(json!("1"))), (Some(json!(["a"])), Some(json!(true))),
+        ];
+        for content in [false, true] {
+            for (ids, revision) in &pairs {
+                let mut body = json!({"processingMode":"markdown-only"});
+                if content { body["contentOptions"] = contract(); }
+                if let Some(value) = ids { body["sourceIds"] = value.clone(); }
+                if let Some(value) = revision { body["catalogueRevision"] = value.clone(); }
+                assert_eq!(decode_start(&body, true).unwrap_err(), "STANDALONE_SELECTION_INVALID");
+            }
+        }
+    }
+
+    #[test]
+    fn genuine_legacy_absence_valid_selection_and_existing_content_error_precedence_are_preserved() {
+        for content in [false, true] {
+            let mut body = json!({"processingMode":"markdown-only"});
+            if content { body["contentOptions"] = contract(); }
+            let expected = if content { Some(contract()) } else { None };
+            assert_eq!(decode_start(&body, true).unwrap(), expected);
+            body["sourceIds"] = json!(["a".repeat(32)]); body["catalogueRevision"] = json!(7);
+            assert_eq!(decode_start(&body, true).unwrap(), expected);
+        }
+        // This decoder checks wire types only. The unchanged command/service
+        // still owns count, ID format/uniqueness, safe-integer and current epoch.
+        assert!(decode_start(&json!({"processingMode":"markdown-only", "sourceIds":[], "catalogueRevision":0}), true).is_ok());
+        let mut body = json!({"processingMode":"markdown-only", "contentOptions":null, "sourceIds":null, "catalogueRevision":null});
+        assert_eq!(decode_start(&body, true).unwrap_err(), INVALID);
+        body["reviewPolicy"] = json!("automatic-conservative");
+        assert_eq!(decode_start(&body, true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
     }
 }

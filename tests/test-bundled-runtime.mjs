@@ -4,10 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { buildRuntimePlugin } from '../scripts/build-runtime-plugin.mjs';
 import {
-  assertBinaryTarget, createTargetOutput, extractRuntime, normalizeRuntimeLicense, readContract,
+  assertBinaryTarget, createTargetOutput, extractRuntime, extractArchiveEntry, normalizeRuntimeLicense, readContract,
   readStandaloneRuntimeContract, readRegular, hashRegular, sha256, verifyTargetEvidence
 } from '../scripts/lib/bundled-runtime.mjs';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
@@ -122,6 +122,27 @@ test('bounded tar.gz extraction returns only the exact declared runtime', () => 
   assert.deepEqual(extractRuntime(archive, target), bytes);
   assert.throws(() => extractRuntime(zlib.gzipSync(tar('other/node', bytes)), target), /BUNDLED_RUNTIME_NODE_MISSING/);
   assert.throws(() => extractRuntime(Buffer.from('not gzip'), target), /BUNDLED_RUNTIME_ARCHIVE_INVALID/);
+});
+
+test('archive-entry bounds apply equally to actual ZIP and TAR payloads before returning bytes', () => {
+  const { zipStore } = require('./lib/zip.js');
+  const entry = 'synthetic/LICENSE', payload = Buffer.from('Unveränderte Lizenz: ÄÖÜ äöü ß.\n');
+  for (const format of ['tar.gz', 'zip']) {
+    const archive = format === 'zip' ? zipStore([[entry, payload]]) : zlib.gzipSync(tar(entry, payload));
+    const before = Buffer.from(archive), target = { archive: 'synthetic.' + format };
+    assert.deepEqual(extractArchiveEntry(archive, target, entry, { minimum: payload.length, maximum: payload.length }), payload);
+    assert.throws(() => extractArchiveEntry(archive, target, entry, { minimum: 0, maximum: payload.length - 1 }),
+      /BUNDLED_RUNTIME_(?:NODE_MISSING|ARCHIVE_LIMIT)/u, format + ': requested maximum is not advisory');
+    assert.throws(() => extractArchiveEntry(archive, target, entry, { minimum: payload.length + 1, maximum: payload.length + 2 }),
+      /BUNDLED_RUNTIME_(?:NODE_MISSING|ARCHIVE_INVALID)/u);
+    assert.ok(archive.equals(before));
+    const empty = format === 'zip' ? zipStore([[entry, Buffer.alloc(0)]]) : zlib.gzipSync(tar(entry, Buffer.alloc(0)));
+    assert.equal(extractArchiveEntry(empty, target, entry, { minimum: 0, maximum: 0 }).length, 0);
+    for (const limits of [
+      { minimum: -1 }, { minimum: 1.5 }, { minimum: NaN }, { maximum: Infinity },
+      { maximum: -1 }, { maximum: 128 * 1024 * 1024 + 1 }, { minimum: 2, maximum: 1 }
+    ]) assert.throws(() => extractArchiveEntry(archive, target, entry, limits), /BUNDLED_RUNTIME_ARCHIVE_INVALID/u);
+  }
 });
 
 test('target evidence is exact and tampering fails closed', () => {
@@ -270,8 +291,15 @@ test('real clean checkout builds after external download staging, but refuses an
   try {
     fs.writeFileSync(path.join(f.directory, '.gitignore'), 'dist/\n');
     const gitEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/iu.test(key)));
-    const git = (...args) => execFileSync('git', ['-c',`core.hooksPath=${path.join(f.directory,'no-hooks')}`,...args],
-      {cwd:f.directory, env:gitEnv, encoding:'utf8', stdio:['ignore','pipe','pipe']}).trim();
+    const git = (...args) => {
+      const result = spawnSync('git', ['-c',`core.hooksPath=${path.join(f.directory,'no-hooks')}`,...args],
+        {cwd:f.directory, env:gitEnv, encoding:'utf8', stdio:['ignore','pipe','pipe'],
+          windowsHide:true, shell:false, timeout:15000, killSignal:'SIGKILL', maxBuffer:1024*1024});
+      assert.ifError(result.error);
+      assert.equal(result.signal, null, 'the synthetic Git command must close without a signal');
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
     git('init', '-q');
     git('add', '.');
     git('-c','user.name=DataSecure Test','-c','user.email=test@example.invalid',

@@ -560,6 +560,17 @@ function removeOwnedRoot(root, initial) {
       assert.deepStrictEqual((await client.send('get_ui_context', '5'.repeat(16))).result.selected_files,
         ['profil.txt'], 'a rejected owner selection cannot replace or partially extend the admission');
     }
+    // A real legal Windows filename may contain C1 controls. Its optional
+    // display metadata must not poison the otherwise valid native response.
+    const c1Owner = path.join(sourceDirectory, '~$port\u009c.docx');
+    fs.writeFileSync(c1Owner, 'synthetic Office owner record');
+    fs.writeFileSync(path.join(sourceDirectory, 'Report\u009c.docx'), officePrefix);
+    const c1Refusal = await client.send('admit_selected_sources', '4'.repeat(16), {
+      source_kind: 'files', source_paths: [c1Owner], source_catalogue: true
+    });
+    assert.deepStrictEqual(c1Refusal, { schema: 'datasecure-standalone-private-response/1', request_id: '4'.repeat(16),
+      ok: false, error_code: 'SOURCE_ARTIFACT_IGNORED' });
+    assert.deepStrictEqual((await client.send('get_ui_context', '3'.repeat(16))).result.selected_files, ['profil.txt']);
     const cancelled = await client.send('cancel_admission', 'd'.repeat(16));
     assert.strictEqual(cancelled.ok, true);
     const mixedRoot = path.join(root, 'mixed-folder');
@@ -758,7 +769,7 @@ function removeOwnedRoot(root, initial) {
       const batchId = started.result.batch_id;
       assert.match(batchId, /^[a-f0-9]{64}$/u);
       await waitForFile(path.join(caseRoot, 'worker-complete.json'), 25000);
-      await workerEnded(caseRoot);
+      assert.strictEqual((await workerEnded(caseRoot)).code, 0, 'document-start worker must exit successfully');
       const deadline = Date.now() + 25000;
       let entry;
       do {

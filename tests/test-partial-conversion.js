@@ -17,6 +17,7 @@ const metadata = require('../plugins/data-secure/server/core/private-document-me
 const { createPassivePdfContent } = require('../plugins/data-secure/server/standalone/pdf-passive-content');
 const { contactSpans } = require('../plugins/data-secure/server/core/ocr-contact-review');
 const { contactQuality } = require('../plugins/data-secure/server/standalone/ocr-quality');
+const { pdfOcrRaster } = require('../plugins/data-secure/server/standalone/pdf-ocr-raster');
 const { MAX_UNITS } = require('../plugins/data-secure/server/standalone/conversion-checkpoints');
 const errors = new Set(require('../plugins/data-secure/server/core/conversion-worker-contract').ERROR_CODES);
 const options = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: true };
@@ -122,6 +123,9 @@ async function main() {
   assert.ok(start > 0 && end > start);
   const importExpression = "import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href)";
   const functionSource = source.slice(start,end); assert.equal(functionSource.split(importExpression).length,2);
+  const readOcrStart = source.indexOf('async function readOcr(');
+  const readOcrEnd = source.indexOf('\nasync function recognize(', readOcrStart);
+  assert.ok(readOcrStart > 0 && readOcrEnd > readOcrStart);
   const omissionStart = source.indexOf('function imageOmission('), omissionEnd = source.indexOf('\nfunction visualOmission(',omissionStart);
   assert.ok(omissionEnd>omissionStart,'closed helper slice, not an adjacent declaration');
   await check('actual Office worker refuses an empty no-media native unit instead of returning a generated or empty success',async()=> {
@@ -156,7 +160,7 @@ async function main() {
       getMetadata:async()=>({metadata:null,info:{IsXFAPresent:false}}),getPage:async number=> {
         const value = pages[number-1]; if (value instanceof Error) throw value; return value;
       },...extra.document };
-    const context = { path,root:'isolated-local-runtime',errors,fail,MAX_UNITS,createPassivePdfContent,...contract,...readable,...visuals,...metadata,
+    const context = { path,root:'isolated-local-runtime',errors,fail,MAX_UNITS,createPassivePdfContent,pdfOcrRaster,...contract,...readable,...visuals,...metadata,
       conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
       pdfOcrLayoutMode:facts=>require('../plugins/data-secure/server/standalone/pdf-ocr-layout-mode').pdfOcrLayoutMode(JSON.parse(JSON.stringify(facts))),
       renderPdfNativeWordEvidence:async()=>null,
@@ -170,11 +174,15 @@ async function main() {
       taggedPdfTextLayout:input=>taggedPdfTextLayout({items:input.items,structureTree:input.structureTree,pageNumber:input.pageNumber,pageRef:input.pageRef}),
       projectTaggedPdf,
       mockModule:{ OPS:{paintImageXObject:1},AnnotationMode:{DISABLE:0},getDocument:()=>({promise:Promise.resolve(document),destroy:async()=>{destroyed++;}}) },
-      dimensions(){},canvasApi:()=>({createCanvas:()=>({getContext:()=>({})})}),
+      dimensions(){},canvasApi:()=>({createCanvas:()=>({width:1,height:1,
+        getContext:()=>({getImageData:()=>({data:Uint8ClampedArray.of(255,255,255,255)})})})}),
       classifyPdfTextVisibility:async()=>({wordRegions:[]}),paintedTextGeometryAvailable:()=>false,
-      nativeTextRegions:()=>[],nativeSingleTokenRegions:()=>[],createOcr:async()=>({terminate:async()=>{},setParameters:async value=>assert.ok(['3','6'].includes(value.tessedit_pageseg_mode))}),
+      nativeTextRegions:()=>[],nativeSingleTokenRegions:()=>[],createOcr:async()=>({terminate:async()=>{},
+        setParameters:async value=>assert.ok(['3','6'].includes(value.tessedit_pageseg_mode)),
+        recognize:async()=>({data:{text:''}})}),
       recognize:async()=>fail('CONVERSION_OCR_FAILED'),attachContactCrops:spans=>spans,Uint8Array,Set,Boolean,
       ...extra.context };
+    context.readOcr = vm.runInNewContext(`(${source.slice(readOcrStart,readOcrEnd)})`,context);
     context.imageOmission = vm.runInNewContext(`(${source.slice(omissionStart,omissionEnd)})`,context);
     const operation = vm.runInNewContext(`(${functionSource.replace(importExpression,'mockModule')})`,context);
     try { return { result:await operation(Buffer.from('%PDF-test'),true,'content-v1',contentOptions,
@@ -184,7 +192,7 @@ async function main() {
   await check('PDF destroys its parser task after OCR termination fails and keeps the primary extraction error', async () => {
     let terminations = 0;
     await assert.rejects(run([page('')], options, { context: { renderPdfOcrLayer: async () => {}, createOcr: async () => ({
-      setParameters: async () => {}, terminate: async () => {
+      setParameters: async () => {}, recognize: async () => ({data:{text:''}}), terminate: async () => {
         terminations++;
         throw Object.assign(new Error('synthetic OCR teardown failure'), { code: 'OCR_TEARDOWN_INJECTED' });
       }
@@ -287,17 +295,10 @@ async function main() {
     await assert.rejects(run([page('valid native text')],options,
       {document:{getMetadata:async()=>{throw resource('EACCES');}}}),{code:'PDF_EXTRACTION_FAILED'});
   });
-  await check('actual OCR recognition keeps unknown coded resource failure hard through PDF page handling',async()=> {
-    const start = source.indexOf('async function recognize('), end = source.indexOf('\nfunction hasRasterContrast(',start);
-    assert.ok(start > 0 && end > start);
+  await check('actual primary OCR read keeps unknown coded resource failure hard through PDF page handling',async()=> {
     let recognitionCalls = 0;
-    const actualRecognize = vm.runInNewContext(`(${source.slice(start,end)})`,{
-      conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
-      errors,fail,MAX_MARKDOWN_CHARS:8_000_000
-    });
     await assert.rejects(run([page('native text',{getOperatorList:async()=>({fnArray:[1]}),
-      render:()=>({promise:Promise.resolve()})})],options,{context:{recognize:actualRecognize,
-      canvasApi:()=>({createCanvas:()=>({width:400,height:300,toBuffer:()=>Buffer.from('synthetic raster'),getContext:()=>({})})}),
+      render:()=>({promise:Promise.resolve()})})],options,{context:{
       createOcr:async()=>({terminate:async()=>{},setParameters:async()=>{},
         recognize:async()=>{recognitionCalls++;throw Object.assign(new Error('resource unavailable'),{code:'ENOMEM'});}})
     }}),{code:'PDF_EXTRACTION_FAILED'});
@@ -324,7 +325,7 @@ async function main() {
   await check('PDF OCR parameter reset cannot replace a hard recognition failure with partial success', async () => {
     let calls = 0;
     await assert.rejects(run([page('Kontakt nativ',{getOperatorList:async()=>({fnArray:[1]}),render:()=>({promise:Promise.resolve()})})],
-      options, { context: { createOcr: async () => ({ terminate: async () => {}, setParameters: async () => {
+      options, { context: { createOcr: async () => ({ terminate: async () => {}, recognize: async () => ({data:{text:''}}), setParameters: async () => {
         if (++calls === 2) throw new Error('synthetic reset failure');
       } }), recognize: async () => fail('CONVERSION_POLICY_FAILED') } }), { code: 'CONVERSION_POLICY_FAILED' });
     assert.equal(calls, 2);
@@ -332,7 +333,7 @@ async function main() {
   await check('PDF OCR parameter reset failure remains hard after an otherwise optional OCR omission', async () => {
     let calls = 0;
     await assert.rejects(run([page('Kontakt nativ',{getOperatorList:async()=>({fnArray:[1]}),render:()=>({promise:Promise.resolve()})})],
-      options, { context: { createOcr: async () => ({ terminate: async () => {}, setParameters: async () => {
+      options, { context: { createOcr: async () => ({ terminate: async () => {}, recognize: async () => ({data:{text:''}}), setParameters: async () => {
         if (++calls === 2) throw new Error('synthetic reset failure');
       } }), recognize: async () => fail('CONVERSION_OCR_FAILED') } }), { code: 'CONVERSION_POLICY_FAILED' });
     assert.equal(calls, 2);
@@ -347,7 +348,7 @@ async function main() {
   });
   await check('actual model and component initializers normalize missing/corrupt runtime data to hard codes',async()=> {
     const modelStart = source.indexOf('function checkedModels('), modelEnd = source.indexOf('\nasync function createOcr()',modelStart);
-    const ocrStart = modelEnd + 1, ocrEnd = source.indexOf('\nasync function recognize(',ocrStart);
+    const ocrStart = modelEnd + 1, ocrEnd = readOcrStart - 1;
     const modelSource = source.slice(modelStart,modelEnd), ocrSource = source.slice(ocrStart,ocrEnd);
     for (const readFileSync of [()=>{throw Object.assign(new Error('missing'),{code:'ENOENT'});},()=>'{invalid JSON}']) {
       const context = {fs:{readFileSync},root:'owned-runtime',path,fail,

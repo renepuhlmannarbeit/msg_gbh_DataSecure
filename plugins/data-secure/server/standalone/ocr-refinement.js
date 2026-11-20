@@ -64,6 +64,12 @@ function refinementPlan(data, width, height, options) {
         if (costs.some(cost => cost > MAX_CROP_PIXELS) || passes + margins.length > MAX_PASSES ||
             pixels + costs.reduce((sum, cost) => sum + cost, 0) > MAX_TOTAL_PIXELS) continue;
         passes += margins.length; pixels += costs.reduce((sum, cost) => sum + cost, 0);
+        // Keep the same admitted occurrences and crop budget. A PDF crop
+        // can change ordinary text only with a candidate vowel and bound
+        // glyph metadata. The general unverified-OCR notice still applies.
+        if (options?.candidateOnly === true && !contact &&
+            (!/[aouAOU]/u.test(literal) || typeof block.text !== 'string' || typeof paragraph.text !== 'string' ||
+              words.some(word => !Array.isArray(word?.symbols) || !word.symbols.length))) continue;
         plan.push({ line, start, literal, box, target, offset, margins, contact });
       }
     }
@@ -191,7 +197,8 @@ async function refineOcr(data, canvas, ocr, createCanvas, options) {
           const context = crop.getContext('2d');
           context.fillStyle = 'white'; context.fillRect(0, 0, crop.width, crop.height);
           context.drawImage(canvas, entry.box.x0, entry.box.y0, width, height, margin, margin, width, height);
-          const result = await ocr.recognize(crop.toBuffer('image/png'), {}, { text: true, blocks: false });
+          const bytes = options?.encodeRaster ? options.encodeRaster(crop) : crop.toBuffer('image/png');
+          const result = await ocr.recognize(bytes, {}, { text: true, blocks: false });
           if (typeof result?.data?.text !== 'string') throw Object.assign(new Error('CONVERSION_OCR_FAILED'), { code: 'CONVERSION_OCR_FAILED' });
           readings.push(result.data.text);
         } finally { crop.width = 1; crop.height = 1; }

@@ -2,6 +2,7 @@
 // Actual JS settings/receipt and service/channel boundaries with synthetic
 // roots. Native ACL creation itself belongs to Windows/Rust integration tests.
 const { test } = require('node:test');
+const { firstFailure, within } = require('./helpers/qa-parent-lifecycle.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-initial-output-')));
@@ -47,6 +48,168 @@ function provision(root) {
   return { schema: 'datasecure-initial-output-binding/1', root, root_identity: nodeId(root),
     markdown_identity: nodeId(path.join(root, 'DataSecure-Markdown')), output_identity: nodeId(path.join(root, 'DataSecure-Output')) };
 }
+//70: actual old configuration APIs with a deliberately scheduled private-name
+// replacement. This seam models an actor outside the cooperative writer guard;
+// it does not claim a native race, ACL bypass, or real user-file deletion.
+function configurationWriter70(kind) {
+  const f = fixture(kind === 'export' ? config.NATIVE_SCHEMA : config.EXACT_SCHEMA);
+  const nativeBinding = {
+    schema: 'datasecure-native-export-binding/1', root: f.root,
+    root_identity: { ...f.nativeIdentity }, data_root_identity: { ...f.nativeIdentity },
+    private_name: `native-export-${'a'.repeat(32)}`, private_identity: { ...f.nativeIdentity },
+    anonymize_identity: { ...f.nativeIdentity }, markdown_identity: { ...f.nativeIdentity }
+  };
+  if (kind === 'notices') {
+    f.value.notices = { sync: true, network: true };
+    fs.writeFileSync(config.configPath(), JSON.stringify(f.value));
+    f.bytes = fs.readFileSync(config.configPath());
+  }
+  const target = kind === 'initial' ? receipt.receiptPath(f.root) : config.configPath();
+  const before = fs.existsSync(target) ? fs.readFileSync(target) : null;
+  const action = kind === 'save' ? () => config.saveConfiguredResultRoot(f.root)
+    : kind === 'export' ? () => config.prepareConfiguredNativeExportBinding(async () => nativeBinding)
+      : kind === 'initial' ? () => config.prepareConfiguredInitialOutputRoot(async () => provision(f.root))
+        : kind === 'notices' ? () => config.consumeConfiguredResultNotices()
+          : () => assert.fail('unknown configuration writer');
+  function assertSuccess(value) {
+    const saved = JSON.parse(fs.readFileSync(config.configPath()));
+    if (kind === 'initial') {
+      assert.equal(typeof value, 'function'); value();
+      assert.deepEqual(fs.readFileSync(config.configPath()), f.bytes);
+      assert.equal(receipt.readInitialOutputBinding(f.root).root, f.root);
+    } else if (kind === 'export') {
+      assert.deepEqual(value, nativeBinding);
+      assert.equal(saved.schema, config.EXPORT_SCHEMA);
+      assert.deepEqual(saved.identity, f.value.identity);
+      assert.deepEqual(saved.native_export, nativeBinding);
+    } else if (kind === 'notices') {
+      assert.deepEqual(value, { sync: true, network: true });
+      assert.deepEqual(saved.notices, { sync: false, network: false });
+      assert.equal(saved.schema, config.EXACT_SCHEMA);
+      assert.deepEqual(saved.exact_identity, f.value.exact_identity);
+    } else {
+      assert.equal(saved.schema, config.EXACT_SCHEMA); assert.equal(saved.root, f.root);
+      assert.deepEqual(saved.exact_identity, f.value.exact_identity);
+    }
+  }
+  function assertUnpublished() {
+    if (before === null) assert.equal(fs.existsSync(target), false);
+    else assert.deepEqual(fs.readFileSync(target), before);
+  }
+  return { ...f, target, action, assertSuccess, assertUnpublished };
+}
+function isConfigurationTemporary70(candidate, target) {
+  return typeof candidate === 'string' && path.dirname(candidate) === path.dirname(target) &&
+    path.basename(candidate).startsWith(path.basename(target) + '.') && candidate.endsWith('.tmp');
+}
+const renameOutcomes70 = [
+  { label: 'success', refused: false },
+  { label: 'EIO refusal', refused: true, primary: Object.assign(Error('MODEL_CONFIG_RENAME_REFUSAL'), { code: 'EIO' }) },
+  ...[undefined, null, false, 0, ''].map((primary, index) => ({ label: `falsy refusal ${index}`, refused: true, primary }))
+];
+for (const kind of ['save', 'export', 'initial', 'notices']) for (const outcome of renameOutcomes70)
+  test(`70 ${kind}: ${outcome.label} never deletes a replacement at the old temporary name`, async () => {
+    const f = configurationWriter70(kind), originalRename = fs.renameSync,
+      originalWrite = fs.writeFileSync, originalUnlink = fs.unlinkSync;
+    const sentinel = Buffer.from(`unowned synthetic sentinel ${kind} / ${outcome.label}`);
+    let temporary, owned, displaced, targeted = 0, deletes = 0, threw = false, caught, value;
+    fs.renameSync = function (from, to, ...rest) {
+      if (to !== f.target) return originalRename(from, to, ...rest);
+      assert.equal(++targeted, 1); assert.ok(isConfigurationTemporary70(from, f.target));
+      temporary = from; owned = fs.readFileSync(from);
+      if (!outcome.refused) {
+        const result = originalRename(from, to, ...rest);
+        originalWrite(from, sentinel, { mode: 0o600, flag: 'wx' });
+        return result;
+      }
+      displaced = from + '.owned-before-refusal';
+      originalRename(from, displaced);
+      originalWrite(from, sentinel, { mode: 0o600, flag: 'wx' });
+      throw outcome.primary;
+    };
+    fs.unlinkSync = function (target, ...rest) {
+      if (target === temporary) deletes++;
+      return originalUnlink(target, ...rest);
+    };
+    try {
+      try { value = await f.action(); } catch (error) { threw = true; caught = error; }
+    } finally {
+      fs.renameSync = originalRename; fs.writeFileSync = originalWrite; fs.unlinkSync = originalUnlink;
+    }
+    assert.equal(targeted, 1, 'the actual intended publication must be reached');
+    assert.equal(threw, outcome.refused);
+    if (outcome.refused) {
+      assert.strictEqual(caught, outcome.primary, 'a falsy primary is still the original failure');
+      f.assertUnpublished();
+      assert.deepEqual(fs.readFileSync(displaced), owned, 'the original private write is also retained');
+    } else {
+      assert.deepEqual(fs.readFileSync(f.target), owned, 'the actual written payload was published');
+      f.assertSuccess(value);
+    }
+    assert.equal(deletes, 0, 'a previously owned pathname is not authority over its replacement');
+    assert.deepEqual(fs.readFileSync(temporary), sentinel);
+    // Preserve these small synthetic sentinels and displaced writes as evidence.
+  });
+for (const kind of ['save', 'export', 'initial', 'notices'])
+  test(`70 ${kind}: failed exclusive creation preserves the pre-existing temporary object`, async () => {
+    const f = configurationWriter70(kind), originalWrite = fs.writeFileSync,
+      originalRename = fs.renameSync, originalUnlink = fs.unlinkSync;
+    const sentinel = Buffer.from(`pre-existing synthetic temporary ${kind}`);
+    let temporary, creations = 0, renames = 0, deletes = 0, threw = false, caught;
+    fs.writeFileSync = function (target, data, options) {
+      if (!isConfigurationTemporary70(target, f.target)) return originalWrite(target, data, options);
+      assert.equal(++creations, 1); assert.equal(options.flag, 'wx');
+      temporary = target;
+      originalWrite(target, sentinel, { mode: 0o600, flag: 'wx' });
+      return originalWrite(target, data, options); // Actual exclusive-write EEXIST.
+    };
+    fs.renameSync = function (from, to, ...rest) {
+      if (to === f.target) renames++;
+      return originalRename(from, to, ...rest);
+    };
+    fs.unlinkSync = function (target, ...rest) {
+      if (target === temporary) deletes++;
+      return originalUnlink(target, ...rest);
+    };
+    try { try { await f.action(); } catch (error) { threw = true; caught = error; } }
+    finally { fs.writeFileSync = originalWrite; fs.renameSync = originalRename; fs.unlinkSync = originalUnlink; }
+    assert.equal(creations, 1); assert.equal(threw, true); assert.equal(caught?.code, 'EEXIST');
+    assert.equal(renames, 0); assert.equal(deletes, 0); f.assertUnpublished();
+    assert.deepEqual(fs.readFileSync(temporary), sentinel);
+  });
+for (const kind of ['export', 'initial'])
+  test(`70 ${kind}: the existing post-write setting/binding recheck still refuses before rename`, async () => {
+    const f = configurationWriter70(kind), originalWrite = fs.writeFileSync, originalRename = fs.renameSync;
+    let observed = 0, renames = 0, changedSetting, threw = false, caught;
+    fs.writeFileSync = function (target, data, options) {
+      const result = originalWrite(target, data, options);
+      if (isConfigurationTemporary70(target, f.target)) {
+        assert.equal(++observed, 1);
+        if (kind === 'export') {
+          changedSetting = Buffer.from(JSON.stringify({ ...f.value, notices: { sync: true, network: false } }));
+          originalWrite(config.configPath(), changedSetting);
+        } else {
+          const child = path.join(f.root, 'DataSecure-Output');
+          originalRename(child, child + '-replaced-after-write'); fs.mkdirSync(child);
+        }
+      }
+      return result;
+    };
+    fs.renameSync = function (from, to, ...rest) {
+      if (to === f.target) renames++;
+      return originalRename(from, to, ...rest);
+    };
+    try { try { await f.action(); } catch (error) { threw = true; caught = error; } }
+    finally { fs.writeFileSync = originalWrite; fs.renameSync = originalRename; }
+    assert.equal(observed, 1); assert.equal(renames, 0); assert.equal(threw, true);
+    if (kind === 'export') {
+      assert.equal(caught?.code, 'AI_EXPORT_CONFIGURATION_REQUIRED');
+      assert.deepEqual(fs.readFileSync(config.configPath()), changedSetting, 'never erase the later setting');
+    } else {
+      assert.equal(caught?.code, 'RESULT_ROOT_UNSAFE');
+      f.assertUnpublished(); assert.deepEqual(fs.readFileSync(config.configPath()), f.bytes);
+    }
+  });
 for (const schema of [config.EXACT_SCHEMA, config.NATIVE_SCHEMA, config.EXPORT_SCHEMA, config.EXACT_EXPORT_SCHEMA])
   test(`initial preparation uses original exact/native admission for ${schema}, never rewrites settings`, async () => {
     const f = fixture(schema); let calls = 0;
@@ -129,7 +292,7 @@ for (const markdown of [true, false]) test(`pending ${markdown ? 'Markdown' : 'a
     const f = fixture(); await config.prepareConfiguredInitialOutputRoot(async () => provision(f.root));
     const exporter = require('../plugins/data-secure/server/gateway/result-export');
     const record = { schema: markdown ? exporter.CONTENT_MARKDOWN_SCHEMA : exporter.CONTENT_ANONYMIZED_SCHEMA,
-      result_layout: exporter.RESULT_LAYOUT, complete: false };
+      result_layout: exporter.RESULT_LAYOUT, complete: false, destination_id: '', items: [] };
     const destination = exporter._test.activeDestination(record);
     const expected = path.join(f.root, markdown ? 'DataSecure-Markdown' : 'DataSecure-Output');
     assert.equal(destination.output.path, expected);
@@ -237,16 +400,46 @@ for (const failure of ['missing-hook', 'falsy', 'native-failure', 'changed-selec
     assert.equal(f.effects.includes('worker'), false); assert.equal(f.service.interactionActive, false); assert.ok(f.service.admittedQueue);
   });
 test('native service exclusion remains held across await and actual worker acknowledgement', async () => {
-  let unblock, acknowledge; const waiting = new Promise(resolve => { unblock = resolve; });
+  let unblock, acknowledge, finishing = false;
+  const failure = firstFailure(), waiting = new Promise(resolve => { unblock = resolve; });
   const f = serviceFixture({ prepare: async hook => { await hook(snapshot()); await waiting; return () => {}; } });
   f.deps.startLocalIntakeExecutor = () => { f.effects.push('worker'); return { ok: true, local_intake_pending: true,
-    batch_token: 'e'.repeat(64), ipcAcknowledgement: new Promise(resolve => { acknowledge = resolve; }) }; };
-  const pending = f.service.startAdmittedBatch({ processingMode: 'markdown-only', documentReview: true });
-  await Promise.resolve(); assert.equal(f.service.interactionActive, true);
-  await assert.rejects(f.service.configureResults({ path: base }), { code: 'STANDALONE_BUSY' });
-  await assert.rejects(f.service.startAdmittedBatch({ processingMode: 'markdown-only' }), { code: 'STANDALONE_BUSY' });
-  unblock(); while (!acknowledge) await Promise.resolve(); assert.equal(f.service.interactionActive, true);
-  acknowledge(); await pending; assert.equal(f.service.interactionActive, false);
+    batch_token: 'e'.repeat(64), ipcAcknowledgement: new Promise(resolve => {
+      acknowledge = resolve; if (finishing) resolve();
+    }) }; };
+  let settled;
+  try {
+    const pending = f.service.startAdmittedBatch({ processingMode: 'markdown-only', documentReview: true });
+    // Attach rejection observation before yielding or asserting any other stage.
+    settled = Promise.resolve(pending).then(value => ({ failed: false, value }), error => {
+      failure.record(error); return { failed: true, error };
+    });
+    await Promise.resolve(); assert.equal(f.service.interactionActive, true);
+    await assert.rejects(within(f.service.configureResults({ path: base }), 5000,
+      'INITIAL_OUTPUT_CONFIGURE_BUSY_NOT_SETTLED'), { code: 'STANDALONE_BUSY' });
+    await assert.rejects(within(f.service.startAdmittedBatch({ processingMode: 'markdown-only' }), 5000,
+      'INITIAL_OUTPUT_DUPLICATE_BUSY_NOT_SETTLED'), { code: 'STANDALONE_BUSY' });
+    unblock();
+    for (let turn = 0; !acknowledge && turn < 20; turn++) {
+      failure.throwIfFailed();
+      await new Promise(resolve => setImmediate(resolve));
+    }
+    failure.throwIfFailed();
+    assert.equal(typeof acknowledge, 'function', 'INITIAL_OUTPUT_WORKER_ACK_NOT_REACHED');
+    assert.equal(f.service.interactionActive, true);
+    acknowledge();
+    const result = await within(settled, 5000, 'INITIAL_OUTPUT_START_NOT_SETTLED');
+    if (result.failed) throw result.error;
+    assert.equal(f.service.interactionActive, false);
+  } catch (error) { failure.record(error); }
+  finally {
+    finishing = true;
+    try { unblock(); } catch (error) { failure.record(error); }
+    try { acknowledge?.(); } catch (error) { failure.record(error); }
+    try { if (settled) await within(settled, 5000, 'INITIAL_OUTPUT_FINISH_NOT_SETTLED'); }
+    catch (error) { failure.record(error); }
+  }
+  failure.throwIfFailed();
 });
 test('manual native configuration retains its existing export binding and never mkdirs initial children', async () => {
   const f = serviceFixture(); let saved;

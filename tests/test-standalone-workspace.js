@@ -90,7 +90,7 @@ function harness(options = {}) {
     addEventListener() {} };
   const context = vm.createContext({ window, document: doc, requestAnimationFrame: options.requestAnimationFrame || (fn => fn()),
     crypto: require('node:crypto').webcrypto,
-    setTimeout: fn => { timers.add(fn); return fn; }, clearTimeout: fn => timers.delete(fn),
+    setTimeout: (fn, ms) => { timers.add(fn); options.onSchedule?.(ms); return fn; }, clearTimeout: fn => timers.delete(fn),
     setInterval: fn => { intervals.add(fn); return fn; }, clearInterval: fn => intervals.delete(fn) });
   vm.runInContext(fs.readFileSync(path.join(base, 'workflow-presentation.js'), 'utf8'), context, { filename: 'workflow-presentation.js' });
   vm.runInContext(source, context, { filename: 'workspace.js' });
@@ -271,17 +271,23 @@ testAsync(`a bootstrap rights refusal survives ${initial ? 'initial context' : '
   const code = 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE';
   let h, refuse = initial, epoch = initial ? 0 : 1;
   let lastFailure;
+  let nativeResolution = null;
   const emit = payload => h.listeners.get('datasecure-connection')({ payload });
   h = harness({ invoke(command, args, fallback) {
     if (command === 'get_native_recovery_status' && lastFailure) return { phase: 'owned',
-      bootstrap_failure: { epoch: lastFailure.epoch, error_code: code }, local_ui_only: true, external_disclosure: false };
+      connection_epoch: nativeResolution ? nativeResolution.ready_epoch : lastFailure.epoch,
+      bootstrap_failure: nativeResolution ? null : { epoch: lastFailure.epoch, error_code: code },
+      bootstrap_resolution: nativeResolution, local_ui_only: true, external_disclosure: false };
     if (refuse && (command === 'get_public_state' || initial && command === 'get_ui_context')) {
       lastFailure = { epoch: ++epoch, state: 'bootstrap_failed', error_code: code };
       const failure = lastFailure;
       if (eventFirst) emit(failure); else setImmediate(() => emit(failure));
       throw Error(code);
     }
-    if (!refuse && command === 'get_public_state' && args?.retryBootstrap === true) emit({ epoch: ++epoch, state: 'ready' });
+    if (!refuse && command === 'get_public_state' && args?.retryBootstrap === true) {
+      nativeResolution = { failure_epoch: lastFailure.epoch, ready_epoch: ++epoch };
+      emit({ epoch, state: 'ready', bootstrap_resolution: nativeResolution });
+    }
     return fallback();
   } });
   await tick(); await tick();
@@ -355,7 +361,7 @@ testAsync('one explicit bootstrap retry remains single-flight and Ready resoluti
       bootstrap_failure: nativeReady ? null : { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' },
       bootstrap_resolution: nativeReady ? resolution : null, local_ui_only: true, external_disclosure: false };
     if (command === 'get_ui_context' && contextFails) throw Error('STANDALONE_IPC_BUSY');
-    if (command === 'get_public_state' && refuse) return new Promise(resolve => { release = () => {
+    if (command === 'get_public_state' && refuse && args?.retryBootstrap === true) return new Promise(resolve => { release = () => {
       nativeReady = true;
       h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
       resolve(fallback());
@@ -376,22 +382,25 @@ testAsync('one explicit bootstrap retry remains single-flight and Ready resoluti
 });
 
 testAsync('native failure snapshot advances the UI epoch before retry so a delayed original event cannot stale its successful status', async () => {
-  let h, firstContext = true;
+  let h, firstContext = true, recovered = false;
   const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
   h = harness({ invoke(command, args, fallback) {
     if (command === 'get_ui_context' && firstContext) { firstContext = false; throw Error(failure.error_code); }
-    if (command === 'get_native_recovery_status') return { phase: 'idle', bootstrap_failure: failure,
-      local_ui_only: true, external_disclosure: false };
+    if (command === 'get_native_recovery_status') return { phase: recovered ? 'owned' : 'idle',
+      connection_epoch: recovered ? 2 : 1, bootstrap_failure: recovered ? null : failure,
+      bootstrap_resolution: recovered ? resolution : null, local_ui_only: true, external_disclosure: false };
     if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      recovered = true;
       h.listeners.get('datasecure-connection')({ payload: { ...failure, state: 'bootstrap_failed' } });
-      h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
     }
     return fallback();
   } });
   await tick(); await tick();
   assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
   await h.act('connection-retry'); await tick();
-  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
   assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
   assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
   assert.equal(h.el('connection-help').hidden, true);
@@ -399,16 +408,19 @@ testAsync('native failure snapshot advances the UI epoch before retry so a delay
 
 for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
 testAsync(`resolved ${code} stays retired when successful status/context precede Ready and the old failure arrives again`, async () => {
-  let h, firstContext = true;
+  let h, firstContext = true, recovered = false;
   const failure = { epoch: 1, state: 'bootstrap_failed', error_code: code };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
   h = harness({ invoke(command, args, fallback) {
-    if (command === 'get_native_recovery_status') return { phase: 'owned',
-      bootstrap_failure: { epoch: failure.epoch, error_code: code }, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_native_recovery_status') return { phase: 'owned', connection_epoch: recovered ? 2 : 1,
+      bootstrap_failure: recovered ? null : { epoch: failure.epoch, error_code: code },
+      bootstrap_resolution: recovered ? resolution : null, local_ui_only: true, external_disclosure: false };
     if (command === 'get_ui_context' && firstContext) {
       firstContext = false; h.listeners.get('datasecure-connection')({ payload: failure }); throw Error(code);
     }
     // Deliberately return real successful renderer DTOs without delivering
     // Ready yet: native events and invoke responses have independent timing.
+    if (command === 'get_public_state' && args?.retryBootstrap === true) recovered = true;
     return fallback();
   } });
   await tick(); await tick();
@@ -416,7 +428,7 @@ testAsync(`resolved ${code} stays retired when successful status/context precede
   await h.act('connection-retry'); await tick();
   assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
   assert.equal(h.el('connection-help').hidden, true);
-  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
   h.listeners.get('datasecure-connection')({ payload: failure });
   h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
   await tick();
@@ -426,16 +438,19 @@ testAsync(`resolved ${code} stays retired when successful status/context precede
     ? 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED' : 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE';
   h.listeners.get('datasecure-connection')({ payload: { epoch: 3, state: 'bootstrap_failed', error_code: newerCode } });
   assert.ok(h.el('feedback').textContent.includes(newerCode), 'a strictly newer failure must still latch');
-  await h.poll(); assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  await h.poll(); assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
 });
 
 for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
 for (const bad of ['unavailable', 'missing', 'epoch-string', 'epoch-zero', 'code-raw', 'extra-field', 'disclosure', 'phase', 'stale'])
 testAsync(`unbound ${code} cannot bootstrap with ${bad} snapshot; a later fresh snapshot allows one retry before delayed failure/Ready`, async () => {
-  let h, firstContext = true, good = false;
+  let h, firstContext = true, good = false, recovered = false;
   const nativeEpoch = bad === 'stale' ? 2 : 1;
   const failure = { epoch: nativeEpoch, error_code: code };
-  const snapshot = () => ({ phase: 'owned', bootstrap_failure: { ...failure }, local_ui_only: true, external_disclosure: false });
+  const snapshot = () => ({ phase: 'owned', connection_epoch: recovered ? nativeEpoch + 1 : nativeEpoch,
+    bootstrap_failure: recovered ? null : { ...failure },
+    bootstrap_resolution: recovered ? { failure_epoch: nativeEpoch, ready_epoch: nativeEpoch + 1 } : null,
+    local_ui_only: true, external_disclosure: false });
   h = harness({ invoke(command, args, fallback) {
     if (command === 'get_ui_context' && firstContext) { firstContext = false; throw Error(code); }
     if (command === 'get_native_recovery_status') {
@@ -452,7 +467,10 @@ testAsync(`unbound ${code} cannot bootstrap with ${bad} snapshot; a later fresh 
       if (bad === 'stale') value.bootstrap_failure.epoch = 1;
       return value;
     }
-    if (command === 'get_public_state') assert.equal(args?.retryBootstrap, true);
+    if (command === 'get_public_state') {
+      assert.equal(args?.retryBootstrap, recovered ? undefined : true);
+      recovered = true;
+    }
     return fallback();
   } });
   await tick(); await tick();
@@ -471,7 +489,7 @@ testAsync(`unbound ${code} cannot bootstrap with ${bad} snapshot; a later fresh 
   await h.act('nav-history'); await h.act('connection-diagnostics');
   assert.equal(h.calls.filter(call => ['get_public_state', 'get_run_history'].includes(call.command)).length, 0);
   good = true; await h.act('connection-retry'); await tick();
-  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
   assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
   assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
   // Success intentionally precedes both the original failure event and Ready.
@@ -482,20 +500,23 @@ testAsync(`unbound ${code} cannot bootstrap with ${bad} snapshot; a later fresh 
   assert.equal(h.el('connection-help').hidden, true);
   h.listeners.get('datasecure-connection')({ payload: { epoch: nativeEpoch + 2, state: 'bootstrap_failed', error_code: code } });
   assert.ok(h.el('feedback').textContent.includes(code), 'a newer native failure must still latch');
-  await h.poll(); assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  await h.poll(); assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
   assert.equal(h.calls.some(call => ['start_admitted_batch', 'continue_history_batch', 'export_approved_documents',
     'decide_document_review_batch'].includes(call.command)), false);
 });
 
 for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
 testAsync(`a stale in-flight snapshot for ${code} cannot authorize retry after a newer native failure`, async () => {
-  let h, firstContext = true, resolveSnapshot, good = false;
-  const nativeSnapshot = epoch => ({ phase: 'owned', bootstrap_failure: { epoch, error_code: code },
+  let h, firstContext = true, resolveSnapshot, good = false, recovered = false;
+  const nativeSnapshot = epoch => ({ phase: 'owned', connection_epoch: recovered ? 3 : epoch,
+    bootstrap_failure: recovered ? null : { epoch, error_code: code },
+    bootstrap_resolution: recovered ? { failure_epoch: 2, ready_epoch: 3 } : null,
     local_ui_only: true, external_disclosure: false });
   h = harness({ invoke(command, args, fallback) {
     if (command === 'get_ui_context' && firstContext) { firstContext = false; throw Error(code); }
     if (command === 'get_native_recovery_status') return good ? nativeSnapshot(2)
       : new Promise(resolve => { resolveSnapshot = resolve; });
+    if (command === 'get_public_state' && args?.retryBootstrap === true) recovered = true;
     return fallback();
   } });
   await tick(); await tick(); await h.act('connection-retry'); await h.act('connection-retry');
@@ -506,7 +527,7 @@ testAsync(`a stale in-flight snapshot for ${code} cannot authorize retry after a
   assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 0);
   assert.ok(h.el('feedback').textContent.includes(code));
   good = true; await h.act('connection-retry'); await tick();
-  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
   assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
   assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
 });
@@ -1482,8 +1503,11 @@ testAsync('a new Core epoch retires the deferred Markdown read without releasing
     return fallback();
   } }); await tick(); h.model.entries = [markdownHistoryEntry()]; await h.act('nav-history');
   await toggleHistorySummary(h, B); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
+  const retired = h.el('history-' + B + '-summary');
   h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } }); await tick();
-  assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisstatus nach Verbindungswechsel nicht bestätigt/u);
+  assert.match(retired.textContent, /Ergebnisstatus nach Verbindungswechsel nicht bestätigt/u);
+  assert.equal(h.el('history-list').children.length, 0, 'new epoch retires the old actionable row');
+  await h.poll(); await tick();
   await h.act(`history-${B}-summary-reload`); assert.equal(reads, 2);
   const reload = h.el(`history-${B}-summary-reload`), summary = h.el(`history-${B}-summary`);
   finishOld(); await tick();
@@ -3767,6 +3791,17 @@ async function openHistoryDisclosure(h, batchId) {
   disclosure.open = true; await h.act(disclosure, 'toggle');
   return disclosure;
 }
+function runPresentationValues(h, batchId) {
+  const prefix = `history-${batchId}`, stages = h.el(`${prefix}-guide-stages`), result = h.el(`${prefix}-results`);
+  // Snapshot fresh primitive arrays; DOM nodes have parent links and methods.
+  return {
+    history: ['state', 'guide-title', 'guide-counts', 'guide-next'].map(key => h.el(`${prefix}-${key}`)?.textContent ?? null),
+    stages: stages ? stages.children.map(stage => [stage.textContent, stage.dataset.status, stage.attrs['aria-current'] ?? null]) : null,
+    result: result ? [result.textContent, result.disabled, result.className] : null,
+    job: ['job-title', 'job-description', 'job-actions'].map(key => h.el(key).textContent)
+  };
+}
+
 async function acknowledgedDocumentWorkspace(options = {}) {
   const backend = { rows: documentResponse('markdown-and-anonymize', 2).documents,
     selection: null, operation: null, acknowledged: false };
@@ -3940,13 +3975,32 @@ testAsync(`explicit disclosure cannot adopt a ${transition} retired or incompati
   const h = await finishedAnonymousWorkspace({ invoke: (command, args, fallback) =>
     command === 'get_document_review_history_summary' ? pending : fallback() });
   await h.act('nav-history'); await openHistoryDisclosure(h, A);
+  const prefix = `history-${A}`, summary = h.el(`${prefix}-summary`), stages = h.el(`${prefix}-guide-stages`);
+  assert.ok(summary.isConnected && stages.isConnected);
+  assert.equal(summary.attrs['aria-busy'], 'true');
+  assert.deepEqual(stages.children.map(stage => stage.dataset.status), ['done', 'done', 'done', 'optional']);
   if (transition === 'navigation') await h.act('nav-settings');
   if (transition === 'connection') h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } });
   if (transition === 'generation') await h.act(`history-${A}-results`);
+  const beforeLate = runPresentationValues(h, A), retiredSummaryText = summary.textContent;
   resolve(fullCopySummary(transition === 'stale' ? { processing_mode: 'markdown-only' } : {}));
   await tick(); await tick();
+  assert.deepEqual(runPresentationValues(h, A), beforeLate, 'late summary cannot change the current run presentation');
+  assert.doesNotMatch(summary.textContent, /1 frühere zusätzliche Kopien mit Beleg|2 gespeicherte Ergebnisstände/u);
+  assert.equal(h.el('run-guide').hidden, true, 'global history guide remains hidden independently of row stages');
+  assert.equal(h.el(transition === 'navigation' ? 'settings-view' : 'history-view').hidden, false);
+  if (transition === 'connection') {
+    assert.equal(summary.isConnected, false); assert.equal(stages.isConnected, false);
+    assert.equal(h.el(`${prefix}-summary`), undefined); assert.equal(h.el('history-list').children.length, 0);
+    assert.equal(summary.textContent, retiredSummaryText, 'late reply cannot write into the retired owner');
+  } else {
+    assert.equal(h.el(`${prefix}-summary`), summary); assert.equal(h.el(`${prefix}-guide-stages`), stages);
+    assert.deepEqual(stages.children.map(stage => stage.dataset.status), ['done', 'done', 'done', 'optional']);
+    assert.match(summary.textContent, transition === 'navigation' ? /nach Ansichtswechsel nicht bestätigt/u
+      : transition === 'generation' ? /STANDALONE_BUSY/u : /DOCUMENT_REVIEW_INVALID/u);
+  }
+  assert.equal(summary.attrs['aria-busy'], undefined);
   assert.doesNotMatch(h.el('history-list').textContent, /Export mit Abschlussbeleg|kein weiterer Export nötig/u);
-  assert.notEqual(h.el(`history-${A}-guide-stages`)?.children[3].dataset.status, 'done');
   assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
   noAutomaticDecision(h);
 });
@@ -4346,12 +4400,32 @@ for(const transition of ['navigation','connection','generation']) testAsync('bou
   let resolve;const pending=new Promise(yes=>{resolve=yes});
   const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?pending:fallback()});
   await openFinishedSnapshot(h);
+  const prefix = `history-${A}`, summary = h.el(`${prefix}-summary`), stages = h.el(`${prefix}-guide-stages`);
+  assert.ok(summary.isConnected && stages.isConnected);
+  assert.equal(summary.attrs['aria-busy'], 'true');
+  assert.deepEqual(stages.children.map(stage => stage.dataset.status), ['done', 'done', 'done', 'optional']);
   if(transition==='navigation')await h.act('nav-new');
   else if(transition==='connection'){h.listeners.get('datasecure-connection')({payload:{epoch:1,state:'recovering'}});await tick()}
   else { await h.act('history-'+A+'-more'); await h.act('history-'+A+'-results'); }
+  const beforeLate = runPresentationValues(h, A), retiredSummaryText = summary.textContent;
   resolve(fullCopySummary());await tick();await tick();
+  assert.deepEqual(runPresentationValues(h, A), beforeLate, 'late reply cannot promote the history row or retained job');
+  assert.doesNotMatch(summary.textContent, /1 frühere zusätzliche Kopien mit Beleg|2 gespeicherte Ergebnisstände/u);
+  assert.equal(h.el('run-guide').hidden, true, 'hidden global guide cannot bypass the independent row-stage assertions');
+  assert.equal(h.el(transition === 'navigation' ? 'new-view' : 'history-view').hidden, false);
+  if (transition === 'connection') {
+    assert.equal(summary.isConnected, false); assert.equal(stages.isConnected, false);
+    assert.equal(h.el(`${prefix}-summary`), undefined); assert.equal(h.el('history-list').children.length, 0);
+    assert.equal(summary.textContent, retiredSummaryText, 'late reply cannot mutate the detached owner');
+  } else {
+    assert.equal(h.el(`${prefix}-summary`), summary); assert.equal(h.el(`${prefix}-guide-stages`), stages);
+    assert.deepEqual(stages.children.map(stage => stage.dataset.status), ['done', 'done', 'done', 'optional']);
+    assert.match(summary.textContent, transition === 'navigation' ? /nach Ansichtswechsel nicht bestätigt/u : /STANDALONE_BUSY/u);
+  }
+  assert.equal(summary.attrs['aria-busy'], undefined);
   assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
-  assert.ok(h.el('run-guide').hidden||h.el('history-' + A + '-guide-stages').children[3].dataset.status!=='done');noAutomaticDecision(h);
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
+  noAutomaticDecision(h);
 });
 testAsync('bound history snapshot: entering the actual document renderer retires the cached current-approval projection',async()=>{
   let opened=false;
@@ -4368,8 +4442,10 @@ testAsync('bound history snapshot: entering the actual document renderer retires
 testAsync('bound history snapshot: a higher native Ready immediately retires the previous connection snapshot',async()=>{
   const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?fullCopySummary():fallback()});
   await openFinishedSnapshot(h);
+  const retiredGuide=h.el('history-'+A+'-guide-next');
   h.listeners.get('datasecure-connection')({payload:{epoch:1,state:'ready'}});await tick();
-  assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  assert.doesNotMatch(retiredGuide.textContent,/kein weiterer Export nötig/u);
+  assert.equal(h.el('history-list').children.length,0,'old actionable history is retired until current context');
   await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
 });
 
@@ -4380,9 +4456,11 @@ testAsync('bound history snapshot: retired read cannot publish or release a succ
     ?++reads===1?fullCopySummary():reads===2?oldRead:freshRead:fallback()});
   await openFinishedSnapshot(h);
   await h.act('history-'+A+'-summary-reload');
+  const retiredGuide=h.el('history-'+A+'-guide-next');
   h.listeners.get('datasecure-connection')({payload:{epoch:1,state:'ready'}});await tick();
-  assert.doesNotMatch(h.el('history-'+A+'-guide-next').textContent,/kein weiterer Export nötig/u);
-  await h.act('history-'+A+'-summary-reload');assert.equal(reads,3,'replacement connection can perform its own read');
+  assert.doesNotMatch(retiredGuide.textContent,/kein weiterer Export nötig/u);
+  assert.equal(h.el('history-list').children.length,0);
+  await h.poll();await tick();assert.equal(reads,3,'current context precedes the replacement summary read');
   resolveOld(fullCopySummary());await tick();
   assert.doesNotMatch(h.el('history-'+A+'-guide-next').textContent,/kein weiterer Export nötig/u);
   assert.equal(h.el('history-'+A+'-summary').attrs['aria-busy'],'true','retired finally cannot release successor');
@@ -5049,10 +5127,24 @@ testAsync('a superseded pending-publication reply cannot replace a newer exact c
     return command === 'get_document_review_history_summary' ? ++reads === 1 ? oldRead : newRead : fallback();
   } });
   await h.act('nav-history'); await openHistoryDisclosure(h, A);
+  const retiredSummary = h.el(`history-${A}-summary`), retiredReload = h.el(`history-${A}-summary-reload`);
+  assert.equal(reads, 1);
   h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } }); await tick();
+  assert.equal(retiredSummary.isConnected, false);
+  assert.equal(retiredReload.isConnected, false);
+  assert.equal(h.el('history-list').children.length, 0, 'a retired native epoch has no actionable old rows');
+  await h.poll(); await tick();
+  assert.equal(reads, 2, 'current context rebuilds the deliberately open summary once');
+  const freshSummary = h.el(`history-${A}-summary`), freshReload = h.el(`history-${A}-summary-reload`);
+  assert.ok(freshSummary && freshReload);
+  assert.notEqual(freshSummary, retiredSummary);
+  assert.notEqual(freshReload, retiredReload);
   await h.act(`history-${A}-summary-reload`);
+  assert.equal(reads, 2, 'explicit reload cannot duplicate the new active read');
   finishOld(fullCopySummary({ result_publication: { state: 'pending', generation_id: null, count: 2, current_revision: 1 } }));
   await tick();
+  assert.equal(h.el(`history-${A}-summary`), freshSummary);
+  assert.equal(h.el(`history-${A}-summary-reload`), freshReload);
   assert.equal(h.el(`history-${A}-summary`).attrs['aria-busy'], 'true');
   assert.equal(h.el(`history-${A}-summary-reload`).disabled, true);
   assert.doesNotMatch(h.el(`history-${A}-state`).textContent, /aktueller Ergebnisstand noch nicht bestätigt/u);
@@ -5261,6 +5353,435 @@ testAsync('actual document-view navigation retains repair restrictions and then 
   await h.act('documents-back'); await tick();
   assert.equal(h.el('job-action-results'), undefined); assert.match(h.el('job-title').textContent, /Ergebnisstand.*nicht bestätigt/u);
   assert.equal(h.calls.some(call => ['publish_result_documents','decide_document_review','decide_document_review_batch','export_approved_documents','open_history_results'].includes(call.command)), false);
+});
+
+/* Epoch92: actual Workspace/renderer handlers, no copied transition algorithm. */
+function noEpochMutation(h, from = 0) {
+  const mutations = new Set(['start_admitted_batch', 'continue_current_batch', 'continue_history_batch',
+    'open_embedded_review', 'submit_review', 'continue_review_session', 'decide_document_review',
+    'decide_document_review_batch', 'export_approved_documents', 'publish_result_documents',
+    'abandon_document_export', 'abandon_result_export', 'skip_ocr_contact_review']);
+  assert.equal(h.calls.slice(from).some(call => mutations.has(call.command)), false);
+}
+function epochContext(sources = [], revision = 0, result = 'Fresh epoch results') {
+  return { local_ui_only: true, external_disclosure: false, source_catalogue: sources,
+    catalogue_revision: revision, result_folder: result, source_folders: [] };
+}
+testAsync('epoch92 initial and duplicate Ready zero preserve the one pending initial context', async () => {
+  let finish;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'get_ui_context' ? pending : fallback();
+  } }); await tick();
+  const emit = h.listeners.get('datasecure-connection');
+  emit({ payload: { epoch: 0, state: 'ready' } }); emit({ payload: { epoch: 0, state: 'ready' } });
+  finish(epochContext()); await tick(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 1);
+  assert.equal(h.el('connection-help').hidden, true);
+  noEpochMutation(h);
+});
+testAsync('epoch92 direct new Ready retires admission until a fresh context, duplicate Ready preserves it', async () => {
+  let deferContext = false, finishContext;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && deferContext) return new Promise(resolve => { finishContext = resolve; });
+    return fallback();
+  } }); await tick(); await h.act('select-folder');
+  h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
+  assert.equal(h.el('start').attrs['aria-disabled'], 'false');
+  h.model.catalogue = []; h.model.revision++; deferContext = true; const before = h.calls.length;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  assert.equal(h.el('catalogue').hidden, true);
+  assert.equal(h.el('start').attrs['aria-disabled'], 'true');
+  await h.act('select-files'); await h.act('start');
+  assert.equal(h.calls.slice(before).some(call => call.command === 'select_files'), false);
+  const poll = h.poll(); await tick(); assert.equal(typeof finishContext, 'function');
+  assert.equal(h.el('start').attrs['aria-disabled'], 'true');
+  deferContext = false; finishContext(epochContext()); await poll;
+  noEpochMutation(h, before);
+  await h.act('select-folder');
+  const catalogueText = h.el('catalogue').textContent, count = h.calls.length;
+  assert.equal(h.el('start').attrs['aria-disabled'], 'false');
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  assert.equal(h.el('catalogue').textContent, catalogueText);
+  assert.equal(h.el('start').attrs['aria-disabled'], 'false');
+  assert.equal(h.calls.length, count, 'duplicate Ready does not re-read or revoke a current admission');
+  noEpochMutation(h, before);
+});
+for (const outcome of ['resolve', 'reject'])
+testAsync('epoch92 delayed normal state ' + outcome + ' cannot repaint a direct new Ready', async () => {
+  let hold = false, settle, reject;
+  const delayed = new Promise((resolve, fail) => { settle = resolve; reject = fail; });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state' && hold) { hold = false; return delayed; }
+    return fallback();
+  } }); await selectAndStart(h);
+  h.model.state = { state: 'processing', batch_id: A, processing_mode: 'markdown-only',
+    selected_count: 3, completed_count: 1 };
+  await h.poll(); hold = true; const poll = h.poll(); await tick(); const before = h.calls.length;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  const message = h.el('feedback').textContent;
+  await h.act('nav-new'); await h.act('nav-details');
+  assert.match(h.el('job-title').textContent, /Verbindungsausfall/u);
+  assert.equal(h.el('job-actions').children.length, 0);
+  if (outcome === 'reject') reject(Error('OLD_EPOCH_STATUS_FAILED'));
+  else settle({ state: 'results_available', batch_id: A, processing_mode: 'markdown-only', selected_count: 3,
+    completed_count: 3, result_count: 3, failed_count: 0, results_available: true, batch_complete: true });
+  await poll;
+  if (outcome === 'reject') {
+    assert.equal(h.el('feedback').textContent, message);
+    assert.match(h.el('job-title').textContent, /Verbindungsausfall/u);
+    assert.equal(h.el('job-actions').children.length, 0);
+  } else {
+    assert.doesNotMatch(h.el('job-title').textContent, /abgeschlossen/u);
+    assert.ok(h.el('job-action-pause'), 'fresh native processing, never the old completed reply');
+    assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  }
+  noEpochMutation(h, before);
+  hold = false; h.model.state = { state: 'ready' }; await h.poll();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+});
+for (const outcome of ['resolve', 'reject'])
+testAsync('epoch92 delayed context ' + outcome + ' cannot claim the successor epoch', async () => {
+  let hold = false, settle, reject;
+  const delayed = new Promise((resolve, fail) => { settle = resolve; reject = fail; });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && hold) { hold = false; return delayed; }
+    return fallback();
+  } }); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  hold = true; const poll = h.poll(); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  const message = h.el('feedback').textContent;
+  const contextReads = h.calls.filter(call => call.command === 'get_ui_context').length;
+  if (outcome === 'reject') reject(Error('OLD_EPOCH_CONTEXT_FAILED'));
+  else settle(epochContext(catalogue(), 99, 'Obsolete epoch destination'));
+  await poll;
+  assert.equal(h.el('catalogue').hidden, true);
+  assert.notEqual(h.el('destination').textContent, 'Obsolete epoch destination');
+  assert.equal(h.el('feedback').textContent, message, 'neither success nor failure of the retired context confirms its successor');
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt|OLD_EPOCH_CONTEXT_FAILED/u);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, contextReads);
+  assert.equal(h.el('start').attrs['aria-disabled'], 'true');
+  hold = false; await h.poll();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  noEpochMutation(h);
+});
+for (const outcome of ['resolve', 'reject'])
+testAsync('epoch92 old picker ' + outcome + ' cannot keep admission busy or release its successor', async () => {
+  const pending = [];
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'select_folder') return new Promise((resolve, reject) => pending.push({ resolve, reject }));
+    return fallback();
+  } }); await tick(); await h.act('select-folder');
+  assert.equal(pending.length, 1);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  assert.equal(h.el('admission-status').hidden, true);
+  await h.poll(); await h.act('select-folder'); assert.equal(pending.length, 2);
+  if (outcome === 'reject') pending[0].reject(Error('OLD_EPOCH_PICKER_FAILED'));
+  else pending[0].resolve({ ui_context: epochContext(catalogue(), 1, 'Obsolete picker result') });
+  await tick();
+  assert.equal(h.el('select-folder').disabled, true, 'old finally cannot unlock the new picker');
+  assert.equal(h.el('admission-status').hidden, false);
+  assert.equal(h.el('catalogue').hidden, true);
+  pending[1].resolve({ ui_context: epochContext([{ name: 'New-epoch.txt', source_id: id(9), bytes: 9, selectable: true }], 9) });
+  await tick();
+  assert.equal(h.el('select-folder').disabled, false);
+  assert.equal(h.el('admission-status').hidden, true);
+  assert.equal(h.el('catalogue').hidden, false);
+  assert.match(h.el('source-tree').textContent, /New-epoch.txt/u);
+  assert.doesNotMatch(h.el('source-tree').textContent, /Old|One\/Inner/u);
+  assert.equal(withClass(h.el('source-tree'), 'file-row').length, 1);
+  assert.equal(h.el('source-' + id(9)).checked, true);
+  assert.equal(h.el('source-' + id(9)).disabled, false);
+  assert.equal(h.el('source-' + id(1)), undefined, 'no old source ID is still rendered');
+  assert.equal(h.el('selection-count').textContent, '1 von 1 ausgewählt');
+  noEpochMutation(h);
+});
+testAsync('epoch92 direct Ready retires native-drop ownership before a new picker', async () => {
+  let finish;
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'select_folder' ? new Promise(resolve => { finish = resolve; }) : fallback();
+  } }); await tick();
+  const drop = h.listeners.get('datasecure-native-drop');
+  drop({ payload: { phase: 'checking', epoch: 0 } });
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  assert.equal(h.el('admission-status').hidden, true);
+  await h.poll(); await h.act('select-folder');
+  drop({ payload: { phase: 'failed', epoch: 0, error_code: 'STANDALONE_IPC_FAILED' } });
+  assert.equal(h.el('select-folder').disabled, true);
+  finish({ cancelled: true }); await tick();
+  assert.equal(h.el('select-folder').disabled, false);
+  noEpochMutation(h);
+});
+testAsync('epoch92 direct Ready invalidates the actual document renderer and its delayed list read', async () => {
+  let delayed = false, finish;
+  const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') return delayed ? new Promise(resolve => { finish = resolve; }) : documentResponse('markdown-only', 1);
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', result_count: 1, status: 'results_available' }];
+  await h.act('nav-history'); await h.act('history-' + B + '-documents');
+  assert.equal(withClass(h.el('documents-list'), 'document-row').length, 1);
+  delayed = true; await h.act('documents-reload'); const before = h.calls.length;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  assert.equal(h.el('documents-view').hidden, true);
+  assert.equal(withClass(h.el('documents-list'), 'document-row').length, 0);
+  assert.match(h.el('documents-list').textContent, /Keine verfügbaren Dokumentprüfstände/u);
+  assert.equal(h.el('document-original').value, '');
+  assert.equal(h.el('document-markdown').value, '');
+  assert.match(h.el('documents-status').textContent, /Verbindung unterbrochen/u);
+  finish(documentResponse('markdown-only', 3)); await tick();
+  assert.equal(withClass(h.el('documents-list'), 'document-row').length, 0);
+  assert.match(h.el('documents-list').textContent, /Keine verfügbaren Dokumentprüfstände/u);
+  assert.equal(h.el('document-original').value, '');
+  assert.equal(h.el('document-markdown').value, '');
+  assert.match(h.el('documents-status').textContent, /Verbindung unterbrochen/u);
+  noEpochMutation(h, before);
+});
+for (const outcome of ['resolve', 'reject'])
+testAsync('epoch92 direct Ready retires iframe owner and delayed review ' + outcome, async () => {
+  let finish, reject;
+  const delayed = new Promise((resolve, fail) => { finish = resolve; reject = fail; });
+  const h = await openDeferredGuideFixture('markdown-and-anonymize', (command, args, fallback) =>
+    command === 'get_review_session' ? delayed : fallback());
+  const facade = h.window.__DATASECURE_REVIEW__, before = h.calls.length;
+  const read = facade.invoke('get_review_session');
+  const observed = assert.rejects(read, /STANDALONE_REVIEW_SURFACE_INVALID/u);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  assert.equal(h.el('review-frame').src, 'about:blank');
+  assert.equal(h.el('review-view').hidden, true);
+  if (outcome === 'reject') reject(Error('OLD_EPOCH_REVIEW_FAILED'));
+  else finish({ ready: false, run_complete: true });
+  await observed;
+  const after = h.calls.length;
+  await assert.rejects(facade.invoke('submit_review', { reviewId: id(1), answer: { action: 'deferred' } }), /SURFACE_INVALID/u);
+  assert.equal(h.calls.length, after, 'retired facade does not send another native mutation');
+  noEpochMutation(h, before);
+});
+testAsync('epoch92 authorized bootstrap Ready uses one override then one fresh ordinary status and context', async () => {
+  let h, initial = true, recovered = false, finishContext;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return { phase: recovered ? 'owned' : 'idle',
+      connection_epoch: recovered ? 2 : 1, bootstrap_failure: recovered ? null : failure,
+      bootstrap_resolution: recovered ? resolution : null, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      recovered = true; h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
+    }
+    if (command === 'get_ui_context' && recovered) return new Promise(resolve => { finishContext = resolve; });
+    return fallback();
+  } }); await tick(); await tick();
+  await h.act('connection-retry'); await h.act('connection-retry');
+  assert.equal(typeof finishContext, 'function');
+  assert.equal(h.calls.filter(call => call.args?.retryBootstrap === true).length, 1);
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u);
+  const before = h.calls.length; await h.act('select-folder');
+  assert.equal(h.calls.slice(before).some(call => call.command === 'select_folder'), false);
+  finishContext(epochContext()); await tick(); await tick();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('connection-help').hidden, true);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
+  noEpochMutation(h);
+});
+testAsync('epoch92 ordinary recovery discards its pre-Ready state and begins one fresh ordinary read', async () => {
+  let h, replace = false;
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state' && replace) {
+      replace = false; assert.equal(args?.retryBootstrap, undefined);
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+    }
+    return fallback();
+  } }); await tick();
+  const before = h.calls.length;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  replace = true; await h.poll();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.deepEqual(h.calls.slice(before).filter(call => call.command === 'get_public_state').map(call => call.args), [undefined, undefined]);
+  assert.equal(h.calls.slice(before).filter(call => call.command === 'get_ui_context').length, 1);
+  noEpochMutation(h);
+});
+testAsync('epoch92 a skipped Ready discards old state and waits for a newly owned ordinary read', async () => {
+  let delay = false;
+  const pending = [];
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state' && delay) {
+      assert.equal(args?.retryBootstrap, undefined);
+      return new Promise(resolve => { pending.push(resolve); });
+    }
+    return fallback();
+  } }); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  delay = true; const poll = h.poll(); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 4, state: 'ready' } });
+  pending[0]({ state: 'ready' }); await tick();
+  assert.equal(pending.length, 2, 'the successor state is a distinct real invoke');
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('start').attrs['aria-disabled'], 'true');
+  delay = false; pending[1]({ state: 'ready' }); await poll;
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  noEpochMutation(h);
+});
+for (const outcome of ['resolve', 'reject'])
+testAsync('epoch92 delayed initial context ' + outcome + ' is retired by direct replacement Ready', async () => {
+  let initial = true, finish, reject;
+  const delayed = new Promise((resolve, fail) => { finish = resolve; reject = fail; });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; return delayed; }
+    return fallback();
+  } }); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  if (outcome === 'reject') reject(Error('OBSOLETE_INITIAL_CONTEXT_FAILED'));
+  else finish(epochContext(catalogue(), 77, 'Obsolete initial destination'));
+  await tick(); await tick();
+  assert.doesNotMatch(h.el('feedback').textContent, /OBSOLETE_INITIAL_CONTEXT_FAILED/u);
+  assert.notEqual(h.el('destination').textContent, 'Obsolete initial destination');
+  await h.poll();
+  assert.equal(h.el('catalogue').hidden, true);
+  assert.equal(h.el('connection-help').hidden, true);
+  noEpochMutation(h);
+});
+
+/* V2 native observation, exact receipt and physical read-lifetime controls. */
+for (const delivery of ['event-without-receipt', 'lost'])
+testAsync('epoch92V2 ' + delivery + ' needs actual native receipt and freshly owned ordinary reads', async () => {
+  let h, initial = true, ready = false;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return { phase: ready ? 'owned' : 'idle',
+      connection_epoch: ready ? 2 : 1, bootstrap_failure: ready ? null : failure,
+      bootstrap_resolution: ready ? resolution : null, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      ready = true;
+      if (delivery === 'event-without-receipt') h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+    }
+    return fallback();
+  } }); await tick(); await tick();
+  const before = h.calls.length; await h.act('connection-retry'); await tick(); await tick();
+  const sequence = h.calls.slice(before).filter(call =>
+    ['get_native_recovery_status', 'get_public_state', 'get_ui_context'].includes(call.command));
+  assert.deepEqual(sequence.map(call => [call.command, call.args?.retryBootstrap]), [
+    ['get_native_recovery_status', undefined], ['get_public_state', true],
+    ['get_native_recovery_status', undefined], ['get_public_state', undefined], ['get_ui_context', undefined] ]);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  const after = h.calls.length;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
+  assert.equal(h.calls.length, after, 'late exact Ready is now the observed duplicate epoch, without arithmetic aliasing');
+  assert.equal(h.el('connection-help').hidden, true);
+  noEpochMutation(h);
+});
+for (const invalid of ['missing', 'wrong-failure', 'extra', 'string'])
+testAsync('epoch92V2 successful old status cannot substitute for ' + invalid + ' native retry resolution', async () => {
+  let initial = true, ready = false, valid = false;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_public_state' && args?.retryBootstrap === true) ready = true;
+    if (command === 'get_native_recovery_status') {
+      const receipt = { ...resolution };
+      if (ready && !valid) {
+        if (invalid === 'wrong-failure') receipt.failure_epoch = 0;
+        if (invalid === 'extra') receipt.vendor = '/private/raw';
+        if (invalid === 'string') receipt.ready_epoch = '2';
+      }
+      return { phase: ready ? 'owned' : 'idle', connection_epoch: ready ? 2 : 1,
+        bootstrap_failure: ready ? null : failure,
+        bootstrap_resolution: ready ? !valid && invalid === 'missing' ? null : receipt : null,
+        local_ui_only: true, external_disclosure: false };
+    }
+    return fallback();
+  } }); await tick(); await tick(); await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 1, 'old status success grants no context/write recovery');
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true]);
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
+  for (let n = 0; n < 3; n++) await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 1);
+  valid = true; await h.act('connection-retry'); await tick(); await tick();
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined]);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  noEpochMutation(h);
+});
+testAsync('epoch92V2 trusted snapshot uses real document invalidation and blocked is never manufactured Ready', async () => {
+  let initial = true, ready = false, phase = 'idle';
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return { phase, connection_epoch: ready ? 2 : 1,
+      bootstrap_failure: ready ? null : failure, bootstrap_resolution: ready ? resolution : null,
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) { ready = true; phase = 'blocked'; throw Error('STANDALONE_IPC_BUSY'); }
+    if (command === 'get_public_state' && phase === 'blocked') throw Error('STANDALONE_CONNECTION_RECOVERY_BLOCKED');
+    return fallback();
+  } }); await tick(); await tick();
+  const renderer = h.window.__DATASECURE_DOCUMENTS__; let invalidations = 0;
+  h.window.__DATASECURE_DOCUMENTS__ = Object.freeze({ ...renderer,
+    invalidateConnection() { invalidations++; return renderer.invalidateConnection(); } });
+  await h.act('connection-retry'); await tick(); assert.equal(invalidations, 1, 'actual trusted failure retirement');
+  await h.act('connection-retry'); await tick();
+  assert.equal(invalidations, 2, 'native snapshot epoch uses the same actual renderer invalidation');
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 1);
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.match(h.el('documents-status').textContent, /Verbindung unterbrochen/u);
+  phase = 'owned'; await h.act('connection-retry'); await tick(); await tick();
+  assert.equal(invalidations, 2, 'same snapshot is not another connection');
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_public_state').map(call => call.args?.retryBootstrap), [true, undefined, undefined]);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  noEpochMutation(h);
+});
+testAsync('epoch92V2 early Ready timer cannot lose its current read plan behind the old physical slot', async () => {
+  let delay = false, rejectOld; const schedules = [];
+  const h = harness({ onSchedule(ms) { schedules.push(ms); }, invoke(command, args, fallback) {
+    if (command === 'get_public_state' && delay) { delay = false; return new Promise((_, reject) => { rejectOld = reject; }); }
+    return fallback();
+  } }); await tick(); delay = true;
+  const old = h.poll(); await tick(); const before = h.calls.length;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  await h.poll();
+  assert.equal(h.calls.length, before, 'early timer cannot overlap the still-held physical request');
+  rejectOld(Error('OLD_STATUS_FAILED')); await old;
+  assert.equal(schedules.at(-1), 50, 'after settlement the actual new epoch still owns a prompt pure read plan');
+  await h.poll();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  noEpochMutation(h);
+});
+testAsync('epoch92V2 receipt for an older retry never completes the later failure transaction', async () => {
+  let h, initial = true, activeEpoch = 1, ready = false, rightReceipt = false, first = true;
+  let finishFirst;
+  const failure = epoch => ({ epoch, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' });
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure(1).error_code); }
+    if (command === 'get_native_recovery_status') return { phase: ready ? 'owned' : 'idle',
+      connection_epoch: ready ? 4 : activeEpoch, bootstrap_failure: ready ? null : failure(activeEpoch),
+      bootstrap_resolution: ready ? rightReceipt ? { failure_epoch: 3, ready_epoch: 4 } : { failure_epoch: 1, ready_epoch: 2 } : null,
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      if (first) { first = false; return new Promise(resolve => { finishFirst = resolve; }); }
+      ready = true;
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 4, state: 'ready',
+        bootstrap_resolution: { failure_epoch: 1, ready_epoch: 2 } } });
+    }
+    return fallback();
+  } }); await tick(); await tick(); await h.act('connection-retry');
+  activeEpoch = 3;
+  h.listeners.get('datasecure-connection')({ payload: { ...failure(3), state: 'bootstrap_failed' } });
+  finishFirst({ state: 'ready' }); await tick(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 1);
+  await h.act('connection-retry'); await tick(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 1);
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
+  assert.equal(h.calls.filter(call => call.args?.retryBootstrap === true).length, 2, 'one distinct proof per native failure, no replay');
+  rightReceipt = true; await h.act('connection-retry'); await tick(); await tick();
+  assert.equal(h.calls.filter(call => call.args?.retryBootstrap === true).length, 2);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  noEpochMutation(h);
 });
 
 done();

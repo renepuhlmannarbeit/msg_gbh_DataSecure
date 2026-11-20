@@ -133,10 +133,15 @@ function createBatchReviewPublication(options = {}) {
       let packagePublished = false;
       let publishedPackageId;
       let publicationContractFailed = false;
+      let sourceBytes;
       let verifiedDocumentResult;
       let publishedDocumentResult;
       try {
         const entry = exactPendingEntry(state, item);
+        sourceBytes = entry.private_bytes;
+        // This factory admits anonymization only. The content authority reads
+        // its own fresh source; legacy publication still consumes this entry.
+        if (contentOptions && Buffer.isBuffer(sourceBytes)) sourceBytes.fill(0);
         if (contentOptions && typeof options.publishStandaloneReviewedItem !== 'function')
           throw Object.assign(Error('CONTENT_OPTIONS_NOT_READY'), { code: 'CONTENT_OPTIONS_NOT_READY' });
         const operation = contentOptions ? (_profile, hooks) => options.publishStandaloneReviewedItem(state.token, item.id, hooks) : anonymizeNext;
@@ -222,7 +227,8 @@ function createBatchReviewPublication(options = {}) {
           if (contentOptionsForBatch(state)) await require('./standalone-anonymized-mapping').ensurePrivateMappingIntentAsync(state, item);
           else ensureMappingOutbox(item.source_label || item.name, result.package_id, item.document_result);
           item.mapping_outbox_persisted = true;
-        } catch {
+        } catch (error) {
+          if (isOwnershipControlFailure(error)) throw error;
           if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
           continue;
         }
@@ -231,7 +237,8 @@ function createBatchReviewPublication(options = {}) {
         catch { item.work_copy_cleanup_pending = true; }
         writeState(state);
         try { await commitPendingMapping(item, result.package_id, state); }
-        catch {
+        catch (error) {
+          if (isOwnershipControlFailure(error)) throw error;
           if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
           continue;
         }
@@ -317,6 +324,8 @@ function createBatchReviewPublication(options = {}) {
         failed++;
         writeState(state);
         if (isDocumentControlBusy(error) && state.product_channel === 'standalone') { recoveryBlocked = true; break; }
+      } finally {
+        if (Buffer.isBuffer(sourceBytes)) sourceBytes.fill(0);
       }
     }
     return { packages, locallyReleased, failed, processed, pauseBlocked, recoveryBlocked };

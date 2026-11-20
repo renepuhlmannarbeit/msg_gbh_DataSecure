@@ -162,11 +162,8 @@ function atomicWriteJson(file, value, options = {}) {
     io.writeFileSync(temp, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
     renameWithTransientRetry(temp, file, io);
   } catch (error) {
-    try {
-      io.unlinkSync(temp);
-    } catch {
-      /* the original file remains authoritative */
-    }
+    // Failed exclusive writes or later namespace changes do not prove that
+    // this pathname still denotes our own temporary object. Preserve it.
     if (error?.code === 'ENOSPC') {
       const capacityError = new Error('LOCAL_CAPACITY_RACE');
       capacityError.code = 'LOCAL_CAPACITY_RACE';

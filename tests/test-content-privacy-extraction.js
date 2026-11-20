@@ -59,18 +59,18 @@ testAsync('converter echo and neutral proof bind all formats before use; new DOC
   }
 });
 
-testAsync('new CSV uses real unchanged headers and records, not raw generic column labels', async () => {
+testAsync('CSV preserves known header roles and every unknown first-record value as data', async () => {
   const csv = 'Name,Name,,Kommentar\r\n"Anna Beispiel","Berta Muster",,"  Ä é | \\ ~ ![Text](bild.png) "\r\n\r\n"Carla Demo","Dora Test",,"erste\r\nzweite"\r\n';
   const result = await extractSourceForPrivacy(Buffer.from(csv), '.csv', { contentOptions: options(),
     convertBuffer: async () => source('csv', '| Zeile | Spalte 1 | Spalte 2 |\n| --- | --- | --- |\n| 1 | Name | Name |') });
   const MarkdownIt = require('markdown-it'), { decodeHTML } = require('entities');
   const html = new MarkdownIt({ html: true }).render(result.markdown);
   assert.equal((html.match(/<th>Name<\/th>/gu) || []).length, 2);
-  assert.ok(html.includes('<th></th>'));
-  assert.equal((html.match(/<tr>/gu) || []).length, 4, 'header, two data records and empty record remain');
+  assert.ok(html.includes('<th>Spalte 3</th>') && html.includes('<th>Spalte 4</th>'));
+  assert.equal((html.match(/<tr>/gu) || []).length, 5, 'partial first record, two data records and empty record remain');
   const visible = decodeHTML(html.replace(/<[^>]*>/gu, ''));
-  for (const text of ['Anna Beispiel', 'Berta Muster', 'Carla Demo', 'Dora Test', 'Ä é | \\ ~ ![Text](bild.png)', 'erste', 'zweite']) assert.ok(visible.includes(text), text);
-  assert.ok(!html.includes('Spalte ') && !html.includes('<img') && !html.includes('<del'));
+  for (const text of ['Kommentar', 'Anna Beispiel', 'Berta Muster', 'Carla Demo', 'Dora Test', 'Ä é | \\ ~ ![Text](bild.png)', 'erste', 'zweite']) assert.ok(visible.includes(text), text);
+  assert.ok(!html.includes('<img') && !html.includes('<del'));
 });
 
 testAsync('legacy/mismatched extraction and forged private carrier cannot confirm a new request', async () => {

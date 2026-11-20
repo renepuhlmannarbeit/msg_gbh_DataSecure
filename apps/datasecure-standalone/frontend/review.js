@@ -544,7 +544,7 @@ function undo() {
   // Undo of Reset restores staged decisions; an open-only filter would hide
   // precisely the rows the operator has just restored. Mixed states need All.
   el('matrix-filter').value = restoredStates.size === 1 ? restoredStates.has(true) ? 'done' : 'open' : 'all';
-  el('matrix-search').value = ''; el('matrix-type').value = 'all';
+  el('matrix-search').value = ''; el('matrix-type').value = 'all'; el('matrix-document').value = 'all';
   state.selected.clear();
   state.page = Math.max(0, Math.floor(filteredRows().findIndex(row => row.ids.includes(previous[0][0])) / PAGE_SIZE));
   render();

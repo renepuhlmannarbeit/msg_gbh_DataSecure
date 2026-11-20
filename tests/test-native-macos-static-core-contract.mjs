@@ -93,15 +93,16 @@ test('MODEL: receipt sequence, closed errors and own data are mandatory; getters
     assert.throws(() => readNativeMacReceipt(value, 3), { code: 'MAC_NATIVE_PROTOCOL_INVALID' });
   assert.equal(traps, 0);
 });
-function helperFunctions(control, held = null) {
+function helperFunctions(control, held = null, newFactory) {
   const helper = fs.readFileSync(path.join(directory, 'helpers/mac-static-core-participant.cjs'), 'utf8');
   new vm.Script(helper, { filename: 'actual-future-helper-syntax.cjs' });
   const first = helper.indexOf('function admission() {'), next = helper.indexOf('async function workerProbe(', first);
   assert.ok(first > 0 && next > first);
-  const context = vm.createContext({ assert, control, held, options: { root: '/own/root' }, fail,
+  const context = vm.createContext({ assert, control, held, newFactory, options: { root: '/own/root' }, fail,
     codeOf: value => value?.code || 'MAC_NATIVE_PARTICIPANT_FAILED' });
   vm.runInContext(helper.slice(first, next), context, { timeout: 500 });
-  return { admission: vm.runInContext('admission', context), release: vm.runInContext('releaseHeld', context) };
+  return { admission: vm.runInContext('admission', context), release: vm.runInContext('releaseHeld', context),
+    hold: vm.runInContext('hold', context) };
 }
 test('MODEL: actual helper admission refuses Busy before callback and propagates hard failure, no operation replay', () => {
   for (const code of ['OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED']) {
@@ -124,6 +125,35 @@ test('MODEL: actual helper release consumes its capability once; false/undefined
   const primary = helperFunctions({}, { guard: { assertHeld: () => true, release() { throw undefined; } },
     factory: { close() { throw fail('CLEANUP_SECONDARY'); } } });
   assert.deepEqual(capture(primary.release), { threw: true, value: undefined });
+});
+test('MODEL: actual helper hold commits a capability, then release closes it exactly once', () => {
+  let releases = 0, closes = 0;
+  const guard = { assertHeld: () => true, release() { releases++; return true; } };
+  const f = helperFunctions({}, null, () => ({ tryAcquire: () => guard, close() { closes++; return true; } }));
+  assert.deepEqual(JSON.parse(JSON.stringify(f.hold())), { acquired: true });
+  assert.equal(closes, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(f.release())), { released: true, root_closed: true });
+  assert.equal(releases, 1); assert.equal(closes, 1);
+});
+test('MODEL: actual failed hold attempts independent close and preserves exact primary, including falsy', () => {
+  for (const value of [undefined, null, false, 0, '', Object.freeze(Error('HELD_PRIMARY'))]) {
+    for (const release of ['throw', false, undefined]) {
+      let releases = 0, closes = 0;
+      const guard = { assertHeld() { throw value; }, release() {
+        releases++; if (release === 'throw') throw Error('RELEASE_SECONDARY'); return release;
+      } };
+      const f = helperFunctions({}, null, () => ({ tryAcquire: () => guard,
+        close() { closes++; throw Error('CLOSE_SECONDARY'); } }));
+      const result = capture(f.hold);
+      assert.equal(result.threw, true); assert.equal(result.value, value);
+      assert.equal(releases, 1); assert.equal(closes, 1);
+      assert.throws(f.release, { code: 'MAC_NATIVE_NO_HELD_CAPABILITY' });
+    }
+    let closes = 0;
+    const f = helperFunctions({}, null, () => ({ tryAcquire() { throw value; },
+      close() { closes++; return false; } }));
+    assert.deepEqual(capture(f.hold), { threw: true, value }); assert.equal(closes, 1);
+  }
 });
 function aclFixtureModel(mode = 'normal', platform = 'darwin') {
   const source = fs.readFileSync(path.join(directory, 'helpers/native-macos-ownership-acl-fixture.cjs'), 'utf8');

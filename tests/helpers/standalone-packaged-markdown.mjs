@@ -155,6 +155,38 @@ export async function runPackagedMarkdownScenario({ request: initialRequest, res
       assert.doesNotMatch(value, /\[(?:PERSON|EMAIL|UNTERNEHMEN)_/u);
       if (path.basename(doc.name) === 'Gemischt.pdf') assert.match(value, /NATIVER KOPF/u);
       else assert.match(renderer.render(value), /Max Mustermann/u);
+      // Independent complete expectations for these twelve fixed source fixtures.
+      // Retain native page/sheet/slide labels and every table cell; do not derive
+      // expected values from the received chunk or its self-reported hash.
+      const pixels = 'Max Mustermann\nNordstern GmbH\nProjektmanager Software Tester';
+      const expected = new Map([
+        ['Original Max.txt', text],
+        ['Original Max.md', `${text}\n\n| Begriff | Wert |\n| --- | --- |\n| Preis | 42 € |\n`],
+        ['Original Max.csv', '| Zeile | Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- | --- |\n' +
+          '| 1 | Name | Betrag | Zeichen |\n| 2 | Max Mustermann | 00123 | Ä § € ± → |'],
+        ['Original Max.docx', text],
+        ['Original Max.xlsx', `# Arbeitsblatt: Quelle\n\n| Quellzeile | Spalte 1 (A) |\n| --- | --- |\n| 1 | ${text} |`],
+        ['Original Max.pptx', `# Folie 1\n\n${text}`], ['Text.pdf', `## Seite 1\n\n${text}`],
+        ['Bild.png', pixels], ['Bild.jpeg', pixels], ['Bild.bmp', pixels], ['Scan.pdf', `## Seite 1\n\n${pixels}`],
+        ['Gemischt.pdf', `## Seite 1\n\nNATIVER KOPF${enabled ? `\n\n${pixels}` : ''}`]
+      ]).get(path.basename(doc.name));
+      assert.equal(typeof expected, 'string', 'MD_FIXTURE_SOURCE_NOT_RECOGNIZED');
+      if (['Original Max.txt', 'Original Max.md'].includes(path.basename(doc.name)))
+        assert.equal(value, expected, 'MD_ORIGINAL_TEXT_BODY_CHANGED');
+      const visible = body => {
+        const parsed = renderer.parse(body, {});
+        const allowed = new Set(['paragraph_open', 'paragraph_close', 'heading_open', 'heading_close', 'inline',
+          'table_open', 'table_close', 'thead_open', 'thead_close', 'tbody_open', 'tbody_close',
+          'tr_open', 'tr_close', 'th_open', 'th_close', 'td_open', 'td_close']);
+        assert.ok(parsed.every(token => allowed.has(token.type)), 'MD_UNEXPECTED_FIXTURE_STRUCTURE');
+        const lines = parsed.filter(token => token.type === 'inline').map(token => token.children.map(child => {
+          assert.ok(['text', 'softbreak', 'hardbreak'].includes(child.type), 'MD_UNEXPECTED_FIXTURE_INLINE');
+          return child.type === 'text' ? child.content : '\n';
+        }).join('')).join('\n').split(/\r?\n/u).map(line => line.trimEnd()).filter(line => line.length);
+        return { lines, table: parsed.filter(token => /^(?:table|thead|tbody|tr|th|td)_(?:open|close)$/u.test(token.type))
+          .map(token => token.type) };
+      };
+      assert.deepEqual(visible(value), visible(expected), 'MD_COMPLETE_FIXTURE_BODY_CHANGED');
       if (doc.name.endsWith('.csv')) {
         const rendered = renderer.render(value);
         for (const literal of ['00123', 'Ä § € ± →', 'Name', 'Betrag']) assert.ok(rendered.includes(literal));

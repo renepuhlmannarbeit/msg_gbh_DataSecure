@@ -630,7 +630,7 @@ test('DOCX resolves header and footer stories from document references in semant
   const word = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   const main = `<w:document xmlns:w="${word}" xmlns:r="${rel}"><w:body><w:p><w:r><w:t>BODY</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rId2"/><w:footerReference w:type="default" r:id="rId3"/></w:sectPr></w:body></w:document>`;
-  const relationships = `<Relationships><Relationship Id="rId1" Type="${rel}/header" Target="header1.xml"/><Relationship Id="rId2" Type="${rel}/header" Target="header2.xml"/><Relationship Id="rId3" Type="${rel}/footer" Target="footer1.xml"/></Relationships>`;
+  const relationships = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/header" Target="header1.xml"/><Relationship Id="rId2" Type="${rel}/header" Target="header2.xml"/><Relationship Id="rId3" Type="${rel}/footer" Target="footer1.xml"/></Relationships>`;
   const result = parseOoxml(docx([], [
     ['word/document.xml', main],
     ['word/header1.xml', `<w:hdr xmlns:w="${word}"><w:p><w:r><w:t>UNREFERENCED</w:t></w:r></w:p></w:hdr>`],
@@ -651,6 +651,23 @@ test('DOCX stops when a header or footer reference has no matching relationship'
   const result = parseOoxml(docx([], [['word/document.xml', main]]), '.docx');
   assert.ok(result.warnings.length > 0);
   assert.doesNotMatch(result.warnings.join(' '), /rMissing|VISIBLE/u);
+});
+
+test('DOCX explicit story references never borrow an unqualified or foreign OPC relationship namespace', () => {
+  const word = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  for (const declaration of ['', ' xmlns="urn:foreign"']) {
+    const main = `<w:document xmlns:w="${word}" xmlns:r="${rel}"><w:body><w:p><w:r><w:t>BODY</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="h1"/></w:sectPr></w:body></w:document>`;
+    const result = parseOoxml(docx([], [
+      ['word/document.xml', main],
+      ['word/header1.xml', `<w:hdr xmlns:w="${word}"><w:p><w:r><w:t>UNQUALIFIED_HEADER</w:t></w:r></w:p></w:hdr>`],
+      ['word/_rels/document.xml.rels', `<Relationships${declaration}><Relationship Id="h1" Type="${rel}/header" Target="header1.xml"/></Relationships>`]
+    ]), '.docx');
+    assert.ok(result.warnings.length > 0);
+    assert.match(result.markdown, /BODY/u);
+    assert.doesNotMatch(result.markdown, /UNQUALIFIED_HEADER/u);
+    assert.doesNotMatch(result.warnings.join(' '), /UNQUALIFIED_HEADER|urn:foreign/u);
+  }
 });
 
 test('DOCX secondary stories reject duplicate relationships and mismatched Word roots', () => {

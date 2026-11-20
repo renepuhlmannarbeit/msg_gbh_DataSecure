@@ -9,6 +9,18 @@ const image = { schema: 'datasecure-ocr-contact-image/1', source_width: 10, sour
   x: 2, y: 3, width: 4, height: 3, png_base64: png.toString('base64') };
 assert.equal(validateContactImage(image), png.length);
 assert.match(contactImageDigest(image), /^[a-f0-9]{64}$/u);
+// CRC-consistent high-bit names must not acquire a fixed producer PNG role.
+// zlib's CRC is independent from the image decoder's local implementation.
+for (let offset = 8; offset + 12 <= png.length;) {
+  const length = png.readUInt32BE(offset);
+  for (let position = 0; position < 4; position++) {
+    const changed = Buffer.from(png); changed[offset + 4 + position] |= 0x80;
+    changed.writeUInt32BE(require('node:zlib').crc32(changed.subarray(offset + 4, offset + 8 + length)), offset + 8 + length);
+    assert.throws(() => validateContactImage({ ...image, png_base64: changed.toString('base64') }),
+      { code: 'OCR_CONTACT_REVIEW_INVALID' });
+  }
+  offset += length + 12;
+}
 const badCrc = Buffer.from(png); badCrc[29] ^= 1;
 assert.throws(() => validateContactImage({ ...image, png_base64: badCrc.toString('base64') }),
   { code: 'OCR_CONTACT_REVIEW_INVALID' });

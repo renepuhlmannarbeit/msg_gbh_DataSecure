@@ -3,8 +3,10 @@
 Status: **Engineering-Vertrag, Release-Gate geschlossen** · Story: BL-021.2
 
 CSV wird lokal als strukturierte, inerte Textquelle gelesen und ausschließlich als
-Markdown-Tabelle ausgegeben. DataSecure erzeugt weder CSV noch XLSX als Ergebnis und
-führt keine Formeln aus.
+Markdown-Tabelle ausgegeben; die CSV-Quellinhalte werden dabei nicht als neue
+Tabellenkalkulation ausgegeben und Formeln nicht ausgeführt. Vertrauliche
+CSV-/XLSX-Zuordnungsbeilagen eines Standalone-Anonymisierungslaufs sind davon
+getrennte, ausdrücklich gebundene Ergebnisrollen.
 
 ## Parservertrag
 
@@ -24,6 +26,31 @@ führt keine Formeln aus.
   und danach dieselbe Anonymisierung wie TXT/DOCX.
 
 ## Wiederverwendung und Gate
+
+### Standalone-Contentprojektion · Reviewkorrektur 27.10.2026
+
+Konvertierung und private Anonymisierungsprojektion verwenden dieselbe reine
+Breitenvalidierung für die bereits geparsten Records. Ein einzelnes leeres Feld
+darf als erhaltener Leerrecord eine kleinere Breite besitzen. Das behauptet keine
+physische Leerzeile: Ein gequotetes leeres Feld hat dieselbe geparste Darstellung.
+Andere ungleiche Breiten bleiben ein Fehler. Formelwerte werden nicht ausgeführt.
+
+Die reine Markdown-Konvertierung erhält weiterhin sämtliche Records unter
+neutralen Positionsüberschriften. Für die private Content-Anonymisierung wird
+nur der erste Record mit einem nichtleeren Wert auf bekannte vollständige
+Feldbezeichnungen geprüft. Eine solche Bezeichnung gilt ausschließlich für ihre
+eigene Spalte; unbekannte Nachbarwerte bleiben Daten unter einer neutralen
+Positionsüberschrift. Nur ein ausschließlich aus bekannten Bezeichnungen und
+leeren Feldern bestehender Record kann vollständig in die Kopfzeile wechseln.
+Personennamen, freie Texte und persönliche Zusätze an Feldbezeichnungen sind
+keine solche Metadatenfreigabe. Eine weiterhin erkennbare Feldpflicht darf dabei
+nicht verloren gehen: Ein privat qualifizierter geschützter Header erhält den
+festen Besitzer `Geschützter Tabellenwert`; sein Originaltext bleibt als
+geschützte Datenzelle erhalten. Dieselbe Pflicht schützt alle folgenden Werte
+dieser Spalte. Unbekannte Nachbarspalten erwerben dadurch keine Feldrolle.
+Leere Records und alle übrigen Daten bleiben
+erhalten. Die vorhandenen Ressourcen-, Struktur- und Veröffentlichungsgates
+gelten weiterhin; Quelltext allein ersetzt keine Windows-/Mac-Desktopabnahme.
 
 Papa Parse 5.5.3 (MIT, feste Lockfile-Integrität) dient ausschließlich als
 Test-Differentialreferenz für Dialekte, Quote- und Formeltests. Es wird nicht in

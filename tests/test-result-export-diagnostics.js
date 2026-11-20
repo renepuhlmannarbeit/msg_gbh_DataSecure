@@ -27,6 +27,7 @@ function fixture(options = {}) {
     require(id) {
       if (['path', 'crypto', 'node:util'].includes(id)) return require(id);
       if (id === '../standalone/result-companions') return require('../plugins/data-secure/server/standalone/result-companions');
+      if (id === './standalone-publication-timings') return require('../plugins/data-secure/server/gateway/standalone-publication-timings');
       if (id === './batch-execution-diagnostic') return {
         ...diagnostic,
         recordBatchExecutionFailure(phase, error) {

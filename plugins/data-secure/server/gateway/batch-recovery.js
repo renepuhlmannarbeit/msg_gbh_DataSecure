@@ -8,6 +8,7 @@ const { createBatchIntakeIntent, SUFFIX: INTAKE_SUFFIX } = require('./batch-inta
 const { releaseOwnedLock } = require('./batch-lock-release');
 const { batchReviewReady } = require('./batch-next-action');
 const { isMarkdownBatch } = require('../core/processing-mode');
+const { CONTENT_BATCH_SCHEMAS } = require('../core/content-options');
 const { ownErrorCode } = require('./batch-execution-diagnostic');
 const ACQUISITION_CONTENTION_CODES = new Set(['BATCH_ACTIVE_LOCK_BUSY', 'OWNERSHIP_GUARD_BUSY']);
 
@@ -20,6 +21,7 @@ function createBatchRecovery(options = {}) {
   const randomBytes = options.randomBytes || crypto.randomBytes;
   const nowMs = options.nowMs || (() => Date.now());
   const readMaintenanceState = options.readStateForMaintenance;
+  const readStatusState = options.readStateForStatus || readMaintenanceState;
   const writeState = options.writeState;
   const readActiveLock = options.readActiveLock;
   const processAlive = options.processAlive;
@@ -171,8 +173,8 @@ function createBatchRecovery(options = {}) {
     const visible = visibleExportStatus(latest.token, progress.released);
     return Object.freeze({
       ...(reviewPolicy ? { review_policy: reviewPolicy } : {}),
-      ...(['datasecure-batch/5', 'datasecure-batch/7'].includes(latest.schema) && isMarkdownBatch(latest) ? { processing_mode: 'markdown-only', warning_count: progress.warning_count || 0 } : {}),
-      ...(['datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(latest.schema)
+      ...(['datasecure-batch/5', ...CONTENT_BATCH_SCHEMAS].includes(latest.schema) && isMarkdownBatch(latest) ? { processing_mode: 'markdown-only', warning_count: progress.warning_count || 0 } : {}),
+      ...(['datasecure-batch/5', 'datasecure-batch/6', ...CONTENT_BATCH_SCHEMAS].includes(latest.schema)
         && latest.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')
         ? { termination_unconfirmed: true } : {}),
       selected_count: progress.batch_total,
@@ -235,7 +237,7 @@ function createBatchRecovery(options = {}) {
       try {
         if (observeRun && selection.skipUnobservedTerminal === true && token !== selectedToken &&
             options.terminalStatusUnchanged?.(token) === true) continue;
-        const candidate = readMaintenanceState(token);
+        const candidate = readStatusState(token);
         const expiresAt = Date.parse(candidate.expires_at);
         const live = liveLocalExecutor(candidate);
         if (live) processingActive = true;
@@ -330,9 +332,10 @@ function createBatchRecovery(options = {}) {
         catch { pending++; complete = false; }
         continue;
       }
-      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      if (!entry.name.endsWith('.json')) continue;
       const token = entry.name.slice(0, -'.json'.length);
       if (!tokenPattern.test(token)) continue;
+      if (!entry.isFile()) { complete = false; continue; }
       try {
         const state = readMaintenanceState(token);
         if (nowMs() > Date.parse(state.expires_at) || (state.zero_day_work === true &&

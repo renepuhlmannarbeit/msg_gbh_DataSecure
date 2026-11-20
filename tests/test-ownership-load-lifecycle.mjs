@@ -89,6 +89,35 @@ function assertUnconfirmed(result, child) {
   assert.ok(!JSON.stringify(result).includes('private'));
 }
 
+for (const failure of ['missing-stdout', 'missing-stderr', 'listener-throws']) {
+  test(`stream setup failure cannot abandon the owned child: ${failure}`, options, async () => {
+    const child = new Child(), clock = new Clock();
+    if (failure === 'missing-stdout') child.stdout = null;
+    if (failure === 'missing-stderr') child.stderr = null;
+    if (failure === 'listener-throws') {
+      const original = child.stdout.on;
+      child.stdout.on = function (event, listener) {
+        if (event === 'data') throw Error('private listener registration failure');
+        return original.call(this, event, listener);
+      };
+    }
+    const m = model({ child, clock });
+    clock.advance(1999); await Promise.resolve(); assert.equal(m.result(), undefined);
+    clock.advance(1); const result = await m.promise;
+    assert.equal(result.ok, false); assert.equal(result.closed, false);
+    assert.equal(result.fixture_cleanup_allowed, false);
+    assert.equal(result.error_code, 'OWNERSHIP_LOAD_STREAM_FAILED');
+    assert.deepEqual(child.kills, ['SIGKILL']); assert.equal(child.unrefs, 1);
+    assert.equal(clock.pending.size, 0);
+    for (const stream of [child.stdin, child.stdout, child.stderr].filter(Boolean)) {
+      assert.equal(stream.destroys, 1); assert.equal(stream.unrefs, 1);
+      assert.doesNotThrow(() => stream.emit('error', Error('private late error')));
+    }
+    child.emit('close', 0, null); clock.advance(30000);
+    assert.equal(result.ok, false); assert.deepEqual(child.kills, ['SIGKILL']);
+  });
+}
+
 test('normal fragmented ready/ACK requires close and keeps stdin open for the ACK', options, async () => {
   const m = model(), frame = ready();
   m.child.stdout.emit('data', frame.subarray(0, 3)); m.child.stdout.emit('data', frame.subarray(3));

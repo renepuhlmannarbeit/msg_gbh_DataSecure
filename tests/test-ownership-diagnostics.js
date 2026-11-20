@@ -29,10 +29,18 @@ test('hidden export causes reach bounded diagnostics without widening their publ
   assert.equal(observeOwnershipOutcome(result, () => { throw Error('diagnostic sink failed'); }), result);
 });
 test('diagnostic hooks do not evaluate foreign getter/proxy outcomes or alter successes', () => {
+  let getterCalls = 0, proxyCalls = 0, diagnosticCalls = 0;
+  const getter = { get ownership_error_code() { getterCalls++; throw Error('must not execute'); } };
+  const proxy = new Proxy({}, {
+    get() { proxyCalls++; throw Error('must not read'); },
+    getOwnPropertyDescriptor() { proxyCalls++; throw Error('must not reflect'); }
+  });
   for (const result of [{ exported: 2, pending: 0 }, null, undefined,
-    { get ownership_error_code() { throw Error('must not execute'); } },
-    new Proxy({}, { getOwnPropertyDescriptor() { throw Error('must not reflect'); } })])
-    assert.equal(observeOwnershipOutcome(result, () => assert.fail('not a closed cause')), result);
+    getter, proxy])
+    assert.equal(observeOwnershipOutcome(result, () => { diagnosticCalls++; }), result);
+  assert.equal(getterCalls, 0, 'a swallowed getter exception must not hide its execution');
+  assert.equal(proxyCalls, 0, 'neither proxy read nor reflection is allowed');
+  assert.equal(diagnosticCalls, 0, 'a caught sink assertion cannot prove no call');
 });
 test('real Standalone wiring observes both replay and history export and preserves startup ownership causes', () => {
   const source = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/application-service.js'), 'utf8');

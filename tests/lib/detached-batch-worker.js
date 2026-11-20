@@ -42,7 +42,7 @@ process.once('message', async (message) => {
   const notify = (payload) => new Promise((resolve) => {
     try {
       if (typeof process.send !== 'function') return resolve(false);
-      process.send(payload, () => resolve(true));
+      process.send(payload, error => resolve(!error));
     } catch { resolve(false); }
   });
   // Mirror the product worker: the parent's bounded handoff acknowledgement is
@@ -61,7 +61,13 @@ process.once('message', async (message) => {
       if (!releaseIntake(reservationId)) throw new Error('INTAKE_RESERVATION_RELEASE_FAILED');
       await notify({ type: 'local-intake-checkpoint-created' });
       if (claimLocalBatchExecutor(message.batch_token, process.pid).ok !== true) return process.exit(1);
-      await notify({ type: 'local-intake-processing-started' });
+      const startedSent = await notify({ type: 'local-intake-processing-started' });
+      // Own QA fixture only. Child-side EOF preserves the parent's real close
+      // accounting; no close event is synthesized (nodejs/node#65646).
+      if (process.env.DATASECURE_QA_CHILD_DISCONNECT_AFTER_START === '1') {
+        if (!startedSent || !process.connected) throw new Error('QA_DISCONNECT_START_NOT_SENT');
+        process.disconnect();
+      }
     }
     const completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
     const envelope = {

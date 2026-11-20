@@ -191,8 +191,10 @@ function writeFrame(value, callback) {
 
 function publicError(requestId, error) {
   const code = desktopErrorCode(error?.code);
-  const safeLabel = label => typeof label === 'string' && label.length > 0 && label.length <= 1024 &&
-    !path.posix.isAbsolute(label) && !path.win32.isAbsolute(label) && !/[:\\\u0000-\u001f\u007f]/u.test(label) &&
+  // Optional local labels must match Rust's UTF-8 byte/control contract. Omit
+  // unrepresentable details instead of turning a normal refusal into bad IPC.
+  const safeLabel = label => typeof label === 'string' && label.length > 0 && Buffer.byteLength(label, 'utf8') <= 1024 &&
+    !path.posix.isAbsolute(label) && !path.win32.isAbsolute(label) && !/[:\\\p{Cc}\p{Cs}]/u.test(label) &&
     !label.split('/').some(part => !part || part === '.' || part === '..');
   const selectionCodes = new Set(['SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY', 'SOURCE_FORMAT_UNSUPPORTED',
     'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED', 'SOURCE_PATH_UNSAFE', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_ARTIFACT_IGNORED']);

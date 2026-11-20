@@ -1,6 +1,6 @@
 'use strict';
 
-// Real progress, continuation, batch runner, automatic review, review planning,
+// Real progress, continuation, batch runner, product review selection, review planning,
 // review orchestration and visible export. Only source decisions, native review
 // UI, journal IO/locks and process launch/ACK are adapted in this boundary test.
 const fs = require('node:fs');
@@ -26,7 +26,7 @@ const { createBatchReviewState } = require('../plugins/data-secure/server/gatewa
 const { createBatchReviewOrchestrator } = require('../plugins/data-secure/server/gateway/batch-review-orchestrator');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const { createBatchExecutorRunner } = require('../plugins/data-secure/server/gateway/batch-executor-runner');
-const { continueIntoLocalReview } = require('../plugins/data-secure/server/gateway/automatic-local-review');
+const { continueBatchReviewForProduct } = require('../apps/datasecure-standalone/runtime-adapters/gateway/product-automatic-review');
 const { batchNextAction } = require('../plugins/data-secure/server/gateway/batch-next-action');
 const { readConfiguredResultRoot } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
@@ -209,10 +209,7 @@ function fixture(otherStatus, options = {}) {
         finally { releaseLocalBatchExecutor(); }
       }
       const processed = await runLocalBatchExecutor(token);
-      return (await continueIntoLocalReview(token, processed, {
-        claimLocalBatchExecutor, releaseLocalBatchExecutor, reviewDeferredBatch,
-        readBatchProgress: () => publicProgress(state)
-      })).progress;
+      return (await continueBatchReviewForProduct(token, processed)).progress;
     }
   };
 }
@@ -279,7 +276,7 @@ async function confirmStart(f, invoke, expected) {
     for (const entrypoint of ['history', 'current']) {
       for (const other of ['pending', 'retryable', 'processing', 'delivery_pending', 'mapping_pending',
         'preflight_mapping_pending', 'stopped']) {
-        await testAsync(`${entrypoint}: review + ${other} finishes automatic work before review and terminal export`, async () => {
+        await testAsync(`${entrypoint}: review + ${other} finishes automatic work before explicit review and terminal export`, async () => {
           const f = fixture(other);
           const invoke = () => entrypoint === 'history'
             ? f.service.continueHistoryBatch(f.token) : f.service.continueCurrentBatch();
@@ -288,7 +285,15 @@ async function confirmStart(f, invoke, expected) {
           assert.equal(f.service.status().failed_count, 1);
           await confirmStart(f, invoke, 'batch');
           await confirmStart(f, invoke, 'batch');
-          const paused = await f.runWorker('batch');
+          const processed = await f.runWorker('batch');
+          assert.equal(Object.hasOwn(processed, 'error'), false);
+          assert.equal(processed.deferred_review, 1);
+          assert.equal(processed.complete, false);
+          assert.equal(f.events.includes('review'), false, 'Standalone never opens an automatic reviewer');
+          assert.equal(f.events.includes('export'), false);
+          f.assertIdle();
+          await confirmStart(f, invoke, 'review');
+          const paused = await f.runWorker('review');
           assert.equal(paused.error, 'LOCAL_REVIEW_CANCELLED');
           assert.equal(paused.deferred_review, 1);
           assert.equal(paused.remaining, 0);

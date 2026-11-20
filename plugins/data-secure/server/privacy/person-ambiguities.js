@@ -63,12 +63,15 @@ const ABSTRACT_TOKEN_RE =
 const BUSINESS_NOUN_RE =
   /^(?:administration|architecture|cloud|consulting|customer|delivery|development|engineering|finance|management|marketing|operations|planning|platform|product|program|project|quality|sales|security|service|services|strategy|success|support|team|transformation)$/iu;
 const ISOLATED_NAME_LINE_RE = new RegExp(`^(${NAME_SHAPE})[ \\t]*$`, 'u');
+const OFFICE_OCR_AUTOSAVE_RE = /^(?:Automatisches[ \t]+Speichern|AutoSave)[ \t]+.{1,180}?[ \t]+[-–—][ \t]+(?:Gespeichert|Saved)[ \t]+[vV∨▾▼⌄˅][ \t]+/iu;
+const OFFICE_OCR_PROFILE_NAME_RE = new RegExp(`^(${NAME_SHAPE})(?=$|[ \\t,;:])`, 'u');
+const OFFICE_OCR_CONTROL_SUFFIX_RE = /[ \t]+(?:Sortierung|Sortieren|Filtern|Freigeben|Kommentare?)(?=$|[ \t,;:])/iu;
 
 function proseBody(line, options = {}) {
   const source = String(line || '');
-  const leading = source.match(/^[ \\t]*(?:(?:[-*+]|\\d+[.)]|>)[ \\t]+)?/u)?.[0]?.length || 0;
+  const leading = source.match(/^[ \t]*(?:(?:[-*+]|\d+[.)]|>)[ \t]+)?/u)?.[0]?.length || 0;
   const body = source.slice(leading);
-  if (!body || /^(?:#{1,6}[ \\t]|```|~~~)/u.test(body) || body.includes('|') ||
+  if (!body || /^(?:#{1,6}[ \t]|```|~~~)/u.test(body) || body.includes('|') ||
       (options.productChannel !== 'standalone' && /^[^:\n]{1,40}:/u.test(body))) return null;
   return { body, leading };
 }
@@ -249,15 +252,26 @@ function personProseCandidateSpans(text, options = {}) {
   for (const line of original.split('\n')) {
     const parsed = proseBody(line, options);
     if (parsed) {
-      // A raster/scan can contain an unlabelled, isolated name. The normal
-      // prose rule needs a verb and would silently publish this line. Reserve
-      // only a bounded two-token line for an exact human decision; do not
-      // infer identity from every title-cased heading or auto-redact it.
+      // OCR can contain an isolated name or an account name from a captured
+      // Office title bar. Reserve only the source span for the existing review.
       if (options.productChannel === 'standalone' && options.ocrLineReview === true) {
         const isolated = ISOLATED_NAME_LINE_RE.exec(parsed.body);
         if (isolated && normalizeSpaces(isolated[1]).split(/\s+/u).length === 2 && plausiblePerson(isolated[1])) {
           const start = lineStart + parsed.leading + isolated.index;
           candidates.push({ start, end: start + isolated[1].length, value: isolated[1] });
+        }
+        // Require the autosave control, save status and dropdown glyph. A
+        // general mention of saving a file has no account-name semantics.
+        const titleBar = OFFICE_OCR_AUTOSAVE_RE.exec(parsed.body);
+        if (titleBar) {
+          const account = parsed.body.slice(titleBar[0].length);
+          const nextControl = OFFICE_OCR_CONTROL_SUFFIX_RE.exec(account);
+          const beforeControl = nextControl && OFFICE_OCR_PROFILE_NAME_RE.exec(account.slice(0, nextControl.index))?.[1];
+          const name = beforeControl || OFFICE_OCR_PROFILE_NAME_RE.exec(account)?.[1];
+          if (name && plausiblePerson(name)) {
+            const start = lineStart + parsed.leading + titleBar[0].length;
+            candidates.push({ start, end: start + name.length, value: name });
+          }
         }
       }
       const patterns = [SUBJECT_RE, ...(hasStrongPersonAnchor || options.productChannel === 'standalone' ? [AUXILIARY_SUBJECT_RE] : []),

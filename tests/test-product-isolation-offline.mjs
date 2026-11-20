@@ -3,11 +3,13 @@ import path from 'node:path';
 import os from 'node:os';
 import { fork, spawn } from 'node:child_process';
 import { createSuite } from './helpers.js';
+import lifecycle from './helpers/qa-parent-lifecycle.cjs';
 import { loopbackCanaries } from './lib/loopback-network-canaries.mjs';
 import { collectProductFiles } from '../scripts/lib/product-files.mjs';
 import { collectStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
+const { endTestCliFailure } = lifecycle;
 
-const { testAsync, assert, done } = createSuite('Projected product isolation and offline workers');
+const { testAsync, assert, done, failure: suiteFailure } = createSuite('Projected product isolation and offline workers');
 const server = path.resolve(import.meta.dirname, '../plugins/data-secure/server');
 const projectionTarget = process.platform === 'win32' ? 'windows-x64' :
   process.platform === 'darwin' ? `macos-${process.arch}` : 'portable-source';
@@ -19,7 +21,6 @@ const projections = {
 // Projection validation may fail before a test starts; allocate owned scratch
 // space only after it succeeds so that setup failures leave no orphaned root.
 const temporary = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ds-product-isolation-'));
-const initial = fs.lstatSync(temporary);
 const children = [];
 const staged = {};
 
@@ -256,22 +257,26 @@ await done(async () => {
       assert.strictEqual(result.code, 0);
     } catch (error) {
       errors.push(error);
-      if (client.child.exitCode === null) client.child.kill();
-      await bounded(client.closed, 'ISOLATION_KILL_TIMEOUT', 10000);
+      // A refused kill or an unconfirmed close must not skip later own clients.
+      try {
+        if (client.child.exitCode === null) client.child.kill();
+      } catch (killError) { errors.push(killError); }
+      try {
+        await bounded(client.closed, 'ISOLATION_KILL_TIMEOUT', 10000);
+      } catch (closeError) { errors.push(closeError); }
     }
   }
-  if (errors.length) throw new AggregateError(errors, 'Product process cleanup failed; preserve owned evidence');
-  const current = fs.lstatSync(temporary);
-  assert.ok(current.isDirectory() && !current.isSymbolicLink());
-  assert.strictEqual(current.dev, initial.dev); assert.strictEqual(current.ino, initial.ino);
-  const inspect = directory => {
-    for (const name of fs.readdirSync(directory)) {
-      const target = path.join(directory, name), entry = fs.lstatSync(target);
-      assert.ok(within(temporary, target) && !entry.isSymbolicLink());
-      assert.ok(entry.isDirectory() || entry.isFile());
-      if (entry.isDirectory()) inspect(target);
-    }
-  };
-  inspect(temporary);
-  fs.rmSync(temporary, { recursive: true });
+  // Host close is not a join of every autonomous writer. Keep this invocation's
+  // synthetic runtime even after successful host cleanup; never inspect old runs.
+  try {
+    process.stderr.write('PRODUCT_ISOLATION_SCOPE_RETAINED:cleanup=' + (errors.length ? 'FAILED' : 'COMPLETE') +
+      '; writer_quiescence=UNCONFIRMED; deletion=NOT_ATTEMPTED\n');
+  } catch (reportError) { errors.push(reportError); }
+  if (errors.length) throw new AggregateError(errors,
+    'Product process cleanup failed; owned runtime retained; process exit may remain unconfirmed', { cause: errors[0] });
 });
+
+// R6 failure-only CLI policy: the awaited done above consumed cleanup rejection.
+const isolationSuite = suiteFailure();
+endTestCliFailure({ failed: isolationSuite.failed, error: isolationSuite.error,
+  retainedRoots: [temporary], unconfirmedChildren: true });

@@ -49,20 +49,50 @@ function zipPrefix(buffer) {
 
 function readPrefixSync(filePath, fsApi) {
   const descriptor = fsApi.openSync(filePath, 'r');
+  let hasPrimaryError = false;
   try {
     const prefix = Buffer.alloc(4);
-    const bytes = fsApi.readSync(descriptor, prefix, 0, prefix.length, 0);
-    return prefix.subarray(0, bytes);
-  } finally { fsApi.closeSync(descriptor); }
+    let read = 0;
+    while (read < prefix.length) {
+      const bytes = fsApi.readSync(descriptor, prefix, read, prefix.length - read, read);
+      if (!Number.isInteger(bytes) || bytes < 0 || bytes > prefix.length - read) {
+        throw new SafeError('Die lokale Datei konnte nicht sicher gelesen werden.');
+      }
+      if (bytes === 0) break;
+      read += bytes;
+    }
+    return prefix.subarray(0, read);
+  } catch (error) {
+    hasPrimaryError = true;
+    throw error;
+  } finally {
+    try { fsApi.closeSync(descriptor); }
+    catch (error) { if (!hasPrimaryError) throw error; }
+  }
 }
 
 async function readPrefix(filePath, io) {
   const handle = await io.open(filePath, 'r');
+  let hasPrimaryError = false;
   try {
     const prefix = Buffer.alloc(4);
-    const { bytesRead } = await handle.read(prefix, 0, prefix.length, 0);
-    return prefix.subarray(0, bytesRead);
-  } finally { await handle.close(); }
+    let read = 0;
+    while (read < prefix.length) {
+      const { bytesRead } = await handle.read(prefix, read, prefix.length - read, read);
+      if (!Number.isInteger(bytesRead) || bytesRead < 0 || bytesRead > prefix.length - read) {
+        throw new SafeError('Die lokale Datei konnte nicht sicher gelesen werden.');
+      }
+      if (bytesRead === 0) break;
+      read += bytesRead;
+    }
+    return prefix.subarray(0, read);
+  } catch (error) {
+    hasPrimaryError = true;
+    throw error;
+  } finally {
+    try { await handle.close(); }
+    catch (error) { if (!hasPrimaryError) throw error; }
+  }
 }
 
 // A reserved-looking name alone is insufficient: a user can legitimately
@@ -77,6 +107,7 @@ function sourceArtifactReason(filePath, options = {}) {
   if (!name) {
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > MAX_METADATA_BYTES) return null;
     const fd = fsApi.openSync(filePath, 'r');
+    let hasPrimaryError = false;
     try {
       const current = fsApi.fstatSync(fd);
       if (!current.isFile() || current.size !== stat.size || current.ino !== stat.ino || current.dev !== stat.dev) return null;
@@ -86,7 +117,13 @@ function sourceArtifactReason(filePath, options = {}) {
         while (read < buffer.length) { const size = fsApi.readSync(fd, buffer, read, buffer.length - read, read); if (!size) return null; read += size; }
         return metadataReason(path.basename(filePath), buffer);
       } finally { buffer.fill(0); }
-    } finally { fsApi.closeSync(fd); }
+    } catch (error) {
+      hasPrimaryError = true;
+      throw error;
+    } finally {
+      try { fsApi.closeSync(fd); }
+      catch (error) { if (!hasPrimaryError) throw error; }
+    }
   }
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > OFFICE_OWNER_MAX_BYTES) return null;
   if (zipPrefix(readPrefixSync(filePath, fsApi))) return null;
@@ -111,6 +148,7 @@ async function sourceArtifactReasonAsync(filePath, options = {}) {
   if (!name) {
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > MAX_METADATA_BYTES) return null;
     const handle = await io.open(filePath, 'r');
+    let hasPrimaryError = false;
     try {
       const current = await handle.stat();
       if (!current.isFile() || current.size !== stat.size || current.ino !== stat.ino || current.dev !== stat.dev) return null;
@@ -120,7 +158,13 @@ async function sourceArtifactReasonAsync(filePath, options = {}) {
         while (read < buffer.length) { const { bytesRead } = await handle.read(buffer, read, buffer.length - read, read); if (!bytesRead) return null; read += bytesRead; }
         return metadataReason(path.basename(filePath), buffer);
       } finally { buffer.fill(0); }
-    } finally { await handle.close(); }
+    } catch (error) {
+      hasPrimaryError = true;
+      throw error;
+    } finally {
+      try { await handle.close(); }
+      catch (error) { if (!hasPrimaryError) throw error; }
+    }
   }
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > OFFICE_OWNER_MAX_BYTES) return null;
   if (zipPrefix(await readPrefix(filePath, io))) return null;

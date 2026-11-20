@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { isMarkdownBatch } = require('../core/processing-mode');
+const { CONTENT_BATCH_SCHEMAS } = require('../core/content-options');
 const { publicPositiveDocumentResult, projectBatchResults, emptyGradeCounts, emptyOmissionCounts } = require('./batch-result-projection');
 
 function createBatchResultAccess(deps) {
@@ -41,7 +42,7 @@ function createBatchResultAccess(deps) {
   }
 
   function pluginHandoffState(state) {
-    if (state?.schema === 'datasecure-batch/7') { isMarkdownBatch(state); return false; }
+    if (CONTENT_BATCH_SCHEMAS.includes(state?.schema)) { isMarkdownBatch(state); return false; }
     if (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only') return false;
     if (state?.product_channel === 'plugin') return true;
     // Journals written before product_channel was introduced belong to the

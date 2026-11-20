@@ -272,7 +272,11 @@ test('batch decisions preserve terminal, review, preparation and mixed-debt sema
 test('conversion metadata preserves the exact frozen source, limit and error contract', () => {
   const contract = require(path.join(server, 'core/conversion-worker-contract'));
   assert.strictEqual(contract.MAX_INPUT_BYTES, 64 * 1024 * 1024);
-  assert.deepStrictEqual(Object.keys(contract), ['LIFECYCLE_ERROR_CODES', 'MAX_INPUT_BYTES', 'SOURCE_TYPES', 'ERROR_CODES']);
+  assert.deepStrictEqual(Object.keys(contract), ['STOP_CAUSE_CODES', 'LIFECYCLE_ERROR_CODES', 'MAX_INPUT_BYTES', 'SOURCE_TYPES', 'ERROR_CODES']);
+  assert.deepStrictEqual(contract.STOP_CAUSE_CODES, ['CONVERSION_TIMEOUT', 'REQUEST_CANCELLED',
+    'CONVERSION_OUTPUT_LIMIT', 'CONVERSION_RESPONSE_INVALID', 'CONVERSION_INPUT_INCOMPLETE',
+    'CONVERSION_INPUT_INVALID', 'CONVERSION_START_FAILED', 'CONVERSION_EXECUTABLE_MISSING',
+    'CONVERSION_EXECUTABLE_DENIED', 'CONVERSION_ARCHITECTURE_INVALID', 'CONVERSION_DEPENDENCY_MISSING']);
   assert.deepStrictEqual(contract.SOURCE_TYPES, { '.txt': 'txt', '.md': 'md', '.markdown': 'md', '.csv': 'csv', '.docx': 'docx',
     '.xlsx': 'xlsx', '.pptx': 'pptx', '.pdf': 'pdf', '.png': 'png', '.bmp': 'bmp', '.jpg': 'jpeg', '.jpeg': 'jpeg' });
   assert.deepStrictEqual(contract.LIFECYCLE_ERROR_CODES, ['CONVERSION_RUNTIME_UNAVAILABLE', 'CONVERSION_ISOLATION_UNAVAILABLE',
@@ -289,7 +293,7 @@ test('conversion metadata preserves the exact frozen source, limit and error con
     'TEXT_CONTROL_INVALID', 'CSV_EMPTY', 'CSV_QUOTE_INVALID', 'CSV_DELIMITER_AMBIGUOUS', 'CSV_ROW_WIDTH_INVALID', 'DOCX_STRUCTURE_UNSAFE',
     'DOCX_STRUCTURE_LIMIT', 'OOXML_XML_CHARACTER_INVALID', 'OOXML_ENCODING_INVALID', 'XLSX_STRUCTURE_UNSAFE', 'XLSX_STRUCTURE_LIMIT',
     'XLSX_SHARED_STRING_INVALID', 'PPTX_STRUCTURE_UNSAFE', 'PPTX_STRUCTURE_LIMIT']);
-  for (const value of [contract, contract.SOURCE_TYPES, contract.ERROR_CODES, contract.LIFECYCLE_ERROR_CODES]) assert.ok(Object.isFrozen(value));
+  for (const value of [contract, contract.SOURCE_TYPES, contract.ERROR_CODES, contract.LIFECYCLE_ERROR_CODES, contract.STOP_CAUSE_CODES]) assert.ok(Object.isFrozen(value));
 });
 
 test('document grades retain their export surface, visual limit and fail-closed reasons', () => {

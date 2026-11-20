@@ -73,7 +73,7 @@ async function conversionCloseCases(filename, expectedSha) {
     return { promise, child, controller, timers, tick, kills: () => kills, outcome: () => outcome,
       send: value => child.stdout.emit('data', Buffer.isBuffer(value) ? value : bytes(value)),
       inputError: code => child.stdin.emit('error', Object.assign(new Error('synthetic input failure'), { code })),
-      flush: () => inputCallback(), close: code => child.emit('close', code) };
+      flush: () => inputCallback(), close: (code, signal = null) => child.emit('close', code, signal) };
   }
   async function pending(m) { await idle(); assert.equal(m.outcome(), null, 'no result before confirmed close or failing grace'); }
   async function rejected(m, code) {
@@ -104,7 +104,7 @@ async function conversionCloseCases(filename, expectedSha) {
   await check('eligible timeout recovers only after actual close without a second grace', async () => {
     const m = parent(); m.send(frame()); m.tick(1000); await pending(m);
     assert.equal(m.kills(), 1); assert.deepEqual([...m.timers.values()].map(timer => timer.ms), [1500]);
-    m.close(null); await recovered(m, 'CONVERSION_TIMEOUT_PARTIAL');
+    m.close(125); await recovered(m, 'CONVERSION_TIMEOUT_PARTIAL');
   });
   await check('unconfirmed grace rejects and a later close cannot turn failure into success', async () => {
     const m = parent(); m.send(frame()); m.tick(1000); await pending(m); m.tick(1500);
@@ -113,7 +113,7 @@ async function conversionCloseCases(filename, expectedSha) {
     assert.equal(m.kills(), 1);
   });
   await check('checkpoint recovery never substitutes for unflushed input', async () => {
-    const m = parent({ flush: false }); m.send(frame()); m.tick(1000); m.close(null);
+    const m = parent({ flush: false }); m.send(frame()); m.tick(1000); m.close(125);
     await rejected(m, 'CONVERSION_TIMEOUT');
   });
   await check('deliberate cancellation before or during timeout never recovers', async () => {
@@ -143,7 +143,7 @@ async function conversionCloseCases(filename, expectedSha) {
   await check('own shutdown pipe closure preserves timeout but not fictitious input flush', async () => {
     for (const flush of [false, true]) {
       const m = parent({ flush }); m.send(frame()); m.tick(1000); m.inputError('EPIPE');
-      assert.equal(m.kills(), 1); assert.deepEqual([...m.timers.values()].map(timer => timer.ms), [1500]); m.close(null);
+      assert.equal(m.kills(), 1); assert.deepEqual([...m.timers.values()].map(timer => timer.ms), [1500]); m.close(125);
       if (flush) await recovered(m, 'CONVERSION_TIMEOUT_PARTIAL'); else await rejected(m, 'CONVERSION_TIMEOUT');
     }
   });
@@ -169,6 +169,12 @@ async function conversionCloseCases(filename, expectedSha) {
     const good = parent({ legacy: true }), expected = unit('pdf', 'Sicherer Text äöüß', true);
     good.send(response(expected, true)); await pending(good); good.close(0); assert.deepEqual((await good.promise).value, expected);
     const bad = parent({ legacy: true }); bad.send(frame()); bad.close(125); await rejected(bad, 'CONVERSION_RESOURCE_LIMIT');
+  });
+  await check('null-code or signalled supervisor close never certifies safe checkpoint recovery', async () => {
+    for (const timeout of [false, true]) for (const [code, signal] of [[null, null], [0, 'SIGKILL'], [125, 'SIGTERM']]) {
+      const m = parent(); m.send(frame()); if (timeout) m.tick(1000);
+      m.close(code, signal); await rejected(m, 'CONVERSION_TERMINATION_UNCONFIRMED');
+    }
   });
   return { classification: 'ACTUAL_PARENT_SOURCE_MODEL/NOT_NATIVE_ACCEPTANCE', worker_sha256: sha256,
     cases: rows.length, results: rows, actual_apps_workers_or_deletes: 0 };
@@ -213,7 +219,7 @@ module.exports = function macosCleanupSourceCases(root) {
   assert.match(conversion, /const result = await convertBuffer\(bytes, extension, \{ timeoutMs: 90_000 \}\);/u);
   const workerFile = path.join(root, 'plugins/data-secure/server/standalone/conversion-worker.js');
   const worker = fs.readFileSync(workerFile, 'utf8');
-  const close = worker.indexOf("child.once('close', code => {");
+  const close = worker.indexOf("child.once('close', (code, signal = null) => {");
   const success = worker.indexOf('finish(null, createMarkdownExtraction(', close);
   assert.ok(close > 0 && success > close);
   assert.match(worker.slice(close, success), /closed = true;/u);
@@ -226,7 +232,7 @@ module.exports = function macosCleanupSourceCases(root) {
   assert.ifError(conversionCases.error); assert.equal(conversionCases.status, 0, conversionCases.stderr);
   const conversionParent = JSON.parse(conversionCases.stdout);
   assert.equal(conversionParent.worker_sha256, workerSha);
-  assert.equal(conversionParent.cases, 15);
+  assert.equal(conversionParent.cases, 16);
   assert.equal(conversionParent.results.length, conversionParent.cases);
   assert.ok(conversionParent.results.every(row => row.status === 'PASS'));
 

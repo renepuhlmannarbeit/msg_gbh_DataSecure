@@ -16,6 +16,7 @@ const {
   createBatchPseudonymState,
   validateBatchPseudonymState,
   standalonePolicyRestartRequired,
+  refuseOwnedRegistryPersist,
   withBatchPseudonymRegistry
 } = require('../plugins/data-secure/server/batch-pseudonym-context');
 
@@ -196,6 +197,46 @@ await test('processing errors survive and an already disposed registry cannot es
   }), (error) => error === expected);
   assert.throws(() => escaped.assign('PERSON', 'Erika Beispiel'),
     (error) => error.code === 'BATCH_PSEUDONYM_INPUT_INVALID');
+});
+
+await test('ownership control refusals bypass final persistence and keep their exact primary through registry disposal', async () => {
+  for (const productChannel of ['plugin', 'standalone']) for (const refused of [false, true])
+    for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_UNSAFE',
+      'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_OWNERSHIP_CONTROL_BUSY']) {
+      const state = createBatchPseudonymState({ productChannel }), before = JSON.stringify(state);
+      const primary = Object.assign(Error('fixed'), { code }); let escaped, writes = 0;
+      await assert.rejects(withBatchPseudonymRegistry(state, registry => {
+        escaped = registry; registry.assign('PERSON', 'Erika Beispiel');
+        if (refused) refuseOwnedRegistryPersist(registry);
+        throw primary;
+      }, { persist() { writes++; } }), error => error === primary);
+      assert.equal(writes, 0); assert.equal(JSON.stringify(state), before);
+      assert.throws(() => escaped.exportState(), { code: 'BATCH_PSEUDONYM_INPUT_INVALID' });
+    }
+});
+
+await test('ordinary and falsy action failures keep existing persistence and refused-commit precedence', async () => {
+  for (const refused of [false, true]) for (const primary of [undefined, null, false, 0, '',
+    Object.assign(Error('fixed'), { code: 'EIO' })]) {
+    const state = createBatchPseudonymState({ productChannel: 'standalone' }); let escaped, writes = 0;
+    try {
+      await withBatchPseudonymRegistry(state, registry => {
+        escaped = registry; registry.assign('PERSON', 'Erika Beispiel');
+        if (refused) refuseOwnedRegistryPersist(registry);
+        throw primary;
+      }, { persist() { writes++; } });
+      assert.fail('an action rejection must remain a rejection');
+    } catch (error) {
+      if (refused) assert.equal(error.code, 'DOCUMENT_REVIEW_CONFLICT');
+      else assert.equal(error, primary);
+    }
+    assert.equal(writes, refused ? 0 : 1);
+    assert.throws(() => escaped.exportState(), { code: 'BATCH_PSEUDONYM_INPUT_INVALID' });
+  }
+  const state = createBatchPseudonymState();
+  await assert.rejects(withBatchPseudonymRegistry(state, registry => {
+    refuseOwnedRegistryPersist(registry); return 'ignored';
+  }), { code: 'DOCUMENT_REVIEW_CONFLICT' });
 });
 
 await test('a journal persistence failure still destroys an escaped registry and seed context', async () => {

@@ -11,9 +11,13 @@ const path = require('path');
 const { createSuite } = require('./helpers');
 
 const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-visual-'));
+const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-visual-'));
+const root = path.join(testRootScope, 'privacy');
+fs.mkdirSync(root, { mode: 0o700 });
 process.env.EU_PRIVACY_ROOT = root;
-process.env.LOCALAPPDATA = path.join(root, 'localapp');
+process.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');
 process.env.EU_PRIVACY_VISUAL_MODE = 'strict';
 
 const { encodePng } = require(path.join(runtime, 'image-sanitizer.js'));

@@ -20,7 +20,7 @@ const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation
 const { terminalVisibleExportAsync } = require('./result-export');
 const { presentTerminalEnvelope, showBatchStateNoticeConfirmed, showLocalIntakeNoticeConfirmed } = require('./product-terminal-notice');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
-const { continueIntoLocalReview } = require('./automatic-local-review');
+const { continueBatchReviewForProduct } = require('./product-automatic-review');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
 const { MODES } = require('../core/processing-mode');
 const { recordBatchExecutionFailure } = require('./batch-execution-diagnostic');
@@ -30,6 +30,7 @@ const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../cor
 
 let started = false;
 const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
+const publicationTimings = require('./standalone-publication-timings');
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
 
 process.once('message', async (message) => {
@@ -138,6 +139,7 @@ process.once('message', async (message) => {
       }
       await notify({ type: 'local-intake-processing-started' });
     }
+    if (standaloneChannel) publicationTimings.start();
     let completed = await runLocalBatchExecutor(message.batch_token, { executorPid: process.pid });
     // The picker already confirmed this local run. If analysis found genuine
     // ambiguities, open the existing local batch reviewer now instead of
@@ -145,8 +147,8 @@ process.once('message', async (message) => {
     // an `awaiting_local_review` checkpoint and is therefore safely resumable.
     // Standalone shows an explicit in-app review step. Its worker never opens
     // a detached OS dialog while the main window is still processing.
-    const reviewed = processingMode === MODES.MARKDOWN || standaloneChannel
-      ? { progress: completed, attempted: false } : await continueIntoLocalReview(message.batch_token, completed, {
+    const reviewed = standaloneChannel ? { progress: completed, attempted: false }
+      : await continueBatchReviewForProduct(message.batch_token, completed, processingMode, {
       executorPid: process.pid,
       claimLocalBatchExecutor,
       releaseLocalBatchExecutor,
@@ -168,6 +170,7 @@ process.once('message', async (message) => {
     // stays pending for the next start or folder change; it never converts the
     // completed batch into the "stopped" failure envelope below.
     const visibleExport = await terminalVisibleExportAsync(completed, () => exportCompletedBatchResultsAsync(message.batch_token));
+    publicationTimings.finish(recordWorkflowEvent);
     // Every automatic run ends with exactly one bounded local state envelope,
     // including non-terminal rest states such as review, mapping repair or an
     // explicit resume. No token, source identifier or document content crosses
@@ -211,6 +214,7 @@ process.once('message', async (message) => {
     }
     process.exit(0);
   } catch (error) {
+    publicationTimings.finish(recordWorkflowEvent);
     recordBatchExecutionFailure('processing', error);
     if (isNewIntake) releaseIntake(reservationId);
     const stage = checkpointCreated || isExistingBatch ? 'after_checkpoint' : 'before_checkpoint';

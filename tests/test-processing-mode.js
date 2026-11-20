@@ -88,8 +88,8 @@ test('option getters, hidden and symbol fields are rejected without invocation',
 
 test('new content journals require an explicit immutable Standalone purpose and complete contract', () => {
   const content_options = { schema: CONTENT_OPTIONS_SCHEMA, markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
-  for (const processing_mode of [MODES.MARKDOWN, MODES.ANONYMIZE]) {
-    const state = { schema: 'datasecure-batch/7', product_channel: 'standalone', processing_mode,
+  for (const schema of ['datasecure-batch/7', 'datasecure-batch/8']) for (const processing_mode of [MODES.MARKDOWN, MODES.ANONYMIZE]) {
+    const state = { schema, product_channel: 'standalone', processing_mode,
       standalone_document_review: true, content_options };
     assert.deepEqual(contentOptionsForBatch(state), content_options);
     assert.equal(processingModeForBatch(state), processing_mode);
@@ -117,7 +117,7 @@ test('legacy schemas cannot acquire new options or silently downgrade the contra
       assert.throws(() => processingModeForBatch({ ...state, content_options: value }), { code: 'CONTENT_OPTIONS_INVALID' });
     assert.throws(() => processingModeForBatch({ ...state, contentOptions: content_options }), { code: 'CONTENT_OPTIONS_INVALID' });
   }
-  assert.throws(() => isMarkdownBatch({ schema: 'datasecure-batch/8', processing_mode: MODES.MARKDOWN }),
+  assert.throws(() => isMarkdownBatch({ schema: 'datasecure-batch/99', processing_mode: MODES.MARKDOWN }),
     { code: 'PROCESSING_MODE_INVALID' }, 'invalid state never routes through a false fallback');
 });
 

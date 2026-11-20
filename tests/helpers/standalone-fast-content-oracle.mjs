@@ -53,16 +53,21 @@ function table(text, anna) {
     if (token.type === 'tr_close') { assert.ok(row); rows.push(row); row = null; }
   }
   assert.equal(tables, 1, 'FAST_CONTENT_TABLE_COUNT');
-  assert.equal(row, null); assert.equal(rows.length, 3, 'FAST_CONTENT_TABLE_ROW_COUNT');
-  assert.deepEqual(rows[0], ['Probe', 'Person', 'Druck (kPa)', 'Menge (kg)', 'Freigabe', 'Kontrollsatz'],
-    'FAST_CONTENT_TABLE_HEADERS_CHANGED');
-  assert.equal(rows[1].length, 6); assert.equal(rows[2].length, 6);
-  assert.equal(rows[1][1], anna, 'FAST_CONTENT_SAME_PERSON_ID_CHANGED');
-  assert.match(rows[2][1], /^\[PERSON_\d{3,5}\]$/u, 'FAST_CONTENT_SECOND_PERSON_TOKEN_INVALID');
-  assert.notEqual(rows[2][1], anna, 'FAST_CONTENT_DISTINCT_PERSONS_COLLAPSED');
-  assert.deepEqual(rows[1].filter((_cell, index) => index !== 1),
+  assert.equal(row, null); assert.equal(rows.length, 4, 'FAST_CONTENT_TABLE_ROW_COUNT');
+  for (const cells of rows) assert.equal(cells.length, 6, 'FAST_CONTENT_TABLE_COLUMN_COUNT');
+  assert.deepEqual(rows[0], ['Spalte 1', 'Person', 'Spalte 3', 'Spalte 4', 'Spalte 5', 'Spalte 6'],
+    'FAST_CONTENT_TABLE_PROJECTION_HEADERS_CHANGED');
+  // Only the source-owned Person role is lifted. Every other authored header
+  // remains in its own column as data; do not guess a whole header exemption.
+  assert.deepEqual(rows[1], ['Probe', '', 'Druck (kPa)', 'Menge (kg)', 'Freigabe', 'Kontrollsatz'],
+    'FAST_CONTENT_TABLE_SOURCE_HEADERS_CHANGED');
+  const first = rows[2], second = rows[3];
+  assert.equal(first[1], anna, 'FAST_CONTENT_SAME_PERSON_ID_CHANGED');
+  assert.match(second[1], /^\[PERSON_\d{3,5}\]$/u, 'FAST_CONTENT_SECOND_PERSON_TOKEN_INVALID');
+  assert.notEqual(second[1], anna, 'FAST_CONTENT_DISTINCT_PERSONS_COLLAPSED');
+  assert.deepEqual(first.filter((_cell, index) => index !== 1),
     ['eins', '42', '7', 'nein', 'Die Pumpe darf nicht starten.'], 'FAST_CONTENT_TABLE_FIRST_ROW_CHANGED');
-  assert.deepEqual(rows[2].filter((_cell, index) => index !== 1),
+  assert.deepEqual(second.filter((_cell, index) => index !== 1),
     ['zwei', '17', '19', 'ja', 'Das Ventil bleibt geschlossen.'], 'FAST_CONTENT_TABLE_SECOND_ROW_CHANGED');
 }
 
@@ -76,6 +81,7 @@ export function assertFastContentOracle(outputs) {
     'Der Test ist nicht bestanden.', 'Spannung: 24 V.', 'Grenzwert: 17 mm.', 'Anteil: 12,5 %.',
     'Dauer: 3 h.', 'Freigabe: nein.']), anna, 'FAST_CONTENT_CROSS_DOCUMENT_PERSON_ID_CHANGED');
   table(outputs.get('03-fakten.csv'), anna);
+  // table_rows counts the two authored data records, not generated/header rows.
   return { documents: 3, factual_prose_lines: 15, table_rows: 2, table_columns: 6,
     negations: true, numbers_units_and_signs: true, row_and_column_association: true,
     complete_visible_content: true, consistent_distinct_person_tokens: true };
@@ -86,7 +92,7 @@ export function fastContentOracleSelfTest() {
   const positive = new Map([
     ['01-fakten.txt', 'Name: [PERSON_001]  \nE-Mail: [EMAIL_REDACTED]\n\nDer Motor startet nicht.  \nDas Ventil bleibt geschlossen.  \nDruck: 42 kPa.  \nTemperatur: -12,5 °C.  \nMenge: 7 kg.  \nFreigabe: nein.  \nReserve: 0 Stück.'],
     ['02-fakten.md', 'Name: [PERSON_001]  \nE-Mail: [EMAIL_REDACTED]\n\n# Messung\n\n- Die Pumpe darf nicht starten.\n- Der Test ist nicht bestanden.\n- Spannung: 24 V.\n- Grenzwert: 17 mm.\n- Anteil: 12,5 %.\n- Dauer: 3 h.\n- Freigabe: nein.'],
-    ['03-fakten.csv', '| Probe | Person | Druck (kPa) | Menge (kg) | Freigabe | Kontrollsatz |\n| --- | --- | --- | --- | --- | --- |\n| eins | [PERSON_001] | 42 | 7 | nein | Die Pumpe darf nicht starten. |\n| zwei | [PERSON_002] | 17 | 19 | ja | Das Ventil bleibt geschlossen. |']
+    ['03-fakten.csv', '| Spalte 1 | Person | Spalte 3 | Spalte 4 | Spalte 5 | Spalte 6 |\n| --- | --- | --- | --- | --- | --- |\n| Probe |  | Druck (kPa) | Menge (kg) | Freigabe | Kontrollsatz |\n| eins | [PERSON_001] | 42 | 7 | nein | Die Pumpe darf nicht starten. |\n| zwei | [PERSON_002] | 17 | 19 | ja | Das Ventil bleibt geschlossen. |']
   ]);
   assertFastContentOracle(positive);
   const corruptions = [
@@ -100,10 +106,27 @@ export function fastContentOracleSelfTest() {
     ['03-fakten.csv', text => text.split('\n').slice(0, 3).join('\n')],
     ['03-fakten.csv', text => text.replace('[PERSON_002]', '[PERSON_001]')],
     ['03-fakten.csv', text => text.replace('| nein | Die Pumpe', '| ja | Die Pumpe')],
-    ['01-fakten.txt', text => text.replace('Das Ventil bleibt geschlossen.', '[TECHNISCH_REDACTED]')]
+    ['01-fakten.txt', text => text.replace('Das Ventil bleibt geschlossen.', '[TECHNISCH_REDACTED]')],
+    ['03-fakten.csv', text => text.split('\n').filter((_line, index) => index !== 2).join('\n')],
+    ['03-fakten.csv', text => text.split('\n').flatMap((line, index) => index === 2 ? [line, line] : [line]).join('\n')],
+    ['03-fakten.csv', text => { const lines = text.split('\n'); [lines[2], lines[3]] = [lines[3], lines[2]]; return lines.join('\n'); }],
+    ['03-fakten.csv', text => text.replace('Druck (kPa)', 'Druck')],
+    ['03-fakten.csv', text => text.replace('Spalte 3', 'Spalte 4')],
+    ['03-fakten.csv', text => text.replace('| Person |', '| Name |')],
+    ['03-fakten.csv', text => text.replace('| Probe |  |', '| Probe | Person |')],
+    ['03-fakten.csv', text => text.replace('| Probe |  |', '| Probe | [PERSON_003] |')],
+    ['03-fakten.csv', text => text.replace('| Probe |  |', '| Probe |')],
+    ['03-fakten.csv', text => { const lines = text.split('\n'); [lines[3], lines[4]] = [lines[4], lines[3]]; return lines.join('\n'); }],
+    ['03-fakten.csv', text => text.replace('| [PERSON_001] | 42 |', '| 42 | [PERSON_001] |')],
+    ['03-fakten.csv', text => text.replace('[PERSON_001]', '[PERSON_003]')],
+    ['03-fakten.csv', text => text.replace('[PERSON_002]', 'Berta Muster')],
+    ['03-fakten.csv', text => text.replace('Spalte 6 |', 'Spalte 6 | Zusatz |')],
+    ['03-fakten.csv', text => text + '\n| drei | [PERSON_003] | 1 | 2 | nein | Fremder Datensatz. |']
   ];
   for (const [name, corrupt] of corruptions) {
-    const changed = new Map(positive); changed.set(name, corrupt(changed.get(name)));
+    const changed = new Map(positive), original = changed.get(name), mutated = corrupt(original);
+    assert.notEqual(mutated, original, 'FAST_CONTENT_SELF_TEST_MUTATION_NOOP');
+    changed.set(name, mutated);
     assert.throws(() => assertFastContentOracle(changed), undefined, `oracle must reject ${name}`);
   }
   return { positive: 1, semantic_counterexamples_rejected: corruptions.length };

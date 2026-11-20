@@ -39,7 +39,8 @@ test('bootstrap refusals latch natively before notification and only explicit ep
   assert.match(transport, /state\.active\.as_ref\(\)\.is_some_and\(\|child\| !child\.exited\(\)\)/u);
   assert.match(workspace, /bootstrapRetryAuthorized \? \{ retryBootstrap: true \} : undefined/u);
   assert.match(workspace, /bootstrapRetryProof\.failure === bootstrapFailure/u);
-  assert.match(workspace, /if \(bootstrapRetryAuthorized\) \{ bootstrapRetryProof\.used = true; bootstrapRecoveryPending = true/u);
+  assert.match(workspace, /if \(bootstrapRetryAuthorized\) \{\s+bootstrapRetryProof\.used = true; bootstrapRecoveryPending = true;/u);
+  assert.match(workspace, /bootstrapRecoveryAttempt = \{ failure: bootstrapFailure, proof: bootstrapRetryProof, resolution: null \}/u);
   assert.match(rust, /source_fingerprint::diagnostic_build_id\(option_env!\("DATASECURE_BUILD_ID"\)\)/u);
 });
 
@@ -732,6 +733,22 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
   }
 });
 
+test('diagnostic-only CLI admits and installs the exact profile before any storage or opener branch', () => {
+  const entry = rust.slice(rust.indexOf('fn main()'));
+  const select = entry.indexOf('native_smoke::from_environment()');
+  const install = entry.indexOf('NATIVE_SMOKE_PROFILE.set(profile)');
+  const cli = entry.indexOf('--startup-diagnostics');
+  const directory = entry.indexOf('let directory = diagnostic_directory()');
+  const mkdir = entry.indexOf('std::fs::create_dir_all(&directory)');
+  const probe = entry.indexOf('native_smoke::prepare_webview_directory(value)');
+  assert.ok(select >= 0 && install > select && cli > install,
+    'profile admission and one-time installation must dominate the diagnostic CLI, not only normal logging');
+  assert.ok(directory > cli && mkdir > directory && probe > mkdir);
+  assert.match(entry.slice(select, install), /Err\(_\) => std::process::exit\(65\)/u);
+  assert.ok(entry.slice(mkdir, probe).includes('return;'), 'diagnostic-only CLI must not require a WebView write probe');
+  assert.equal(entry.split('native_smoke::from_environment()').length - 1, 1);
+});
+
 test('native archive identity is parsed explicitly for current and historical candidates', () => {
   const hostPath = path.join(__dirname, 'manual/standalone-native-host.ps1');
   const host = fs.readFileSync(hostPath, 'utf8');
@@ -746,9 +763,10 @@ test('native archive identity is parsed explicitly for current and historical ca
   assert.match(result.stdout, /HOST CONTRACT PASS/u);
 });
 
-test('native cleanup allows only the exact post-exit cache junction without following it', () => {
+test('separate native cleanup allows only the exact cache junction while the launcher retains its root', () => {
   const cleanup = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-cleanup.ps1'), 'utf8');
-  assert.match(nativeSmoke, /AllowCacheJunction:\(\$null -ne \$process -and \$process\.HasExited\)/u);
+  assert.doesNotMatch(nativeSmoke, /Remove-NativeTestTree|AllowCacheJunction/u,
+    'the engineering launcher retains evidence; checked cleanup remains a separate explicit operation');
   assert.match(nativeSmoke, /if \(-not \$process\.WaitForExit\(3000\)\)/u);
   const preflight = nativeSmoke.slice(nativeSmoke.indexOf('function Get-CheckedTree'), nativeSmoke.indexOf('function New-IsolatedStartInfo'));
   assert.doesNotMatch(preflight, /AllowCacheJunction/u);
@@ -817,10 +835,26 @@ test('historical Bootstrap resolution is coherent native metadata, never a live-
   assert.ok(workspace.includes('if (!bootstrapRecoveryPending)'));
   assert.ok(workspace.indexOf("if (data.state === 'ready') retireResolvedBootstrap") <
     workspace.indexOf('if (data.epoch < connectionEpoch'));
-  const resolution = workspace.slice(workspace.indexOf('function retireResolvedBootstrap('), workspace.indexOf('function feedback('));
+  const resolutionStart = workspace.indexOf('function retireResolvedBootstrap(');
+  const retirementStart = workspace.indexOf('function retireWorkspaceConnection(', resolutionStart);
+  const retirementEnd = workspace.indexOf('function feedback(', retirementStart);
+  assert.ok(resolutionStart >= 0 && retirementStart > resolutionStart && retirementEnd > retirementStart);
+  const resolution = workspace.slice(resolutionStart, retirementStart);
   assert.ok(resolution.includes('reconnecting = true; contextRequired = true'));
   assert.ok(!resolution.includes('reconnecting = false'));
-  assert.ok(!resolution.includes('connectionEpoch ='));
+  const assignsConnectionEpoch = /\bconnectionEpoch\s*=(?!=|>)/u;
+  assert.ok(assignsConnectionEpoch.test('connectionEpoch=observedEpoch'));
+  assert.ok(!assignsConnectionEpoch.test('attempt.proof.connectionEpoch === resolution.failure_epoch'));
+  assert.ok(!assignsConnectionEpoch.test('connectionEpoch => observedEpoch'));
+  assert.ok(!assignsConnectionEpoch.test(resolution));
+  assert.ok(resolution.includes('attempt.failure === bootstrapFailure && attempt.proof.failure === bootstrapFailure'));
+  assert.ok(resolution.includes('attempt.proof.used === true && attempt.proof.connectionEpoch === resolution.failure_epoch'));
+  const retirement = workspace.slice(retirementStart, retirementEnd);
+  assert.ok(retirement.includes('connectionEpoch = epoch'));
+  assert.ok(retirement.includes('reconnecting = true; contextRequired = true'));
+  assert.ok(!retirement.includes('reconnecting = false') && !retirement.includes('contextRequired = false'));
+  assert.ok(!retirement.includes('invoke('), 'retirement is not a native mutation or a bootstrap override');
+  assert.ok(workspace.includes('retireWorkspaceConnection(snapshot.connection_epoch)'));
   const rpc = rust.slice(rust.indexOf('fn rpc_request('), rust.indexOf('fn native_export_data_root('));
   assert.ok(!rpc.includes('read_existing_epoch') && !rpc.includes('ready_read_epoch'));
 });

@@ -1,4 +1,5 @@
 'use strict';
+const { scanTableCells } = require('./markdown-table-cells');
 const { isIP } = require('node:net');
 
 const {
@@ -70,6 +71,7 @@ function uriTokenEnd(text, start, characters = ADDRESS_URI_CHARACTER_RE) {
 // transformed payload. Only ASCII percent triplets relevant to the telephone
 // grammar are interpreted. Unknown encoded payloads retain conservative whole-
 // token redaction instead of creating an encoding bypass by trimming them.
+const PHONE_VISUAL_ESCAPE_CODES = new Set([0x28, 0x29, 0x2b, 0x2d, 0x2e, 0x2f, 0x5c]);
 function contactUriEnd(text, match) {
   const start = match.index + match[0].length;
   const scheme = match[1].toLowerCase();
@@ -79,6 +81,12 @@ function contactUriEnd(text, match) {
   let cursor = start, end = start, digits = false, parentheses = 0, previous = '';
   while (cursor < text.length) {
     let character = text[cursor], next = cursor + 1;
+    // Consume only actual visual phone escapes, retaining raw offsets.
+    // Literal backslashes may separate digits under an explicit tel/sms
+    // owner; following letters and prose still end the numeric token.
+    if (text.charCodeAt(cursor) === 0x5c && PHONE_VISUAL_ESCAPE_CODES.has(text.charCodeAt(cursor + 1))) {
+      character = text[cursor + 1]; next = cursor + 2;
+    }
     if (character === '%' && /^[a-f0-9]{2}$/iu.test(text.slice(cursor + 1, cursor + 3))) {
       character = String.fromCharCode(Number.parseInt(text.slice(cursor + 1, cursor + 3), 16));
       next = cursor + 3;
@@ -87,7 +95,7 @@ function contactUriEnd(text, match) {
     else if (character === '+' && (!digits || (scheme === 'sms' && previous === ','))) { /* dial prefix */ }
     else if (character === '(') { parentheses++; }
     else if (character === ')' && parentheses > 0) { parentheses--; if (digits) end = next; }
-    else if (/[.\/\- \t]/u.test(character) || (scheme === 'sms' && character === ',')) { /* internal separator */ }
+    else if (/[.\/\- \t]/u.test(character) || character.charCodeAt(0) === 0x5c || (scheme === 'sms' && character === ',')) { /* internal separator */ }
     else if (digits && (character === ';' || character === '?')) {
       return Math.max(next, uriTokenEnd(text, next, PHONE_PARAMETER_CHARACTER_RE));
     } else if (text[cursor] === '%') {
@@ -272,37 +280,21 @@ const DETECTORS = [
 // regex this understands optional outer pipes and escaped `\|` characters, so
 // replacing a secret cannot corrupt the table that carried it.
 function markdownCellsWithOffsets(line, lineStart) {
-  const first = line.search(/\S/u);
-  if (first < 0) return null;
-  let last = line.length;
-  while (last > first && /\s/u.test(line[last - 1])) last--;
-  let bodyStart = first;
-  let bodyEnd = last;
-  if (line[bodyStart] === '|') bodyStart++;
-  if (bodyEnd > bodyStart && line[bodyEnd - 1] === '|') bodyEnd--;
-  // GFM also permits a one-column table with an outer pipe. Without either
-  // an internal or an outer pipe this could instead be an ordinary paragraph
-  // or Setext heading, so do not reinterpret bare prose as a table.
-  if (!line.slice(bodyStart, bodyEnd).includes('|') && line[first] !== '|' && line[last - 1] !== '|') return null;
+  if (!line.includes('|')) return null;
   const cells = [];
-  let cellStart = bodyStart;
-  let escaped = false;
-  const pushCell = (end) => {
-    let start = cellStart;
+  const geometry = scanTableCells(line, (start, end, bounds) => {
+    start = Math.max(start, bounds.firstVisible);
+    end = Math.min(end, bounds.visibleEnd);
     while (start < end && /[ \t]/u.test(line[start])) start++;
     while (end > start && /[ \t]/u.test(line[end - 1])) end--;
     cells.push({ value: line.slice(start, end), start: lineStart + start, end: lineStart + end });
-  };
-  for (let index = bodyStart; index < bodyEnd; index++) {
-    const character = line[index];
-    if (escaped) escaped = false;
-    else if (character === '\\') escaped = true;
-    else if (character === '|') {
-      pushCell(index);
-      cellStart = index + 1;
-    }
+  });
+  if (!geometry.separators) return null;
+  // A lone outer pipe has one empty body in this reader, not in raw FVC ranges.
+  if (!cells.length && geometry.leadingPipe && geometry.trailingPipe) {
+    const at = lineStart + geometry.firstVisible + 1;
+    cells.push({ value: '', start: at, end: at });
   }
-  pushCell(bodyEnd);
   return cells.length >= 1 ? cells : null;
 }
 
@@ -366,21 +358,8 @@ function isSetextHeadingLine(text, index) {
   return /^[ \t]*(?:={3,}|-{3,})[ \t]*$/u.test(nextLine);
 }
 
-function credentialIntervals(spans) {
-  return spans.filter((span) => span.type === 'CREDENTIAL')
-    .sort((left, right) => left.start - right.start || left.end - right.end);
-}
-
-function overlapsCredential(intervals, span) {
-  let low = 0;
-  let high = intervals.length;
-  while (low < high) {
-    const middle = (low + high) >> 1;
-    if (intervals[middle].start < span.end) low = middle + 1;
-    else high = middle;
-  }
-  return low > 0 && intervals[low - 1].end > span.start;
-}
+const { credentialIntervals, overlapsCredential: overlapsCredentialRange } = require('./credential-interval-coverage');
+function overlapsCredential(intervals, span) { return overlapsCredentialRange(intervals, span.start, span.end); }
 
 function safeStructuredSpans(spans) {
   const intervals = credentialIntervals(spans);

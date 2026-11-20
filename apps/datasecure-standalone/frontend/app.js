@@ -98,6 +98,9 @@ let historyButtons = [];
 let lastHistorySnapshot = null;
 let historyRenderGeneration = 0;
 const historyRows = new Map();
+// A row can be replaced while its detail request is pending. The request
+// belongs to its batch and opaque owner, not to a particular DOM button.
+const historyFailureReads = new Map();
 let currentResultsAvailable = false;
 let currentSessionRunStarted = false;
 let currentSessionResultBaseline = '';
@@ -245,8 +248,10 @@ function unsupportedSelectionMessage(code, details, fallback) {
 }
 function renderFailedFiles(target, result) {
   target.replaceChildren();
+  const partialDetails = result?.available === false && Number.isSafeInteger(result.total) &&
+    result.total > 0 && result.total <= 200 && Array.isArray(result.files) && result.files.length <= result.total;
   if (result?.ok !== true || result.local_ui_only !== true || result.external_disclosure !== false ||
-      result.available !== true || !Array.isArray(result.files)) {
+      (result.available !== true && !partialDetails) || !Array.isArray(result.files)) {
     target.textContent = 'Dateinamen für diesen Lauf sind lokal nicht mehr verfügbar. Die Anzahl bleibt im Verlauf erhalten.';
     return;
   }
@@ -256,9 +261,16 @@ function renderFailedFiles(target, result) {
       : 'Für diesen Lauf wurden keine gestoppten Dateinamen gefunden.';
     return;
   }
+  if (partialDetails) {
+    const note = document.createElement('p');
+    note.textContent = 'Die Dateidetails sind unvollständig. Vorhandene lokal verfügbare Dateinamen werden angezeigt; weitere Dateinamen fehlen.';
+    target.appendChild(note);
+  }
   const list = document.createElement('ol');
+  let renderedCount = 0;
   for (const file of result.files) {
     if (!safeLocalFileLabel(file?.name)) continue;
+    renderedCount += 1;
     const item = document.createElement('li');
     const explanation = failedFileExplanation(file.reason_code);
     // Never render source labels or untrusted error text as HTML. Only the
@@ -271,7 +283,7 @@ function renderFailedFiles(target, result) {
         ? `\nFehlercode: ${file.reason_code}` : '');
     list.appendChild(item);
   }
-  const missing = Math.max(0, Number(result.total || 0) - result.files.length);
+  const missing = Math.max(0, Number(result.total || 0) - renderedCount);
   if (missing) {
     const item = document.createElement('li');
     item.textContent = `${missing} weitere Datei${missing === 1 ? '' : 'en'} ohne verfügbaren Dateinamen.`;
@@ -386,9 +398,12 @@ function invalidateHistory() {
 function updateHistoryAvailability() {
   for (const item of historyButtons) {
     const blocked = item.resume === true && (admitted || ['preparing', 'processing'].includes(lastPublicState));
-    item.button.disabled = operationInFlight || historyDirty || !item.available || blocked;
+    const detailReadPending = typeof item.detailReadBatchId === 'string' &&
+      historyFailureReads.has(item.detailReadBatchId);
+    item.button.disabled = operationInFlight || historyDirty || !item.available || blocked || detailReadPending;
     item.button.title = !item.available ? item.reason : blocked
       ? 'Bitte die vorbereitete Auswahl oder den laufenden Stapel zuerst abschließen.'
+      : detailReadPending ? 'Die Dateiliste dieses Laufs wird geladen.'
       : operationInFlight || historyDirty ? 'Die lokale Übersicht wird aktualisiert.' : '';
   }
 }
@@ -520,25 +535,33 @@ function renderHistory(entries) {
       fileDetails.className = 'history-failure-details';
       fileDetails.hidden = true;
       button.addEventListener('click', async () => {
-        if (button.disabled || pageClosed || !record.live) return;
-        button.disabled = true;
+        if (button.disabled || pageClosed || !record.live || operationInFlight || historyDirty ||
+            historyFailureReads.has(entry.batch_id)) return;
+        const readOwner = Object.freeze({});
+        historyFailureReads.set(entry.batch_id, readOwner);
+        updateHistoryAvailability();
         feedback.hidden = false;
         feedback.textContent = 'Dateinamen werden nur lokal gelesen …';
         try {
           const result = await invoke('get_run_failures', { batchId: entry.batch_id });
-          if (pageClosed || !record.live) return;
+          if (pageClosed || !record.live || historyFailureReads.get(entry.batch_id) !== readOwner) return;
           renderFailedFiles(fileDetails, result);
           fileDetails.hidden = false;
           feedback.textContent = 'Nicht verarbeitete Dateien dieses Laufs:';
         } catch {
-          if (pageClosed || !record.live) return;
+          if (pageClosed || !record.live || historyFailureReads.get(entry.batch_id) !== readOwner) return;
           feedback.textContent = 'Die Dateidetails konnten nicht geladen werden. „Gestoppte Dateien anzeigen“ erneut wählen; bei wiederholtem Fehler „Diagnose öffnen“. Der Lauf wird dadurch nicht erneut gestartet.';
-        } finally { button.disabled = false; }
+        } finally {
+          if (historyFailureReads.get(entry.batch_id) === readOwner) {
+            historyFailureReads.delete(entry.batch_id);
+            if (!pageClosed) updateHistoryAvailability();
+          }
+        }
       });
       wrapper.appendChild(button);
       wrapper.appendChild(fileDetails);
       actions.appendChild(wrapper);
-      record.buttons.push({ button, available: true });
+      record.buttons.push({ button, available: true, detailReadBatchId: entry.batch_id });
     }
     actions.appendChild(feedback);
     historyButtons.push(...record.buttons);

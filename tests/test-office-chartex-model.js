@@ -239,4 +239,44 @@ for(const extension of ['.docx','.pptx','.xlsx'])for(const profile of ['general'
   assert.throws(()=>verifyAnonymizedPublication({...proof,markdown:kept.markdown,reviewed_person_candidates:keepProof}),{code:'STANDALONE_PUBLICATION_INVALID'});}
  assert.deepEqual(input,before);
 });
+test('cx85 exact axis ordering and duplicate identity remain unchanged', () => {
+ const ids=[9,0,4294967295],axes=ids.map(id=>axis(id,'Region-'+id)).join('');
+ const xml=chart({axes}),parsed=model(xml);
+ assert.deepEqual(parsed.axes.map(value=>value.id),ids);
+ const out=renderOfficeChartEx(parsed,String,fail).markdown;
+ const positions=ids.map(id=>out.indexOf('Achse · ID '+id+' ·'));
+ assert.ok(positions.every(position=>position>=0));
+ assert.ok(positions[0]<positions[1]&&positions[1]<positions[2]);
+ for(const duplicate of [axis(9)+axis(9),axis(9)+axis(0)+axis(9),axis(9)+axis('0009')])
+  assert.throws(()=>model(chart({axes:duplicate})),{code:'PPTX_STRUCTURE_UNSAFE'});
+});
+test('cx85 the actual reader no longer scans all earlier axes to admit each unique ID', () => {
+ const fs=require('node:fs'),vm=require('node:vm');
+ const filename=require.resolve('../plugins/data-secure/server/office-chartex-model');
+ const bytes=fs.readFileSync(filename),moduleRecord={exports:{}};
+ const context=vm.createContext({module:moduleRecord,require:require('node:module').createRequire(filename)});
+ vm.runInContext('globalThis.__cx85Comparisons=0;const realSome=Array.prototype.some;' +
+  'Array.prototype.some=function(predicate,thisArg){return Reflect.apply(realSome,this,[function(...args){' +
+  'globalThis.__cx85Comparisons++;return Reflect.apply(predicate,thisArg,args);}]);};',context);
+ vm.runInContext(bytes.toString('utf8'),context,{filename});
+ const ids=Array.from({length:40},(_,index)=>40-index);
+ const parsed=moduleRecord.exports.readOfficeChartEx(chart({axes:ids.map(id=>axis(id,'Region')).join('')}),xmlDecode,fail);
+ assert.deepEqual(Array.from(parsed.axes,value=>value.id),ids);
+ assert.equal(context.__cx85Comparisons,0,'actual axis admission uses no growing Array.some scan');
+ assert.deepEqual(fs.readFileSync(filename),bytes,'only the actual source body was evaluated in an isolated VM');
+});
+test('cx85 axis-ID membership preserves actual Word, PowerPoint and Excel source cache paths', () => {
+ const axes=axis(21,'Region')+axis(3,'Wert','val');
+ for(const extension of ['.docx','.pptx','.xlsx']){
+  const input=source(extension,chart({axes,seriesXml:series(17,{axisIds:[21,3]})})),before=Buffer.from(input);
+  assert.equal(controls(input,extension).controls_verified,true);
+  for(const mode of ['content-v1','notes-v1']){
+   const out=extract(input,extension,mode);
+   for(const value of ['North','South','100','200'])assert.ok(out.markdown.includes(value));
+   assert.notEqual(out.coverage.status,'complete');
+  }
+  assert.deepEqual(input,before);
+ }
+});
+
 done();

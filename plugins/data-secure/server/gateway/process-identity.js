@@ -64,7 +64,7 @@ function windowsBirth(pid, spawnSync = childProcess.spawnSync, verifyArtifact = 
 function macosBirth(pid, spawnSync = childProcess.spawnSync) {
   const result = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'lstart='], {
     encoding: 'utf8', windowsHide: true, shell: false, timeout: 2000,
-    maxBuffer: 256, env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C' }
+    maxBuffer: 256, env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C', TZ: 'UTC0' }
   });
   assertProbeSucceeded(result);
   const started = String(result?.stdout || '').trim().replace(/\s+/gu, ' ');
@@ -104,8 +104,17 @@ function processInstanceIdentity(pid, options = {}) {
   catch { return null; }
 }
 
-// `unknown` deliberately blocks recovery. Only a dead process or a different
-// birth identity proves that a persisted PID no longer owns the lease.
+// Internal observation only. Callers retain PID/liveness/shape validation.
+// Existing Mac journals carry an unversioned hash of a local-time display;
+// even a successful new UTC probe cannot make a live mismatch conclusive.
+function compareProcessBirth(actual, expectedIdentity, platform = process.platform) {
+  if (!actual) return 'unknown';
+  if (actual === expectedIdentity) return 'same';
+  return platform === 'darwin' ? 'unknown' : 'different';
+}
+
+// `unknown` deliberately blocks recovery. A live mismatch is conclusive only
+// on providers whose stored and current representations remain comparable.
 function processInstanceState(pid, expectedIdentity, options = {}) {
   if (!Number.isSafeInteger(pid) || pid <= 0) return 'dead';
   const alive = options.processAlive || processAlive;
@@ -113,8 +122,8 @@ function processInstanceState(pid, expectedIdentity, options = {}) {
   if (!ID_RE.test(String(expectedIdentity || ''))) return 'unknown';
   const actual = (options.processInstanceIdentity || processInstanceIdentity)(pid);
   if (!ID_RE.test(String(actual || ''))) return 'unknown';
-  return actual === expectedIdentity ? 'same' : 'different';
+  return compareProcessBirth(actual, expectedIdentity, options.platform || process.platform);
 }
 
 module.exports = { ID_RE, ERROR_CODES, processInstanceIdentity, requireProcessInstanceIdentity,
-  processInstanceState, _test: { linuxBirth, windowsBirth, macosBirth } };
+  processInstanceState, compareProcessBirth, _test: { linuxBirth, windowsBirth, macosBirth } };

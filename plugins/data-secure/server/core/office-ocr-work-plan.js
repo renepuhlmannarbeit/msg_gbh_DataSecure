@@ -6,7 +6,8 @@ const OFFICE_OCR_WORK_LIMITS = Object.freeze({
   MAX_WORK_PIXELS: 120_000_000, MAX_LIVE_PIXELS: 30_000_000, MAX_ASSETS: 150,
   MAX_LINES: 2000, MAX_WORD_BOXES: 5000, FINE_WORD_HEIGHT: 18,
   MIN_FINE_WORDS: 48, MIN_TEXT_BANDS: 8, MIN_FINE_WORDS_PER_LINE: 3,
-  MAX_CROP_PASSES: 32, MAX_CROP_PIXELS: 200_000, MAX_CROP_WORK_PIXELS: 2_000_000
+  MAX_CROP_PASSES: 32, MAX_CROP_PIXELS: 200_000, MAX_CROP_WORK_PIXELS: 2_000_000,
+  MAX_DIAGRAM_SOURCE_PIXELS: 450_000, MAX_DIAGRAM_WORK_PIXELS: 8_000_000
 });
 const L = OFFICE_OCR_WORK_LIMITS;
 const assessed = new WeakMap();
@@ -118,8 +119,8 @@ function assessExtraOfficeOcrRaster(facts, lines) {
 }
 
 function createOfficeOcrWorkLedger(assets) {
-  const bases = new Map(), upscaled = new Set(), crops = new Set();
-  let basePixels = 0, optionalPixels = 0, unavailable = null, closed = false;
+  const bases = new Map(), upscaled = new Set(), crops = new Set(), diagrams = new Set();
+  let basePixels = 0, optionalPixels = 0, diagramPixels = 0, unavailable = null, closed = false;
   try {
     const entries = array(assets, L.MAX_ASSETS);
     if (!entries) unavailable = 'BASE_INVALID';
@@ -155,12 +156,31 @@ function createOfficeOcrWorkLedger(assets) {
       const reason = status(assetId);
       if (reason) return denied(reason);
       if (upscaled.has(assetId)) return denied('UPSCALE_ALREADY_RESERVED');
+      if (diagrams.has(assetId)) return denied('DIAGRAM_ALREADY_RESERVED');
       const cost = assessment && typeof assessment === 'object' ? assessed.get(assessment) : null;
       if (!cost) return denied('ASSESSMENT_INVALID');
       if (bases.get(assetId) < cost.sourcePixels) return denied('BASE_ASSET_MISMATCH');
       if (!enough(cost.workPixels)) return denied('NO_EXTRA_BUDGET');
       optionalPixels += cost.workPixels; upscaled.add(assetId);
       return frozen({ admitted: true, chargedPixels: cost.workPixels });
+    },
+    reserveDiagram(assetId, width, height) {
+      const reason = status(assetId);
+      if (reason) return denied(reason);
+      if (diagrams.has(assetId)) return denied('DIAGRAM_ALREADY_RESERVED');
+      if (upscaled.has(assetId)) return denied('UPSCALE_ALREADY_RESERVED');
+      const pixels = area(width, height, L.MAX_DIAGRAM_SOURCE_PIXELS);
+      if (pixels === null) return denied('DIAGRAM_PLAN_INVALID');
+      if (bases.get(assetId) < pixels) return denied('BASE_ASSET_MISMATCH');
+      // Charge the native-size color filter and the complete 2x OCR raster.
+      // A diagram supplement never displaces the base work of a later asset.
+      const workPixels = pixels * 5;
+      if (workPixels > L.MAX_DIAGRAM_WORK_PIXELS - diagramPixels || !enough(workPixels))
+        return denied('NO_EXTRA_BUDGET');
+      optionalPixels += workPixels;
+      diagramPixels += workPixels;
+      diagrams.add(assetId);
+      return frozen({ admitted: true, chargedPixels: workPixels });
     },
     reserveCrops(assetId, cropPixels) {
       const reason = status(assetId);

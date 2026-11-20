@@ -1237,8 +1237,8 @@ testAsync('masking previews only marked text then saves with one click and revok
   assert.match(h.el('document-markdown-caption').textContent, /Aktueller Ergebnistext.*nur markieren/u);
   assert.match(h.el('document-edit-hint').textContent, /schreibgeschützt.*Maskierung speichern/u);
   assert.equal(h.el('document-save-correction').hidden, true);
-  await h.mark(14, 16);
   const writesBefore = h.calls.filter(call => call.command === 'decide_document_review').length;
+  await h.mark(14, 16);
   assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, writesBefore);
   assert.equal(h.el('document-mask-preview').value, '42');
   assert.equal(h.el('document-change-confirm').hidden, true);
@@ -2964,4 +2964,103 @@ testAsync('a failed fresh repair-binding read after an acknowledged commit leave
   assert.doesNotMatch(h.el('documents-status').textContent, /gespeichert und aktueller Ergebnisstand bereitgestellt/u);
 });
 
+for (const completion of ['resolve', 'reject']) for (const successor of ['none', 'same', 'other', 'busy'])
+  testAsync(`retired explicit reload ${completion} cannot overwrite ${successor} successor status or busy ownership`, async () => {
+    let hold = false, holdDetail = false, finish, reject, finishDetail;
+    const delayed = new Promise((resolve, refuse) => { finish = resolve; reject = refuse; });
+    const detail = new Promise(resolve => { finishDetail = resolve; });
+    const h = harness({ invoke(command) {
+      if (hold && command === 'get_document_reviews') return delayed;
+      if (holdDetail && command === 'get_document_review_chunk') return detail;
+    } });
+    const listing = () => ({ documents: structuredClone(h.rows), unavailable: [], processing_complete: true,
+      result_publication: { state: 'initial', generation_id: null, count: 2, current_revision: 0 },
+      local_ui_only: true, external_disclosure: false });
+    await h.api.open('a'.repeat(64)); hold = true;
+    const pending = h.el('documents-reload').events.get('click')(); await tick();
+    try {
+      h.api.invalidateConnection(); hold = false;
+      if (successor !== 'none') await h.api.open((successor === 'other' ? 'b' : 'a').repeat(64));
+      if (successor === 'busy') {
+        holdDetail = true; await h.act(h.el('documents-list').children[0].children[1].children[0]);
+        assert.equal(h.el('documents-reload').disabled, true);
+      }
+      const snapshot = () => ({ batch: h.api.activeBatchId(), status: h.el('documents-status').textContent,
+        name: h.el('document-name').textContent, revision: h.el('document-revision').textContent,
+        text: h.el('document-markdown').value, reloadDisabled: h.el('documents-reload').disabled,
+        redactDisabled: h.el('document-redact').disabled, guides: JSON.stringify(h.guides) });
+      const before = snapshot();
+      if (completion === 'resolve') finish(listing()); else reject(Error('DOCUMENT_REVIEW_INVALID'));
+      await pending; await tick();
+      assert.deepEqual(snapshot(), before);
+      assert.equal(h.calls.some(isDecision), false);
+      assert.equal(h.calls.some(call => ['publish_result_documents', 'export_approved_documents'].includes(call.command)), false);
+    } finally {
+      finish(listing()); finishDetail({ ...h.rows[0], chunk_index: 0, original_text: 'Anna Beispiel: 42 Projekte.',
+        markdown: '[PERSON_001]: 42 Projekte.', local_ui_only: true, external_disclosure: false });
+      await pending; await tick();
+    }
+  });
+testAsync('current explicit reload errors remain visible without replaying a mutation', async () => {
+  let fail = false;
+  const h = harness({ invoke(command) { if (fail && command === 'get_document_reviews') throw Error('DOCUMENT_REVIEW_INVALID'); } });
+  await h.api.open('a'.repeat(64)); fail = true;
+  await h.el('documents-reload').events.get('click')();
+  assert.match(h.el('documents-status').textContent, /Stand konnte nicht abgefragt werden/u);
+  assert.match(h.el('documents-status').textContent, /Änderungen bleiben gesperrt/u);
+  assert.equal(h.calls.some(isDecision), false);
+});
+for (const completion of ['resolve', 'reject']) testAsync(`twice interrupted draft recovery ${completion} preserves its original owner and current connection status`, async () => {
+  let held = false, finish, reject;
+  const response = new Promise((resolve, refuse) => { finish = resolve; reject = refuse; });
+  const h = harness({ invoke(command) { if (held && command === 'get_document_review_chunk') return response; } });
+  h.rows.forEach(row => { row.processing_mode = 'markdown-only'; });
+  const first = 'a'.repeat(64), second = 'b'.repeat(64), draft = 'Mein nicht gespeicherter Entwurf';
+  await h.api.open(first); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+  h.el('document-markdown').value = draft; await h.act('document-markdown', 'input'); h.api.invalidateConnection();
+  const row = structuredClone(h.rows[0]); held = true;
+  const pending = h.el('documents-reload').events.get('click')(); await tick();
+  try {
+    assert.equal(h.calls.filter(call => call.command === 'get_document_review_chunk').length, 2);
+    h.api.invalidateConnection();
+    assert.equal(h.api.canOpen(second), false, 'a suspended read is not permission to abandon the held draft');
+    assert.equal(h.el('document-recovery-draft').hidden, false);
+    assert.equal(h.el('document-recovery-text').value, draft);
+    const status = h.el('documents-status').textContent;
+    if (completion === 'reject') reject(Error('DOCUMENT_REVIEW_INVALID'));
+    else finish({ ...row, chunk_index: 0, original_text: 'Original', markdown: '[PERSON_001]: 42 Projekte.', local_ui_only: true, external_disclosure: false });
+    await pending; await tick();
+    assert.equal(h.api.activeBatchId(), first);
+    assert.equal(h.el('documents-status').textContent, status);
+    assert.equal(h.el('document-recovery-draft').hidden, false);
+    assert.equal(h.el('document-recovery-text').value, draft);
+    assert.equal(h.calls.some(isDecision), false);
+  } finally {
+    finish({ ...row, chunk_index: 0, original_text: 'Original', markdown: '[PERSON_001]: 42 Projekte.', local_ui_only: true, external_disclosure: false });
+    await pending; await tick();
+  }
+});
+testAsync('discarding an interrupted recovery is explicit and its late reader cannot reinsert the old draft into a successor', async () => {
+  let held = false, finish;
+  const response = new Promise(resolve => { finish = resolve; });
+  const h = harness({ invoke(command) { if (held && command === 'get_document_review_chunk') return response; } });
+  h.rows.forEach(row => { row.processing_mode = 'markdown-only'; });
+  await h.api.open('a'.repeat(64)); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+  h.el('document-markdown').value = 'Alter Entwurf'; await h.act('document-markdown', 'input'); h.api.invalidateConnection();
+  const row = structuredClone(h.rows[0]); held = true;
+  const pending = h.el('documents-reload').events.get('click')(); await tick();
+  try {
+    h.api.invalidateConnection(); await h.act('document-recovery-discard'); held = false;
+    assert.equal(h.api.canOpen('b'.repeat(64)), true);
+    h.rows[0].document_id = '3'.repeat(32); h.rows[0].name = 'Neue Quelle.pdf';
+    await h.api.open('b'.repeat(64)); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+    const snapshot = () => ({ batch: h.api.activeBatchId(), status: h.el('documents-status').textContent,
+      name: h.el('document-name').textContent, text: h.el('document-markdown').value,
+      recoveryHidden: h.el('document-recovery-draft').hidden, recoveryText: h.el('document-recovery-text').value });
+    const before = snapshot();
+    finish({ ...row, chunk_index: 0, original_text: 'Original', markdown: '[PERSON_001]: 42 Projekte.', local_ui_only: true, external_disclosure: false });
+    await pending; await tick(); assert.deepEqual(snapshot(), before);
+    assert.equal(h.calls.some(isDecision), false);
+  } finally { finish({}); await pending; await tick(); }
+});
 done();

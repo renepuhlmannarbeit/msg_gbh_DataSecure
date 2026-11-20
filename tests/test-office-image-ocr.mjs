@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { writeStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
 import { writeConversionRuntime } from '../scripts/lib/standalone-conversion-runtime.mjs';
-import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+import { finishPackageSmokeParent } from './helpers/standalone-package-scope.mjs';
 import { fromMarkdown } from '../native/markdown/pilot/node_modules/mdast-util-from-markdown/index.js';
 import { parseFragment } from '../native/markdown/pilot/node_modules/parse5/dist/index.js';
 const require = createRequire(import.meta.url);
@@ -204,12 +204,13 @@ if (process.argv.includes('--source-only')) {
   process.env.EU_PRIVACY_RESULT_ROOT=path.join(scope,'results');
   const server = path.join(scope, 'server'), runtime = path.join(server, 'standalone', 'conversion-runtime');
   const originalSpawn = childProcess.spawn, children = [];
-  let diagnostics = '';
+  let diagnostics = '', failed = false, error;
   childProcess.spawn = (...args) => {
     const child = originalSpawn(...args); let closed = false;
+    const terminate = child.kill.bind(child, 'SIGTERM');
     const done = new Promise(resolve => child.once('close', () => { closed = true; resolve(); }));
     child.stderr?.on('data', bytes => { diagnostics += bytes.toString(); });
-    children.push({ child, done, closed: () => closed }); return child;
+    children.push(Object.freeze({ done, closed: () => closed, terminate })); return child;
   };
   try {
     writeStandaloneRuntime(path.join(repo, 'plugins', 'data-secure', 'server'), server, target);
@@ -241,6 +242,57 @@ if (process.argv.includes('--source-only')) {
       ['-e', rasterFixture, path.join(runtime, 'node_modules/@napi-rs/canvas')],
       { windowsHide: true, encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 }));
     const png = Buffer.from(generated.png, 'base64'), jpg = Buffer.from(generated.jpg, 'base64'), bmp = encodeBmp(decodePng(png));
+    await check(`${target}: typed unsupported embedded PNG preserves all three Office bodies and later image contacts`, async () => {
+      const variants = require('./lib/png-static-variants.cjs');
+      const entries = variants.chunks(variants.checker(1, 3, 1));
+      const unsupported = variants.assemble([entries[0], ['abCd', Buffer.from([1, 2, 3])], ...entries.slice(1)]);
+      const failures = [], inputHash = hash(unsupported), goodHash = hash(png);
+      for (const type of ['docx', 'xlsx', 'pptx']) {
+        const source = office(type, [{ ext: 'png', bytes: unsupported }, { ext: 'png', bytes: png }]);
+        const before = hash(source);
+        let result;
+        try { result = await convertBuffer(source, `.${type}`, { contentOptions: options(true) }); }
+        catch (error) { failures.push({ type, code: error?.code }); }
+        assert.equal(hash(source), before); assert.equal(hash(unsupported), inputHash); assert.equal(hash(png), goodHash);
+        if (!result) continue;
+        assert.ok(result.markdown.includes(nativeText), `${type}: exact independent native text`);
+        assert.equal((result.markdown.match(/RASTER ORIGINAL/gu) || []).length, 1);
+        assert.equal(result.coverage.status, 'incomplete');
+        assert.ok(result.coverage.reason_codes.includes('OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED'));
+        assert.ok(!result.coverage.reason_codes.includes('IMAGE_CONTENT_DAMAGED'), 'unsupported is not damaged');
+        assert.ok(result.ocr_contacts?.length >= 2);
+        assert.deepEqual([...new Set(result.ocr_contacts.map(contact => contact.page))], [2]);
+        for (const contact of result.ocr_contacts)
+          assert.ok(result.markdown.slice(contact.start, contact.end).includes(contact.kind === 'email' ? '@' : '555'));
+      }
+      assert.deepEqual(failures, [], 'known isolated PNG limitation must not erase an Office body or stop its later asset');
+    });
+    await check(`${target}: actual embedded PNG omission helper requires the exact typed refusal and original PNG role`, () => {
+      const { PngUnsupportedFeatureError, decodeRasterPng } = require('../plugins/data-secure/server/standalone/png-raster-decoder');
+      const source = fs.readFileSync(path.join(repo, 'plugins/data-secure/server/standalone/conversion-worker-child.js'), 'utf8');
+      const start = source.indexOf('function imageOmission('), end = source.indexOf('async function* officeRasters(', start);
+      assert.ok(start > 0 && end > start);
+      const helper = require('node:vm').runInNewContext(`(function(){${source.slice(start, end)};return visualOmission;})()`, {
+        PngUnsupportedFeatureError,
+        officeVisualOmission: require('../plugins/data-secure/server/standalone/office-visual-omission').officeVisualOmission
+      });
+      const refusal = new PngUnsupportedFeatureError('UNKNOWN_ANCILLARY');
+      assert.equal(helper(refusal, 'png'), 'OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED');
+      for (const type of ['docx', 'tiff', 'svg', undefined]) assert.equal(helper(refusal, type), null);
+      for (const error of [{ code: 'PNG_FEATURE_UNSUPPORTED' },
+        Object.assign(Error('backend refusal'), { code: 'PNG_FEATURE_UNSUPPORTED', name: 'PngUnsupportedFeatureError' }),
+        Object.assign(Error('policy'), { code: 'CONVERSION_POLICY_FAILED' })]) assert.equal(helper(error, 'png'), null);
+      assert.equal(helper({ code: 'CONVERSION_IMAGE_INVALID' }, 'png'), 'IMAGE_CONTENT_DAMAGED');
+      let nativeCalls = 0;
+      const variants = require('./lib/png-static-variants.cjs'), entries = variants.chunks(variants.checker(1, 3, 1));
+      const bytes = variants.assemble([entries[0], ['abCd', Buffer.from([1, 2, 3])], ...entries.slice(1)]), before = hash(bytes);
+      return assert.rejects(decodeRasterPng(bytes, {
+        createCanvas() { nativeCalls++; throw Error('unexpected native fallback'); },
+        loadImage() { nativeCalls++; throw Error('unexpected native fallback'); }
+      }), error => error instanceof PngUnsupportedFeatureError).then(() => {
+        assert.equal(nativeCalls, 0); assert.equal(hash(bytes), before);
+      });
+    });
     const raster=decodePng(png),tagRows=[[256,4,raster.width],[257,4,raster.height],[258,3,8],[259,3,1],[262,3,1],
       [273,4,146],[274,3,1],[277,3,1],[278,4,raster.height],[279,4,raster.width*raster.height],[284,3,1]];
     const tif=Buffer.alloc(146+raster.width*raster.height);tif.write('II');tif.writeUInt16LE(42,2);tif.writeUInt32LE(8,4);tif.writeUInt16LE(tagRows.length,8);
@@ -512,23 +564,24 @@ if (process.argv.includes('--source-only')) {
       await assert.rejects(convertBuffer(Buffer.from('![Bad](data:image/png;base64,AAAA)'), '.md', { contentOptions: options(true) }), { code: 'CONVERSION_IMAGE_INVALID' });
       assert.doesNotMatch(diagnostics, /CONVERSION_OCR_(?:STARTING|READY)/u);
     });
-    process.stdout.write(`${passed} Office/MD groups passed; actual native host ${target}\n`);
   } catch (failure) {
-    // The product never persists parser stderr. In this synthetic CI fixture,
-    // emit only the supervisor's fixed setup phase (and numeric errno) so an
-    // intermittent macOS isolation failure can be diagnosed without paths or
-    // document text from Node, OCR or other vendor processes.
-    const phases = [...diagnostics.matchAll(/datasecure-sandbox setup_failure phase=([a-z-]+)(?: errno=(\d+))?/gu)];
-    if (phases.length) {
-      const [, phase, errno] = phases.at(-1);
-      process.stderr.write(`DATASECURE_SUPERVISOR_SETUP_PHASE=${phase}${errno ? ` ERRNO=${errno}` : ''}\n`);
-    }
-    throw failure;
+    failed = true; error = failure;
+    // Emit only fixed setup phase/errno. Diagnostic failure must not replace
+    // the original thrown value, including falsy values.
+    try {
+      const phases = [...diagnostics.matchAll(/datasecure-sandbox setup_failure phase=([a-z-]+)(?: errno=(\d+))?/gu)];
+      if (phases.length) {
+        const [, phase, errno] = phases.at(-1);
+        process.stderr.write(`DATASECURE_SUPERVISOR_SETUP_PHASE=${phase}${errno ? ` ERRNO=${errno}` : ''}\n`);
+      }
+    } catch { /* The original test failure owns this outcome. */ }
   } finally {
-    childProcess.spawn = originalSpawn;
-    for (const entry of children) if (!entry.closed()) entry.child.kill('SIGTERM');
-    await Promise.all(children.map(entry => entry.done));
-    for(const [key,value] of originalDiagnosticEnvironment){if(value===undefined)delete process.env[key];else process.env[key]=value;}
-    removePackageSmokeScope(repo, scope);
+    await finishPackageSmokeParent({ children, failed, error,
+      restoreSpawn: () => { childProcess.spawn = originalSpawn; },
+      restoreEnvironment: [...originalDiagnosticEnvironment].map(([key, value]) => () => {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }) });
   }
+  process.stdout.write('Office runtime retained; descendant writer quiescence unconfirmed\n');
+  process.stdout.write(`${passed} Office/MD groups passed; actual native host ${target}\n`);
 }

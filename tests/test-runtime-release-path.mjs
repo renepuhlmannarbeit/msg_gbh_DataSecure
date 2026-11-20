@@ -54,6 +54,39 @@ for (const required of ['runs-on: windows-latest', 'test:standalone', 'test:stan
   assert.ok(standaloneWindows.includes(required), required);
 }
 assert.doesNotMatch(standaloneWindows, /build:cowork|build:plugin/u);
+// The second real build must have its own create-only destination. Keep this
+// before the install assertion so the old Windows source exposes CI-F2 itself.
+const windowsRepro = standaloneWindows.match(/      - name: Require deterministic packaging of the identical compiled desktop\n([\s\S]*?)(?=\n      - name:|\n      - uses:)/u)?.[1];
+assert.ok(windowsRepro, 'Windows retains its actual two-build reproducibility step');
+assert.match(windowsRepro,
+  /node scripts\/build-standalone-package\.mjs --engineering-directory \$reproDirectory/u,
+  'CI-F2: the second actual Windows build must use a fresh engineering destination');
+assert.match(windowsRepro, /\$reproDirectory = 'engineering-repro-windows-x64'/u);
+assert.match(windowsRepro,
+  /\$reproArchive = "dist\/\$reproDirectory\/DataSecure-Standalone-\$version-windows-x64\.zip"/u);
+assert.equal((standaloneWindows.match(/^\s*node scripts\/build-standalone-package\.mjs(?:[^\n]*)$/gmu) || []).length, 2,
+  'reproducibility requires two real builder invocations, not a copied first ZIP');
+assert.deepEqual([...windowsRepro.matchAll(/^\s*node scripts\/verify-standalone-package\.mjs ([^\r\n]+)\r?$/gmu)]
+  .map(match => match[1].trim()), ['$archive', '$reproArchive'],
+  'both actual archives pass the existing positional verifier and checksum gate');
+assert.match(windowsRepro,
+  /if \(\(Get-FileHash -LiteralPath \$reproArchive -Algorithm SHA256\)\.Hash -ne \$before\) \{ throw 'STANDALONE_PACKAGE_NOT_DETERMINISTIC' \}/u);
+assert.ok(windowsRepro.includes('& "$env:SystemRoot\\System32\\fc.exe" /b $archive $reproArchive > $null'),
+  'compare the two real archives byte-for-byte with the fixed native Windows binary comparator');
+assert.match(windowsRepro,
+  /if \(\$LASTEXITCODE -ne 0\) \{ throw 'STANDALONE_PACKAGE_NOT_DETERMINISTIC' \}/u,
+  'a byte difference or comparison error cannot pass the gate');
+assert.doesNotMatch(windowsRepro, /Copy-Item|Remove-Item|\.first|--archive|\b(?:del|rm|unlink)\b/u,
+  'no substitute ZIP copy, prebuild deletion or invented verifier option');
+const windowsInstall = standaloneWindows.match(/      - name: Install locked build and offline conversion dependencies\n([\s\S]*?)(?=\n      - name:)/u)?.[1];
+assert.ok(windowsInstall, 'Windows keeps its locked dependency preparation');
+for (const prefix of ['ocr', 'pdfjs', 'markdown', 'graphics']) {
+  const command = 'npm ci --prefix native/' + prefix + '/pilot --ignore-scripts' +
+    (prefix === 'graphics' ? ' --legacy-peer-deps' : '') + ' --no-audit --no-fund';
+  assert.ok(windowsInstall.includes(command + '\n          if ($LASTEXITCODE) { exit $LASTEXITCODE }'),
+    'CI-F1: the fresh Windows job must install and check mandatory ' + prefix + ' runtime inputs');
+  assert.ok(windowsInstall.indexOf(command) < windowsInstall.indexOf('node native/ocr/pilot/fetch-models.mjs'));
+}
 assert.match(releaseWorkflow, /\$archive = Join-Path \$env:RUNNER_TEMP \$archiveName/u);
 assert.match(releaseWorkflow, /Invoke-WebRequest[^\n]+\$archiveName[^\n]+-OutFile \$archive/u);
 assert.match(releaseWorkflow, /dist\/DataSecure-Privacy-Preflight-windows-x64-debug-v\*\.zip/u);

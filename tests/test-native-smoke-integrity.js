@@ -279,6 +279,134 @@ test('an approved untagged batch failure is ancillary only and can neither corru
   }
 }));
 
+const mappingReadinessPhases = ['mapping_publication', 'mapping_intent', 'mapping_recheck', 'mapping_csv',
+  'mapping_csv_root', 'mapping_csv_lock', 'mapping_csv_read', 'mapping_csv_write', 'mapping_intent_finish'];
+
+test('the nine actual closed mapping failure phases are discard-only ancillary readiness rows', () => diagnosticFixture(f => {
+  for (const phase of mappingReadinessPhases) {
+    const failure = f.event('sidecar', 'batch_worker_failed', 90,
+      { outcome: 'failed', phase, error_code: 'EIO' });
+    delete failure.session_id;
+    f.write(path.basename(f.leaf), [f.sidecarEvents[0], failure, ...f.sidecarEvents.slice(1), failure]);
+    const ready = sidecarReadiness(f.directory, f.desktop,
+      { requireRuntime: true, requireReview: true, requireWorkspace: true });
+    assert.equal(ready.ready, true, phase);
+    assert.deepEqual(ready.error_codes, []);
+    assert.equal(ready.session_id, f.session); assert.equal(ready.conditions.sidecar_generation, true);
+    assert.equal(ready.conditions.current_owner_main_ipc, true);
+    assert.equal(ready.conditions.current_owner_review_ipc, true);
+    // This row has no identity and cannot manufacture any startup evidence.
+    f.write(path.basename(f.leaf), [failure]);
+    const alone = sidecarReadiness(f.directory, f.desktop,
+      { requireRuntime: true, requireReview: true, requireWorkspace: true });
+    assert.equal(alone.ready, false); assert.equal(alone.conditions.sidecar_session, false);
+    assert.equal(alone.conditions.sidecar_generation, false);
+    assert.equal(alone.conditions.service_initialized, false);
+  }
+}));
+
+test('mapping diagnostic compatibility preserves exact fields, no-session, outcome and code refusals', () => diagnosticFixture(f => {
+  for (const phase of mappingReadinessPhases) {
+    const failure = f.event('sidecar', 'batch_worker_failed', 90,
+      { outcome: 'failed', phase, error_code: 'EIO' });
+    delete failure.session_id;
+    for (const invalid of [
+      { ...failure, phase: 'PRIVATE_MAPPING_PHASE_SENTINEL' },
+      { ...failure, session_id: f.session }, { ...failure, action: 'service_initialized' },
+      { ...failure, extra: 'PRIVATE_MAPPING_EXTRA_SENTINEL' },
+      { ...failure, outcome: 'ready' }, { ...failure, outcome: 'progress' },
+      { ...failure, error_code: 'PRIVATE_MAPPING_CODE_SENTINEL' },
+      { ...failure, event: 'service_initialized' }
+    ]) {
+      f.write(path.basename(f.leaf), [...f.sidecarEvents, invalid]);
+      const report = sidecarReadiness(f.directory, f.desktop,
+        { requireRuntime: true, requireReview: true, requireWorkspace: true });
+      assert.equal(report.ready, false, phase);
+      assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_INVALID'), phase);
+      assert.ok(!JSON.stringify(report).includes('PRIVATE_MAPPING_'));
+    }
+  }
+}));
+
+// A real own Dir handle is acquired/read/closed. Throws only model the named
+// scan/close error boundary; there is no copied enumerator or native IO claim.
+function directoryReadCloseFault(f, faults = {}) {
+  const open = fs.opendirSync, counts = { reads: 0, closes: 0, fallbackCloses: 0 };
+  let handle, closeOriginal, closeAttempted = false, report;
+  fs.opendirSync = function(target, ...args) {
+    const opened = open.call(this, target, ...args);
+    if (path.resolve(target) !== f.directory) return opened;
+    assert.equal(handle, undefined, 'exactly one owned directory stream');
+    handle = opened;
+    const readOriginal = opened.readSync.bind(opened);
+    closeOriginal = opened.closeSync.bind(opened);
+    opened.readSync = () => {
+      counts.reads++;
+      const value = readOriginal();
+      if (Object.hasOwn(faults, 'readFailure')) throw faults.readFailure;
+      return value;
+    };
+    opened.closeSync = () => {
+      counts.closes++; closeAttempted = true;
+      const value = closeOriginal();
+      if (Object.hasOwn(faults, 'closeFailure')) throw faults.closeFailure;
+      return value;
+    };
+    return opened;
+  };
+  try { report = sidecarReadiness(f.directory, f.desktop, { requireRuntime: true }); }
+  finally {
+    fs.opendirSync = open;
+    // Avoid leaking this known handle if a future regression omits close.
+    // The separate counter makes that fallback fail every test below.
+    if (handle && !closeAttempted) { counts.fallbackCloses++; closeAttempted = true; closeOriginal(); }
+  }
+  assert.ok(handle); assert.equal(counts.closes, 1); assert.equal(counts.fallbackCloses, 0);
+  assert.throws(() => handle.readSync(), error => error.code === 'ERR_DIR_CLOSED');
+  return { report, counts };
+}
+
+test('actual directory leaf-limit primary survives one real close plus a modeled close failure', () => diagnosticFixture(f => {
+  // 65 matching tiny leaves including the fixture's original: no huge files,
+  // descriptor exhaustion, guessed enumeration order or copied limit check.
+  for (let index = 1; index <= MAX_LEAVES; index++) f.write(
+    `sidecar-interactions.${index.toString(16).padStart(32, '0')}.jsonl`, [f.sidecarEvents[0]]);
+  const closeFailure = Object.assign(Error('PRIVATE_CLOSEDIR_EIO_SENTINEL'), { code: 'EIO' });
+  const { report, counts } = directoryReadCloseFault(f, { closeFailure });
+  assert.ok(counts.reads >= MAX_LEAVES + 1);
+  assert.equal(report.ready, false); assert.deepEqual(report.error_codes, ['NATIVE_SMOKE_LOG_LIMIT']);
+  assert.ok(!JSON.stringify(report).includes('PRIVATE_CLOSEDIR_'));
+}));
+
+test('directory scan primary presence survives close failure even for falsy throws', () => {
+  const primary = Object.assign(Error('PRIVATE_READDIR_PRIMARY_SENTINEL'), { code: 'ENOENT' });
+  const secondary = Object.assign(Error('PRIVATE_CLOSEDIR_SECONDARY_SENTINEL'), { code: 'EIO' });
+  const cases = [{ readFailure: primary, closeFailure: secondary, expected: 'NATIVE_SMOKE_LOG_MISSING' },
+    ...[undefined, null, false, 0, ''].map(readFailure => ({ readFailure,
+      // Distinct existing failure class exposes a mistaken truthiness guard.
+      // This typed throw is a routing seam, not a claimed native close errno.
+      closeFailure: primary, expected: 'NATIVE_SMOKE_LOG_UNAVAILABLE' }))];
+  for (const item of cases) diagnosticFixture(f => {
+    const { report, counts } = directoryReadCloseFault(f, item);
+    assert.equal(counts.reads, 2, 'one real scan read plus the closed-handle witness');
+    assert.equal(report.ready, false); assert.deepEqual(report.error_codes, [item.expected]);
+    assert.ok(!JSON.stringify(report).includes('PRIVATE_'));
+  });
+});
+
+test('directory close-only errors stay hard and a normal close keeps its positive control', () => {
+  diagnosticFixture(f => {
+    const { report } = directoryReadCloseFault(f);
+    assert.equal(report.ready, true); assert.deepEqual(report.error_codes, []);
+  });
+  for (const closeFailure of [Object.assign(Error('PRIVATE_CLOSEDIR_ONLY_SENTINEL'), { code: 'EIO' }),
+    undefined, null, false, 0, '']) diagnosticFixture(f => {
+    const { report } = directoryReadCloseFault(f, { closeFailure });
+    assert.equal(report.ready, false); assert.deepEqual(report.error_codes, ['NATIVE_SMOKE_LOG_UNAVAILABLE']);
+    assert.ok(!JSON.stringify(report).includes('PRIVATE_'));
+  });
+});
+
 test('current-owner IPC cannot borrow an older owner response and preserves requests issued before bootstrap', () => diagnosticFixture(f => {
   const another = `sidecar-interactions.${'b'.repeat(32)}.jsonl`;
   const latestOwner = [f.event('desktop', 'sidecar_starting', 50), f.event('desktop', 'sidecar_bootstrap_ready', 70)];
@@ -845,6 +973,93 @@ testAsync('packaged OCR assertions reject lost fields, leaked contacts and colla
   assert.throws(() => assertAppliedOcrCorrection({ original_text: corrected.original_text.replace(correctedPhone, '+49 (040) 987654321') }, expected));
 });
 
+// Read the actual existing per-document assertion block, including any narrow
+// subsequent fix. Do not run the scenario/fixtures/processes or copy its oracle.
+async function packagedMarkdownBodyCheck(outputs, enabled) {
+  const file = path.join(__dirname, 'helpers/standalone-packaged-markdown.mjs');
+  const source = fs.readFileSync(file, 'utf8');
+  const marker = '    for (const doc of documents.documents) {';
+  const start = source.indexOf(marker), end = source.indexOf('\n    const original = documents.documents.find(', start);
+  assert.ok(start >= 0 && end > start && source.indexOf(marker, start + 1) === -1, 'actual checker bounds');
+  const { text } = await import('./helpers/conversion-fixtures.mjs');
+  const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+  const documents = { documents: [...outputs].map(([name, value], index) => ({ name,
+    document_id: String(index + 1).padStart(32, '0'), revision: 0,
+    output_sha256: sha(Buffer.from(value)), approved: false, text_modified: false })) };
+  const byId = new Map(documents.documents.map(doc => [doc.document_id, doc]));
+  const check = vm.runInNewContext(`(async function (documents) {\n${source.slice(start, end)}\n})`, {
+    assert, Buffer, path, text, enabled, sha, renderer: require('markdown-it')(),
+    send: async (action, fields) => {
+      assert.equal(action, 'get_document_review_chunk');
+      const doc = byId.get(fields.document_id); assert.ok(doc);
+      assert.equal(fields.batch_id, 'a'.repeat(64)); assert.equal(fields.revision, 0); assert.equal(fields.chunk_index, 0);
+      return { chunks: 1, markdown: outputs.get(doc.name) };
+    }, batchId: 'a'.repeat(64)
+  }, { filename: file + ':actual-body-oracle', timeout: 1000 });
+  await check(documents);
+}
+
+async function packagedMarkdownBodyBaseline(enabled) {
+  const { text } = await import('./helpers/conversion-fixtures.mjs');
+  const pixels = 'Max Mustermann  \nNordstern GmbH  \nProjektmanager Software Tester  \n';
+  const outputs = new Map([
+    ['Original Max.txt', text],
+    ['Original Max.md', `${text}\n\n| Begriff | Wert |\n| --- | --- |\n| Preis | 42 € |\n`],
+    ['Original Max.csv', '| Zeile | Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- | --- |\n' +
+      '| 1 | Name | Betrag | Zeichen |\n| 2 | Max&#32;Mustermann | 00123 | Ä&#32;§&#32;€&#32;±&#32;→ |'],
+    ['Original Max.docx', text],
+    ['Original Max.xlsx', `# Arbeitsblatt: Quelle\n\n| Quellzeile | Spalte 1 (A) |\n| --- | --- |\n| 1 | ${text} |`],
+    ['Original Max.pptx', `# Folie 1\n\n${text}`], ['Text.pdf', `## Seite 1\n\n${text}`],
+    ['Gemischt.pdf', `## Seite 1\n\nNATIVER KOPF${enabled ? '\n\nMax Mustermann  \n\nNordstern GmbH  \nProjektmanager Software Tester  \n' : ''}`]
+  ]);
+  if (enabled) for (const name of ['Bild.png', 'Bild.jpeg', 'Bild.bmp']) outputs.set(name, pixels);
+  if (enabled) outputs.set('Scan.pdf', '## Seite 1\n\nMax Mustermann  \nNordstern GmbH  \n\nProjektmanager Software Tester  \n');
+  return outputs;
+}
+
+testAsync('actual packaged Markdown body checker accepts complete valid OCR-off/on fixtures first', async () => {
+  for (const enabled of [false, true]) await packagedMarkdownBodyCheck(await packagedMarkdownBodyBaseline(enabled), enabled);
+});
+
+testAsync('actual packaged Markdown body checker refuses lost/changed/extra company and IBAN', async () => {
+  const positive = await packagedMarkdownBodyBaseline(false);
+  for (const name of ['Original Max.txt', 'Original Max.md', 'Original Max.docx', 'Original Max.xlsx', 'Original Max.pptx', 'Text.pdf']) {
+    for (const literal of ['Nordstern GmbH', 'DE89370400440532013000']) for (const mutate of [
+      value => value.replace(literal, ''), value => value.replace(literal, `${literal} FALSCH`), value => value + `\n\n${literal}`]) {
+      const changed = mutate(positive.get(name)); assert.notEqual(changed, positive.get(name));
+      // Metadata hashes are deliberately recomputed from the actual changed
+      // bytes: self-consistency alone must not pass a lossy converter result.
+      await assert.rejects(() => packagedMarkdownBodyCheck(new Map([[name, changed]]), false),
+        error => error.code === 'ERR_ASSERTION', `${name}: complete source-owned value`);
+    }
+  }
+});
+
+testAsync('actual packaged Markdown body checker refuses missing/changed/extra authored price rows', async () => {
+  const positive = (await packagedMarkdownBodyBaseline(false)).get('Original Max.md');
+  for (const changed of [positive.replace('| Preis | 42 € |\n', ''), positive.replace('42 €', '24 €'),
+    positive + '| Preis | 42 € |\n', positive.replace('| Begriff | Wert |', '| Begriff | Anderer Wert |')]) {
+    assert.notEqual(changed, positive);
+    await assert.rejects(() => packagedMarkdownBodyCheck(new Map([['Original Max.md', changed]]), false),
+      error => error.code === 'ERR_ASSERTION');
+  }
+});
+
+testAsync('actual packaged Markdown body checker retains whole CSV/XLSX rows and actual OCR bodies', async () => {
+  const positive = await packagedMarkdownBodyBaseline(true);
+  for (const [name, changed] of [
+    ['Original Max.csv', positive.get('Original Max.csv') + '\n| 3 | Zusatz | 00123 | Ä&#32;§&#32;€&#32;±&#32;→ |'],
+    ['Original Max.xlsx', positive.get('Original Max.xlsx').replace('Quellzeile', 'Andere Zeile')],
+    ['Bild.png', positive.get('Bild.png').replace('Nordstern GmbH  \n', '')],
+    ['Scan.pdf', positive.get('Scan.pdf').replace('Projektmanager Software Tester', 'Software Tester')],
+    ['Gemischt.pdf', '## Seite 1\n\nNATIVER KOPF']
+  ]) {
+    assert.notEqual(changed, positive.get(name));
+    await assert.rejects(() => packagedMarkdownBodyCheck(new Map([[name, changed]]), true),
+      error => error.code === 'ERR_ASSERTION', `${name}: complete actual fixture body`);
+  }
+});
+
 testAsync('complete shared review assertions reject lost rows, changed Sachzellen and inconsistent IDs', async () => {
   const { packagedReviewFixtures, assertPackagedReviewOutputs } = await import('./helpers/standalone-packaged-review.mjs');
   const texts = [...packagedReviewFixtures()].filter(([name]) => name.endsWith('.md')).map(([, bytes]) =>
@@ -921,6 +1136,143 @@ testAsync('the actual extracted execution tree rejects edited, missing, addition
     if (fs.existsSync(link)) { assert.ok(fs.lstatSync(link).isSymbolicLink()); fs.unlinkSync(link); }
     removePackageSmokeScope(parent, scope);
   }
+});
+
+// PTO-F1 fixtures are tiny real files, not resource-exhaustion or native runs.
+async function candidateByteFixture(action, expected = Buffer.from('SYNTHETIC-CANDIDATE-PTO1')) {
+  const { verifyExtractedCandidate } = await import('./helpers/standalone-candidate-integrity.mjs');
+  const { removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
+  const parent = fs.realpathSync.native(path.resolve(__dirname, '..'));
+  const scope = fs.mkdtempSync(path.join(parent, '.tmp-standalone-package-'));
+  const root = path.join(scope, 'candidate'), relative = 'bundle/runtime.bin';
+  const leaf = path.join(root, ...relative.split('/'));
+  try {
+    fs.mkdirSync(path.dirname(leaf), { recursive: true });
+    fs.writeFileSync(leaf, expected, { flag: 'wx' });
+    return action({ verifyExtractedCandidate, root, leaf, relative, expected,
+      entries: new Map([[relative, expected]]) });
+  } finally { removePackageSmokeScope(parent, scope); }
+}
+
+testAsync('candidate byte oracle accepts exact real nonempty and empty files', async () => {
+  for (const expected of [Buffer.from('SYNTHETIC-CANDIDATE-PTO1'), Buffer.alloc(0)]) {
+    await candidateByteFixture(({ verifyExtractedCandidate, root, entries }) => {
+      assert.doesNotThrow(() => verifyExtractedCandidate(root, entries));
+    }, expected);
+  }
+});
+
+testAsync('candidate byte oracle rejects a size mismatch before any leaf read', async () => {
+  await candidateByteFixture(({ verifyExtractedCandidate, root, leaf, entries }) => {
+    fs.appendFileSync(leaf, '+');
+    const bound = require('../plugins/data-secure/server/core/bound-file-io');
+    const readFile = fs.readFileSync, readBound = bound.readBoundFile;
+    let rawReads = 0, boundedReads = 0, failure;
+    fs.readFileSync = function(target, ...args) {
+      if (typeof target === 'string' && path.resolve(target) === leaf) rawReads++;
+      return readFile.call(this, target, ...args);
+    };
+    bound.readBoundFile = function(target, options) {
+      if (path.resolve(target) === leaf) boundedReads++;
+      return readBound.call(this, target, options);
+    };
+    try { verifyExtractedCandidate(root, entries); } catch (error) { failure = error; }
+    finally { fs.readFileSync = readFile; bound.readBoundFile = readBound; }
+    assert.equal(rawReads, 0, 'size mismatch must not perform the old unbounded leaf read');
+    assert.equal(boundedReads, 0, 'known wrong size is rejected before opening a leaf for reading');
+    assert.ok(failure); assert.match(failure.message, /CANDIDATE_FILE_CHANGED:bundle\/runtime\.bin/u);
+  });
+});
+
+testAsync('candidate byte oracle reports same-size drift with a small fixed failure text', async () => {
+  await candidateByteFixture(({ verifyExtractedCandidate, root, leaf, relative, expected, entries }) => {
+    const changed = Buffer.from(expected); changed[0] ^= 1;
+    fs.writeFileSync(leaf, changed);
+    let failure;
+    try { verifyExtractedCandidate(root, entries); } catch (error) { failure = error; }
+    assert.ok(failure); assert.equal(failure.message, 'CANDIDATE_FILE_CHANGED:' + relative);
+    assert.equal(failure.code, 'ERR_ASSERTION');
+    assert.ok(failure.message.length < 100, 'never include a full binary diff');
+  });
+});
+
+testAsync('candidate byte oracle uses the actual held reader with exact byte bounds', async () => {
+  await candidateByteFixture(({ verifyExtractedCandidate, root, leaf, expected, entries }) => {
+    const bound = require('../plugins/data-secure/server/core/bound-file-io');
+    const readFile = fs.readFileSync, readBound = bound.readBoundFile;
+    const optionsSeen = []; let rawReads = 0;
+    fs.readFileSync = function(target, ...args) {
+      if (typeof target === 'string' && path.resolve(target) === leaf) rawReads++;
+      return readFile.call(this, target, ...args);
+    };
+    bound.readBoundFile = function(target, options) {
+      if (path.resolve(target) === leaf) optionsSeen.push({ ...options });
+      return readBound.call(this, target, options);
+    };
+    try { verifyExtractedCandidate(root, entries); }
+    finally { fs.readFileSync = readFile; bound.readBoundFile = readBound; }
+    assert.equal(rawReads, 0); assert.equal(optionsSeen.length, 1);
+    assert.equal(optionsSeen[0].minimum, expected.length);
+    assert.equal(optionsSeen[0].maximum, expected.length);
+    assert.equal(optionsSeen[0].maxLinks, 1); assert.equal(optionsSeen[0].checkCtime, true);
+  });
+});
+
+testAsync('candidate byte oracle rejects real growth after bytes are read from its held file', async () => {
+  await candidateByteFixture(({ verifyExtractedCandidate, root, leaf, relative, expected, entries }) => {
+    const owned = fs.statSync(leaf), readFile = fs.readFileSync, read = fs.readSync;
+    let grown = false, failure, growthSite = null;
+    const allocations = [];
+    const grow = site => {
+      if (grown) return;
+      grown = true; growthSite = site; fs.appendFileSync(leaf, '+');
+    };
+    // Old path-read control: return the real original bytes, then grow that
+    // same real file. The old helper silently accepts this changed leaf.
+    fs.readFileSync = function(target, ...args) {
+      const bytes = readFile.call(this, target, ...args);
+      if (typeof target === 'string' && path.resolve(target) === leaf) grow('path-read');
+      return bytes;
+    };
+    // Corrected path: the actual shared reader owns this FD and verifies its
+    // post-read fstat/named identity. No read algorithm or result is mocked.
+    fs.readSync = function(fd, buffer, offset, length, position) {
+      const current = fs.fstatSync(fd), selected = current.dev === owned.dev && current.ino === owned.ino;
+      const count = read.call(this, fd, buffer, offset, length, position);
+      if (selected && count > 0) { allocations.push(buffer.length); grow('held-fd'); }
+      return count;
+    };
+    try { verifyExtractedCandidate(root, entries); } catch (error) { failure = error; }
+    finally { fs.readFileSync = readFile; fs.readSync = read; }
+    assert.equal(grown, true, 'the real owned file must actually grow');
+    assert.equal(fs.statSync(leaf).size, expected.length + 1);
+    assert.ok(failure, 'a path-read snapshot must not accept a leaf that grew during its read');
+    assert.equal(failure.message, 'CANDIDATE_FILE_CHANGED:' + relative);
+    assert.equal(growthSite, 'held-fd');
+    assert.ok(allocations.length > 0 && allocations.every(size => size <= expected.length));
+  });
+});
+
+testAsync('candidate byte oracle maps bound failures but preserves an unrelated primary', async () => {
+  await candidateByteFixture(({ verifyExtractedCandidate, root, leaf, relative, entries }) => {
+    const bound = require('../plugins/data-secure/server/core/bound-file-io'), readBound = bound.readBoundFile;
+    const primary = Object.assign(Error('SYNTHETIC-UNRELATED-READ-FAILURE'), { code: 'SYNTHETIC_PTO1' });
+    try {
+      for (const code of ['BOUND_FILE_CHANGED', 'BOUND_FILE_UNSAFE', 'BOUND_FILE_CLOSE_FAILED']) {
+        bound.readBoundFile = function(target, options) {
+          if (path.resolve(target) === leaf) throw Object.assign(Error(code), { code });
+          return readBound.call(this, target, options);
+        };
+        assert.throws(() => verifyExtractedCandidate(root, entries), error =>
+          error.code === 'ERR_ASSERTION' && error.message === 'CANDIDATE_FILE_CHANGED:' + relative);
+      }
+      bound.readBoundFile = function(target, options) {
+        if (path.resolve(target) === leaf) throw primary;
+        return readBound.call(this, target, options);
+      };
+      assert.throws(() => verifyExtractedCandidate(root, entries), error => error === primary);
+    } finally { bound.readBoundFile = readBound; }
+  });
 });
 
 testAsync('native campaign resolves supported package roots and rejects changed runtimes before launch or a PASS receipt', async () => {
@@ -1136,11 +1488,60 @@ test('Standalone/platform gates contain the actual review and integrity regressi
     'actual Node/private IPC decisions must not be relabelled as native UI acceptance');
 });
 
-test('Windows native cleanup proves profile quiescence before strict inventory and never skips failed deletion', () => {
+if (process.platform === 'win32') test('actual Windows launcher finally retains evidence across success, body failure and teardown failure without running an app', () => {
+  const launcher = path.join(__dirname, 'manual/standalone-native-windows-launch.ps1');
+  const script = `
+$Launcher = $env:DATASECURE_REVIEW_LAUNCHER
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$tree = [System.Management.Automation.Language.Parser]::ParseFile($Launcher, [ref] $tokens, [ref] $errors)
+if ($errors.Count) { throw 'LAUNCHER_PARSE_FAILED' }
+$outer = @($tree.EndBlock.Statements | Where-Object {
+  $_ -is [System.Management.Automation.Language.TryStatementAst] -and $null -ne $_.Finally -and $_.Body.Extent.Text.Contains('Expand-Archive')
+})
+if ($outer.Count -ne 1) { throw 'LAUNCHER_FINALLY_NOT_UNIQUE' }
+$text = $outer[0].Finally.Extent.Text
+$actualFinally = [scriptblock]::Create($text.Substring(1, $text.Length - 2))
+function Remove-TestRoot { $script:deleteCalls++ }
+function Stop-Process { throw 'UNEXPECTED_REAL_PROCESS_BOUNDARY' }
+function Wait-NativeWebViewProfileExit { param($Directory, $Started) if ($script:failTeardown) { throw 'fixture-teardown' } }
+function Write-Output { param($InputObject) $script:notices.Add([string] $InputObject) }
+$testRoot = 'C:\\synthetic\\not-created-native-root'
+$rootStartedUtc = [DateTime]::UtcNow
+foreach ($kind in @('setup-failure', 'early-exit', 'post-readiness-failure', 'success', 'live-owned-model', 'teardown-failure')) {
+  $script:deleteCalls = 0; $script:notices = [System.Collections.Generic.List[string]]::new()
+  $script:failTeardown = $kind -eq 'teardown-failure'
+  $process = if ($kind -eq 'setup-failure') { $null } else { [pscustomobject]@{ HasExited = $true } }
+  if ($kind -eq 'live-owned-model') {
+    $process.HasExited = $false
+    $process | Add-Member ScriptMethod CloseMainWindow { return $true }
+    $process | Add-Member ScriptMethod WaitForExit { param($Milliseconds) $this.HasExited = $true; return $true }
+  }
+  $expected = if ($script:failTeardown) { 'fixture-teardown' } elseif ($kind -in @('setup-failure', 'early-exit', 'post-readiness-failure')) { 'fixture-body' } else { $null }
+  $caught = $null
+  try { try { if ($expected -eq 'fixture-body') { throw 'fixture-body' } } finally { & $actualFinally } }
+  catch { $caught = $_.Exception.Message }
+  if ($caught -cne $expected) { throw ('PRIMARY_OR_TEARDOWN_CHANGED:' + $kind) }
+  if ($script:deleteCalls -ne 0) { throw ('EVIDENCE_DELETE_REQUESTED:' + $kind) }
+  if (-not ($script:notices | Where-Object { $_.Contains($testRoot) })) { throw ('RETENTION_NOTICE_MISSING:' + $kind) }
+}
+[Console]::WriteLine('ACTUAL LAUNCHER FINALLY RETENTION PASS; six explicit lifecycle models; no app, file deletion or native end proof')
+`;
+  const result = spawnSync('C:\\Program Files\\PowerShell\\7\\pwsh.exe', ['-NoProfile', '-Command', script],
+    { encoding: 'utf8', windowsHide: true, timeout: 30000,
+      env: { ...process.env, DATASECURE_REVIEW_LAUNCHER: launcher } });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /ACTUAL LAUNCHER FINALLY RETENTION PASS/u);
+});
+else console.log('SKIP Windows launcher finally lifecycle models on this host; not counted as a passed case');
+
+test('Windows native teardown retains its evidence while the separate checked cleanup remains strict', () => {
   const root = path.resolve(__dirname, '..');
   const launcher = fs.readFileSync(path.join(root, 'tests/manual/standalone-native-windows-launch.ps1'), 'utf8');
   const cleanup = fs.readFileSync(path.join(root, 'tests/manual/standalone-native-cleanup.ps1'), 'utf8');
-  assert.match(launcher, /Wait-NativeWebViewProfileExit \(Join-Path \$testRoot 'webview\\main'\) \$rootStartedUtc\s*\}\s*Remove-TestRoot/u);
+  assert.match(launcher, /Wait-NativeWebViewProfileExit \(Join-Path \$testRoot 'webview\\main'\) \$rootStartedUtc/u);
+  assert.match(launcher, /STANDALONE NATIVE EVIDENCE RETAINED/u);
+  assert.doesNotMatch(launcher, /Remove-TestRoot|Remove-NativeTestTree/u);
   assert.match(launcher, /\$held\.StartTime\.ToUniversalTime\(\)/u);
   assert.match(launcher, /\$held\.WaitForExit\(\[Math\]::Min\(1000, \$remaining\)\)/u);
   assert.match(launcher, /STANDALONE_NATIVE_WEBVIEW_EXIT_TIMEOUT/u);
@@ -1254,6 +1655,66 @@ testAsync('detached join retains exact probe failure and rejects completion afte
   const late = workerEndModel([]); let now = 0;
   await assert.rejects(late.run({ now: () => now, state: () => { now = 5000; return 'dead'; } }),
     /worker identity probe exceeded join deadline/u);
+});
+
+// Execute the two actual positive document-start caller statements. The join
+// beneath this call is the existing real awaitWorkerEnd clock/state model;
+// no worker outcome, source assertion, or success condition is copied here.
+function documentStartWorkerEndProbe(code = 0, states = ['dead']) {
+  const source = fs.readFileSync(path.join(__dirname, 'test-standalone-sidecar.js'), 'utf8');
+  const startMarker = "      await waitForFile(path.join(caseRoot, 'worker-complete.json'), 25000);";
+  const endMarker = '      const deadline = Date.now() + 25000;';
+  const start = source.indexOf(startMarker), end = source.indexOf(endMarker, start);
+  assert.ok(start >= 0 && end > start && source.indexOf(startMarker, start + 1) === -1,
+    'unique actual positive document-start caller');
+  const body = source.slice(start, end), model = workerEndModel(states), events = [];
+  model.exited.code = code;
+  const caseRoot = path.join(__dirname, 'synthetic-positive-document-worker');
+  return { model, events, run: () => vm.runInNewContext(
+    `(async () => {\n${body}\naccepted();\n})()`, {
+      assert, path, caseRoot,
+      waitForFile: async (file, timeout) => {
+        assert.equal(file, path.join(caseRoot, 'worker-complete.json'));
+        assert.equal(timeout, 25000); events.push('completion');
+        return { complete: true };
+      },
+      workerEnded: async root => {
+        assert.equal(root, caseRoot); events.push('join');
+        return model.run();
+      },
+      accepted: () => events.push('accepted')
+    }, { filename: 'actual-positive-document-worker-end', timeout: 1000 }) };
+}
+
+testAsync('actual positive document-start caller accepts a valid original-instance zero-code join', async () => {
+  const probe = documentStartWorkerEndProbe();
+  await probe.run();
+  assert.deepEqual(probe.events, ['completion', 'join', 'accepted']);
+  assert.deepEqual(probe.model.calls, [{ pid: 4242, identity: 'a'.repeat(64) }]);
+  assert.deepEqual(probe.model.sleeps, []);
+});
+
+testAsync('actual positive document-start caller refuses otherwise valid nonzero worker exits', async () => {
+  for (const code of [1, 2, 72, 255]) {
+    // These are valid termination receipts for the general cleanup join.
+    // Keep its 0..255 contract; require success only in the positive caller.
+    const joined = workerEndModel(['dead']); joined.exited.code = code;
+    assert.equal(await joined.run(), joined.exited);
+    const probe = documentStartWorkerEndProbe(code);
+    await assert.rejects(probe.run(), error => error?.code === 'ERR_ASSERTION');
+    assert.deepEqual(probe.events, ['completion', 'join']);
+    assert.deepEqual(probe.model.calls, [{ pid: 4242, identity: 'a'.repeat(64) }]);
+    assert.deepEqual(probe.model.sleeps, []);
+  }
+});
+
+testAsync('actual positive document-start caller preserves a join probe failure without accepting completion', async () => {
+  const primary = Object.assign(new Error('synthetic process identity refusal'), { code: 'EPERM' });
+  const probe = documentStartWorkerEndProbe(0, [primary]);
+  await assert.rejects(probe.run(), value => value === primary);
+  assert.deepEqual(probe.events, ['completion', 'join']);
+  assert.equal(probe.model.calls.length, 1);
+  assert.deepEqual(probe.model.sleeps, []);
 });
 
 function contentWorkflowLaunchSource() {

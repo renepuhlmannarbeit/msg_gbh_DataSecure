@@ -132,10 +132,14 @@ function readSnapshot(token, itemId, options = {}) {
   return expected;
 }
 
-function identityStatus(state, options = {}) {
+function releasedItems(state) {
   if (state?.product_channel !== 'standalone' || !TOKEN_RE.test(String(state.token || '')) ||
-      state.processing_mode === 'markdown-only' || !Array.isArray(state.items)) return { available: false, complete: false };
-  const released = state.items.filter((item) => item.status === 'released');
+      state.processing_mode === 'markdown-only' || !Array.isArray(state.items)) return [];
+  return state.items.filter((item) => item.status === 'released');
+}
+
+function identityStatus(state, options = {}) {
+  const released = releasedItems(state);
   if (!released.length) return { available: false, complete: false };
   let captured = 0;
   let unmapped = 0;
@@ -188,34 +192,46 @@ function atomicDocument(file, chunks) {
 }
 
 function materialize(state, options = {}) {
-  const status = identityStatus(state, options);
-  if (!status.available) throw invalid();
+  const released = releasedItems(state);
+  if (!released.length) throw invalid();
   const directory = directoryFor(state.token, options);
+  // Keep the existing no-create private-directory admission BEFORE opening
+  // the atomic writer, rather than relying on a later generator read.
+  assertDirectory(path.dirname(directory));
+  assertDirectory(directory);
+  let captured = 0;
+  let unmapped = 0;
   const header = [
     'DataSecure – vertrauliche Identitätszuordnung (nur lokal für Menschen)',
     'NICHT in KI-Systeme hochladen. Diese Datei enthält Originalwerte und ist selbst vertraulich.',
-    `Vollständigkeit der erfassten Ergebnisdateien: ${status.captured_count}/${status.released_count}.`,
-    `Nicht eindeutig zuordenbare Pseudonymstellen: ${status.unmapped_count}.`,
+    'Die Zusammenfassung am Ende bezieht sich auf die tatsächlich erfassten Zuordnungen.',
     'Generische Masken und nicht erkannte Identifikatoren sind nicht 1:1 zuordenbar.',
     'Originalwerte sind technisch für den Vergleich normalisiert; Groß-/Kleinschreibung kann abweichen.',
     ''
   ];
   function* chunks() {
-  yield header.join('\r\n') + '\r\n';
-  for (const item of state.items.filter((candidate) => candidate.status === 'released')) {
-    let snapshot;
-    try { snapshot = readSnapshot(state.token, item.id, options); }
-    catch { yield `OHNE ZUORDNUNG: ${readableLine(item.source_label || item.name)}\r\n`; continue; }
-    yield `Datei: ${readableLine(item.source_label || item.name)}\r\n`;
-    if (!snapshot.entries.length) yield '  Keine eindeutig zuordenbaren Pseudonyme erfasst.\r\n';
-    for (const entry of snapshot.entries) yield `  ${entry.pseudonym} = ${readableLine(entry.original)}\r\n`;
-    for (const label of snapshot.unmapped_labels) yield `  OHNE EINDEUTIGE ZUORDNUNG: ${label}\r\n`;
-    yield '\r\n';
-  }
+    yield header.join('\r\n') + '\r\n';
+    for (const item of released) {
+      let snapshot;
+      try { snapshot = readSnapshot(state.token, item.id, options); }
+      catch { yield `OHNE ZUORDNUNG: ${readableLine(item.source_label || item.name)}\r\n`; continue; }
+      captured++;
+      unmapped += snapshot.unmapped_labels.length;
+      yield `Datei: ${readableLine(item.source_label || item.name)}\r\n`;
+      if (!snapshot.entries.length) yield '  Keine eindeutig zuordenbaren Pseudonyme erfasst.\r\n';
+      for (const entry of snapshot.entries) yield `  ${entry.pseudonym} = ${readableLine(entry.original)}\r\n`;
+      for (const label of snapshot.unmapped_labels) yield `  OHNE EINDEUTIGE ZUORDNUNG: ${label}\r\n`;
+      yield '\r\n';
+    }
+    // Do not replace a previous aid with a new document containing only
+    // missing-record notices. The atomic writer has not renamed it yet.
+    if (!captured) throw invalid();
+    yield `Vollständigkeit der erfassten Ergebnisdateien: ${captured}/${released.length}.\r\n`;
+    yield `Nicht eindeutig zuordenbare Pseudonymstellen: ${unmapped}.\r\n`;
   }
   const file = path.join(directory, DOCUMENT);
   atomicDocument(file, chunks());
-  return { local_path: file, complete: status.complete };
+  return { local_path: file, complete: captured === released.length && unmapped === 0 };
 }
 
 function resolveDocument(token, options = {}) {

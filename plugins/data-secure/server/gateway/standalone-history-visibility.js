@@ -13,6 +13,7 @@ const { withOwnershipControl } = require('../core/ownership-control');
 const { ensurePrivateDirectory } = require('./common');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const { processAlive } = require('./process-liveness');
+const { MAX_RESULT_EXPORT_RECORD_BYTES } = require('../core/result-export-record');
 
 const SCHEMA = 'datasecure-standalone-history-visibility/1';
 const ID = /^[a-f0-9]{64}$/u;
@@ -61,7 +62,7 @@ function snapshot(batchId) {
     const value = JSON.parse(bytes);
     if (value?.batch_id !== batchId || value.complete !== true) throw fail();
   });
-  const exported = optionalDigest(root, ['result-export-state', `${exportId(batchId)}.json`], 1024 * 1024);
+  const exported = optionalDigest(root, ['result-export-state', `${exportId(batchId)}.json`], MAX_RESULT_EXPORT_RECORD_BYTES);
   const manifest = optionalDigest(root, ['document-reviews', batchId, 'manifest.json'], 1024 * 1024);
   const exports = [];
   let exportBytes = 0;

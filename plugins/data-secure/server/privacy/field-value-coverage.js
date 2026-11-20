@@ -1,4 +1,7 @@
 'use strict';
+// Exact raw UTF-16 cell boundaries, not .indexOf(value): duplicate values and
+// escaped pipes must retain their distinct positions in the actual basis.
+const { tableCellRanges: cellRanges, unescapeMarkdownPunctuation: proseUnescape } = require('./markdown-table-cells');
 
 // Explicit source fields are stronger evidence than name-shaped vocabulary.
 // A slash, long value or escaped cell paragraph must not make an otherwise
@@ -21,7 +24,6 @@ const PROSE_LITERAL_LABEL_PATTERN = [personFieldPattern(CONTENT_PERSON_FIELD_POL
 const PROSE_LABEL_PATTERN = PROSE_LITERAL_LABEL_PATTERN + '|' + STRUCTURED_LABEL_VALUE_PATTERN;
 const PROSE_LABEL_END = new RegExp('(?:' + PROSE_LABEL_PATTERN + ')$', 'giu');
 const EXACT_HEADER_METADATA = new RegExp('^(?:' + PROSE_LITERAL_LABEL_PATTERN + ')$', 'iu');
-const proseUnescape = value => value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1');
 const isExactHeaderMetadata = value => {
   const label = effectiveTableFieldLabel(value).replace(/\s+/gu, ' '), role = structuredLabelRole(label);
   return role ? role.wholeMetadata : EXACT_HEADER_METADATA.test(label);
@@ -82,6 +84,12 @@ function isProtectedFieldHeader(value, policy) {
   const label = effectiveTableFieldLabel(value);
   return policy === CONTENT_PERSON_FIELD_POLICY && (isResolvedSensitiveTableHeader(label, policy) ||
     ORGANIZATION_FIELD.test(label) || label === GENERIC_FIELD || structuredLabelRole(label)?.protectsValue === true);
+}
+
+// A value duty is not proof that every character is metadata (for example a
+// phone label may contain a person's name). CSV may hoist only the whole role.
+function isFieldHeaderMetadata(value, policy) {
+  return typeof value === 'string' && isProtectedFieldHeader(value, policy) && isExactHeaderMetadata(value);
 }
 
 // Only a closed source-line prefix is a prose field, never an arbitrary
@@ -189,25 +197,6 @@ function proseFieldRanges(line, policy, allowBareCr = true) {
     groupStart = separator + 1;
   }
   return fields;
-}
-
-// Exact raw UTF-16 cell boundaries, not .indexOf(value): duplicate values and
-// escaped pipes must retain their distinct positions in the actual basis.
-function cellRanges(line) {
-  const ranges = []; let start = 0, escaped = false, firstPipe = -1, lastPipe = -1;
-  for (let index = 0; index < line.length; index++) {
-    const character = line[index];
-    if (escaped) { escaped = false; continue; }
-    if (character === '\\') { escaped = true; continue; }
-    if (character !== '|') continue;
-    if(firstPipe < 0)firstPipe = index;
-    lastPipe = index;
-    ranges.push({ start, end: index }); start = index + 1;
-  }
-  ranges.push({ start, end: line.length });
-  if (firstPipe === line.length - line.trimStart().length) ranges.shift();
-  if (lastPipe === line.trimEnd().length - 1) ranges.pop();
-  return ranges;
 }
 
 function protectedHeaderRanges(text, policy) {
@@ -361,4 +350,4 @@ function uncoveredFieldSpans(text, policy, sourceText = '') {
   return result;
 }
 
-module.exports = { isProtectedFieldHeader, uncoveredFieldSpans, protectedHeaderRanges, isWithinProtectedHeader };
+module.exports = { isProtectedFieldHeader, isFieldHeaderMetadata, uncoveredFieldSpans, protectedHeaderRanges, isWithinProtectedHeader };

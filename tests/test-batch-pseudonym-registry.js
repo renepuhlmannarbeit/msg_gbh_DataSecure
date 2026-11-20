@@ -28,9 +28,18 @@ test('the same entity keeps its deterministic pseudonym across separate document
   const marker = one.match(/\[PERSON_[A-Z2-7]+\]/u)?.[0];
   assert.ok(marker, 'first document must contain a batch pseudonym');
   assert.ok(two.includes(marker), 'same entity must keep its batch pseudonym');
-  assert.doesNotMatch(marker, /\d{3}\]/u, 'legacy per-document counter must not be used');
+  assert.match(marker, /^\[PERSON_[A-Z2-7]{10,52}\]$/u, 'the complete batch marker must use the bounded digest format');
+  assert.doesNotMatch(marker, /^\[PERSON_\d{3}\]$/u, 'legacy per-document counter must not be used');
   registry.dispose();
   secret.fill(0);
+});
+
+test('a valid digest ending in digits is distinct from an entire legacy counter token', () => {
+  const label = placeholderForDigest('PERSON', Buffer.alloc(32, 255), new Map()).placeholder;
+  assert.strictEqual(label, '[PERSON_7777777777]');
+  assert.match(label, /^\[PERSON_[A-Z2-7]{10,52}\]$/u);
+  assert.doesNotMatch(label, /^\[PERSON_\d{3}\]$/u);
+  assert.match('[PERSON_001]', /^\[PERSON_\d{3}\]$/u);
 });
 
 test('the existing release gate accepts only an injected in-memory batch registry', () => {

@@ -4,12 +4,13 @@
 // an on-disk matching PID nor another factory's ticket is processing authority.
 const crypto = require('node:crypto');
 const path = require('node:path');
-const { contentOptionsForBatch } = require('../core/content-options');
+const { CONTENT_BATCH_SCHEMAS, contentOptionsForBatch } = require('../core/content-options');
 const { reviewPolicyForBatch } = require('../core/standalone-review-policy');
 const { assertAnonymizationBatch } = require('../core/processing-mode');
 const { validateBatchPseudonymState, ownedRegistrySnapshot, refuseOwnedRegistryPersist, synchronizeOwnedRegistryCommit } = require('../batch-pseudonym-context');
 const registryCommit = require('./prepared-registry-commit');
 const { VERSION } = require('../version');
+const { isOwnershipControlFailure } = require('./prepublication-error');
 const invalid = () => Object.assign(Error('CONTENT_OPTIONS_BINDING_INVALID'), { code: 'CONTENT_OPTIONS_BINDING_INVALID' });
 const ID = /^[a-f0-9]{32}$/u, TOKEN = /^[a-f0-9]{64}$/u;
 const PROFILES = new Set(['auto', 'general', 'contract', 'customer', 'applicant', 'personnel_profile']);
@@ -31,7 +32,7 @@ function createContentOperationAuthority(services) {
     const reviewPolicy = reviewPolicyForBatch(state);
     assertAnonymizationBatch(state);
     const candidates = state.items.filter(item => item.id === itemId), item = candidates[0];
-    if (!contentOptions || state.schema !== 'datasecure-batch/7' || state.product_channel !== 'standalone' ||
+    if (!contentOptions || !CONTENT_BATCH_SCHEMAS.includes(state.schema) || state.product_channel !== 'standalone' ||
         state.standalone_document_review !== true || state.invalidated === true || candidates.length !== 1 ||
         !PROFILES.has(state.profile) || typeof state.created_at !== 'string' ||
         new Date(state.created_at).toISOString() !== state.created_at || !Number.isFinite(Date.parse(state.expires_at)) ||
@@ -78,18 +79,30 @@ function createContentOperationAuthority(services) {
       // this Buffer, and later caller state/queue mutations cannot change it.
       record.bytes = Buffer.from(bytes); bytes.fill(0); bytes = undefined;
       const ticket = Object.freeze({}); tickets.set(ticket, record); return ticket;
-    } catch { if (Buffer.isBuffer(bytes)) bytes.fill(0); throw invalid(); }
+    } catch (error) {
+      if (Buffer.isBuffer(bytes)) bytes.fill(0);
+      if (isOwnershipControlFailure(error)) throw error;
+      throw invalid();
+    }
   }
   function consume(ticket) {
     const record = tickets.get(ticket);
     if (!record) throw invalid();
     tickets.delete(ticket); // consumed once, including a failed revalidation
     try { revalidate(record); }
-    catch { record.bytes.fill(0); throw invalid(); }
+    catch (error) {
+      record.bytes.fill(0);
+      if (isOwnershipControlFailure(error)) throw error;
+      throw invalid();
+    }
     let disposed = false, sourceTaken = false;
     const check = () => {
       if (disposed) throw invalid();
-      try { return revalidate(record); } catch { disposed = true; record.bytes.fill(0); throw invalid(); }
+      try { return revalidate(record); } catch (error) {
+        disposed = true; record.bytes.fill(0);
+        if (isOwnershipControlFailure(error)) throw error;
+        throw invalid();
+      }
     };
     // A UUID-shaped stable operation ID belongs to the saved run, never to a
     // new retry clock. Exact publication replay will still require its prepared
@@ -139,7 +152,11 @@ function createContentOperationAuthority(services) {
           synchronizeOwnedRegistryCommit(registry, readback.state, snapshot);
           record.registryCommit = { state: snapshot, manifestSha };
           return witness;
-        } catch { if (refusePersist) refuseOwnedRegistryPersist(registry); throw invalid(); }
+        } catch (error) {
+          if (refusePersist) refuseOwnedRegistryPersist(registry);
+          if (isOwnershipControlFailure(error)) throw error;
+          throw invalid();
+        }
         finally { seed?.fill(0); }
       },
       assertPreparedRegistryCommit(commit, manifestSha) {

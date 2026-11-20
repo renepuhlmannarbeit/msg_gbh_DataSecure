@@ -263,6 +263,55 @@ await testAsync('the batch composition root retains its public processing facade
   assert.strictEqual(typeof batch._test.maintainBeforeNext, 'function');
 });
 
+await testAsync('the source producer owns its original buffer through every awaited consumer exit', async () => {
+  for (const mode of ['legacy', 'markdown', 'content-anonymize', 'content-markdown']) {
+    for (const ending of ['success', 'processor-refusal', 'registry-refusal', 'claim-refusal']) {
+      const original = Buffer.from('synthetic private source'), expected = Buffer.from(original);
+      const entry = { name: 'synthetic.txt', private_bytes: original }, failure = new Error('synthetic consumer refusal');
+      let calls = 0;
+      const h = harness({ exactPendingEntry: () => entry,
+        withBatchPseudonymRegistry: async (_state, action) => {
+          if (ending === 'registry-refusal') throw failure;
+          return action(undefined);
+        },
+        async processSingleBatchItem(_state, _item, selected) {
+          calls++; assert.strictEqual(selected, entry);
+          const earlyClear = mode === 'content-anonymize';
+          assert.deepEqual(selected.private_bytes, earlyClear ? Buffer.alloc(original.length) : expected);
+          await new Promise(resolve => setImmediate(resolve));
+          assert.deepEqual(selected.private_bytes, earlyClear ? Buffer.alloc(original.length) : expected,
+            'producer must await the consumer before final disposal');
+          if (ending === 'processor-refusal') throw failure;
+          return { ok: true, claimed: ending !== 'claim-refusal' };
+        } });
+      if (mode !== 'legacy') Object.assign(h.state, { product_channel: 'standalone', processing_mode: 'markdown-only', schema: 'datasecure-batch/5' });
+      if (mode.startsWith('content-')) Object.assign(h.state, { schema: 'datasecure-batch/8', standalone_document_review: true,
+        processing_mode: mode === 'content-anonymize' ? 'markdown-and-anonymize' : 'markdown-only',
+        content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } });
+      const registryRefused = ending === 'registry-refusal' && !['markdown', 'content-markdown'].includes(mode);
+      const action = () => h.processBatchNext(h.token, h.deps);
+      if (ending === 'processor-refusal' || registryRefused) await assert.rejects(action, error => error === failure);
+      else assert.equal((await action()).ok, true);
+      assert.equal(calls, registryRefused ? 0 : 1);
+      assert.ok(original.every(byte => byte === 0)); assert.equal(h.active.size, 0);
+      assert.equal(h.calls.filter(([name]) => name === 'release').length, 1);
+    }
+  }
+});
+
+await testAsync('producer disposes only its original reference and still releases after a disposal fault', async () => {
+  const bytes = Buffer.from('original'), replacement = Buffer.from('unowned replacement');
+  const entry = { private_bytes: bytes };
+  const h = harness({ exactPendingEntry: () => entry, async processSingleBatchItem() { entry.private_bytes = replacement; return { ok: true }; } });
+  await h.processBatchNext(h.token, h.deps);
+  assert.ok(bytes.every(byte => byte === 0)); assert.equal(replacement.toString(), 'unowned replacement');
+  const fault = new Error('synthetic disposal fault'), refusing = Buffer.from('owned source');
+  refusing.fill = () => { throw fault; };
+  const failed = harness({ exactPendingEntry: () => ({ private_bytes: refusing }) });
+  await assert.rejects(() => failed.processBatchNext(failed.token, failed.deps), error => error === fault);
+  assert.equal(failed.active.size, 0); assert.equal(failed.calls.filter(([name]) => name === 'release').length, 1);
+});
+
 done();
 }
 

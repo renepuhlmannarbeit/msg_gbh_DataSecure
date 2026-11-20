@@ -2,6 +2,7 @@
 
 const { normalizeDocumentResultReasonCode } = require('./document-result-grade');
 const { types } = require('node:util');
+const CONVERSION_STOP_CAUSES = new Set(require('../core/conversion-worker-contract').STOP_CAUSE_CODES);
 
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{2,63}$/u;
 const MAX_SAME_ERROR_FAILURES = 3;
@@ -40,6 +41,13 @@ async function retryDocumentControl(action, options = {}) {
 function preserveOpaqueErrorCode(source, target) {
   const code = ownCode(source);
   if (ERROR_CODE.test(code)) target.code = code;
+  if (code === 'CONVERSION_TERMINATION_UNCONFIRMED') {
+    const cause = Object.getOwnPropertyDescriptor(source, 'cause')?.value;
+    const causeCode = ownCode(cause);
+    if (CONVERSION_STOP_CAUSES.has(causeCode)) Object.defineProperty(target, 'cause', {
+      value: Object.freeze({ code: causeCode }), configurable: true
+    });
+  }
   return target;
 }
 

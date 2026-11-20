@@ -156,5 +156,46 @@ test('new exact binding refuses stale settings across native await without erasi
   }), { code: 'AI_EXPORT_CONFIGURATION_REQUIRED' });
   assert.equal(JSON.parse(fs.readFileSync(config.configPath())).schema, config.NATIVE_SCHEMA);
 });
+test('71: an unavailable real /1 root retains deny-only file/folder exclusion without acquiring destination authority', async () => {
+  const f = fixture(config.LEGACY_SCHEMA);
+  assert.equal(config.readConfiguredResultRootStatus().status, 'available', 'the original real legacy binding is valid');
+  fs.renameSync(f.root, f.root + '-original-v1');
+  fs.mkdirSync(f.root);
+  assert.equal(config.readConfiguredResultRootStatus().status, 'unavailable', 'actual directory replacement is the stale-root premise');
+  assert.equal(config.readConfiguredResultRoot(), '');
+  assert.equal(config.readConfiguredNativeRootBinding(), null);
+  assert.equal(config.readConfiguredNativeExportBinding(), null);
+  assert.equal(config.recordedResultRootPath(), f.root);
+  await assert.rejects(config.prepareConfiguredNativeExportBinding(() => assert.fail('no native authority')), { code: 'AI_EXPORT_CONFIGURATION_REQUIRED' });
+  await assert.rejects(config.prepareConfiguredInitialOutputRoot(() => assert.fail('no initial authority')), { code: 'STANDALONE_RESULT_ROOT_UNSAFE' });
+  const files = require('../plugins/data-secure/server/local-ui/file-picker');
+  const folders = require('../plugins/data-secure/server/local-ui/source-folder');
+  const options = { allowedTypes: ['md'], productChannel: 'standalone',
+    hasReparseComponent: () => false, hasReparseComponentAsync: async () => false };
+  for (const name of ['DataSecure-Output', 'DataSecure-Markdown', 'DataSecure-KI-Export', 'DataSecure-Markdown-Korrektur']) {
+    const directory = path.join(f.root, name); fs.mkdirSync(directory);
+    const file = path.join(directory, 'synthetic-result.md'); fs.writeFileSync(file, '# Synthetisches Ergebnis ÄÖÜß');
+    assert.equal(config.visibleResultTreeOverlaps(directory), true);
+    assert.equal(config.visibleResultTreeOverlaps(file), true);
+    assert.throws(() => files.validateSelectedPath(file, options), { code: 'SOURCE_PATH_UNSAFE' });
+    await assert.rejects(files.validateSelectedPathAsync(file, options), { code: 'SOURCE_PATH_UNSAFE' });
+    assert.throws(() => folders.enumerateSourceFolder(directory, options), /DataSecure-Output|getrennten Ordner/u);
+    await assert.rejects(folders.enumerateSourceFolderAsync(directory, options), /DataSecure-Output|getrennten Ordner/u);
+  }
+  assert.equal(config.visibleResultTreeOverlaps(f.root), true, 'an ancestor containing outputs is excluded too');
+  assert.throws(() => folders.enumerateSourceFolder(f.root, options), /DataSecure-Output|getrennten Ordner/u);
+  await assert.rejects(folders.enumerateSourceFolderAsync(f.root, options), /DataSecure-Output|getrennten Ordner/u);
+  const sibling = path.join(f.root, 'Originale'); fs.mkdirSync(sibling);
+  const source = path.join(sibling, 'quelle.md'); fs.writeFileSync(source, '# Synthetisches Original ÄÖÜß');
+  assert.equal(config.visibleResultTreeOverlaps(sibling), false);
+  assert.equal(files.validateSelectedPath(source, options).sourceType, 'md');
+  assert.equal((await files.validateSelectedPathAsync(source, options)).sourceType, 'md');
+  assert.equal(folders.enumerateSourceFolder(sibling, options).length, 1);
+  assert.equal((await folders.enumerateSourceFolderAsync(sibling, options)).length, 1);
+  assert.deepEqual(fs.readFileSync(config.configPath()), f.bytes, 'exclusion never upgrades or rewrites /1');
+  assert.equal(JSON.parse(fs.readFileSync(config.configPath())).schema, config.LEGACY_SCHEMA);
+  assert.equal(config.readConfiguredResultRootStatus().status, 'unavailable');
+  assert.equal(config.readConfiguredNativeExportBinding(), null);
+});
 // Deliberately retain these small synthetic fault fixtures, including displaced
 // folders. No recursive cleanup or permissions repair of a tampered tree.

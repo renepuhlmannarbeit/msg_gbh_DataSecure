@@ -131,7 +131,7 @@
   let catalogue = [], selected = new Set(), knownIds = new Set(), revision = 0, mode = '', expanded = new Map();
   let consumedAdmission = null;
   let busy = false, closed = false, view = 'new', generation = 0, current = null, job = null;
-  let timer, refreshing = false, bootstrapping = true, consecutiveConnectionFailures = 0, automaticRetryPaused = false;
+  let timer, refreshing = null, bootstrapping = true, consecutiveConnectionFailures = 0, automaticRetryPaused = false;
   let historyGeneration = 0, historyRecoveryBusy = false, historySummaryReads = 0,
     historySummaryReadGeneration = 0, historySummaryOwnershipEpoch = 0,
     lastJobSignature = '', problemSignature = '', acknowledged;
@@ -340,6 +340,7 @@
   // Explicit recovery keeps automatic reads paused until status + valid context.
   let bootstrapFailure = null;
   let bootstrapRecoveryPending = false;
+  let bootstrapRecoveryAttempt = null, connectionRetirement = null;
   let resolvedBootstrapEpoch = -1;
   let receiveConnectionState = null;
   let connectionRetryChecking = false;
@@ -355,6 +356,7 @@
     async invoke(command, args) {
       const owner = reviewOrigin;
       if (closed || view !== 'review' || !owner || owner.closing || !reviewCommands.has(command)) throw Error('STANDALONE_REVIEW_SURFACE_INVALID');
+      const connection = connectionEpoch, request = generation;
       // Completion is learned only from this owned native session, never a
       // child-frame claim or the number of rendered/staged decisions.
       if (command === 'close_review_window') owner.closing = true;
@@ -365,6 +367,7 @@
       const phaseGeneration = owner.phaseGeneration;
       try {
         const result = await invoke(command, args);
+        if (connection !== connectionEpoch || request !== generation) throw Error('STANDALONE_REVIEW_SURFACE_INVALID');
         if (command !== 'close_review_window' && (owner !== reviewOrigin || owner.closing)) throw Error('STANDALONE_REVIEW_SURFACE_INVALID');
         if (command === 'submit_review' && phaseGeneration === owner.phaseGeneration &&
             result?.accepted === true && result.action === 'deferred') {
@@ -381,6 +384,7 @@
         }
         return result;
       } catch (error) {
+        if (connection !== connectionEpoch || request !== generation) throw Error('STANDALONE_REVIEW_SURFACE_INVALID');
         if (owner === reviewOrigin && command === 'close_review_window') owner.closing = false;
         if (owner === reviewOrigin && phaseGeneration === owner.phaseGeneration &&
             (['submit_review', 'continue_review_session'].includes(command) ||
@@ -430,6 +434,17 @@
         !Number.isSafeInteger(observedEpoch) || resolution.failure_epoch !== bootstrapFailure.epoch ||
         resolution.ready_epoch <= resolution.failure_epoch || resolution.ready_epoch > observedEpoch ||
         resolution.failure_epoch <= resolvedBootstrapEpoch) return false;
+    const attempt = bootstrapRecoveryAttempt;
+    if (attempt) {
+      if (attempt.failure === bootstrapFailure && attempt.proof.failure === bootstrapFailure &&
+          attempt.proof.used === true && attempt.proof.connectionEpoch === resolution.failure_epoch) {
+        attempt.resolution = Object.freeze({ failure_epoch: resolution.failure_epoch, ready_epoch: resolution.ready_epoch });
+      } else {
+        // A real historical cause may be resolved without completing an
+        // unrelated current retry transaction. Never lend it that receipt.
+        bootstrapRecoveryAttempt = null;
+      }
+    }
     resolvedBootstrapEpoch = Math.max(resolvedBootstrapEpoch, resolution.failure_epoch);
     bootstrapFailure = null;
     // Historical Ready does not rewind a newer recovery epoch or unlock work.
@@ -438,6 +453,37 @@
     feedback('Der frühere Startfehler ist nativ erledigt. Verbindung und gespeicherter Laufstatus sind noch nicht bestätigt.', false, { kind: 'connection-unconfirmed' });
     $('connection-help').hidden = false;
     $('connection-status').textContent = 'Der frühere Startfehler ist nativ erledigt. Verbindung und gespeicherter Laufstatus sind noch nicht bestätigt. Bitte ausdrücklich erneut prüfen; kein Lauf oder Export wird wiederholt.';
+    return true;
+  }
+  function retireWorkspaceConnection(epoch, force = false) {
+    if (closed || !Number.isSafeInteger(epoch) || epoch < connectionEpoch ||
+        epoch === connectionEpoch && !force) return false;
+    connectionEpoch = epoch;
+    reconnecting = true; contextRequired = true;
+    busyGeneration++; historyRecoveryBusy = false; dropOwnership = null; setBusy(false);
+    historySummaryOwnershipEpoch++; historySummaryReadGeneration++; historySummaryReads = 0;
+    generation++; historyGeneration++; historySummaryEpoch++; historySignature = ''; lastJobSignature = '';
+    workingActionSignature = null; current = null;
+    for (const retire of historySummaryRetirements) retire();
+    catalogue = []; knownIds.clear(); selected.clear(); expanded.clear(); revision = 0;
+    admitting = false; acknowledged = null;
+    $('review-frame').src = 'about:blank'; reviewOrigin = null;
+    window.__DATASECURE_DOCUMENTS__?.invalidateConnection();
+    if (view === 'review' || view === 'documents') { view = ''; showView('history'); }
+    historyUnavailable(bootstrapFailure
+      ? 'Der lokale Core konnte nicht sicher gestartet werden. Der Verlauf ist derzeit nicht erreichbar; bitte die angezeigte Startursache und die Diagnose prüfen.'
+      : 'Verbindung unterbrochen. Der zuletzt angezeigte Verlauf ist nicht bestätigt. DataSecure versucht die sichere Wiederverbindung; kein Lauf wird erneut gestartet.');
+    clearRunReview(); renderRunReceipt(); $('run-guide').hidden = true;
+    if (!$('job').hidden) {
+      $('job-title').textContent = 'Laufstatus wird nach Verbindungsausfall geprüft';
+      $('job-description').textContent = 'Der zuletzt angezeigte Fortschritt ist nicht bestätigt. Bitte keine Ergebnisse als vollständig ansehen.';
+      $('job-progress').removeAttribute('value'); $('job-current').textContent = '';
+      $('job-actions').replaceChildren(); $('job-secondary-actions').replaceChildren();
+      $('job-more').hidden = true; $('job-skip-confirm').hidden = true; $('file-problems').hidden = true;
+    }
+    renderTree(); updateStart();
+    // This is an observation/retirement record, not a Ready or write grant.
+    connectionRetirement = Object.freeze({ epoch: connectionEpoch, generation });
     return true;
   }
   function feedback(message, error = false, owner = null) {
@@ -528,7 +574,9 @@
         ['idle', 'owned', 'settling', 'checking', 'blocked', 'closing'].includes(snapshot.phase) &&
         failure === null && Number.isSafeInteger(snapshot.connection_epoch) && snapshot.connection_epoch >= connectionEpoch;
       if (trustedResolution && retireResolvedBootstrap(snapshot.bootstrap_resolution, snapshot.connection_epoch)) {
-        connectionEpoch = Math.max(connectionEpoch, snapshot.connection_epoch);
+        // A snapshot may be checking/blocked/closing and its receipt historical.
+        // Retire old owners without manufacturing a current Ready event.
+        retireWorkspaceConnection(snapshot.connection_epoch);
       }
       if (bootstrapFailure) {
         renderBootstrapFailure();
@@ -600,7 +648,7 @@
     if (closed || !['new', 'history', 'settings', 'details', 'documents', 'review'].includes(next)) return;
     const navigation = ++navigationGeneration, connection = connectionEpoch;
     if (view === 'documents' && next !== 'documents') {
-      // close() clears its batch synchronously, then awaits native revocation.
+      // close() retains its batch until native revocation is acknowledged.
       // Share that exact close transaction across rapid tab clicks: a second
       // click must not capture a null owner or revoke a successor's binding.
       const owner = documentGuide?.batch_id, renderer = window.__DATASECURE_DOCUMENTS__;
@@ -816,8 +864,9 @@
     if (busy) { await explainBlockedPicker(command, 'busy'); return; }
     const connection = connectionEpoch;
     admitting = true; renderTree();
-    const result = await perform(command);
-    if (connection !== connectionEpoch) return;
+    const operation = perform(command), request = generation;
+    const result = await operation;
+    if (connection !== connectionEpoch || request !== generation) return;
     admitting = false; renderTree();
     if (!result || result.cancelled) return;
     try { applyContext(result.ui_context); $('add-options').hidden = true; $('add-more').setAttribute('aria-expanded', 'false');
@@ -1182,7 +1231,7 @@
       : 'Der aktuelle Ergebnisordner ist nicht bestätigt. Den gespeicherten Stand in der Nachbearbeitung prüfen; keine Änderung blind wiederholen.') : summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
       ? `${reviews} Datei${reviews === 1 ? ' wartet' : 'en warten'} auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
-      : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei einschließlich Bereitstellung und Zuordnung wird fertiggestellt; danach beginnt keine weitere Datei.' : `${done} von ${total} Dateien abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
+      : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.' : `${done} von ${total} Dateien abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
       : state.state === 'results_available' ? `${count(state.result_count)} ${rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
       : state.state === 'stopped' ? 'Der lokale Zwischenstand ist gespeichert. Fortsetzen verarbeitet nur noch offene Schritte.'
       : state.state === 'paused' ? 'Der Lauf ist pausiert. Fortsetzen verarbeitet nur offene Dateien. Die privaten Arbeitskopien unterliegen weiterhin der eingestellten Aufbewahrung.'
@@ -1944,25 +1993,60 @@
       bootstrapFailure && bootstrapRetryProof.failure === bootstrapFailure &&
       bootstrapRetryProof.connectionEpoch === connectionEpoch && bootstrapRetryProof.generation === generation);
     if (bootstrapFailure && explicitRetry && !bootstrapRetryAuthorized) { explainUnboundBootstrapRetry(); return; }
-    if (bootstrapRetryAuthorized) { bootstrapRetryProof.used = true; bootstrapRecoveryPending = true; }
+    if (bootstrapRetryAuthorized) {
+      bootstrapRetryProof.used = true; bootstrapRecoveryPending = true;
+      bootstrapRecoveryAttempt = { failure: bootstrapFailure, proof: bootstrapRetryProof, resolution: null };
+    }
     if (explicitRetry) { automaticRetryPaused = Boolean(bootstrapFailure || bootstrapRecoveryPending); clearTimeout(timer); }
-    refreshing = true; const request = generation, summaryReadAtStart = historySummaryReadGeneration;
+    const flight = { read: null }; refreshing = flight;
+    const attempt = bootstrapRecoveryPending ? bootstrapRecoveryAttempt : null;
+    const ownRead = () => {
+      const owner = Object.freeze({ generation, connection: connectionEpoch, summaryReadGeneration: historySummaryReadGeneration });
+      flight.read = owner; return owner;
+    };
+    let request = ownRead();
+    const currentRead = () => !closed && refreshing === flight && flight.read === request &&
+      request.generation === generation && request.connection === connectionEpoch;
+    const canReadSuccessor = () => !closed && refreshing === flight && !busy && !historyRecoveryBusy &&
+      !historySummaryReads && !bootstrapFailure && request.connection !== connectionEpoch &&
+      connectionRetirement?.epoch === connectionEpoch && connectionRetirement.generation === generation &&
+      (!attempt || bootstrapRecoveryAttempt === attempt && attempt.resolution !== null);
     let pendingRead = 'get_public_state';
     try {
-      const state = await invoke('get_public_state', bootstrapRetryAuthorized ? { retryBootstrap: true } : undefined);
+      let state = await invoke('get_public_state', bootstrapRetryAuthorized ? { retryBootstrap: true } : undefined);
       pendingRead = null;
-      if (closed || request !== generation || busy || historyRecoveryBusy ||
-        historySummaryReads || summaryReadAtStart !== historySummaryReadGeneration ||
+      if (attempt && bootstrapRecoveryAttempt === attempt && !attempt.resolution &&
+          (!bootstrapFailure || bootstrapFailure === attempt.failure)) {
+        // Ready delivery is optional. Obtain the actual native resolution,
+        // never infer it from the status response or an incremented number.
+        pendingRead = 'get_native_recovery_status';
+        await updateConnectionHelp(); pendingRead = null;
+      }
+      if (attempt && bootstrapRecoveryAttempt !== attempt) return;
+      if (attempt && !attempt.resolution) {
+        if (bootstrapFailure) { renderBootstrapFailure(); return; }
+        throw Error('STANDALONE_CONNECTION_CHANGED');
+      }
+      if (!currentRead()) {
+        if (!canReadSuccessor()) return;
+        // One new ordinary read, begun AFTER the real epoch observation.
+        // The old response is discarded. No proof/override is replayed.
+        request = ownRead(); pendingRead = 'get_public_state';
+        state = await invoke('get_public_state'); pendingRead = null;
+      }
+      if (!currentRead() || busy || historyRecoveryBusy ||
+        historySummaryReads || request.summaryReadGeneration !== historySummaryReadGeneration ||
         view === 'documents' && documentGuide?.busy) return;
       if (contextRequired || explicitRetry && resultFolderUnavailable) {
         const recoveredConnection = contextRequired;
         pendingRead = 'get_ui_context';
         const context = await invoke('get_ui_context');
         pendingRead = null;
-        if (closed || request !== generation || busy || historySummaryReads || summaryReadAtStart !== historySummaryReadGeneration) return;
+        if (!currentRead() || busy || historySummaryReads || request.summaryReadGeneration !== historySummaryReadGeneration) return;
         applyContext(context); contextRequired = false; reconnecting = false;
         if (bootstrapFailure) resolvedBootstrapEpoch = Math.max(resolvedBootstrapEpoch, bootstrapFailure.epoch);
         bootstrapFailure = null; bootstrapRecoveryPending = false; updateStart();
+        if (bootstrapRecoveryAttempt === attempt) bootstrapRecoveryAttempt = null;
         if (recoveredConnection) feedback('Lokale Verbindung wiederhergestellt. Gespeicherte Läufe bleiben erhalten; kein Start und keine Entscheidung wurden automatisch wiederholt. Eine frühere Dateiauswahl bitte neu aufnehmen.');
       }
       current = state; observeHistoryCountState(state); updateStart();
@@ -1977,26 +2061,28 @@
           await refreshHistory(true, null, runDetails.batchId);
         if (view !== 'history') await refreshHistoryCount();
       }
+      if (!currentRead()) return;
       if (state.state === 'blocked') feedback('Die lokale Verarbeitung ist nicht bereit. Bitte das vollständige Paket und die Diagnose prüfen.', true);
       else if (feedbackOwner?.kind === 'connection-unconfirmed') feedback(
         'Lokale Verbindung und Laufstatus sind wieder erreichbar. Ein zuvor unterbrochener Befehl wurde nicht erneut ausgeführt; seinen Abschluss bitte im Verlauf und anhand gespeicherter Belege prüfen.');
       else if (feedbackOwner?.kind === 'read-busy') feedback('');
       consecutiveConnectionFailures = 0; automaticRetryPaused = false;
     } catch (error) {
+      if (!currentRead()) return;
       if (bootstrapFailure) { if (!closed) renderBootstrapFailure(); return; }
       const readCode = errorCode(error), transientBusyRead = pendingRead !== null && transientReadBusyCodes.has(readCode);
       if (bootstrapRecoveryPending) {
         // Native Ready ended the old refusal, not this explicit recovery attempt.
         // Keep every mutation blocked and require another deliberate status check.
-        if (!closed && request === generation) {
+        if (currentRead()) {
           if (transientBusyRead) feedback(readBusyMessage(readCode), false, { kind: 'read-busy' }); else showError(error);
           if (terminalCoreStartupCodes.has(errorCode(error))) holdBootstrapFailure(connectionEpoch, errorCode(error));
           automaticRetryPaused = true; $('connection-help').hidden = false;
         }
         return;
       }
-      if (!closed && request === generation && !historyRecoveryBusy && !historySummaryReads &&
-      summaryReadAtStart === historySummaryReadGeneration && !(view === 'documents' && documentGuide?.busy)) {
+      if (currentRead() && !historyRecoveryBusy && !historySummaryReads &&
+      request.summaryReadGeneration === historySummaryReadGeneration && !(view === 'documents' && documentGuide?.busy)) {
       invalidateHistoryCount();
       if (transientBusyRead) {
         if (explicitRetry) {
@@ -2004,7 +2090,7 @@
           try { const snapshot = await invoke('get_native_recovery_status');
             if (snapshot?.local_ui_only === true && snapshot.external_disclosure === false) description = nativeCoreDescription(snapshot);
           } catch { /* Busy is still distinct from a failed connection. */ }
-          if (!closed && request === generation) feedback(readCode === 'STANDALONE_IPC_BUSY'
+          if (currentRead()) feedback(readCode === 'STANDALONE_IPC_BUSY'
             ? description || readBusyMessage(readCode)
             : [readBusyMessage(readCode), description].filter(Boolean).join(' '), false, { kind: 'read-busy' });
         }
@@ -2013,13 +2099,24 @@
       showError(error);
       if (terminalCoreStartupCodes.has(errorCode(error))) { holdBootstrapFailure(connectionEpoch, errorCode(error)); return; }
       if (reconnecting) await updateConnectionHelp();
+      if (!currentRead()) return;
       if (++consecutiveConnectionFailures >= 2 || terminalCoreStartupCodes.has(errorCode(error))) {
         automaticRetryPaused = true;
         $('connection-help').hidden = false;
         $('connection-status').textContent += ' Automatische Verbindungsversuche sind angehalten. Öffne die Diagnose und prüfe danach die Verbindung ausdrücklich erneut; ein Lauf oder Export wird nicht automatisch wiederholt.';
       }
     } }
-    finally { refreshing = false; schedule(['processing', 'preparing'].includes(current?.state) ? 1200 : 5000); }
+    finally {
+      if (refreshing === flight) {
+        const newEpochReadPending = contextRequired && !bootstrapFailure && !bootstrapRecoveryPending &&
+          request.connection !== connectionEpoch && connectionRetirement?.epoch === connectionEpoch &&
+          connectionRetirement.generation === generation;
+        flight.read = null; refreshing = null;
+        // An early Ready timer may already have encountered this held slot.
+        // Replan only its actual newer epoch after this physical read settles.
+        schedule(newEpochReadPending ? 50 : ['processing', 'preparing'].includes(current?.state) ? 1200 : 5000);
+      }
+    }
   }
   async function configure() { const result = await perform('configure_results'); if (!result || result.cancelled) return;
     if (result.ok === false && result.configuration_changed === true && result.preparation_pending === true &&
@@ -2194,6 +2291,7 @@
   (async () => {
     updateStart();
     let initialContextReadPending = false;
+    let initialContextOwner = null;
     try {
       receiveConnectionState = event => {
         const data = event.payload;
@@ -2206,49 +2304,9 @@
             !['recovering', 'ready', 'bootstrap_failed'].includes(data.state) ||
             data.state === 'bootstrap_failed' && !/^[A-Z][A-Z0-9_]{1,80}$/u.test(data.error_code || '')) return;
         if (bootstrapFailure && data.epoch <= bootstrapFailure.epoch && data.epoch <= connectionEpoch) { renderBootstrapFailure(); return; }
-        const changedConnection = connectionEpoch !== data.epoch;
-        connectionEpoch = data.epoch;
-        if (changedConnection) {
-          invalidateHistoryCount();
-          // A newer Ready may arrive without an intermediate Recovering
-          // event. Retire both the global proof and every rendered row's
-          // approval/copy projection; an old read/finally cannot own the new
-          // channel or restore a completion claim afterwards.
-          historySummaryOwnershipEpoch++;
-          if (historySummaryReads) historySummaryReadGeneration++;
-          historySummaryReads = 0;
-          historySummaryEpoch++; historyGeneration++; historySignature = '';
-          for (const retire of historySummaryRetirements) retire();
-          clearRunReview(); renderRunReceipt();
-        }
+        if (data.state === 'bootstrap_failed') holdBootstrapFailure(data.epoch, data.error_code, true);
+        retireWorkspaceConnection(data.epoch, data.state !== 'ready');
         if (data.state === 'recovering' || data.state === 'bootstrap_failed') {
-          if (data.state === 'bootstrap_failed') holdBootstrapFailure(data.epoch, data.error_code, true);
-          busyGeneration++; historyRecoveryBusy = false; dropOwnership = null; setBusy(false);
-          // Pending reads belong to the retired Core connection. Their late
-          // finally blocks must not keep the replacement connection locked.
-          historySummaryOwnershipEpoch++; historySummaryReadGeneration++; historySummaryReads = 0;
-          generation++; historyGeneration++; historySummaryEpoch++; historySignature = ''; lastJobSignature = '';
-          catalogue = []; knownIds.clear(); selected.clear(); expanded.clear(); revision = 0;
-          admitting = false; acknowledged = null; reconnecting = true; contextRequired = true;
-          $('review-frame').src = 'about:blank'; reviewOrigin = null;
-          window.__DATASECURE_DOCUMENTS__?.invalidateConnection();
-          if (view === 'review' || view === 'documents') { view = ''; showView('history'); }
-          historyUnavailable(bootstrapFailure
-            ? 'Der lokale Core konnte nicht sicher gestartet werden. Der Verlauf ist derzeit nicht erreichbar; bitte die angezeigte Startursache und die Diagnose prüfen.'
-            : 'Verbindung unterbrochen. Der zuletzt angezeigte Verlauf ist nicht bestätigt. DataSecure versucht die sichere Wiederverbindung; kein Lauf wird erneut gestartet.');
-          $('run-guide').hidden = true;
-          if (!$('job').hidden) {
-            $('job-title').textContent = 'Laufstatus wird nach Verbindungsausfall geprüft';
-            $('job-description').textContent = 'Der zuletzt angezeigte Fortschritt ist nicht bestätigt. Bitte keine Ergebnisse als vollständig ansehen.';
-            $('job-progress').removeAttribute('value');
-            $('job-current').textContent = '';
-            $('job-actions').replaceChildren();
-            $('job-secondary-actions').replaceChildren();
-            $('job-more').hidden = true;
-            $('job-skip-confirm').hidden = true;
-            $('file-problems').hidden = true;
-          }
-          renderTree(); updateStart();
           if (bootstrapFailure) { renderBootstrapFailure(); return; }
           feedback('Lokale Verbindung unterbrochen. DataSecure wartet auf das sichere Ende der alten Sitzung und verbindet sich erneut. Nicht gespeicherte Prüfentscheidungen wurden nicht übertragen.', true);
           $('connection-help').hidden = false;
@@ -2313,6 +2371,7 @@
         $('product-version').textContent = `Version ${ready.product_version}${build}${target ? ` · ${target}` : ''}`;
       }
       const initialGeneration = generation, initialConnection = connectionEpoch;
+      initialContextOwner = { generation: initialGeneration, connection: initialConnection };
       reconnecting = true; contextRequired = true; updateStart();
       feedback('Der lokale Core wird gestartet und der gespeicherte Zustand geprüft. Dateiauswahl und Ergebnisordner sind bis zur bestätigten Verbindung gesperrt.', false,
         { kind: 'bootstrap' });
@@ -2329,7 +2388,12 @@
       bootstrapping = false;
       await refresh();
     } catch (error) {
-      bootstrapping = false; reconnecting = true; contextRequired = true; updateStart();
+      bootstrapping = false;
+      if (initialContextOwner && (initialContextOwner.generation !== generation || initialContextOwner.connection !== connectionEpoch)) {
+        if (bootstrapFailure) renderBootstrapFailure(); else schedule(50);
+        return;
+      }
+      reconnecting = true; contextRequired = true; updateStart();
       if (bootstrapFailure) { renderBootstrapFailure(); return; }
       if (initialContextReadPending && transientReadBusyCodes.has(errorCode(error))) {
         feedback(errorCode(error) === 'STANDALONE_IPC_BUSY'

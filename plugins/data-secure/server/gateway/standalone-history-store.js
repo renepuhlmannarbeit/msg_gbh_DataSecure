@@ -1,5 +1,5 @@
 'use strict';
-const { readHeldBytes, readBoundFile, readBoundFileRecord, bindDirectory, assertDirectory, fileIdentity, sameFile } = require('../core/bound-file-io');
+const { readHeldBytes, readBoundFile, readBoundFileRecord, readBoundFileSnapshotAttemptRecord, bindDirectory, assertDirectory, fileIdentity, sameFile } = require('../core/bound-file-io');
 
 // Private, content-free run summaries outlive the source-copy/journal retention
 // window. Export bindings are separate files because workers and UI readers may
@@ -14,9 +14,11 @@ const { ensurePrivateDirectory } = require('./common');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
 const { createBatchProgress } = require('./batch-progress');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { MAX_RESULT_EXPORT_RECORD_BYTES } = require('../core/result-export-record');
 const { createBatchActiveLock } = require('./batch-active-lock');
 const { withDocumentControl } = require('./standalone-document-control');
 const historyWindow = require('./standalone-history-window');
+const { CONTENT_BATCH_SCHEMAS } = require('../core/content-options');
 
 const ID_RE = /^[a-f0-9]{64}$/u;
 const EXPORT_RE = /^re_[a-f0-9]{32}$/u;
@@ -56,13 +58,18 @@ function readJson(file) {
   const stat = fs.lstatSync(file, { bigint: true });
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1n || stat.size > 32768n) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
   const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
+  let value, failed = false, primary;
   try {
     const opened = fs.fstatSync(descriptor, { bigint: true });
     if (!opened.isFile() || opened.dev !== stat.dev || opened.ino !== stat.ino || opened.size !== stat.size) {
       throw failure('STANDALONE_HISTORY_UNAVAILABLE');
     }
-    return JSON.parse(readHeldBytes(descriptor, opened.size, fs, 32768).toString('utf8'));
-  } finally { fs.closeSync(descriptor); }
+    value = JSON.parse(readHeldBytes(descriptor, opened.size, fs, 32768).toString('utf8'));
+  } catch (error) { failed = true; primary = error; }
+  try { fs.closeSync(descriptor); }
+  catch (error) { if (!failed) { failed = true; primary = error; } }
+  if (failed) throw primary;
+  return value;
 }
 function writeJson(name, value) {
   const target = path.join(historyRoot(), `${name}.json`);
@@ -70,8 +77,12 @@ function writeJson(name, value) {
   try { if (JSON.stringify(readJson(target)) === payload) return; } catch { /* create/repair private projection */ }
   const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
   const descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+  let failed = false, primary;
   try { writeFully(descriptor, Buffer.from(payload), fs); fs.fsyncSync(descriptor); }
-  finally { fs.closeSync(descriptor); }
+  catch (error) { failed = true; primary = error; }
+  try { fs.closeSync(descriptor); }
+  catch (error) { if (!failed) { failed = true; primary = error; } }
+  if (failed) throw primary;
   renameWithTransientRetry(temporary, target);
   syncParentDirectory(target, fs, process.platform);
 }
@@ -176,7 +187,7 @@ function recordStandaloneState(state, options = {}) {
   try { historyWindow.registerHistory(summary, historyWindowMigration); }
   catch { /* the independently read UI index fails closed; durable run facts remain valid */ }
   if (summary.processing_mode === 'markdown-and-anonymize' && summary.complete) {
-    if (options.reconstructContentNotices !== false && state.schema === 'datasecure-batch/7') {
+    if (options.reconstructContentNotices !== false && CONTENT_BATCH_SCHEMAS.includes(state.schema)) {
       // This is the actual terminal state-write path, not a status/list poll.
       // Reconstruct from bounded, independently bound publication manifests.
       const notices = require('../standalone/anonymization-notices').anonymizationContentNotices(summary.batch_id,
@@ -287,12 +298,22 @@ function historyWindowMigration() {
       }
       if (stat.size > BigInt(64 * 1024 * 1024 - bytes)) throw unavailable();
       let record;
-      try { record = readBoundFileRecord(target, { directory: parent, io, maximum, minimum: 1 }); }
-      catch (error) {
+      try {
+        record = readBoundFileSnapshotAttemptRecord(target,
+          { directory: parent, io, maximum, minimum: 1, validateParents: assertParents },
+          () => { throw retrySnapshot; });
+      } catch (error) {
         assertParents();
         if (budgetExceeded) throw unavailable();
-        if (error?.code === 'BOUND_FILE_CHANGED' || error?.code === 'ENOENT') throw retrySnapshot;
-        throw error; // in particular UNSAFE and unconfirmed close are final
+        if (error === retrySnapshot) throw error;
+        if (error?.code === 'ENOENT') {
+          let absent = false;
+          try { io.lstatSync(target, { bigint: true }); }
+          catch (current) { if (current?.code !== 'ENOENT') throw current; absent = true; }
+          assertParents();
+          if (absent) throw retrySnapshot;
+        }
+        throw error; // generic IO, in-place changes and unconfirmed close are final
       }
       observed.set(target, record.identity);
       try { return JSON.parse(record.bytes); } catch { return null; }
@@ -307,7 +328,7 @@ function historyWindowMigration() {
       const knownExports = new Set(rows.map(row => exportId(row.batch_id)));
       for (const name of initialExports) {
         if (knownExports.has(name.slice(0, -5))) continue;
-        const record = read(exports.binding, name, 1024 * 1024, true);
+        const record = read(exports.binding, name, MAX_RESULT_EXPORT_RECORD_BYTES, true);
         // Search metadata, not a validated export receipt. Only the selected
         // five are later resolved with the full existing owner/anchor reader.
         const stamp = /^Lauf-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-[a-f0-9]{8}$/u.exec(record?.run_directory);
@@ -367,11 +388,14 @@ function historyWindowMigration() {
         batch_id: row.batch_id, legacy_export_id: row.legacy_export_id }));
       const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
         (fs.constants.O_NOFOLLOW || 0), 0o600);
-      let identity;
+      let identity, failed = false, primary;
       try {
         assertParents(); writeFully(fd, payload, fs); fs.fsyncSync(fd);
         identity = fileIdentity(fs.fstatSync(fd, { bigint: true }));
-      } finally { fs.closeSync(fd); }
+      } catch (error) { failed = true; primary = error; }
+      try { fs.closeSync(fd); }
+      catch (error) { if (!failed) { failed = true; primary = error; } }
+      if (failed) throw primary;
       assertParents();
       if (!sameFile(fs.lstatSync(temporary, { bigint: true }), identity)) throw unavailable();
       renameWithTransientRetry(temporary, target);
@@ -468,7 +492,7 @@ function exportCaptureSnapshot() {
     add(source, 'result-root-override', String(process.env.EU_PRIVACY_RESULT_ROOT || ''));
     const outbox = directory('result-export-state', source);
     if (outbox) for (const name of names(outbox, /^re_[a-f0-9]{32}\.json(?:\.waived)?$/u)) {
-      const data = read(outbox, name, 1024 * 1024, source, `export:${name}`);
+      const data = read(outbox, name, name.endsWith('.json') ? MAX_RESULT_EXPORT_RECORD_BYTES : 1024 * 1024, source, `export:${name}`);
       if (name.endsWith('.json')) {
         records++;
         const value = JSON.parse(data);

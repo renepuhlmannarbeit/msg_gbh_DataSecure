@@ -8,11 +8,12 @@ import { fileURLToPath } from 'node:url';
 import { writeStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
 import { collectConversionRuntime, writeConversionRuntime } from '../scripts/lib/standalone-conversion-runtime.mjs';
 import { derivePdfjsTextPaintModule, PDFJS_TEXT_PAINT_HOOK } from '../scripts/lib/pdfjs-text-paint-hook.mjs';
-import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+import { finishPackageSmokeParent } from './helpers/standalone-package-scope.mjs';
 import { createCases as createAdversarialCases } from '../scripts/generate-adversarial-golden-corpus.mjs';
 import { qualityCases } from '../scripts/generate-quality-corpus.mjs';
 
 const require = createRequire(import.meta.url);
+const { firstFailure, within, ownChild } = require('./helpers/qa-parent-lifecycle.cjs');
 const { decodePng } = require('../plugins/data-secure/server/images/png');
 const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
 const { xlsxCounterexample, bmp32 } = require('./lib/conversion-counterexamples');
@@ -81,14 +82,53 @@ function headerFooterDocx() {
 let observeSpawn;
 childProcess.spawn = (...args) => {
   const child = originalSpawn(...args);
-  const entry = { child, closed: false, kill: child.kill.bind(child) };
-  entry.done = new Promise(resolve => child.once('close', (code, signal) => {
-    entry.closed = true; entry.exitCode = code; entry.signal = signal; resolve();
-  }));
+  const entry = ownChild(child);
   children.push(entry); observeSpawn?.(child, args);
   return child;
 };
+// The observed supervisor close is not an inner-process join. Assert the
+// precise public classification from its real code/signal, on every target.
+async function assertConversionStop(action, primaryCode) {
+  const before = children.length;
+  let failure;
+  try { await action(); } catch (error) { failure = error; }
+  assert.ok(failure, 'the interrupted conversion must not return a result');
+  const launched = children.slice(before);
+  assert.equal(launched.length, 1); assert.equal(launched[0].closed, true);
+  const end = launched[0], confirmed = end.signal === null && [0, 2, 125].includes(end.exitCode);
+  assert.equal(failure.code, confirmed ? primaryCode : 'CONVERSION_TERMINATION_UNCONFIRMED');
+  if (!confirmed) assert.deepEqual(failure.cause, { code: primaryCode });
+}
 const { test, snapshot: testCounts } = createPlatformCases();
+const parentFailure = firstFailure();
+
+function windowFixture(factory, converter, { expiresAt, free = 5 * 1024 ** 3, automatic = false } = {}) {
+  const inputs = ['Quelle A', 'Quelle B', 'Quelle C'].map(text => Buffer.from(text));
+  const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1',
+    scanOcr: true, imageOcr: true };
+  const state = { token: 'a'.repeat(64), schema: 'datasecure-batch/8', product_channel: 'standalone',
+    local_executor_pid: 10, local_executor_started_at: '2026-01-01', local_executor_lease_id: '1'.repeat(32),
+    expires_at: expiresAt ?? new Date(Date.now() + 60_000).toISOString(),
+    processing_mode: automatic ? 'markdown-and-anonymize' : 'markdown-only',
+    standalone_document_review: true, content_options: contentOptions,
+    ...(automatic ? { standalone_review_policy: 'automatic-conservative' } : {}),
+    items: inputs.map((bytes, i) => ({ id: String(i), status: 'pending', name: 'document.txt',
+      work_name: String(i), size: bytes.length, sha256: hash(bytes), private_artifact_plain: true })) };
+  const epoch = {}, options = { contentOptions };
+  let paused = false;
+  const run = factory({ initial: structuredClone(state), readState: () => state,
+    assertOwnedEpoch: proof => assert.equal(proof, epoch),
+    claim(_state, action) { if (paused) return false; action(); return true; },
+    readPrivate(_state, item) { return { name: item.name, private_bytes: Buffer.from(inputs[Number(item.id)]) }; },
+    convert: converter, environment: { DATASECURE_NATIVE_EXPORT_CHANNEL: '1', DATASECURE_PRODUCT_CHANNEL: 'standalone' },
+    system: { availableParallelism: () => 4, totalmem: () => 8 * 1024 ** 3, freemem: () => free } });
+  return { run, inputs, options, state, pause() { paused = true; }, enter(i) {
+    const item = state.items[i];
+    const scope = run.enter(state, item, epoch);
+    item.status = 'processing';
+    return scope;
+  } };
+}
 
 try {
   await test('OCR contact warnings retain line locations and never silently repair text', () => {
@@ -143,6 +183,77 @@ try {
     assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
   });
   const { convertBuffer, conversionStartFailureCode, nativeConversionExitCode } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  const { createStandaloneConversionWindow } = require(path.join(server, 'gateway', 'standalone-conversion-window.js'));
+  await test('actual native supervisors overlap and ordered reuse returns the exact serial extracts', async () => {
+    const expected = [];
+    for (const automatic of [false, true]) {
+      const fixture = windowFixture(createStandaloneConversionWindow, convertBuffer, { automatic });
+      assert.ok(fixture.run, 'the persisted mode and review policy authorize the conversion window');
+      if (!automatic)
+        for (const bytes of fixture.inputs) expected.push(await convertBuffer(bytes, '.txt', fixture.options));
+      const before = children.length;
+      try {
+        for (const [index, input] of fixture.inputs.entries()) {
+          const scope = fixture.enter(index);
+          try {
+            const result = scope.convert(input, '.txt', fixture.options);
+            if (index === 0) {
+              assert.equal(children.length - before, 2, 'both isolated supervisors are running before either close is handled');
+              assert.ok(children.slice(before).every(child => !child.closed));
+            }
+            assert.deepEqual(await result, expected[index]);
+            fixture.state.items[index].status = 'released';
+          } finally { scope.leave(); }
+        }
+      } finally { await fixture.run.close(); }
+      assert.equal(children.length - before, 3, 'one native conversion per file including prefetched files');
+      assert.ok(children.slice(before).every(child => child.closed && child.signal === null && child.exitCode === 0));
+    }
+  }, { platform: target === 'linux-x64-glibc' ? 'darwin' : process.platform });
+
+  await test('window closes admission on pause and waits for already launched work without claiming a future item', async () => {
+    const jobs = [];
+    const fixture = windowFixture(createStandaloneConversionWindow, () => new Promise(resolve => jobs.push(resolve)));
+    const scope = fixture.enter(0);
+    const conversion = scope.convert(fixture.inputs[0], '.txt', fixture.options);
+    assert.equal(jobs.length, 2);
+    fixture.pause();
+    jobs[0]({ markdown: 'first' });
+    assert.deepEqual(await conversion, { markdown: 'first' });
+    scope.leave();
+    let closed = false;
+    const drained = fixture.run.close().then(() => { closed = true; });
+    await Promise.resolve();
+    assert.equal(closed, false);
+    assert.equal(fixture.state.items[1].status, 'pending');
+    jobs[1]({ markdown: 'future' });
+    await drained;
+    assert.equal(jobs.length, 2);
+  }, { platform: target === 'linux-x64-glibc' ? 'darwin' : process.platform });
+
+  await test('an unconfirmed converter end blocks the window, while a stale lease prevents document error classification', async () => {
+    for (const stale of [false, true]) {
+      const jobs = [];
+      const fixture = windowFixture(createStandaloneConversionWindow, () => new Promise((resolve, reject) => jobs.push({ resolve, reject })));
+      const scope = fixture.enter(0);
+      const conversion = scope.convert(fixture.inputs[0], '.txt', fixture.options);
+      const coded = code => Object.assign(new Error(code), { code });
+      if (stale) {
+        fixture.state.local_executor_lease_id = '2'.repeat(32);
+        jobs[0].reject(coded('SOURCE_ENCRYPTED_UNSUPPORTED'));
+        jobs[1].resolve({ markdown: 'future' });
+        await assert.rejects(conversion, { code: 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' });
+        await fixture.run.close();
+      } else {
+        jobs[1].reject(coded('CONVERSION_TERMINATION_UNCONFIRMED'));
+        jobs[0].resolve({ markdown: 'first' });
+        await assert.rejects(conversion, { code: 'CONVERSION_TERMINATION_UNCONFIRMED' });
+        await assert.rejects(fixture.run.close(), { code: 'CONVERSION_TERMINATION_UNCONFIRMED' });
+      }
+      scope.leave();
+      assert.equal(jobs.length, 2);
+    }
+  }, { platform: target === 'linux-x64-glibc' ? 'darwin' : process.platform });
   await test('actual closed native worker emits one content-free diagnostic without changing success or hard errors',async()=>{
     const { _test:{readWorkflowEvents} }=require(path.join(server,'gateway/workflow-diagnostics.js'));
     const events=()=>readWorkflowEvents().filter(row=>row.event==='conversion_worker_closed');
@@ -755,8 +866,8 @@ try {
       }
       if (type === 'csv') {
         assert.equal((rendered.match(/<th>Name<\/th>/gu) || []).length, 2);
-        assert.ok(rendered.includes('<th></th>')); assert.equal((rendered.match(/<tr>/gu) || []).length, 3);
-        assert.ok(!rendered.includes('Spalte ') && !rendered.includes('<th>Zeile'));
+        assert.ok(rendered.includes('<th>Spalte 4</th>')); assert.equal((rendered.match(/<tr>/gu) || []).length, 3);
+        assert.ok(!rendered.includes('<th>Zeile'));
       }
       if (type === 'md') {
         assert.ok(rendered.includes('Grafiktitel')); assert.ok(rendered.includes('![Code](literal.png)'));
@@ -994,6 +1105,7 @@ try {
           assert.equal(draft.processing_mode, 'markdown-only'); assert.ok(draft.ambiguities[0].image);
           const broker = createReviewBroker(), id = 'a'.repeat(32); let response;
           const child = { send(message) { response = message.answer; } };
+          broker.begin(child, token);
           broker.receive(child, { type: 'standalone-review-draft', batch_token: token, review_id: id, draft });
           const serialized = new FrameDecoder().push(encodeFrame({ schema: 'datasecure-standalone-private-ipc/1',
             request_id: 'a'.repeat(16), action: 'submit_review', review_id: id,
@@ -1341,26 +1453,26 @@ try {
     }
     assert.equal(children.length, before);
   });
-  await test('inflight cancellation after actual OCR readiness confirms supervisor termination', async () => {
+  await test('inflight OCR cancellation distinguishes supervisor close from confirmed inner termination', async () => {
     const controller = new AbortController(); let ready = false;
     observeSpawn = child => { let log = ''; child.stderr.on('data', chunk => {
       log += chunk.toString(); if (!ready && log.includes('CONVERSION_OCR_READY')) { ready = true; controller.abort(); }
     }); };
-    try { await assert.rejects(convertBuffer(png, '.png', { signal: controller.signal }), { code: 'REQUEST_CANCELLED' }); }
+    try { await assertConversionStop(() => convertBuffer(png, '.png', { signal: controller.signal }), 'REQUEST_CANCELLED'); }
     finally { observeSpawn = null; }
     assert.equal(ready, true); assert.ok(children.every(entry => entry.closed));
   });
-  await test('timeout confirms process termination rather than returning a hanging promise', async () => {
-    await assert.rejects(convertBuffer(png, '.png', { timeoutMs: 1 }), { code: 'CONVERSION_TIMEOUT' });
+  await test('timeout is bounded and never labels a signal-only supervisor close as confirmed inner end', async () => {
+    await assertConversionStop(() => convertBuffer(png, '.png', { timeoutMs: 1 }), 'CONVERSION_TIMEOUT');
     assert.ok(children.every(entry => entry.closed));
   });
-  await test('native Windows assignment is atomic and 60 early cancellations leave no stdio-owning orphan', async () => {
+  await test('native Windows assignment is atomic and 60 early timeouts close all observed transports', async () => {
     const native = fs.readFileSync(path.join(repo, 'native', 'windows', 'datasecure-sandbox.cpp'), 'utf8');
     assert.ok(native.indexOf('PROC_THREAD_ATTRIBUTE_JOB_LIST') < native.indexOf('const BOOL created = CreateProcessW'));
     assert.doesNotMatch(native, /\bAssignProcessToJobObject\s*\(/u);
     assert.match(native, /IsProcessInJob/u);
     for (let i = 0; i < 60; i++) {
-      await assert.rejects(convertBuffer(Buffer.from(text), '.txt', { timeoutMs: 1 + i % 3 }), { code: 'CONVERSION_TIMEOUT' });
+      await assertConversionStop(() => convertBuffer(Buffer.from(text), '.txt', { timeoutMs: 1 + i % 3 }), 'CONVERSION_TIMEOUT');
       assert.ok(children.every(entry => entry.closed), `early termination ${i} confirmed every inherited pipe closed`);
     }
   }, { platform: 'win32' });
@@ -1369,14 +1481,16 @@ try {
       const end = child.stdin.end.bind(child.stdin);
       child.stdin.end = (bytes, callback) => end(bytes.subarray(0, 3), callback);
     };
-    try { await assert.rejects(convertBuffer(Buffer.from(text), '.txt'), { code: 'CONVERSION_INPUT_INCOMPLETE' }); }
+    try { await assertConversionStop(() => convertBuffer(Buffer.from(text), '.txt'), 'CONVERSION_INPUT_INCOMPLETE'); }
     finally { observeSpawn = null; }
     assert.ok(children.every(entry => entry.closed));
   });
   await test('refused termination has a bounded distinct failure, no automatic escalation', async () => {
-    let attempts = 0;
+    let attempts = 0, entry;
+    const failure = firstFailure(() => process.stderr.write('CONVERSION_TEST_SECONDARY_CLEANUP_FAILURE\n'));
     const controller = new AbortController();
     observeSpawn = child => {
+      entry = children.at(-1);
       child.stdin.end = () => child.stdin; // Real child waits for bytes; no output/result mock.
       child.kill = () => { attempts++; return false; };
       queueMicrotask(() => controller.abort());
@@ -1384,11 +1498,16 @@ try {
     try {
       await assert.rejects(convertBuffer(png, '.png', { signal: controller.signal }), { code: 'CONVERSION_TERMINATION_UNCONFIRMED' });
       assert.equal(attempts, 1); assert.equal(children.at(-1).closed, false);
-    } finally {
+    } catch (error) { failure.record(error); }
+    finally {
       observeSpawn = null;
-      const entry = children.at(-1); if (!entry.closed) entry.kill('SIGTERM');
-      await entry.done;
+      if (entry) {
+        try { entry.terminate('SIGTERM'); } catch (error) { failure.record(error); }
+        try { await within(entry.done, 6000, 'CONVERSION_TEST_CLEANUP_UNCONFIRMED'); }
+        catch (error) { failure.record(error); }
+      }
     }
+    failure.throwIfFailed();
   });
   await test('missing or changed packaged resource has no system/pilot fallback', async () => {
     const model = path.join(runtime, 'models', 'eng.traineddata');
@@ -1472,13 +1591,16 @@ try {
   });
   const counts = testCounts();
   process.stdout.write(`${counts.passed} packaged conversion groups passed; ${counts.skipped} skipped (${target})\n`);
-} finally {
-  childProcess.spawn = originalSpawn;
-  for (const entry of children) if (!entry.closed) entry.kill('SIGTERM');
-  let timer;
-  try { await Promise.race([Promise.all(children.map(entry => entry.done)), new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error('CONVERSION_TEST_CLEANUP_UNCONFIRMED')), 6000);
-  })]); } finally { clearTimeout(timer); }
-  for(const [key,value] of originalDiagnosticEnvironment){if(value===undefined)delete process.env[key];else process.env[key]=value;}
-  removePackageSmokeScope(repo, scope);
+} catch (error) { parentFailure.record(error); }
+finally {
+  await finishPackageSmokeParent({
+    children: children.map(entry => ({ done: entry.done, closed: () => entry.closed,
+      terminate: () => entry.terminate('SIGTERM') })),
+    failed: parentFailure.failed, error: parentFailure.value,
+    restoreSpawn: () => { childProcess.spawn = originalSpawn; },
+    restoreEnvironment: [...originalDiagnosticEnvironment].map(([key, value]) => () => {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    })
+  });
+  process.stdout.write('Conversion runtime retained; descendant writer quiescence unconfirmed\n');
 }

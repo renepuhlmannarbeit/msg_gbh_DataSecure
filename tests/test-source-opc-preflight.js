@@ -639,4 +639,112 @@ test('partial payload policy does not change unsupported compression into a CRC 
   assert.strictEqual(inspect('partial-encrypted.docx', archive, partialStandalone).code, 'SOURCE_ENCRYPTED_UNSUPPORTED');
 });
 
+const opc84TypesNamespace = 'http://schemas.openxmlformats.org/package/2006/content-types';
+function opc84Declarations(count, start = 0) {
+  return Array.from({ length: count }, (_, index) =>
+    ' xmlns:p' + (start + index) + '="urn:opc84:' + (start + index) + '"').join('');
+}
+function opc84Types(attributes = '', body = '') {
+  return '<Types xmlns="' + opc84TypesNamespace + '"' + attributes + '>' +
+    '<Override PartName="/word/document.xml" ContentType="' + TYPES.docx.contentType + '"/>' +
+    body + '</Types>';
+}
+function opc84Inspect(name, xml, wanted) {
+  const bytes = docx({ contentTypes: xml }), before = Buffer.from(bytes);
+  for (const [label, options] of [['strict', {}], ['partial', partialStandalone]]) {
+    const result = inspect('opc84-' + name + '-' + label + '.docx', bytes, options);
+    assert.strictEqual(result.verdict, wanted === 'candidate' ? 'candidate' : 'rejected');
+    if (wanted !== 'candidate') assert.strictEqual(result.code, wanted);
+    assert.deepStrictEqual(bytes, before);
+  }
+}
+test('opc84 depth admission matches the existing 128-element XML boundary before further construction', () => {
+  opc84Inspect('depth-exact', opc84Types('', '<e>'.repeat(127) + '</e>'.repeat(127)), 'candidate');
+  opc84Inspect('depth-over', opc84Types('', '<e>'.repeat(128) + '</e>'.repeat(128)), 'SOURCE_CONTAINER_LIMIT');
+});
+test('opc84 per-element attributes remain bounded at the existing 256-attribute contract', () => {
+  const attributes = count => Array.from({ length: count }, (_, index) => ' a' + index + '="x"').join('');
+  // The root default namespace is one real XML attribute.
+  opc84Inspect('attributes-exact', opc84Types(attributes(255)), 'candidate');
+  opc84Inspect('attributes-over', opc84Types(attributes(256)), 'SOURCE_CONTAINER_LIMIT');
+});
+test('opc84 namespace cardinality is admitted before copying an inherited scope', () => {
+  // 129 inherited bindings (default + 128 prefixes), then 127/128 distinct new prefixes.
+  opc84Inspect('namespaces-exact', opc84Types(opc84Declarations(128),
+    '<e' + opc84Declarations(127, 128) + '/>'), 'candidate');
+  opc84Inspect('namespaces-over', opc84Types(opc84Declarations(128),
+    '<e' + opc84Declarations(128, 128) + '/>'), 'SOURCE_CONTAINER_LIMIT');
+});
+test('opc84 namespace-copy work is cumulative across actual bounded OPC control parses', () => {
+  const scope = opc84Declarations(255);
+  const make = extra => opc84Types(scope,
+    '<e xmlns:p0="urn:changed"/>'.repeat(253) +
+    '<e xmlns:p0="urn:changed"' + (extra ? ' xmlns:p1="urn:changed"' : '') + '/>');
+  // Actual control schedule: Types contributes 256 + 254*(256+1);
+  // the existing root relationships parse twice contributes 1+1. Total 65536.
+  const exact = make(false), over = make(true);
+  assert.ok(Buffer.byteLength(over) < 32 * 1024, 'small finite input, not an OOM fixture');
+  opc84Inspect('namespace-work-exact', exact, 'candidate');
+  opc84Inspect('namespace-work-over', over, 'SOURCE_CONTAINER_LIMIT');
+});
+test('opc84 the real parser body enforces seeded cumulative structural counters at exact boundaries', () => {
+  const filename = require.resolve('../plugins/data-secure/server/gateway/opc-source-validator');
+  const bytes = fs.readFileSync(filename), moduleRecord = { exports: {} };
+  // Expose only the existing private function inside this isolated source VM.
+  // No parser algorithm is copied and no product module/export/cache is mutated.
+  require('node:vm').runInNewContext(bytes.toString('utf8') +
+    '\nmodule.exports = { parseXml };', { module: moduleRecord }, { filename });
+  const parse = moduleRecord.exports.parseXml;
+  const xml = '<Types xmlns="' + opc84TypesNamespace + '"/>';
+  for (const [field, limit] of [['elements', 1000000], ['attributes', 2000000], ['namespaceEntries', 65536]]) {
+    const exact = { elements: 0, attributes: 0, namespaceEntries: 0, [field]: limit - 1 };
+    assert.doesNotThrow(() => parse(xml, opc84TypesNamespace, 'Types', exact));
+    assert.strictEqual(exact[field], limit);
+    const over = { elements: 0, attributes: 0, namespaceEntries: 0, [field]: limit };
+    assert.throws(() => parse(xml, opc84TypesNamespace, 'Types', over), { code: 'SOURCE_CONTAINER_LIMIT' });
+  }
+  const shared = { elements: 0, attributes: 0, namespaceEntries: 65534 };
+  parse(xml, opc84TypesNamespace, 'Types', shared);
+  parse(xml, opc84TypesNamespace, 'Types', shared);
+  assert.strictEqual(shared.namespaceEntries, 65536);
+  assert.throws(() => parse(xml, opc84TypesNamespace, 'Types', shared), { code: 'SOURCE_CONTAINER_LIMIT' });
+  const scope = { elements: 0, attributes: 0, namespaceEntries: 0 };
+  const nodes = parse('<Types xmlns="' + opc84TypesNamespace + '" xmlns:p="urn:outer">' +
+    '<e xmlns:p="urn:inner"><p:v/></e><p:v/></Types>', opc84TypesNamespace, 'Types', scope);
+  assert.deepStrictEqual(Array.from(nodes.filter(node => node.localName === 'v'), node => node.namespaceURI),
+    ['urn:inner', 'urn:outer'], 'copy-on-declaration must not mutate the sibling inherited namespace');
+  assert.deepStrictEqual(fs.readFileSync(filename), bytes, 'the actual source bytes remain unchanged');
+});
+test('opc84 resource refusal stays technical through actual source and partial extraction APIs', () => {
+  const bytes = docx({ contentTypes: opc84Types('', '<e>'.repeat(128) + '</e>'.repeat(128)) });
+  const before = Buffer.from(bytes);
+  const entries = require('../plugins/data-secure/server/zip-reader').readZip(bytes);
+  const controls = Object.fromEntries([...entries].filter(([name]) =>
+    name === '[Content_Types].xml' || name.endsWith('.rels')).map(([name, data]) => [name, data.toString('utf8')]));
+  assert.throws(() => require('../plugins/data-secure/server/gateway/opc-source-validator').validateOpcControls({
+    declaredType: 'docx', entries: new Set(entries.keys()), controlParts: controls, partialExtraction: true
+  }), { code: 'SOURCE_CONTAINER_LIMIT' });
+  assert.strictEqual(inspect('opc84-fixed-source-code.docx', bytes, partialStandalone).code, 'SOURCE_CONTAINER_LIMIT');
+  // The existing extraction envelope has no SOURCE_CONTAINER_LIMIT member.
+  // Preserve that current fixed generic technical refusal; never invent active content.
+  assert.throws(() => extractMarkdownBuffer(bytes, '.docx', {
+    partialExtraction: true, markdownOutput: 'content-v1'
+  }), { code: 'MARKDOWN_EXTRACTION_FAILED' });
+  assert.deepStrictEqual(bytes, before);
+});
+test('opc84 ordinary metadata, active-content and malformed-control outcomes keep their existing roles', () => {
+  const positive = docx({}, [], { standardPackageMetadata: true }), before = Buffer.from(positive);
+  assert.strictEqual(inspect('opc84-real-standard-metadata.docx', positive, partialStandalone).verdict, 'candidate');
+  assert.deepStrictEqual(positive, before);
+  const malformed = docx({ contentTypes: '<Types xmlns="' + opc84TypesNamespace + '"><e></Types>' });
+  assert.strictEqual(inspect('opc84-still-malformed.docx', malformed, partialStandalone).code, 'SOURCE_CONTAINER_CORRUPT');
+  const active = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="root" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+    '<Relationship Id="active" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="word/macro.xml"/>' +
+    '</Relationships>';
+  const input = docx({ relationships: active }, [['word/macro.xml', '<inert/>']]), copy = Buffer.from(input);
+  assert.strictEqual(inspect('opc84-still-active.docx', input, partialStandalone).code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  assert.deepStrictEqual(input, copy);
+});
+
 done(() => fs.rmSync(root, { recursive: true, force: true }));

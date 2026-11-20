@@ -12,9 +12,13 @@ if (process.platform !== 'win32') {
   process.exit(0);
 }
 
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-windows-visual-'));
+const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-windows-visual-'));
+const root = path.join(testRootScope, 'privacy');
+fs.mkdirSync(root, { mode: 0o700 });
 process.env.EU_PRIVACY_ROOT = root;
-process.env.LOCALAPPDATA = path.join(root, 'localapp');
+process.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');
 
 const imagePath = path.join(root, 'synthetic-ocr.png');
 const escaped = imagePath.replace(/'/g, "''");

@@ -5,6 +5,9 @@
 // extraction and Tauri acceptance are separate gates, not simulated by this file.
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const { fork, spawnSync } = require('node:child_process');
+const { firstFailure, within, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
+const { finishArtifactCrash } = require('./helpers/artifact-crash-process.cjs');
+const crashChildren = [];
 const worker = process.argv[2] === '--worker';
 const root = worker ? process.argv[3] : fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-private-publication-'));
 for (const [key, name] of [['EU_PRIVACY_DATA_ROOT', 'data'], ['EU_PRIVACY_ROOT', 'legacy']]) process.env[key] = path.join(root, name);
@@ -16,7 +19,7 @@ const artifact = require('../plugins/data-secure/server/standalone/anonymized-ar
 const store = require('../plugins/data-secure/server/standalone/anonymized-store');
 const publicStore = require('../plugins/data-secure/server/gateway/package-store');
 const { roots, safeRemovePrivateTree } = require('../plugins/data-secure/server/gateway/common');
-const { test, testAsync, assert, done } = createSuite('Private Standalone anonymized publication');
+const { test, testAsync, assert, done, failure: suiteFailure } = createSuite('Private Standalone anonymized publication');
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 let serial = 0;
 const options = (markdownOutput = 'content-v1', scanOcr = true, imageOcr = false) =>
@@ -42,6 +45,46 @@ function freshRead(f) {
   assert.equal(read.status, 0, read.stderr); assert.equal(read.error, undefined);
   return JSON.parse(read.stdout);
 }
+// Fault only the selected, genuinely opened payload FD. The real close is
+// completed before injecting its secondary error, so this test leaves no FD
+// behind and does not claim a native double-I/O failure or disk exhaustion.
+function payloadCloseFault(select, phase, primary) {
+  const observed = { openCalls: 0, opened: 0, writes: 0, syncs: 0,
+    primaryThrows: 0, closeCalls: 0, closed: false };
+  const closeError = Object.assign(new Error('synthetic payload close'), { code: 'EIO' });
+  let descriptor = null;
+  const io = { ...fs,
+    openSync(file, ...args) {
+      if (!select(file)) return fs.openSync(file, ...args);
+      observed.openCalls++;
+      if (phase === 'open') { observed.primaryThrows++; throw primary; }
+      assert.equal(descriptor, null, 'only one selected payload FD may be live');
+      descriptor = fs.openSync(file, ...args); observed.opened++;
+      return descriptor;
+    },
+    writeSync(fd, ...args) {
+      if (fd === descriptor) {
+        observed.writes++;
+        if (phase === 'write') { observed.primaryThrows++; throw primary; }
+      }
+      return fs.writeSync(fd, ...args);
+    },
+    fsyncSync(fd) {
+      if (fd === descriptor) {
+        observed.syncs++;
+        if (phase === 'fsync') { observed.primaryThrows++; throw primary; }
+      }
+      return fs.fsyncSync(fd);
+    },
+    closeSync(fd) {
+      if (fd !== descriptor) return fs.closeSync(fd);
+      observed.closeCalls++; descriptor = null;
+      fs.closeSync(fd); observed.closed = true;
+      throw closeError;
+    }
+  };
+  return { io, observed, closeError };
+}
 function batchFixture(f, status = 'processing', reviewPolicy) {
   const id = f.input.package_id.slice(3);
   const item = { id, name: `synthetic-source.${f.input.source_type}`, sha256: hash(f.proofInput.source_extraction.markdown), status };
@@ -63,24 +106,25 @@ function batchFixture(f, status = 'processing', reviewPolicy) {
 }
 
 async function workerMain() {
-  const phase = process.argv[4], f = fixture();
-  await store.publishAnonymizedArtifact(f.input, { beforePublish: async () => {
-    await new Promise((resolve, reject) => process.send({ expectation: f.expectation }, error => error ? reject(error) : resolve()));
-    if (phase === 'before') await new Promise(() => { setInterval(() => {}, 1000); });
-  }, publishPackage(from, to) { fs.renameSync(from, to); process.exit(79); } });
+  // This intentionally paused TEST fixture must not become an endless orphan.
+  const watchdog = setTimeout(() => {
+    try { fs.writeSync(2, 'ARTIFACT_WORKER_SELF_DEADLINE_UNCONFIRMED\n'); } catch {}
+    process.exit(78);
+  }, 20000);
+  try {
+    const phase = process.argv[4], f = fixture();
+    await store.publishAnonymizedArtifact(f.input, { beforePublish: async () => {
+      await new Promise((resolve, reject) => process.send({ expectation: f.expectation }, error => error ? reject(error) : resolve()));
+      if (phase === 'before') await new Promise(() => {});
+    }, publishPackage(from, to) { fs.renameSync(from, to); process.exit(79); } });
+  } finally { clearTimeout(watchdog); }
 }
 async function crashAt(phase) {
   const privateRoot = fs.mkdtempSync(path.join(root, 'crash-'));
   const child = fork(__filename, ['--worker', privateRoot, phase], { windowsHide: true,
     env: { ...process.env, NODE_OPTIONS: '' }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
-  let expectation, timedOut = false, stderr = '';
-  child.stderr.on('data', bytes => { stderr += bytes.toString().slice(0, 1000); });
-  child.on('message', value => { expectation = value.expectation; if (phase === 'before') child.kill('SIGKILL'); });
-  const exited = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, 15000);
-    child.once('error', error => { clearTimeout(timer); reject(error); });
-    child.once('close', code => { clearTimeout(timer); resolve(code); });
-  });
+  const { expectation, timedOut, stderr, exited } = await finishArtifactCrash(child, phase,
+    { onOwned: owned => crashChildren.push(owned) });
   assert.equal(timedOut, false); assert.equal(stderr, ''); assert.ok(expectation);
   if (phase === 'after') assert.equal(exited, 79);
   const environment = { ...process.env, NODE_OPTIONS: '', EU_PRIVACY_DATA_ROOT: path.join(privateRoot, 'data'), EU_PRIVACY_ROOT: path.join(privateRoot, 'legacy') };
@@ -93,6 +137,8 @@ async function crashAt(phase) {
 }
 
 async function main() {
+  const primary = firstFailure(() => { try { process.stderr.write('ARTIFACT_PARENT_SECONDARY_FAILURE\n'); } catch {} });
+  try {
   test('construction requires an actual residual proof, bound to exact bytes, profile, source coverage and every option', () => {
     const f = fixture();
     for (const value of [undefined, null, {}, JSON.parse(JSON.stringify(f.input.verification_proof))])
@@ -158,6 +204,97 @@ async function main() {
     assert.throws(() => publicStore.safeResolvePackage(f.input.package_id));
     assert.equal(publicStore.listOutputs().packages.some(row => row.package_id === f.input.package_id), false);
     assert.throws(() => publicStore.openVerifiedMarkdownSnapshot(f.input.package_id));
+  });
+  await testAsync('a fresh reader preserves hash-bound private results from earlier producer versions', async () => {
+    for (const version of ['3.2.0-rc169', '3.2.0-rc176']) {
+      const f = fixture(); await store.publishAnonymizedArtifact(f.input);
+      const manifest = { ...f.created.manifest, gateway_version: version };
+      const bytes = Buffer.from(JSON.stringify(manifest));
+      const previous = f.expectation;
+      f.expectation = { ...previous, manifest_sha256: hash(bytes) };
+      fs.writeFileSync(path.join(folder(f), 'manifest.json'), bytes);
+      assert.deepEqual(freshRead(f), { hash: f.expectation.document_sha256, text: f.input.markdown });
+      assert.deepEqual(fs.readFileSync(path.join(folder(f), 'manifest.json')), bytes);
+      failure(() => artifact.validateAnonymizedArtifact(manifest, f.input.markdown));
+      failure(() => store.readAnonymizedArtifact(f.input.package_id, previous));
+      failure(() => artifact.validateAnonymizedArtifactForExpectation(f.created.manifest, f.input.markdown, f.expectation, bytes));
+      for (const key of ['privacy_ruleset', 'credential_context_policy', 'person_field_policy']) {
+        const changed = { ...manifest, [key]: 'unsupported/999' };
+        failure(() => artifact.validateAnonymizedArtifactForExpectation(changed, f.input.markdown,
+          { ...f.expectation, manifest_sha256: hash(Buffer.from(JSON.stringify(changed))) }, Buffer.from(JSON.stringify(changed))));
+      }
+    }
+  });
+  test('producer-version metadata remains canonical and cannot claim an unsupported future release', () => {
+    const f = fixture();
+    for (const gateway_version of [null, 177, '', '3.2.0-rc0176', '3.2.0-rc0', '3.2.0-rc176\n',
+      '3.2.0-rc999999', '3.2.0', '3.2.1', '99.0.0', '3.2.0-beta1', '3.2.0-rc176+other']) {
+      const changed = { ...f.created.manifest, gateway_version }, bytes = Buffer.from(JSON.stringify(changed));
+      failure(() => artifact.validateAnonymizedArtifact(changed, f.input.markdown));
+      failure(() => artifact.validateAnonymizedArtifactForExpectation(changed, f.input.markdown,
+        { ...f.expectation, manifest_sha256: hash(bytes) }, bytes));
+    }
+    assert.equal(artifact.createAnonymizedArtifact(f.input).manifest.gateway_version,
+      require('../plugins/data-secure/server/version').VERSION);
+  });
+  test('actual bootstrap recovers expired historical private results but retains a changed private result', () => {
+    const { createBatchJournalStore } = require('../plugins/data-secure/server/gateway/batch-journal-store');
+    const { createBatchRecovery } = require('../plugins/data-secure/server/gateway/batch-recovery');
+    const { initializeProduct } = require('../plugins/data-secure/server/core/product-bootstrap');
+    for (const version of ['3.2.0-rc169', '3.2.0-rc176']) for (const corrupt of [false, true]) {
+      const f = fixture(), manifest = { ...f.created.manifest, gateway_version: version };
+      const bytes = Buffer.from(JSON.stringify(manifest));
+      f.expectation = { ...f.expectation, manifest_sha256: hash(bytes) };
+      fs.mkdirSync(folder(f));
+      fs.writeFileSync(path.join(folder(f), 'manifest.json'), bytes, { flag: 'wx' });
+      const document = path.join(folder(f), manifest.document);
+      fs.writeFileSync(document, f.input.markdown, { flag: 'wx' });
+      const b = batchFixture(f, 'released');
+      Object.assign(b.state, require('../plugins/data-secure/server/batch-pseudonym-context').createBatchPseudonymState({ productChannel: 'standalone' }),
+        { output_naming_mode: 'neutral' });
+      b.capture({ package_id: f.input.package_id, publication_binding: f.expectation });
+      Object.assign(b.item, { package_id: f.input.package_id, document_result: manifest.document_result });
+      b.state.created_at = '2026-10-21T08:00:00.000Z'; b.state.expires_at = '2026-10-28T08:00:00.000Z';
+      const batches = fs.mkdtempSync(path.join(root, 'upgrade-journals-'));
+      const batchPath = token => path.join(batches, token + '.json');
+      const journal = createBatchJournalStore({ batchPath, productChannel: 'standalone',
+        documentReviewDataRoot: process.env.EU_PRIVACY_DATA_ROOT });
+      journal.writeState(b.state);
+      assert.equal(journal.readStateForMaintenance(b.state.token).items[0].status, 'released');
+      const reconciliation = require('../plugins/data-secure/server/gateway/batch-reconciliation').createBatchReconciliation();
+      const { publicProgress } = require('../plugins/data-secure/server/gateway/batch-progress').createBatchProgress({
+        deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review', mappingPendingStatus: 'mapping_pending',
+        publishedPackageRecord: reconciliation.publishedPackageIdentityRecord });
+      const evidence = require('../plugins/data-secure/server/gateway/batch-terminal-evidence').createBatchTerminalEvidence({
+        writeState: journal.writeState, publicProgress,
+        publishedPackageRecord: reconciliation.publishedPackageRecord, publishedPackageIdentityRecord: reconciliation.publishedPackageIdentityRecord });
+      assert.equal(evidence.writeTerminalEvidence(b.state), true);
+      const originalJournal = fs.readFileSync(batchPath(b.state.token));
+      if (corrupt) fs.writeFileSync(document, 'synthetic external private corruption');
+      const originalDocument = fs.readFileSync(document);
+      let removals = 0, refusals = 0;
+      const recovery = createBatchRecovery({ batchRoot: () => batches, batchPath,
+        readStateForMaintenance: journal.readStateForMaintenance, captureDocumentRun: b.review.captureRun,
+        withSynchronousActiveLock: (_token, action) => action(), liveLocalExecutor: () => false, publicProgress,
+        reconcileTerminalEvidence: evidence.writeTerminalEvidence, beforeStateRemoval() {},
+        safeRemoveWorkDirectory(token) { assert.equal(token, b.state.token); assert.equal(fs.existsSync(path.join(batches, token + '.work')), false); },
+        removeState(state) { removals++; journal.removeState(state); } });
+      const start = () => initializeProduct({ assertRootSeparation() {}, verifyBundledRuntime() {}, ensureDurableRuntime() {},
+        migrateLegacyAuditReceipts() {}, openBatchPackageProtection: () => ({ ids: new Set(), complete: true }),
+        cleanupLocalData() {}, cleanupUiJobs() {}, recoverBatches: recovery.recoverBatches,
+        replayMappingOutbox: () => ({ failures: 0 }), startBatchMaintenance: () => ({ stop() {} }),
+        cleanupExpiredBatchSnapshots() {}, migrateLegacyInput: () => ({ failures: 0, active: false }),
+        cleanupAbandonedWorkingJobs: () => ({ failures: 0 }), refuseStartup() { refusals++; } });
+      if (corrupt) {
+        assert.throws(start, /Batch recovery failed closed/u); assert.equal(refusals, 1); assert.equal(removals, 0);
+        assert.deepEqual(fs.readFileSync(batchPath(b.state.token)), originalJournal);
+      } else {
+        const started = start(); assert.equal(started.recovery.failures, 0); assert.equal(started.recovery.removed, 1);
+        assert.equal(refusals, 0); assert.equal(removals, 1); started.batchMaintenance.stop();
+      }
+      assert.deepEqual(fs.readFileSync(document), originalDocument);
+      assert.deepEqual(fs.readFileSync(path.join(folder(f), 'manifest.json')), bytes);
+    }
   });
   await testAsync('missing or changed expected context never adopts even identical output bytes', async () => {
     const f = fixture(); await store.publishAnonymizedArtifact(f.input);
@@ -673,9 +810,123 @@ async function main() {
     assert.equal(anonymizationContentNotices(b.state.token, { state: b.state, expectedCount: 2 })
       .content_notice_breakdown_complete, false);
   });
+  const requireClosedCrashChildren = () => {
+    if (crashChildren.some(owned => !owned.closed)) {
+      const suite = suiteFailure(); if (suite.failed) throw suite.error;
+      throw Error('ARTIFACT_CRASH_CLOSE_UNCONFIRMED');
+    }
+  };
   await testAsync('actual pre-rename process death cleans only owned staging, never adopting its uncommitted text', () => crashAt('before'));
+  requireClosedCrashChildren();
   await testAsync('actual post-rename process death recovers the ownership receipt and preserves exact committed bytes', () => crashAt('after'));
-  await done(() => safeRemovePrivateTree(path.dirname(root), path.basename(root)));
+  requireClosedCrashChildren();
+  await testAsync('payload write/fsync errors reach capacity normalization before secondary close errors', async () => {
+    const { createRequire } = require('node:module'), vm = require('node:vm');
+    const source = require.resolve('../plugins/data-secure/server/standalone/anonymized-store'), local = createRequire(source);
+    const sourceText = fs.readFileSync(source, 'utf8');
+    const staging = local('../gateway/package-staging');
+    const { assertWritableCapacity } = local('../gateway/storage-capacity');
+    const ownership = ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY',
+      'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED'];
+    const primaryCases = [Object.assign(new Error('synthetic full payload'), { code: 'ENOSPC' }),
+      Object.freeze(Object.assign(new Error('synthetic fsync failure'), { code: 'EIO' })),
+      undefined, null, false, 0, '',
+      ...ownership.map(code => Object.assign(new Error('synthetic control priority'), { code }))];
+    async function exercise(kind, phase, primary, cleanupError = null) {
+      // This is the existing real residual-proof factory; no serialized,
+      // copied or invented verification_proof can substitute for it.
+      const f = fixture(), before = JSON.stringify(f.input);
+      const name = kind === 'document' ? f.created.manifest.document : 'manifest.json';
+      let stageDirectory, capacityCalls = 0, beforePublish = 0, afterPublish = 0, cleanupCalls = 0;
+      const fault = payloadCloseFault(file => typeof file === 'string' &&
+        path.dirname(file) === stageDirectory && path.basename(file) === name, phase, primary);
+      const loaded = { exports: {} };
+      vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${sourceText}\n})`, { filename: source })(
+        request => request === 'node:fs' ? fault.io :
+          request === '../gateway/package-staging' && cleanupError
+            ? { ...staging, discardStage() { cleanupCalls++; throw cleanupError; } } : local(request),
+        loaded, loaded.exports, source, path.dirname(source));
+      let rejected = false, actual;
+      try { await loaded.exports.publishAnonymizedArtifact(f.input, {
+        assertWritableCapacity(value) {
+          capacityCalls++; stageDirectory = value.directory;
+          return assertWritableCapacity(value);
+        },
+        beforePublish() { beforePublish++; }, afterPublish() { afterPublish++; }
+      }); } catch (error) { rejected = true; actual = error; }
+      assert.equal(rejected, true, `${kind}/${phase}: a falsy exception still rejects`);
+      const normalized = phase !== 'close' && primary?.code === 'ENOSPC';
+      if (cleanupError && !ownership.includes(primary?.code)) assert.strictEqual(actual, cleanupError);
+      else if (normalized) {
+        assert.equal(actual?.code, 'LOCAL_CAPACITY_RACE');
+        assert.notStrictEqual(actual, fault.closeError);
+      } else assert.ok(Object.is(actual, phase === 'close' ? fault.closeError : primary),
+        `${kind}/${phase}: preserve exact first-error identity`);
+      assert.equal(capacityCalls, 1, 'retain the actual stage-capacity preflight');
+      assert.equal(fault.observed.openCalls, 1);
+      assert.equal(fault.observed.opened, phase === 'open' ? 0 : 1);
+      assert.equal(fault.observed.primaryThrows, phase === 'close' ? 0 : 1);
+      assert.equal(fault.observed.closeCalls, phase === 'open' ? 0 : 1);
+      assert.equal(fault.observed.closed, phase !== 'open');
+      assert.equal(fault.observed.writes > 0, phase !== 'open');
+      assert.equal(fault.observed.syncs, phase === 'fsync' || phase === 'close' ? 1 : 0);
+      assert.equal(beforePublish, 0); assert.equal(afterPublish, 0);
+      assert.equal(cleanupCalls, cleanupError ? 1 : 0);
+      assert.equal(fs.existsSync(folder(f)), false, 'no failed write grants a target');
+      assert.equal(JSON.stringify(f.input), before, 'the caller proof/input remain unchanged');
+      if (!cleanupError) assert.equal(fs.existsSync(stageDirectory), false, 'normal owned-stage discard still runs');
+    }
+    for (const kind of ['document', 'manifest']) {
+      for (const phase of ['write', 'fsync']) for (const primary of primaryCases)
+        await exercise(kind, phase, primary);
+      await exercise(kind, 'close');
+      await exercise(kind, 'open', Object.assign(new Error('synthetic open refusal'), { code: 'EACCES' }));
+    }
+    for (const primary of [primaryCases[0], undefined, primaryCases[7]]) {
+      const cleanup = Object.assign(new Error('synthetic uncertain discard'), { code: 'PACKAGE_STAGING_UNSAFE' });
+      await exercise('document', 'write', primary, cleanup);
+    }
+  });
+  await testAsync('a hard stage cleanup cannot hide an ownership refusal, but still dominates ordinary failures', async () => {
+    const { createRequire } = require('node:module'), vm = require('node:vm');
+    const source = require.resolve('../plugins/data-secure/server/standalone/anonymized-store'), local = createRequire(source);
+    const staging = local('../gateway/package-staging');
+    for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE',
+      'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_BUSY', 'LOCAL_REVIEW_DEFERRED', 'LOCAL_CAPACITY_INSUFFICIENT', 'EIO']) {
+      const primary = Object.assign(new Error('synthetic primary'), { code });
+      const cleanup = Object.assign(new Error('synthetic hard cleanup'), { code: 'PACKAGE_STAGING_UNSAFE' });
+      const loaded = { exports: {} }; let calls = 0;
+      vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(source, 'utf8')}\n})`, { filename: source })(
+        request => request === '../gateway/package-staging' ? { ...staging, discardStage() { calls++; throw cleanup; } } : local(request),
+        loaded, loaded.exports, source, path.dirname(source));
+      const f = fixture();
+      await assert.rejects(loaded.exports.publishAnonymizedArtifact(f.input, { beforePublish() { throw primary; } }),
+        error => error === (code === 'BATCH_OWNERSHIP_CHANGED' || code.startsWith('OWNERSHIP_GUARD_') ? primary : cleanup));
+      assert.equal(calls, 1);
+      assert.equal(fs.existsSync(folder(f)), false, 'a cleanup failure never grants publication');
+    }
+  });
+  } catch (error) {
+    const suite = suiteFailure(); if (suite.failed) primary.record(suite.error);
+    primary.record(error);
+  } finally {
+    const suite = suiteFailure(); if (suite.failed) primary.record(suite.error);
+    for (const owned of crashChildren) {
+      try { owned.terminate('SIGKILL'); } catch (error) { primary.record(error); }
+    }
+    try { await within(Promise.all(crashChildren.map(owned => owned.done)),
+      5000, 'ARTIFACT_PARENT_CLOSE_UNCONFIRMED'); }
+    catch (error) { primary.record(error); }
+    for (const owned of crashChildren) if (owned.failure.failed) primary.record(owned.failure.value);
+    try { await done(() => {
+      if (!primary.failed && !suiteFailure().failed && crashChildren.every(owned => owned.closed))
+        safeRemovePrivateTree(path.dirname(root), path.basename(root));
+    }); } catch (error) { primary.record(error); }
+    const finalSuite = suiteFailure(); if (finalSuite.failed) primary.record(finalSuite.error);
+  }
+  primary.throwIfFailed();
 }
-if (worker) workerMain().catch(error => { console.error(error); process.exitCode = 1; });
-else main().catch(error => { console.error(error); process.exitCode = 1; });
+if (worker) workerMain().catch(error => endTestCliFailure({ failed: true, error,
+  retainedRoots: [root], unconfirmedChildren: false }));
+else main().catch(error => endTestCliFailure({ failed: true, error, retainedRoots: [root],
+  unconfirmedChildren: crashChildren.some(owned => !owned.closed) }));

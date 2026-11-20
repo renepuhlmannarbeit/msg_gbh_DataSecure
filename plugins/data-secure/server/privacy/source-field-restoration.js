@@ -1,4 +1,7 @@
 'use strict';
+// Exact raw UTF-16 cell boundaries, not .indexOf(value): duplicate values and
+// escaped pipes must retain their distinct positions in the actual basis.
+const { tableCellRanges: cellRanges, unescapeMarkdownPunctuation: proseUnescape } = require('./markdown-table-cells');
 
 // Derived only from the immutable canonical input and actual private edits.
 // This module supplies no identity, Keep waiver or persisted coverage flag.
@@ -18,7 +21,6 @@ const PROSE_LABEL_PATTERN = [personFieldPattern(CONTENT_PERSON_FIELD_POLICY), ..
   ID_LABEL_HEADER_RE, CREDENTIAL_LABEL_HEADER_RE, ORGANIZATION_FIELD].map(pattern => unanchor(pattern.source)),
   'Geschützter Tabellenwert', STRUCTURED_LABEL_VALUE_PATTERN].join('|');
 const PROSE_LABEL_END = new RegExp('(?:' + PROSE_LABEL_PATTERN + ')$', 'giu');
-const proseUnescape = value => value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1');
 const fail = code => Object.assign(new Error(code), { code });
 const invalid = () => fail('DOCUMENT_REVIEW_INVALID');
 const states = new WeakMap();
@@ -165,26 +167,6 @@ function proseFieldRanges(line, policy, allowBareCr = true) {
   }
   return fields;
 }
-
-// Exact raw UTF-16 cell boundaries, not .indexOf(value): duplicate values and
-// escaped pipes must retain their distinct positions in the actual basis.
-function cellRanges(line) {
-  const ranges = []; let start = 0, escaped = false, firstPipe = -1, lastPipe = -1;
-  for (let index = 0; index < line.length; index++) {
-    const character = line[index];
-    if (escaped) { escaped = false; continue; }
-    if (character === '\\') { escaped = true; continue; }
-    if (character !== '|') continue;
-    if(firstPipe < 0)firstPipe = index;
-    lastPipe = index;
-    ranges.push({ start, end: index }); start = index + 1;
-  }
-  ranges.push({ start, end: line.length });
-  if (firstPipe === line.length - line.trimStart().length) ranges.shift();
-  if (lastPipe === line.trimEnd().length - 1) ranges.pop();
-  return ranges;
-}
-
 
 function sourceIntervals(source, policy = CONTENT_PERSON_FIELD_POLICY) {
   if (typeof source !== 'string' || !source.isWellFormed() || source.length > RESOURCE_LIMITS.MAX_TEXT_CHARS) throw invalid();

@@ -34,10 +34,13 @@ function snapshot(directory) {
 function scoped(operation) {
   const previousPrivacy = process.env.EU_PRIVACY_ROOT;
   const previousLocal = process.env.LOCALAPPDATA;
+  const previousData = process.env.EU_PRIVACY_DATA_ROOT, previousResult = process.env.EU_PRIVACY_RESULT_ROOT;
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-package-stage-test-'));
   const privacy = path.join(base, 'privacy');
   process.env.EU_PRIVACY_ROOT = privacy;
   process.env.LOCALAPPDATA = path.join(base, 'localapp');
+  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
   try {
     const storage = roots();
     assert.strictEqual(storage.root, privacy);
@@ -72,6 +75,8 @@ function scoped(operation) {
     else process.env.EU_PRIVACY_ROOT = previousPrivacy;
     if (previousLocal === undefined) delete process.env.LOCALAPPDATA;
     else process.env.LOCALAPPDATA = previousLocal;
+    if (previousData === undefined) delete process.env.EU_PRIVACY_DATA_ROOT; else process.env.EU_PRIVACY_DATA_ROOT = previousData;
+    if (previousResult === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT; else process.env.EU_PRIVACY_RESULT_ROOT = previousResult;
   }
 }
 

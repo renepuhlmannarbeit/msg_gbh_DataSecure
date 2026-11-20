@@ -793,4 +793,17 @@ test('formal N3 and N4 acceptance stays bound to one candidate and separate targ
   });
 });
 
+test('canonical document index rejects nonfiles through the complete actual validator', () => {
+  const cp = require('node:child_process');
+  const child = cp.spawnSync(process.execPath, ['--experimental-vm-modules',
+    path.join(root, 'tests/lib/canonical-docs-admission-cases.mjs')], {
+    cwd: root, encoding: 'utf8', windowsHide: true, shell: false,
+    timeout: 30_000, maxBuffer: 512 * 1024
+  });
+  const output = String(child.stdout || '') + String(child.stderr || '');
+  assert.strictEqual(child.error, undefined, String(child.error || '') + '\n' + output);
+  assert.strictEqual(child.signal, null, output);
+  assert.strictEqual(child.status, 0, output);
+});
+
 done();

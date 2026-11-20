@@ -5,7 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { createSuite } = require('./helpers');
-const { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, hashBoundFile } = require('../plugins/data-secure/server/core/bound-file-io');
+const { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, readBoundFileSnapshotAttemptRecord, readHeldBytes, hashBoundFile } = require('../plugins/data-secure/server/core/bound-file-io');
 const { createBestEffortDiagnosticLog } = require('../plugins/data-secure/server/core/safe-diagnostic-log');
 const { test, done, assert } = createSuite('Held file and best-effort diagnostic boundaries');
 // Product private storage deliberately rejects symlink ancestors. macOS's
@@ -40,6 +40,19 @@ test('exact bounds, short reads and explicitly permitted empty files', () => {
   changed(() => readBoundFile(file, { maximum: 4, minimum: 1 }));
   assert.equal(handles.size, 0);
 });
+test('partially read owned buffers are cleared on EIO or EOF while the primary error and original survive', () => {
+  for (const mode of ['EIO','EOF']) {
+    const { file } = fixture(), before=fs.readFileSync(file), fd=fs.openSync(file,'r');
+    const primary=Object.freeze(Object.assign(new Error('injected-read'),{code:'EIO'})); let seen, calls=0;
+    const io={readSync(held,bytes,offset,length,position){ seen=bytes; if(++calls===1)
+      return fs.readSync(held,bytes,offset,Math.min(2,length),position);
+      if(mode==='EIO')throw primary; return 0; }};
+    try { assert.throws(()=>readHeldBytes(fd,before.length,io),error=>mode==='EIO'?error===primary:error.code==='BOUND_FILE_CHANGED');
+      assert.equal(calls,2); assert.ok(seen.every(byte=>byte===0)); assert.deepEqual(fs.readFileSync(file),before);
+    } finally {fs.closeSync(fd);}
+  }
+});
+
 test('streaming digest supports exact bounds, short reads, FD zero and a larger total without a larger buffer', () => {
   const { file } = fixture(); let held, closes = 0;
   const io = { ...fs, openSync(...args) { held = fs.openSync(...args); return 0; },
@@ -57,6 +70,25 @@ test('streaming digest supports exact bounds, short reads, FD zero and a larger 
   assert.equal(closes, 1);
   fs.writeFileSync(file, '');
   assert.equal(hashBoundFile(file, { maximum: 0 }), crypto.createHash('sha256').digest('hex'));
+});
+
+test('fully read buffers are cleared on end-binding or close refusal, and successful buffers remain usable', () => {
+  for (const mode of ['end-fstat', 'close', 'success']) {
+    const { file } = fixture(), original = fs.readFileSync(file); let seen, closes = 0;
+    const io = { ...fs,
+      readSync(fd, bytes, ...args) { seen = bytes; return fs.readSync(fd, bytes, ...args); },
+      fstatSync(...args) {
+        if (mode === 'end-fstat' && seen) throw Object.assign(new Error('synthetic end binding'), { code: 'EIO' });
+        return fs.fstatSync(...args);
+      },
+      closeSync(fd) { closes++; fs.closeSync(fd); if (mode === 'close') throw Object.assign(new Error('synthetic close'), { code: 'EIO' }); }
+    };
+    if (mode === 'success') assert.deepEqual(readBoundFile(file, { io }), original);
+    else assert.throws(() => readBoundFile(file, { io }), { code: mode === 'close' ? 'BOUND_FILE_CLOSE_FAILED' : 'BOUND_FILE_CHANGED' });
+    assert.equal(closes, 1); assert.ok(seen);
+    if (mode === 'success') assert.deepEqual(seen, original); else assert.ok(seen.every(byte => byte === 0));
+    assert.deepEqual(fs.readFileSync(file), original);
+  }
 });
 test('streaming digest enforces its exact 768 MiB ceiling using a bounded synthetic FS seam', () => {
   const { file } = fixture(); const maximum = 768 * 1024 * 1024;
@@ -415,11 +447,12 @@ test('directory junctions/symlinks, including higher ancestors with missing desc
 // Delegated real FD/byte reads with a MODELLED POSIX name replacement. Windows
 // refuses a real rename over these open FDs; this seam is not a native Unix
 // acceptance claim. The production Child-publisher probe runs on POSIX too.
-function retiredSnapshotProbe({ phase = 'read', fault, turns = 1, links = 0, strict } = {}) {
+function retiredSnapshotProbe({ phase = 'read', fault, turns = 1, links = 0, strict, singleAttempt = false, notificationThrows = false } = {}) {
   const f = fixture(), files = [f.file, f.foreign, path.join(f.directory, 'third'), path.join(f.directory, 'fourth')];
   for (const file of files.slice(2)) fs.writeFileSync(file, path.basename(file), { flag: 'wx' });
   const held = new Map(), versions = [], counts = new Map();
-  let version = 0, opens = 0, closes = 0, value, error;
+  let version = 0, opens = 0, closes = 0, value, error, notifications = 0, notificationAfterClose = false;
+  const notificationSignal = Object.freeze({ snapshotChanged: true });
   function retire(index) {
     if (opens > turns || index !== version) return;
     if (fault === 'inplace') { fs.appendFileSync(files[index], 'changed'); return; }
@@ -454,6 +487,7 @@ function retiredSnapshotProbe({ phase = 'read', fault, turns = 1, links = 0, str
       const count = fs.readSync(fd, ...args);
       if (held.has(fd) && phase === 'read') retire(held.get(fd));
       if (fault === 'read') throw Object.assign(Error('model read'), { code: 'EIO' });
+      if (fault === 'forged-change') throw Object.assign(Error('not a private classification'), { code: 'BOUND_FILE_CHANGED' });
       return count;
     },
     closeSync(fd) {
@@ -463,11 +497,44 @@ function retiredSnapshotProbe({ phase = 'read', fault, turns = 1, links = 0, str
   };
   try {
     value = strict === 'record' ? readBoundFileRecord(f.file, { io }).bytes : strict === 'hash'
-      ? hashBoundFile(f.file, { io }) : readBoundFileSnapshot(f.file, { io, maximum: 65536, minimum: 1 });
+      ? hashBoundFile(f.file, { io }) : singleAttempt
+        ? readBoundFileSnapshotAttemptRecord(f.file, { io, maximum: 65536, minimum: 1 }, () => {
+          notifications++; notificationAfterClose = held.size === 0 && closes === opens;
+          if (notificationThrows) throw notificationSignal;
+        }).bytes
+        : readBoundFileSnapshot(f.file, { io, maximum: 65536, minimum: 1 });
   } catch (caught) { error = caught; }
   assert.equal(held.size, 0, 'all real model descriptors closed');
-  return { value, error, opens, closes, versions, expected: fs.readFileSync(files[version]) };
+  return { value, error, opens, closes, versions, expected: fs.readFileSync(files[version]),
+    notifications, notificationAfterClose, notificationSignal };
 }
+test('one snapshot attempt notifies only its own verified replacement after confirmed close (IO model)', () => {
+  for (const phase of ['open', 'read']) for (const links of [0, 1]) for (const notificationThrows of [false, true]) {
+    const result = retiredSnapshotProbe({ phase, links, singleAttempt: true, notificationThrows });
+    assert.equal(result.opens, 1); assert.equal(result.closes, 1);
+    assert.equal(result.value, undefined); assert.equal(result.notifications, 1);
+    assert.equal(result.notificationAfterClose, true);
+    if (notificationThrows) assert.strictEqual(result.error, result.notificationSignal);
+    else assert.equal(result.error.code, 'BOUND_FILE_CHANGED', 'a returning notification never supplies successful bytes');
+  }
+});
+test('one snapshot attempt never notifies for IO, forged codes, mutation, unsafe parents or close refusal (IO model)', () => {
+  for (const fault of ['inplace', 'changed-content', 'parent', 'hardlink', 'unstable-held', 'missing', 'read', 'forged-change', 'close']) {
+    const result = retiredSnapshotProbe({ fault, singleAttempt: true });
+    assert.ok(result.error, fault); assert.equal(result.value, undefined, fault);
+    assert.equal(result.opens, 1, fault); assert.equal(result.closes, 1, fault);
+    assert.equal(result.notifications, 0, fault);
+    if (fault === 'close') assert.equal(result.error.code, 'BOUND_FILE_CLOSE_FAILED');
+  }
+});
+test('one snapshot attempt rejects alternate hardlink policy and invalid notifications before open', () => {
+  const f = fixture(); let opens = 0;
+  const io = { ...fs, openSync(...args) { opens++; return fs.openSync(...args); } };
+  for (const maxLinks of [0, 2]) changed(() =>
+    readBoundFileSnapshotAttemptRecord(f.file, { io, maxLinks }, () => {}));
+  changed(() => readBoundFileSnapshotAttemptRecord(f.file, { io }, null));
+  assert.equal(opens, 0);
+});
 test('read-only snapshot discards retired descriptors before first fstat and after read (delegated IO model)', () => {
   for (const phase of ['open', 'read']) for (const links of [0, 1]) {
     const result = retiredSnapshotProbe({ phase, links });

@@ -25,11 +25,11 @@ const pdfText = '## Seite 1\n\nFIRST VALID PAGE - Anna Berger - Elbwiese Beratun
   '`[EMAIL_REDACTED]`  \n`[PHONE_REDACTED]`  \nDE10370400440532013001  \nBeispielweg 3, 10115 Berlin  \n\n\n' +
   '## Seite 2\n\nNATIVE TEXT ON DAMAGED IMAGE PAGE - Kontakt anna@example.invalid\n\n' +
   '## Seite 3\n\nLAST VALID PAGE RETAINED';
-function proof(final, source, profile, selectedOptions) {
+function proof(final, source, profile, selectedOptions, sourceType = 'pdf') {
   return verifyAnonymizedPublication({ markdown: final.markdown, profile, content_options: selectedOptions,
     // This test starts at the text/privacy boundary. It makes no new PDF
     // rendering or source-completeness claim.
-    source_extraction: createSourceExtraction({ source_type: 'pdf', markdown: source,
+    source_extraction: createSourceExtraction({ source_type: sourceType, markdown: source,
       coverage: { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] },
       content_options: selectedOptions }, 8_000_000),
     dictionary: final.dictionary, strong_person_anchor: final.strong_person_anchor,
@@ -122,6 +122,41 @@ async function main() {
         assert.equal(replayTransformTrace(final.transform_trace), final.markdown);
         assert.ok(proof(final, pdfText, profile, contentOptions));
       } finally { registry.dispose(); }
+    }
+  });
+  await testAsync('embedded Office title-bar OCR masks the profile name and keeps the document context', async () => {
+    const options = { ...contentOptions, imageOcr: true };
+    const prefix = 'Automatisches Speichern Projektstatus.xlsx - Gespeichert v ';
+    const name = 'Anna Mustername';
+    for (const suffix of [' S aA \\_ 2 Sortierung und Bericht', ' Sortierung und Bericht', ' Freigeben']) {
+      const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 54), { contractVersion: READABLE_CONTRACT_VERSION });
+      const source = `### Bildtext · Folie 2 · Grafik 1\n\n${prefix}${name}${suffix}`;
+      try {
+        const value = prepare(source, { registry, ocrLineReview: true,
+          consumerOptions: { productChannel: 'standalone', contentOptions: options } });
+        assert.deepEqual(value.ambiguities.map(row => value.draft.original_text.slice(row.original_start, row.original_end)), [name]);
+        const text = await resolveTextPrivacyReview(value, null, { reviewPolicy: 'automatic-conservative' });
+        const final = finalizeTextPrivacyReview(value, text, { prefix: '', suffix: '' });
+        const marker = registry.lookup('PERSON', name);
+        assert.match(marker, /^\[PERSON_\d+\]$/u);
+        assert.ok(final.markdown.includes(prefix + marker + suffix));
+        assert.ok(!final.markdown.includes(name));
+        assert.equal(final.markdown.split(marker).length - 1, 1);
+        assert.equal(replayTransformTrace(final.transform_trace), final.markdown);
+        assert.ok(proof(final, source, 'general', options, 'pptx'));
+      } finally { registry.dispose(); }
+    }
+  });
+  await testAsync('native and unrelated save wording do not become Office profile names', async () => {
+    const { personProseCandidateSpans } = require('../plugins/data-secure/server/privacy/person-ambiguities');
+    for (const [source, ocrLineReview] of [
+      ['Automatisches Speichern Projektstatus.xlsx - Gespeichert v Anna Mustername S', false],
+      ['Projektstatus.xlsx - Gespeichert v Anna Mustername S', true],
+      ['Automatisches Speichern ist verfügbar - Gespeichert Als Lokale Kopie', true],
+      ['Automatisches Speichern Dokument - Gespeichert v Product Planning', true],
+      ['Automatisches Speichern Dokument - Gespeichert v [PERSON_001] S', true]
+    ]) {
+      assert.deepEqual(personProseCandidateSpans(source, { productChannel: 'standalone', ocrLineReview }), []);
     }
   });
   await testAsync('a German ordinary-word caption does not poison another document, while an actual surname still binds', async () => {

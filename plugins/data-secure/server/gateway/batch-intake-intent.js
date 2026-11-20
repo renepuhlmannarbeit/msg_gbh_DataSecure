@@ -52,12 +52,24 @@ function createBatchIntakeIntent(options = {}) {
     if (!validIdentity(record.work_identity)) throw new Error('BATCH_INTAKE_INTENT_INVALID');
     const target = intentPath(token);
     const fd = io.openSync(target, io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL, 0o600);
+    let producerIdentity, failed = false, primary;
     try {
       writeFully(fd, Buffer.from(`${JSON.stringify(record)}\n`), io);
       io.fsyncSync(fd);
-    } finally { io.closeSync(fd); }
+      const produced = io.fstatSync(fd, { bigint: true });
+      if (!produced.isFile() || produced.nlink !== 1n) throw new Error('BATCH_INTAKE_INTENT_INVALID');
+      producerIdentity = boundIdentity(produced);
+    } catch (error) { failed = true; primary = error; }
+    // Close once; even a falsy primary must survive a secondary close failure.
+    try { io.closeSync(fd); }
+    catch (error) { if (!failed) { failed = true; primary = error; } }
+    if (failed) throw primary;
     syncParentDirectory(target, io, options.platform || process.platform);
-    bindings.set(record, bindFile(target, { io }));
+    const binding = bindFile(target, { io });
+    if (Object.entries(producerIdentity).some(([key, value]) => binding.file[key] !== value)) {
+      throw new Error('BATCH_INTAKE_INTENT_INVALID');
+    }
+    bindings.set(record, binding);
     return record;
   }
 

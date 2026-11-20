@@ -4,10 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const { SafeError } = require('../runtime');
 const { workPath, assertPlainWorkFile } = require('./batch-private-store');
+const { bindDirectory, assertDirectory } = require('../core/bound-file-io');
+const { bindPrivateFile, identity: privateFileIdentity } = require('./bound-private-file');
 const { releaseOwnedLock } = require('./batch-lock-release');
 const { verifyMarkdownItem } = require('../standalone/markdown-store');
 const { isMarkdownBatch } = require('../core/processing-mode');
 const { contentOptionsForBatch } = require('../core/content-options');
+const { BATCH_SCHEMA, validateStorageItem } = require('../core/source-snapshot-storage');
 const { privatePublicationRecord, confirmPublication } = require('./standalone-anonymized-batch');
 
 function conversionBatch(state) {
@@ -70,35 +73,57 @@ function createBatchDelivery(options = {}) {
   }
 
   function cleanupTerminalWorkCopy(state, item, deps = {}) {
+    validateStorageItem(state, item);
     if (state?.schema === 'datasecure-batch/3' || Object.hasOwn(item || {}, 'private_artifact_encrypted') ||
         Object.hasOwn(item || {}, 'legacy_work_name')) {
       const error = new ErrorType('Eine alte verschlüsselte Arbeitskopie bleibt unverändert erhalten.');
       error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';
       throw error;
     }
-    if (!WORK_NAME_RE.test(String(item?.work_name || ''))) {
+    if (!WORK_NAME_RE.test(String(item?.work_name || '')))
       throw new ErrorType('Private Arbeitskopie ist nicht sicher bereinigbar.');
-    }
-    const full = pathApi.join(resolveWorkPath(state.token), item.work_name);
-    if (io.existsSync(full)) {
-      const stat = io.lstatSync(full);
-      if (!stat.isFile() || stat.isSymbolicLink()) {
-        throw new ErrorType('Private Arbeitskopie ist nicht sicher bereinigbar.');
+    const work = resolveWorkPath(state.token), parent = bindDirectory(path.dirname(work), { io });
+    const unchangedMissing = (target, directory) => {
+      try { io.lstatSync(target, { bigint: true }); }
+      catch (error) {
+        assertDirectory(directory);
+        if (error?.code === 'ENOENT') return true;
+        throw error;
       }
-      assertPlainWorkFile(full, io);
-      (deps.unlinkWorkCopy || io.unlinkSync)(full);
-    }
+      return false;
+    };
+    if (unchangedMissing(work, parent)) { delete item.work_copy_cleanup_pending; return; }
+    const directory = bindDirectory(work, { io }); assertDirectory(parent);
+    const full = pathApi.join(work, item.work_name);
+    if (unchangedMissing(full, directory)) { delete item.work_copy_cleanup_pending; return; }
+    const binding = bindPrivateFile(full, { io });
+    const plain = assertPlainWorkFile(full, io, state.schema === BATCH_SCHEMA ? { state, item } : undefined);
+    if (JSON.stringify(privateFileIdentity(plain)) !== JSON.stringify(binding.file))
+      throw Object.assign(Error('BATCH_WORK_UNSAFE'), { code: 'BATCH_WORK_UNSAFE' });
+    assertDirectory(directory);
+    const beforeUnlink = bindPrivateFile(full, { io });
+    if (JSON.stringify(beforeUnlink) !== JSON.stringify(binding))
+      throw Object.assign(Error('BATCH_WORK_UNSAFE'), { code: 'BATCH_WORK_UNSAFE' });
+    assertDirectory(directory);
+    (deps.unlinkWorkCopy || io.unlinkSync)(full);
+    // A test hook or unconfirmed namespace change cannot acknowledge deletion.
+    if (!unchangedMissing(full, directory))
+      throw Object.assign(Error('BATCH_WORK_UNSAFE'), { code: 'BATCH_WORK_UNSAFE' });
     delete item.work_copy_cleanup_pending;
   }
 
-  function enter(token, operation) {
-    if (active.has(token)) throw new ErrorType('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
+  function enter(token, operation, transaction = options.withSynchronousActiveLock) {
+    const assertIdle = () => {
+      if (active.has(token)) throw new ErrorType('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
+    };
+    assertIdle();
     const action = () => {
+      assertIdle();
       active.add(token);
       try { return operation(); }
       finally { active.delete(token); }
     };
-    if (typeof options.withSynchronousActiveLock === 'function') return options.withSynchronousActiveLock(token, action);
+    if (typeof transaction === 'function') return transaction(token, action);
     if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1' && ['win32', 'darwin'].includes(process.platform))
       throw Object.assign(new ErrorType('Die native Sperrtransaktion ist nicht verfügbar.'), { code: 'OWNERSHIP_GUARD_UNAVAILABLE' });
     // Explicit legacy/source adapter only. Native composition must inject the
@@ -231,10 +256,19 @@ function createBatchDelivery(options = {}) {
     } catch { /* preserve exact original exception, including throw undefined */ }
   }
 
-  function finalizePublishedPackageLocally(token, packageId, deps = {}) {
+  function finishLocalDelivery(token, packageId, deps, admitted) {
     let step = 'BATCH_LOCAL_DELIVERY_ACQUIRE_FAILED';
+    const fail = error => {
+      // The lock lifecycle has settled. Record only the final refusal and
+      // preserve the exact primary, including thrown undefined.
+      recordDeliveryFailure(step, error);
+      throw error;
+    };
     try {
-      return enter(token, () => {
+      const transaction = admitted ? options.withSynchronousActiveLockAdmitted : options.withSynchronousActiveLock;
+      if (admitted && typeof transaction !== 'function')
+        throw Object.assign(new ErrorType('Die native Sperrtransaktion ist nicht verfügbar.'), { code: 'OWNERSHIP_GUARD_UNAVAILABLE' });
+      const outcome = enter(token, () => {
         step = 'BATCH_LOCAL_DELIVERY_STATE_FAILED';
         const state = readState(token);
         step = 'BATCH_LOCAL_DELIVERY_ACCESS_FAILED';
@@ -273,12 +307,10 @@ function createBatchDelivery(options = {}) {
         };
         step = 'BATCH_LOCAL_DELIVERY_RELEASE_FAILED';
         return result;
-      });
+      }, transaction);
+      return admitted ? outcome.catch(fail) : outcome;
     } catch (error) {
-      // enter() has settled the synchronous lock lifecycle before observation;
-      // no logger, IPC call or asynchronous work runs inside our action here.
-      recordDeliveryFailure(step, error);
-      throw error;
+      return fail(error);
     }
   }
 
@@ -307,7 +339,12 @@ function createBatchDelivery(options = {}) {
     cleanupTerminalWorkCopy,
     acknowledgeDeliveredPackage,
     acknowledgeDeliveredPackages,
-    finalizePublishedPackageLocally,
+    finalizePublishedPackageLocally(token, packageId, deps = {}) {
+      return finishLocalDelivery(token, packageId, deps, false);
+    },
+    finalizePublishedPackageLocallyAdmitted(token, packageId, deps = {}) {
+      return finishLocalDelivery(token, packageId, deps, true);
+    },
     retryReleasedWorkCopyCleanup
   };
 }

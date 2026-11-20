@@ -786,9 +786,13 @@
     } catch (error) { if (expected === batchId && request === ticket) { stateFresh = false; render(); } throw error; }
     finally { if (expected === batchId && request === ticket) { loading = false; controls(); } }
   }
-  async function loadDetail(row) {
+  async function loadDetail(row, recovery = null) {
     if (!row) return;
-    if (navigationDraft()) { status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen. Die aktuelle Datei und Auswahl bleiben erhalten.', true); controls(); return; }
+    // Only the held raw recovery draft may authorize its own comparison read.
+    // Keep it reachable while awaiting IPC so another disconnect cannot make
+    // navigation look draft-free or revive it after an explicit discard.
+    const recoveryRead = Boolean(recovery && recovery === recoveryDraft && raw() && !detail && !prepared());
+    if (navigationDraft() && !recoveryRead) { status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen. Die aktuelle Datei und Auswahl bleiben erhalten.', true); controls(); return; }
     if (busy || !stateFresh || !batchId) return; const expected = batchId, request = ++ticket;
     const ownership = ++busyGeneration; busy = true; clearText(); render(); status(`${row.name} wird lokal geladen …`);
     try {
@@ -1349,15 +1353,19 @@
   $('documents-reload').addEventListener('click', async () => {
     if (busy || !batchId) return;
     if (prepared() || dirty() && !recoveryDraft) { status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen. Der angezeigte Text und die Auswahl bleiben erhalten.', true); controls(); return; }
-    const draft = recoveryDraft; const ownership = ++busyGeneration; busy = true; controls();
+    const draft = recoveryDraft, expected = batchId, connection = connectionGeneration;
+    const ownership = ++busyGeneration; busy = true; controls();
     try { await reload(); }
-    catch (error) { showError(error, draft?.name); $('documents-status').textContent += ' Der aktuelle Stand konnte nicht abgefragt werden. Änderungen bleiben gesperrt.'; }
+    catch (error) { if (expected === batchId && connection === connectionGeneration && ownership === busyGeneration) {
+      showError(error, draft?.name); $('documents-status').textContent += ' Der aktuelle Stand konnte nicht abgefragt werden. Änderungen bleiben gesperrt.';
+    } }
     finally { if (ownership !== busyGeneration) return; busy = false; render(); }
     if (stateFresh && draft) {
       const row = documents.find(value => value.document_id === draft.document_id);
       clearText();
       // Preserve the draft separately while loading the actual committed text.
-      recoveryDraft = null; await loadDetail(row); recoveryDraft = draft;
+      await loadDetail(row, draft);
+      if (expected !== batchId || connection !== connectionGeneration || recoveryDraft !== draft) return;
       if (detail && row) {
         if (markdownPositions?.display === draft.text) { recoveryDraft = null; status(`${draft.name}: Der gespeicherte Text stimmt mit deinem Korrekturentwurf überein. ${publicDirectoryUnavailable() ? 'Der ursprüngliche Ergebnisordner ist nicht verfügbar. Der private Text bleibt lesbar; Änderungen und neue Bereitstellungen bleiben gesperrt.' : publicationUnsettled() ? 'Die Bereitstellung des aktuellen Ergebnisstands erneut prüfen.' : 'Den bestätigten Ergebnisordner öffnen; keine weitere Dateiauswahl nötig.'}`); }
         else if (row.revision === draft.revision && row.output_sha256 === draft.output_sha256) {

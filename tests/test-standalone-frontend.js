@@ -293,6 +293,7 @@ async function frontendHarness(overrides = {}) {
   const elements = htmlElements();
   const timers = new Map();
   const calls = [];
+  const windowEvents = Object.create(null);
   let timerId = 0;
   let nativeListener;
   let admissionProgressListener;
@@ -310,7 +311,7 @@ async function frontendHarness(overrides = {}) {
       if (name === 'datasecure-native-drop') nativeListener = callback;
       if (name === 'datasecure-admission-progress') admissionProgressListener = callback;
       return () => {};
-    } } }, addEventListener() {} },
+    } } }, addEventListener(name, callback) { windowEvents[name] = callback; } },
     document: { getElementById: (id) => elements[id], createElement: element },
     setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
     clearTimeout(id) { timers.delete(id); }, requestAnimationFrame: (callback) => callback(), console
@@ -321,6 +322,10 @@ async function frontendHarness(overrides = {}) {
     click: (id) => elements[id].listeners.click(),
     native: (payload) => nativeListener({ payload }),
     progress: (payload) => admissionProgressListener({ payload }),
+    pagehide() {
+      assert.strictEqual(typeof windowEvents.pagehide, 'function');
+      windowEvents.pagehide();
+    },
     runTimer() {
       assert.strictEqual(timers.size, 1, 'exactly one next status timer must exist');
       const [id, timer] = timers.entries().next().value;
@@ -1482,6 +1487,227 @@ async function historyAdmissionRaceCase() {
   assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit');
 }
 
+function historyDetailAction93(harness, index = 0) {
+  const wrapper = harness.elements['history-body'].children[index].children[4].children
+    .find(item => item.children[0]?.textContent === 'Gestoppte Dateien anzeigen');
+  assert.ok(wrapper, 'the real history renderer must create this failed-file action');
+  return { button: wrapper.children[0], content: wrapper.children[1] };
+}
+function historyDetailResult93(name = 'nested/Quelle.pdf') {
+  return { ok: true, local_ui_only: true, external_disclosure: false, available: true,
+    total: 1, files: [{ name, reason_code: 'SOURCE_READ_FAILED' }] };
+}
+async function historyDetailPendingRefresh93Case() {
+  const pending = deferred(), attempts = [], batchId = '9'.repeat(64);
+  const harness = await frontendHarness({
+    get_run_history: () => localHistory([historyEntry(batchId)]),
+    get_run_failures: () => pending.promise
+  });
+  try {
+    await harness.click('tab-results'); await settleFrontend();
+    const action = historyDetailAction93(harness);
+    attempts.push(action.button.listeners.click());
+    await settleFrontend();
+    assert.strictEqual(harness.count('get_run_failures'), 1);
+    assert.strictEqual(action.button.disabled, true);
+    await harness.click('tab-results'); await settleFrontend();
+    assert.strictEqual(historyDetailAction93(harness).button, action.button, 'unchanged row is reused');
+    assert.strictEqual(action.button.disabled, true, 'history refresh cannot erase this pending request');
+    attempts.push(action.button.listeners.click());
+    await settleFrontend();
+    assert.strictEqual(harness.count('get_run_failures'), 1, 'one request while this batch is pending');
+    pending.resolve(historyDetailResult93());
+    await Promise.all(attempts);
+    assert.strictEqual(action.button.disabled, false);
+    assert.strictEqual(action.content.hidden, false);
+    assert.match(action.content.children[0].children[0].textContent, /nested\/Quelle\.pdf/u);
+    assert.strictEqual(JSON.stringify(harness.calls.filter(call => call.action === 'get_run_failures').map(call => call.args)),
+      JSON.stringify([{ batchId }]));
+    assert.strictEqual(harness.count('continue_history_batch'), 0);
+    assert.strictEqual(harness.count('start_admitted_batch'), 0);
+  } finally {
+    pending.resolve(historyDetailResult93());
+    await Promise.all(attempts);
+    harness.pagehide();
+  }
+}
+async function historyDetailForeground93Case() {
+  for (const rejected of [false, true]) {
+    const pending = deferred(), picker = deferred(), reads = [], batchId = '8'.repeat(64);
+    let choosing, detailCalls = 0;
+    const harness = await frontendHarness({
+      get_run_history: () => localHistory([historyEntry(batchId)]),
+      get_run_failures: () => ++detailCalls === 1 ? pending.promise : historyDetailResult93(),
+      select_files: () => picker.promise
+    });
+    try {
+      await harness.click('tab-results'); await settleFrontend();
+      const action = historyDetailAction93(harness);
+      reads.push(action.button.listeners.click()); await settleFrontend();
+      await harness.click('tab-process');
+      choosing = harness.click('select-files'); await settleFrontend();
+      assert.strictEqual(harness.elements['select-files'].disabled, true);
+      await harness.click('tab-results');
+      if (rejected) pending.reject('STANDALONE_IPC_FAILED');
+      else pending.resolve(historyDetailResult93());
+      await reads[0];
+      assert.strictEqual(action.button.disabled, true,
+        'late success/rejection cannot unlock a detail button during the actual picker');
+      reads.push(action.button.listeners.click()); await settleFrontend();
+      assert.strictEqual(harness.count('get_run_failures'), 1);
+      picker.resolve({ cancelled: true }); await choosing; await settleFrontend();
+      const current = historyDetailAction93(harness);
+      assert.strictEqual(current.button.disabled, false, 'real foreground completion releases its own busy state');
+      reads.push(current.button.listeners.click()); await reads.at(-1);
+      assert.strictEqual(harness.count('get_run_failures'), 2, 'an explicit later retry remains available');
+      assert.strictEqual(current.content.hidden, false);
+      assert.strictEqual(harness.count('start_admitted_batch'), 0);
+      assert.strictEqual(harness.count('continue_history_batch'), 0);
+    } finally {
+      pending.resolve(historyDetailResult93());
+      picker.resolve({ cancelled: true });
+      await Promise.all(reads);
+      if (choosing) await choosing;
+      harness.pagehide();
+    }
+  }
+}
+async function historyDetailOwnerReplacement93Case() {
+  const a = 'a'.repeat(64), b = 'b'.repeat(64);
+  const firstA = deferred(), secondA = deferred(), firstB = deferred(), reads = [];
+  let rows = [historyEntry(a), historyEntry(b)], aCalls = 0;
+  const harness = await frontendHarness({
+    get_run_history: () => localHistory(rows),
+    get_run_failures: ({ batchId }) => {
+      if (batchId === a) return ++aCalls === 1 ? firstA.promise : secondA.promise;
+      assert.strictEqual(batchId, b);
+      return firstB.promise;
+    }
+  });
+  try {
+    await harness.click('tab-results'); await settleFrontend();
+    const oldA = historyDetailAction93(harness, 0), actionB = historyDetailAction93(harness, 1);
+    reads.push(oldA.button.listeners.click()); await settleFrontend();
+    assert.strictEqual(actionB.button.disabled, false, 'a different batch keeps its own detail owner');
+    reads.push(actionB.button.listeners.click()); await settleFrontend();
+    assert.strictEqual(harness.count('get_run_failures'), 2);
+    rows = [historyEntry(b)];
+    await harness.click('tab-results'); await settleFrontend();
+    rows = [historyEntry(a, { status: 'stopped', results_available: false }), historyEntry(b)];
+    await harness.click('tab-results'); await settleFrontend();
+    const newA = historyDetailAction93(harness, 0);
+    assert.notStrictEqual(newA.button, oldA.button, 'the old row was removed, not merely reused');
+    assert.strictEqual(newA.button.disabled, true, 'pending ownership survives removal/reappearance of the same batch');
+    reads.push(newA.button.listeners.click()); await settleFrontend();
+    assert.strictEqual(harness.count('get_run_failures'), 2);
+    firstA.resolve(historyDetailResult93('old/First.pdf')); await reads[0];
+    assert.strictEqual(newA.content.hidden, true, 'old owner cannot render into its replacement');
+    assert.strictEqual(newA.button.disabled, false);
+    assert.strictEqual(actionB.button.disabled, true);
+    reads.push(newA.button.listeners.click()); await settleFrontend();
+    assert.strictEqual(harness.count('get_run_failures'), 3);
+    reads.push(oldA.button.listeners.click()); await settleFrontend();
+    assert.strictEqual(harness.count('get_run_failures'), 3, 'retired row handler cannot start or release a new owner');
+    await harness.click('tab-results'); await settleFrontend();
+    assert.strictEqual(newA.button.disabled, true, 'new owner survives another same-row availability refresh');
+    firstB.resolve(historyDetailResult93('b/Other.pdf')); await reads[1];
+    assert.strictEqual(newA.button.disabled, true, 'another batch finally cannot unlock this new owner');
+    secondA.resolve(historyDetailResult93('new/Second.pdf')); await Promise.all(reads);
+    assert.strictEqual(newA.button.disabled, false);
+    assert.strictEqual(newA.content.hidden, false);
+    assert.match(newA.content.children[0].children[0].textContent, /new\/Second\.pdf/u);
+    assert.strictEqual(harness.count('start_admitted_batch'), 0);
+    assert.strictEqual(harness.count('continue_history_batch'), 0);
+  } finally {
+    firstA.resolve(historyDetailResult93()); secondA.resolve(historyDetailResult93()); firstB.resolve(historyDetailResult93());
+    await Promise.all(reads);
+    harness.pagehide();
+  }
+}
+async function historyDetailPagehide93Case() {
+  for (const rejected of [false, true]) {
+    const pending = deferred(), batchId = 'c'.repeat(64), reads = [];
+    const harness = await frontendHarness({
+      get_run_history: () => localHistory([historyEntry(batchId)]),
+      get_run_failures: () => pending.promise
+    });
+    try {
+      await harness.click('tab-results'); await settleFrontend();
+      const action = historyDetailAction93(harness);
+      reads.push(action.button.listeners.click()); await settleFrontend();
+      harness.pagehide();
+      assert.strictEqual(harness.timers.size, 0, 'the actual pagehide handler clears its own scheduled timer');
+      if (rejected) pending.reject('STANDALONE_IPC_FAILED');
+      else pending.resolve(historyDetailResult93());
+      await reads[0];
+      assert.strictEqual(action.content.hidden, true);
+      assert.strictEqual(action.button.disabled, true, 'late finally cannot re-enable the retired page');
+      reads.push(action.button.listeners.click()); await Promise.all(reads);
+      assert.strictEqual(harness.count('get_run_failures'), 1);
+    } finally {
+      pending.resolve(historyDetailResult93()); await Promise.all(reads);
+      harness.pagehide();
+    }
+  }
+}
+async function legacyPartialFailureDetails89CompatibilityCase() {
+  const batchId = 'd'.repeat(64);
+  const readText = node => [node.textContent, ...node.children.map(readText)].join('\n');
+  const render = async details => {
+    const harness = await frontendHarness({
+      get_run_history: () => localHistory([historyEntry(batchId, { failed_count: 2 })]),
+      get_run_failures: () => details
+    });
+    await harness.click('tab-results'); await settleFrontend();
+    const action = historyDetailAction93(harness);
+    await action.button.listeners.click();
+    assert.strictEqual(JSON.stringify(harness.calls.find(call => call.action === 'get_run_failures').args),
+      JSON.stringify({ batchId }));
+    assert.strictEqual(harness.count('start_admitted_batch'), 0);
+    assert.strictEqual(harness.count('continue_history_batch'), 0);
+    harness.pagehide();
+    return { content: action.content, text: readText(action.content) };
+  };
+  const partial = { ok: true, local_ui_only: true, external_disclosure: false, available: false,
+    total: 2, files: [{ name: 'safe/Quelle.pdf', reason_code: 'SOURCE_READ_FAILED' }] };
+  const shown = await render(partial);
+  assert.match(shown.text, /Dateidetails sind unvollständig/u);
+  assert.match(shown.text, /safe\/Quelle\.pdf/u);
+  assert.match(shown.text, /1 weitere Datei ohne verfügbaren Dateinamen/u);
+  assert.doesNotMatch(shown.text, /keine gestoppten Dateinamen gefunden/u);
+  const pending = await render({ ...partial, pending_total: 1,
+    pending_files: [{ name: 'pending/Noch-nicht-gestartet.xlsx' }] });
+  assert.match(pending.text, /safe\/Quelle\.pdf/u);
+  assert.match(pending.text, /pending\/Noch-nicht-gestartet\.xlsx/u);
+  assert.match(pending.text, /nicht als Dokumentfehler gewertet/u);
+  const guarded = await render({ ...partial, total: 3,
+    files: [...partial.files, { name: '../not-a-display-label.pdf', reason_code: 'SOURCE_READ_FAILED' }] });
+  assert.match(guarded.text, /safe\/Quelle\.pdf/u);
+  assert.doesNotMatch(guarded.text, /not-a-display-label/u);
+  assert.match(guarded.text, /2 weitere Dateien ohne verfügbaren Dateinamen/u);
+  const absent = await render({ ...partial, files: [] });
+  assert.match(absent.text, /2 betroffene Dateien; die Dateinamen sind lokal nicht verfügbar/u);
+  for (const bad of [
+    { ...partial, ok: false }, { ...partial, local_ui_only: false }, { ...partial, external_disclosure: true },
+    { ...partial, total: '2' }, { ...partial, total: 0 }, { ...partial, total: 201 },
+    { ...partial, files: {} }
+  ]) {
+    const denied = await render(bad);
+    assert.doesNotMatch(denied.text, /safe\/Quelle\.pdf/u);
+    assert.match(denied.text, /Dateinamen für diesen Lauf sind lokal nicht mehr verfügbar/u);
+  }
+  const complete = await render(historyDetailResult93('complete/Quelle.pdf'));
+  assert.match(complete.text, /complete\/Quelle\.pdf/u);
+  assert.doesNotMatch(complete.text, /Dateidetails sind unvollständig/u);
+}
+function legacyHistoryCopy94Case() {
+  const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
+  assert.match(html, /<p class="home-note">[^<]*letzten 5 Läufe/u);
+  assert.match(html, /aria-label="Letzte 5 Läufe"/u);
+  assert.match(html, /<caption>Die letzten 5 Läufe · neueste zuerst<\/caption>/u);
+  assert.doesNotMatch(html, /letzten 20 Läufe|Letzte 20 Läufe/u);
+}
+
 function selectionActionsStayAboveLongFileListsCase() {
   const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
   const dropZone = html.indexOf('id="drop-zone"');
@@ -1510,6 +1736,12 @@ function selectionActionsStayAboveLongFileListsCase() {
   await testAsync('first start distinguishes a proposed result folder from a chosen one', firstRunResultFolderGuidanceCase);
   await testAsync('tabs use manual activation and roving arrow, Home and End focus', accessibleTabsCase);
   await testAsync('history renders at most 5 rows and every action binds its exact batch ID', historyRowBindingCase);
+  await testAsync('93 one pending failed-file read survives an unchanged history availability refresh', historyDetailPendingRefresh93Case);
+  await testAsync('93 late failed-file success and rejection respect a still-active foreground picker', historyDetailForeground93Case);
+  await testAsync('93 detail-read ownership is per batch and survives row removal and replacement', historyDetailOwnerReplacement93Case);
+  await testAsync('93 late failed-file responses cannot re-enable a closed legacy page', historyDetailPagehide93Case);
+  await testAsync('94 legacy home, ARIA and caption agree with the actual five-run history', legacyHistoryCopy94Case);
+  await testAsync('89 compatibility shows safe partial legacy file details without claiming complete availability', legacyPartialFailureDetails89CompatibilityCase);
   await testAsync('private identity mapping opens locally without a delete action', privateIdentityHistoryCase);
   await testAsync('history preserves focus, ignores progress polls and rejects stale replies and actions', historyFreshnessCase);
   await testAsync('history requires a local-only envelope and explains disabled actions', historyPrivacyAndAvailabilityCase);

@@ -56,7 +56,6 @@ $env:Path = "$cargoDirectory;$env:Path"
 $package = Get-Content -Raw -LiteralPath (Join-Path $repositoryRoot 'package.json') | ConvertFrom-Json
 $webviewHost = Get-StandaloneWebViewHostFacts
 $archiveName = "DataSecure-Standalone-$($package.version)-windows-x64.zip"
-$sourceArchive = Join-Path $repositoryRoot "dist\$archiveName"
 $evidenceRoot = Join-Path $repositoryRoot "dist\pkg-04\$commit"
 if (Test-Path -LiteralPath $evidenceRoot) { throw 'PKG04_EVIDENCE_ALREADY_EXISTS' }
 New-Item -ItemType Directory -Path $evidenceRoot | Out-Null
@@ -69,7 +68,10 @@ Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-
     'tests/manual/standalone-native-windows-launch.ps1', '-ValidateIsolationOnly')
 foreach ($label in @('candidate-a', 'candidate-b')) {
     Invoke-Checked $cargo @('clean', '--manifest-path', 'apps/datasecure-standalone/tauri-contract/Cargo.toml')
-    Invoke-Checked 'npm.cmd' @('run', 'build:standalone:windows:portable')
+    $engineeringDirectory = "engineering-pkg04-$commit-$label"
+    Invoke-Checked 'npm.cmd' @('run', 'build:standalone:windows')
+    Invoke-Checked 'node.exe' @('scripts/build-standalone-package.mjs', '--engineering-directory', $engineeringDirectory)
+    $sourceArchive = Join-Path $repositoryRoot "dist\$engineeringDirectory\$archiveName"
     $candidateDirectory = Join-Path $evidenceRoot $label
     New-Item -ItemType Directory -Path $candidateDirectory | Out-Null
     $candidateArchive = Join-Path $candidateDirectory $archiveName

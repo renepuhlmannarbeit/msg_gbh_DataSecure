@@ -4,6 +4,8 @@ const path = require('path');
 const fs = require('fs');
 const { SafeError, dataRoot } = require('../runtime');
 const { ensurePrivateDirectory, hasReparseComponent, safeRemovePrivateTree } = require('./common');
+const { readHeldBytes } = require('../core/bound-file-io');
+const { MAX_HEADER_BYTES, PREFIX_BYTES, sourceSnapshotHeaderLength, verifySourceSnapshotHeader } = require('../core/source-snapshot-storage');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
 const TRANSIENT_DELETE_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
@@ -71,7 +73,7 @@ function workPath(token) {
 
 // Shared deletion guard: only inspect the fixed legacy magic, never decrypt
 // or resolve a key. Uncertain reads and renamed envelopes remain untouched.
-function assertPlainWorkFile(target, io = fs) {
+function assertPlainWorkFile(target, io = fs, sourceSnapshot) {
   if (/\.dsart$/iu.test(target)) throw legacyCopyError();
   // NTFS inode values can exceed Number.MAX_SAFE_INTEGER. Rounded identifiers
   // must never merge distinct work copies or conceal an object substitution.
@@ -91,6 +93,16 @@ function assertPlainWorkFile(target, io = fs) {
       offset += count;
     }
     if (offset === 8 && header.equals(Buffer.from('DSARTF01'))) throw legacyCopyError();
+    if (sourceSnapshot) {
+      const { state, item } = sourceSnapshot;
+      const prefixBytes = sourceSnapshotHeaderLength(state, item);
+      if (named.size !== BigInt(item.source_snapshot_storage.stored_bytes)) throw new Error('BATCH_WORK_UNSAFE');
+      // Same held FD, only a locally reconstructed bounded header. The source
+      // body is verified by exactPendingEntry before any content operation.
+      const prefix = readHeldBytes(fd, prefixBytes, io, PREFIX_BYTES + MAX_HEADER_BYTES);
+      try { verifySourceSnapshotHeader(state, item, prefix, Number(named.size)); }
+      finally { prefix.fill(0); }
+    }
     const again = io.lstatSync(target, { bigint: true });
     if (!again.isFile() || again.isSymbolicLink() || again.dev !== opened.dev || again.ino !== opened.ino ||
         again.size !== named.size || again.mtimeNs !== named.mtimeNs) throw new Error('BATCH_WORK_UNSAFE');

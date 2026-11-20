@@ -5,6 +5,8 @@ const path = require('path');
 const { batchRoot } = require('./batch-private-store');
 const { processingModeForBatch, isMarkdownBatch } = require('../core/processing-mode');
 const { resultNamingModeForBatch } = require('../core/result-naming-mode');
+const { CONTENT_BATCH_SCHEMAS } = require('../core/content-options');
+const { validateStorageItem } = require('../core/source-snapshot-storage');
 
 function createBatchRetentionProtection(options = {}) {
   const defaultIo = options.io || fs;
@@ -32,28 +34,37 @@ function createBatchRetentionProtection(options = {}) {
     }
     for (const entry of entries) {
       if (entry.name === 'active-processing.json') continue;
-      if (!entry.isFile || !entry.isFile() || !entry.name.endsWith('.json')) continue;
+      const fileToken = /^([a-f0-9]{64})\.json$/u.exec(entry.name)?.[1];
+      const regular = typeof entry.isFile === 'function' && entry.isFile();
+      // A reserved journal path with an unknown type makes the inventory
+      // incomplete; it cannot authorize removal of dependent artifacts.
+      if (!regular) {
+        if (fileToken) return { ids, complete: false };
+        continue;
+      }
+      if (!entry.name.endsWith('.json')) continue;
       let state;
       try {
         state = JSON.parse(fsApi.readFileSync(pathApi.join(dir, entry.name), 'utf8'));
       } catch {
         return { ids, complete: false };
       }
-      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state?.schema) || !Array.isArray(state.items)) {
+      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', ...CONTENT_BATCH_SCHEMAS].includes(state?.schema) || !Array.isArray(state.items)) {
         return { ids, complete: false };
       }
+      try { for (const item of state.items) validateStorageItem(state, item); }
+      catch { return { ids, complete: false }; }
       // Real journal filenames are token-bound. Inspect the independent run
       // anchor even after a schema/channel/flag downgrade, not only for /7.
       // Old narrow in-memory projection fixtures may omit that filename.
-      const fileToken = /^([a-f0-9]{64})\.json$/u.exec(entry.name)?.[1];
-      if (fileToken || state.schema === 'datasecure-batch/7') {
+      if (fileToken || CONTENT_BATCH_SCHEMAS.includes(state.schema)) {
         try {
           if (fileToken && state.token !== fileToken) return { ids, complete: false };
           (options.assertContentBinding || (value => require('./standalone-document-review-store')
             .createDocumentReviewStore({ dataRoot: options.documentReviewDataRoot }).assertContentBinding(value)))(state);
         } catch { return { ids, complete: false }; }
       }
-      if (['datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema)) {
+      if (['datasecure-batch/6', ...CONTENT_BATCH_SCHEMAS].includes(state.schema)) {
         try {
           processingModeForBatch(state);
           resultNamingModeForBatch(state);

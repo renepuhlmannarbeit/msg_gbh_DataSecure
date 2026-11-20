@@ -31,6 +31,7 @@ function verifyNativeLauncherArtifact(launcher, options = {}) {
     const noFollow = fs.constants.O_NOFOLLOW || 0;
     let launcherFd;
     let checksumFd;
+    let failed = false, primary;
     try {
       launcherFd = fs.openSync(launcher, fs.constants.O_RDONLY | noFollow);
       checksumFd = fs.openSync(checksumFile, fs.constants.O_RDONLY | noFollow);
@@ -47,12 +48,23 @@ function verifyNativeLauncherArtifact(launcher, options = {}) {
       expected = fs.readFileSync(checksumFd, 'utf8').trim();
       bytes = fs.readFileSync(launcherFd);
     } catch (error) {
-      if (error instanceof NativeLauncherVerificationError) throw error;
-      fail('unreadable');
+      failed = true;
+      primary = error instanceof NativeLauncherVerificationError
+        ? error : new NativeLauncherVerificationError('unreadable');
     } finally {
-      if (launcherFd !== undefined) fs.closeSync(launcherFd);
-      if (checksumFd !== undefined) fs.closeSync(checksumFd);
+      const closing = [launcherFd, checksumFd];
+      launcherFd = undefined; checksumFd = undefined;
+      for (const fd of closing) if (fd !== undefined) {
+        try { fs.closeSync(fd); }
+        catch {
+          if (!failed) {
+            failed = true;
+            primary = new NativeLauncherVerificationError('unreadable');
+          }
+        }
+      }
     }
+    if (failed) throw primary;
   }
   const actual = crypto.createHash('sha256').update(bytes).digest('hex');
   if (!/^[a-f0-9]{64}$/.test(expected) || actual !== expected) fail('integrity_failed');

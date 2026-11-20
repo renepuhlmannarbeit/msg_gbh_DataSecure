@@ -32,11 +32,59 @@ test('Standalone source projection excludes Cowork-only runtime modules independ
       'companion/processor.js', 'companion/job-store.js', 'companion/batch-start-confirmation.js',
       'companion/retention.js', 'companion/completion-summary.js', 'companion/local-confirmation.js',
       'companion/release-verifier.js', 'companion/text-review.js', 'gateway/worker-terminal-presentation.js',
-      'gateway/package-store.js', 'gateway/review.js']) {
+      'gateway/package-store.js', 'gateway/review.js', 'gateway/result-export-replay.js',
+      'gateway/result-export-replay-worker.js', 'gateway/automatic-local-review.js', 'gateway/mcp-diagnostic-export.js']) {
       assert.equal(files.has(relative), false, `${target}: ${relative} is Cowork-only runtime code`);
     }
   }
 });
+
+test('the actual shared source closure preserves neutral diagnostics on every desktop target without the MCP exporter', () => {
+  const common = collectStandaloneRuntime(path.join(repository, 'plugins/data-secure/server'), null);
+  const neutral = common.find(file => file.relative === 'gateway/diagnostics.js');
+  const sidecar = common.find(file => file.relative === 'standalone/desktop-sidecar.js');
+  assert.ok(neutral && sidecar);
+  assert.doesNotMatch(neutral.bytes.toString('utf8'),
+    /\b(?:digestArtifact|diagnosticExportPath|exportDiagnosticPackage)\b|data-secure-diagnostic-export\/1/u);
+  for (const target of ['windows-x64', 'macos-arm64', 'macos-x64']) {
+    const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-build-fingerprint-'));
+    try {
+      const root = path.join(scope, 'plugins/data-secure/server');
+      for (const file of common) {
+        write(root, file.relative, file.bytes);
+        const adapter = standaloneProjectionContract.adapterSources[file.relative];
+        if (adapter) write(scope, `apps/datasecure-standalone/runtime-adapters/${adapter}`, file.bytes);
+      }
+      // These are inert collector-only assets, never native executable evidence.
+      for (const asset of standaloneProjectionContract.platformAssets[target])
+        write(root, asset, Buffer.from('synthetic source-projection asset\n'));
+      assert.equal(fs.existsSync(path.join(root, 'gateway/mcp-diagnostic-export.js')), false);
+      const projected = collectStandaloneRuntime(root, target);
+      assert.equal(projected.some(file => file.relative === 'gateway/mcp-diagnostic-export.js'), false, target);
+      assert.deepEqual(projected.find(file => file.relative === 'gateway/diagnostics.js').bytes, neutral.bytes, target);
+      for (const relative of ['gateway/mcp-diagnostic-export.js', 'gateway/MCP-DIAGNOSTIC-EXPORT.JS']) {
+        write(root, relative, "'use strict';\nmodule.exports = {};\n");
+        write(root, 'standalone/desktop-sidecar.js',
+          Buffer.concat([sidecar.bytes, Buffer.from(`\nrequire('../${relative}');\n`)]));
+        assert.throws(() => collectStandaloneRuntime(root, target), error =>
+          error.message === `STANDALONE_PROJECTION_DEPENDENCY_FORBIDDEN:${relative}`, target);
+      }
+      write(root, 'standalone/desktop-sidecar.js', sidecar.bytes);
+      for (const snippet of [
+        'function digestArtifact() {}',
+        'function diagnosticExportPath() {}',
+        'function exportDiagnosticPackage() {}',
+        "const legacySchema = 'data-secure-diagnostic-export/1';"
+      ]) {
+        write(root, 'gateway/diagnostics.js',
+          Buffer.concat([neutral.bytes, Buffer.from('\n' + snippet + '\n')]));
+        assert.throws(() => collectStandaloneRuntime(root, target), error =>
+          error.message === 'STANDALONE_COWORK_DIAGNOSTIC_FORBIDDEN', target + ':' + snippet);
+      }
+    } finally { cleanup(scope); }
+  }
+});
+
 test('Standalone build identity never reads Cowork-only source files', () => {
   const source = `
     const assert = require('node:assert/strict');
@@ -47,7 +95,9 @@ test('Standalone build identity never reads Cowork-only source files', () => {
       const original = fs[method];
       fs[method] = function(file, ...args) {
         const name = String(file).replaceAll('\\\\', '/');
-        assert.equal(name.includes('/server/companion/') || name.endsWith('/server/durable-runtime-cache.js'), false,
+        assert.equal(name.includes('/server/companion/') || name.endsWith('/server/durable-runtime-cache.js') ||
+          name.endsWith('/server/gateway/automatic-local-review.js') ||
+          name.endsWith('/server/gateway/mcp-diagnostic-export.js'), false,
           'Standalone touched a Cowork source: ' + name);
         return original.call(this, file, ...args);
       };
@@ -96,7 +146,7 @@ test('projected Standalone adapters contain only Standalone behavior even withou
   try {
     const projected = collectStandaloneRuntime(path.join(repository, 'plugins/data-secure/server'), null);
     for (const file of projected) write(scope, `server/${file.relative}`, file.bytes);
-    const adapters = ['local-review-adapter', 'product-read-capability', 'product-terminal-notice'];
+    const adapters = ['local-review-adapter', 'product-read-capability', 'product-terminal-notice', 'product-automatic-review'];
     for (const name of adapters) {
       const file = projected.find(item => item.relative === `gateway/${name}.js`);
       assert.ok(file, `${name} must be projected`);
@@ -110,6 +160,7 @@ test('projected Standalone adapters contain only Standalone behavior even withou
       const review = require(path.join(gateway, 'local-review-adapter.js'));
       const read = require(path.join(gateway, 'product-read-capability.js'));
       const notice = require(path.join(gateway, 'product-terminal-notice.js'));
+      const automatic = require(path.join(gateway, 'product-automatic-review.js'));
       const document = { original_text: 'Microsoft Zertifikat', anonymized_text: 'Microsoft Zertifikat',
         profile: 'personnel_profile', ambiguities: [{ ambiguity_id: 'credential:v2:000001',
           type: 'credential_issuer_ambiguous', original_start: 0, original_end: 9,
@@ -120,6 +171,13 @@ test('projected Standalone adapters contain only Standalone behavior even withou
         await assert.rejects(review.reviewBatchTextLocally([document]), /STANDALONE_REVIEWER_REQUIRED/);
         assert.throws(() => review.reviewTextLocally(), /STANDALONE_REVIEWER_REQUIRED/);
         assert.deepEqual(read.issueReadCapability('package'), {});
+        const progress = Object.freeze({ batch_phase: 'awaiting_local_review' });
+        const denied = () => { throw Error('AUTOMATIC_REVIEW_MUST_NOT_RUN'); };
+        const skipped = await automatic.continueBatchReviewForProduct('synthetic-token', progress,
+          'markdown-and-anonymize', { claimLocalBatchExecutor: denied, releaseLocalBatchExecutor: denied,
+            reviewDeferredBatch: denied, readBatchProgress: denied });
+        assert.deepEqual(skipped, { progress, attempted: false });
+        assert.strictEqual(skipped.progress, progress);
         for (const action of ['showBatchStateNoticeConfirmed', 'showLocalIntakeNoticeConfirmed',
           'presentTerminalEnvelope']) assert.throws(() => notice[action](), /STANDALONE_PRESENTER_UNAVAILABLE/);
         assert.equal(Object.keys(require.cache).some(name => /[\\/]companion[\\/]/u.test(name)), false);
@@ -138,13 +196,31 @@ test('Standalone adapter projection does not depend on the legacy adapter files'
     for (const relative of standaloneProjectionContract.entrypoints)
       write(root, relative, "'use strict';\nmodule.exports = {};\n");
     write(root, 'standalone/desktop-sidecar.js',
-      "require('../gateway/local-review-adapter'); require('../gateway/product-read-capability'); require('../gateway/product-terminal-notice');\n");
+      "require('../gateway/local-review-adapter'); require('../gateway/product-read-capability'); require('../gateway/product-terminal-notice'); require('../gateway/product-automatic-review');\n");
     for (const relative of Object.values(standaloneProjectionContract.adapterSources).filter(name => name.startsWith('gateway/')))
       write(scope, `apps/datasecure-standalone/runtime-adapters/${relative}`, "module.exports = {};\n");
     const projected = collectStandaloneRuntime(root, null);
     for (const name of Object.keys(standaloneProjectionContract.adapterSources).filter(name => name.startsWith('gateway/')))
       assert.ok(projected.some(file => file.relative === name));
   } finally { cleanup(scope); }
+});
+
+test('retained Standalone seeds cannot reintroduce host-only replay or automatic-review modules by require', () => {
+  for (const relative of ['gateway/result-export-replay.js', 'gateway/result-export-replay-worker.js',
+    'gateway/automatic-local-review.js', 'gateway/mcp-diagnostic-export.js']) {
+    assert.equal(standaloneProjectionContract.entrypoints.includes(relative), false);
+    assert.equal(standaloneProjectionContract.forbidden.test(relative), true);
+    const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-build-fingerprint-'));
+    try {
+      const root = path.join(scope, 'plugins/data-secure/server');
+      for (const entry of standaloneProjectionContract.entrypoints)
+        write(root, entry, "'use strict';\nmodule.exports = {};\n");
+      write(root, relative, "'use strict';\nmodule.exports = {};\n");
+      write(root, 'standalone/desktop-sidecar.js', `require('../${relative}');\n`);
+      assert.throws(() => collectStandaloneRuntime(root, null), error =>
+        error.message === `STANDALONE_PROJECTION_DEPENDENCY_FORBIDDEN:${relative}`);
+    } finally { cleanup(scope); }
+  }
 });
 function write(scope, relative, bytes) {
   const target = path.join(scope, ...relative.split('/'));
@@ -231,7 +307,9 @@ function builderFixture() {
     'scripts/build-standalone-package.mjs', 'scripts/build-standalone-macos-package.mjs',
     'scripts/lib/standalone-build-fingerprint.mjs', 'scripts/lib/standalone-runtime-projection.mjs',
     'scripts/lib/standalone-conversion-runtime.mjs', 'scripts/lib/pdfjs-text-paint-hook.mjs', 'scripts/lib/bundled-runtime.mjs',
-    'scripts/lib/standalone-windows-layout.mjs',
+    'scripts/lib/standalone-windows-layout.mjs', 'scripts/lib/standalone-windows-package.mjs',
+    ...(fs.existsSync(path.join(repository, 'scripts/lib/standalone-macos-package.mjs'))
+      ? ['scripts/lib/standalone-macos-package.mjs'] : []),
     'scripts/lib/windows-native-contract.mjs', 'native/runtime/standalone-windows-runtime.json',
     'plugins/data-secure/server/standalone/macos-bundle-layout.js',
     'plugins/data-secure/server/standalone/tiff-scan-codecs.js',

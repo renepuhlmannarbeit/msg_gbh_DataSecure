@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { image, pdf } from './conversion-fixtures.mjs';
+import { assertPackagedAnonymizedOcrMarkdown } from './standalone-packaged-anonymized-ocr-oracle.mjs';
 
 const require = createRequire(import.meta.url);
 const { decodePng } = require('../../plugins/data-secure/server/images/png');
@@ -112,10 +113,7 @@ export async function runPackagedAnonymizedOcrScenario({ request, sourceDirector
     'anonymized output names must not disclose source names');
   for (const name of names) {
     const value = fs.readFileSync(path.join(output.local_path, name), 'utf8');
-    assert.doesNotMatch(value, /Max Mustermann|Nordstern GmbH|data:image|base64,|!\[/iu,
-      'anonymized Markdown must not retain synthetic identities or embedded image artifacts');
-    assert.match(value, /Projektmanager|Software Tester/iu,
-      'a factual OCR line must survive the anonymization workflow');
+    assertPackagedAnonymizedOcrMarkdown(value);
   }
   const documents = await send('get_document_reviews', { batch_id: started.batch_id });
   assert.equal(documents.processing_mode, 'markdown-and-anonymize');

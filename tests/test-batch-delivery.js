@@ -10,6 +10,8 @@ const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch delivery boundary');
 const token = 'a'.repeat(64);
+const fixtureTempParent = fs.realpathSync.native(os.tmpdir());
+const fixtureRoot = fs.mkdtempSync(path.join(fixtureTempParent, 'datasecure-delivery-fixtures-'));
 const ids = ['1', '2', '3'].map((character) => `ds_${character.repeat(32)}`);
 
 function item(index, status = 'delivery_pending', options = {}) {
@@ -28,6 +30,17 @@ function fixture(options = {}) {
   const active = options.active || new Set();
   const packages = new Set(options.packages || ids);
   const files = new Map(options.files || []);
+  const own = fs.mkdtempSync(path.join(fixtureRoot, 'case-')), work = path.join(own, 'work'); fs.mkdirSync(work);
+  const logical = target => path.dirname(target) === work ? 'work:' + token + '/' + path.basename(target) : target;
+  for (const [name, type] of files) {
+    const target = path.join(work, path.basename(name));
+    if (type === 'file') fs.writeFileSync(target, Buffer.alloc(8));
+    else if (type === 'directory') fs.mkdirSync(target);
+    else if (type === 'symlink') {
+      const linkTarget = path.join(own, 'own-link-target'); fs.mkdirSync(linkTarget);
+      fs.symlinkSync(linkTarget, target, process.platform === 'win32' ? 'junction' : 'dir');
+    } else throw Error('UNKNOWN_OWN_FIXTURE_KIND');
+  }
   let durable = { schema: 'datasecure-batch/4', ...structuredClone(options.state || {
     token,
     items: [item(0)],
@@ -37,30 +50,15 @@ function fixture(options = {}) {
   const delivery = createBatchDelivery({
     active,
     ...(options.withSynchronousActiveLock ? { withSynchronousActiveLock: options.withSynchronousActiveLock } : {}),
-    path: { join: (left, right) => `${left}/${right}` },
-    workPath: (batchToken) => `work:${batchToken}`,
-    io: {
-      constants: { O_RDONLY: 0 },
-      openSync(target) { return target; },
-      fstatSync(target) { return { isFile: () => files.get(target) === 'file' }; },
-      readSync(_fd, buffer, offset, length) {
-        buffer.fill(0, offset, offset + length);
-        return length;
-      },
-      closeSync() {},
-      existsSync(target) { events.push(`exists:${target}`); return files.has(target); },
-      lstatSync(target) {
-        events.push(`lstat:${target}`);
-        const type = files.get(target);
-        return {
-          isFile: () => type === 'file',
-          isSymbolicLink: () => type === 'symlink'
-        };
-      },
+    path,
+    workPath: () => work,
+    io: { ...fs,
+      existsSync(target) { events.push('exists:' + logical(target)); return fs.existsSync(target); },
+      lstatSync(target, settings) { events.push('lstat:' + logical(target)); return fs.lstatSync(target, settings); },
       unlinkSync(target) {
-        events.push(`unlink:${target}`);
-        if (options.unlinkFailure === target) throw new Error('UNLINK_FAILED');
-        files.delete(target);
+        const name = logical(target); events.push('unlink:' + name);
+        if (options.unlinkFailure === name) throw new Error('UNLINK_FAILED');
+        fs.unlinkSync(target); files.delete(name);
       }
     },
     acquireActiveLock(batchToken) {
@@ -441,22 +439,14 @@ test('all terminal cleanup callers preserve renamed legacy magic with bounded sh
   const bytes = Buffer.from('DSARTF01legacy ciphertext, not a real secret');
   let readBytes = 0;
   let unlinks = 0;
-  const stat = { dev: 1, ino: 2, size: bytes.length, mtimeMs: 1, isFile: () => true, isSymbolicLink: () => false };
-  const delivery = createBatchDelivery({
-    workPath: () => 'owned-work',
-    io: {
-      constants: { O_RDONLY: 0 }, existsSync: () => true,
-      lstatSync: () => stat, fstatSync: () => stat,
-      openSync: () => 7, closeSync() {},
-      readSync(_fd, buffer, offset, length, position) {
-        const count = Math.min(2, length);
-        bytes.copy(buffer, offset, position, position + count);
-        readBytes += count;
-        return count;
-      },
-      unlinkSync() { unlinks++; }
-    }
-  });
+  const ownWork = fs.mkdtempSync(path.join(fixtureRoot, 'legacy-short-read-'));
+  const ownFile = path.join(ownWork, candidate.work_name); fs.writeFileSync(ownFile, bytes);
+  const delivery = createBatchDelivery({ workPath: () => ownWork, io: { ...fs,
+    readSync(fd, buffer, offset, length, position) {
+      const count = fs.readSync(fd, buffer, offset, Math.min(2, length), position); readBytes += count; return count;
+    },
+    unlinkSync() { unlinks++; throw Error('legacy envelope cannot be removed'); }
+  } });
   assert.throws(() => delivery.cleanupTerminalWorkCopy({ token }, candidate), (error) =>
     error.code === 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED');
   assert.strictEqual(readBytes, 8);
@@ -466,9 +456,11 @@ test('all terminal cleanup callers preserve renamed legacy magic with bounded sh
 
 test('whole-work cleanup preflights siblings and leaves unexpected nested trees untouched', () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-guard-'));
-  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA };
+  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA, data: process.env.EU_PRIVACY_DATA_ROOT, result: process.env.EU_PRIVACY_RESULT_ROOT };
   process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
   process.env.LOCALAPPDATA = path.join(base, 'localapp');
+  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
   const { workPath, safeRemoveWorkDirectory } = require('../plugins/data-secure/server/gateway/batch-private-store');
   try {
     const work = workPath(token);
@@ -505,7 +497,7 @@ test('whole-work cleanup preflights siblings and leaves unexpected nested trees 
     assert.strictEqual(fs.readFileSync(first, 'utf8'), 'an external hard link is not owned');
     assert.strictEqual(fs.readFileSync(nestedCopy, 'utf8'), 'regular synthetic helper file');
   } finally {
-    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local]]) {
+    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local], ['EU_PRIVACY_DATA_ROOT', previous.data], ['EU_PRIVACY_RESULT_ROOT', previous.result]]) {
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
     fs.rmSync(base, { recursive: true, force: true });
@@ -514,9 +506,11 @@ test('whole-work cleanup preflights siblings and leaves unexpected nested trees 
 
 test('whole-work cleanup retries bounded transient Windows delete failures without weakening identity checks', () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-retry-'));
-  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA };
+  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA, data: process.env.EU_PRIVACY_DATA_ROOT, result: process.env.EU_PRIVACY_RESULT_ROOT };
   process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
   process.env.LOCALAPPDATA = path.join(base, 'localapp');
+  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
   const { workPath, safeRemoveWorkDirectory } = require('../plugins/data-secure/server/gateway/batch-private-store');
   const originalUnlink = fs.unlinkSync;
   const originalRmdir = fs.rmdirSync;
@@ -544,7 +538,7 @@ test('whole-work cleanup retries bounded transient Windows delete failures witho
   } finally {
     fs.unlinkSync = originalUnlink;
     fs.rmdirSync = originalRmdir;
-    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local]]) {
+    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local], ['EU_PRIVACY_DATA_ROOT', previous.data], ['EU_PRIVACY_RESULT_ROOT', previous.result]]) {
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
     fs.rmSync(base, { recursive: true, force: true });
@@ -690,4 +684,9 @@ test('the batch composition root preserves every delivery facade', () => {
   assert.strictEqual(typeof batch._test.retryReleasedWorkCopyCleanup, 'function');
 });
 
-done();
+done(() => {
+  assert.equal(path.dirname(fixtureRoot), fixtureTempParent);
+  assert.ok(path.basename(fixtureRoot).startsWith('datasecure-delivery-fixtures-'));
+  assert.equal(fs.realpathSync.native(fixtureRoot), fixtureRoot);
+  fs.rmSync(fixtureRoot, { recursive: true });
+});

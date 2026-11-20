@@ -140,13 +140,15 @@ function readHeldBytes(fd, length, io = fs, maximum = 64 * 1024 * 1024) {
       !Number.isSafeInteger(maximum) || maximum < 0 || maximum > 512 * 1024 * 1024) throw failure();
   const bytes = Buffer.alloc(size);
   let offset = 0;
-  while (offset < size) {
-    const remaining = Math.min(size - offset, 64 * 1024);
-    const count = io.readSync(fd, bytes, offset, remaining, offset);
-    if (!Number.isSafeInteger(count) || count < 1 || count > remaining) throw failure('BOUND_FILE_CHANGED');
-    offset += count;
-  }
-  return bytes;
+  try {
+    while (offset < size) {
+      const remaining = Math.min(size - offset, 64 * 1024);
+      const count = io.readSync(fd, bytes, offset, remaining, offset);
+      if (!Number.isSafeInteger(count) || count < 1 || count > remaining) throw failure('BOUND_FILE_CHANGED');
+      offset += count;
+    }
+    return bytes;
+  } catch (error) { bytes.fill(0); throw error; }
 }
 // Distribution archives need only a digest, not an archive-sized buffer.
 // Their total budget is separate from the 512 MiB allocation ceiling.
@@ -174,7 +176,7 @@ function consumeBoundFileRecord(target, options, consume, snapshotOwner = null) 
   if (!Number.isSafeInteger(maximum) || maximum < 0 || !Number.isSafeInteger(minimum) ||
       minimum < 0 || minimum > maximum || ![1, 2].includes(maxLinks)) throw failure();
   const absolute = path.resolve(target);
-  let fd, started = false;
+  let fd, started = false, value;
   try {
     options.validateParents?.();
     const directory = options.directory || bindDirectory(path.dirname(absolute), { ...options, io });
@@ -199,7 +201,7 @@ function consumeBoundFileRecord(target, options, consume, snapshotOwner = null) 
     }
     assertDirectory(directory);
     options.validateParents?.();
-    const value = consume(fd, size, io, maximum);
+    value = consume(fd, size, io, maximum);
     const after = io.fstatSync(fd, { bigint: true });
     if (!sameFile(after, identity) || !sameFile(io.lstatSync(absolute, { bigint: true }), identity)) {
       if (snapshotOwner && retiredSnapshotReplacement(absolute, directory, fd, opened, after, io, options))
@@ -212,6 +214,7 @@ function consumeBoundFileRecord(target, options, consume, snapshotOwner = null) 
     // revalidate a later namespace operation without accepting another object.
     return { value, stat: opened, identity, directory, path: absolute };
   } catch (error) {
+    if (Buffer.isBuffer(value)) value.fill(0);
     if (error?.code?.startsWith('BOUND_FILE_')) throw error;
     if (!started && error?.code === 'ENOENT') throw error;
     throw failure('BOUND_FILE_CHANGED');
@@ -219,7 +222,10 @@ function consumeBoundFileRecord(target, options, consume, snapshotOwner = null) 
     if (fd !== undefined) {
       const closing = fd;
       fd = undefined;
-      try { io.closeSync(closing); } catch { throw failure('BOUND_FILE_CLOSE_FAILED'); }
+      try { io.closeSync(closing); } catch {
+        if (Buffer.isBuffer(value)) value.fill(0);
+        throw failure('BOUND_FILE_CLOSE_FAILED');
+      }
     }
   }
 }
@@ -228,6 +234,22 @@ function readBoundFileRecord(target, options = {}) {
   return { bytes, ...binding };
 }
 function readBoundFile(target, options = {}) { return readBoundFileRecord(target, options).bytes; }
+// Exactly one held read. A fixed internal caller may abandon its whole snapshot
+// only after this call positively classified a replacement AND confirmed close.
+function readBoundFileSnapshotAttemptRecord(target, options = {}, onReplacement) {
+  if ((options.maxLinks !== undefined && options.maxLinks !== 1) || typeof onReplacement !== 'function') throw failure();
+  const io = options.io || fs, absolute = path.resolve(target);
+  const directory = options.directory || bindDirectory(path.dirname(absolute), { ...options, io });
+  const owner = Symbol('bound file snapshot attempt');
+  try {
+    const { value: bytes, ...binding } = consumeBoundFileRecord(absolute,
+      { ...options, io, directory, maxLinks: 1, checkCtime: true }, readHeldBytes, owner);
+    return { bytes, ...binding };
+  } catch (error) {
+    if (snapshotReplacementOwners.get(error) === owner) onReplacement();
+    throw error;
+  }
+}
 function readBoundFileSnapshotRecord(target, options = {}) {
   if (options.maxLinks !== undefined && options.maxLinks !== 1) throw failure();
   const io = options.io || fs, absolute = path.resolve(target);
@@ -248,6 +270,6 @@ function hashBoundFile(target, options = {}) {
   return consumeBoundFileRecord(target, options, hashHeldBytes).value;
 }
 
-module.exports = { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, readBoundFileSnapshotRecord,
+module.exports = { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, readBoundFileSnapshotRecord, readBoundFileSnapshotAttemptRecord,
   readHeldBytes, hashBoundFile, bindDirectory, assertDirectory,
   fileIdentity, sameFile, objectIdentity, sameObject, failure };

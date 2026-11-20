@@ -10,6 +10,7 @@ const MAX_IMAGE_PIXELS = 200000;
 const MAX_TOTAL_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_PIXELS = 2000000;
 const KEYS = ['schema', 'source_width', 'source_height', 'x', 'y', 'width', 'height', 'png_base64'];
+const IHDR = Buffer.from('IHDR'), IDAT = Buffer.from('IDAT'), IEND = Buffer.from('IEND');
 const fail = () => { throw Object.assign(new Error('OCR_CONTACT_IMAGE_INVALID'), { code: 'OCR_CONTACT_REVIEW_INVALID' }); };
 
 function validateContactImage(image) {
@@ -29,11 +30,12 @@ function validateContactImage(image) {
     // trailing polyglot payloads; verify CRCs and bounded decompression too.
     let offset = 8, header = false, data = false, end = false;
     while (offset + 12 <= bytes.length) {
-      const length = bytes.readUInt32BE(offset), type = bytes.toString('ascii', offset + 4, offset + 8);
+      // ASCII decoding masks high bits; protocol names require exact bytes.
+      const length = bytes.readUInt32BE(offset), type = bytes.subarray(offset + 4, offset + 8);
       if (length > bytes.length - offset - 12 || end) fail();
-      if (type === 'IHDR' && !header && offset === 8 && length === 13) header = true;
-      else if (type === 'IDAT' && header && !data) data = true;
-      else if (type === 'IEND' && data && length === 0) end = true;
+      if (type.equals(IHDR) && !header && offset === 8 && length === 13) header = true;
+      else if (type.equals(IDAT) && header && !data) data = true;
+      else if (type.equals(IEND) && data && length === 0) end = true;
       else fail();
       offset += length + 12;
     }

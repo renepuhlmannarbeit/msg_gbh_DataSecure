@@ -99,8 +99,10 @@ for (const [before, after] of [['A O', 'A O'], ['A 6', 'Ä 8'], ['A:O', 'Ä;O'],
   ['A I U', 'Ä l U'], ['A O', 'Ä O\n'], ['A ß', 'Ä ss'], ['A e\u0301', 'Ä é']]) {
   test(`whole-line exact UTF16 change gate refuses ${JSON.stringify([before, after])}`, () => {
     const input = fixture(before); input.reading = after;
-    input.readPixels = () => { throw new Error('must be refused before pixel reads'); };
+    let pixelCalls = 0;
+    input.readPixels = () => { pixelCalls++; throw new Error('must be refused before pixel reads'); };
     assert.equal(diaeresisCandidate(input), null);
+    assert.equal(pixelCalls, 0, 'whole-line refusal must precede every pixel callback');
   });
 }
 test('the exact OCR record separator is allowed but no trimming or word-boundary normalization occurs', () => {

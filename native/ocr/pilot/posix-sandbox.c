@@ -253,13 +253,13 @@ int main(int argc, char **argv) {
     int read_errno = received < 0 ? errno : 0;
     close(group_pipe[0]);
     if (available <= 0 || received != 1 || group_ready != 'G') {
-      kill_and_reap(pid);
+      if (kill_and_reap(pid) != 0) return WAIT_ERROR;
       return setup_failure("parent-group-handshake", poll_errno ? poll_errno : read_errno);
     }
   }
   if (sigprocmask(SIG_SETMASK, &previous_mask, NULL) != 0) {
     int mask_errno = errno;
-    kill_and_reap(pid);
+    if (kill_and_reap(pid) != 0) return WAIT_ERROR;
     return setup_failure("parent-signal-restore", mask_errno);
   }
   for (;;) {
@@ -294,11 +294,11 @@ int main(int argc, char **argv) {
       rss = resident_bytes(pid);
       int rss_errno = rss == UINT64_MAX ? errno : 0;
       if (now == UINT64_MAX) {
-        kill_and_reap(pid);
+        if (kill_and_reap(pid) != 0) return WAIT_ERROR;
         return setup_failure("monitor-monotonic-clock", 0);
       }
       if (now - started >= wall_ms || (rss != UINT64_MAX && rss > memory_bytes)) {
-        kill_and_reap(pid);
+        if (kill_and_reap(pid) != 0) return WAIT_ERROR;
         return RESOURCE_LIMIT;
       }
       if (rss == UINT64_MAX) {
@@ -311,7 +311,7 @@ int main(int argc, char **argv) {
         if (waited == 0 && observed.si_pid == pid) return finish_observed_child(pid, &observed);
         if (waited < 0 && errno == ECHILD) return WAIT_ERROR;
         if (++unavailable_rss_samples >= 3) {
-          kill_and_reap(pid);
+          if (kill_and_reap(pid) != 0) return WAIT_ERROR;
           return setup_failure("monitor-memory-measurement", rss_errno);
         }
       } else {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { capturePackageSmokeScope, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 import vm from 'node:vm';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -9,19 +9,25 @@ import { derivePdfjsTextPaintModule, PDFJS_TEXT_PAINT_HOOK } from '../scripts/li
 
 const require = createRequire(import.meta.url);
 const { bindTextRuns, classifyPdfTextVisibility, wordCandidates } = require('../plugins/data-secure/server/standalone/pdf-text-visibility');
-const { uncoveredOcrText, renderPdfOcrLayer, nativeColumnOrder } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
+const { uncoveredOcrText, renderPdfOcrLayer, nativeColumnOrder, nativePaintedPhraseRegions,
+  coincidentNativePhraseCandidates } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
+const { contactQuality } = require('../plugins/data-secure/server/standalone/ocr-quality');
+const { contactSpans } = require('../plugins/data-secure/server/core/ocr-contact-review');
+const { attachContactCrops } = require('../plugins/data-secure/server/standalone/ocr-contact-crops');
 const { renderPdfNativeWordEvidence } = require('../plugins/data-secure/server/standalone/pdf-ocr-native-words');
+const { observePdfArtifactPrefix, provePdfArtifactWords } = require('../plugins/data-secure/server/standalone/pdf-artifact-ocr');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pdfRoot = path.join(root, 'native', 'pdfjs', 'pilot', 'node_modules', 'pdfjs-dist');
 const original = fs.readFileSync(path.join(pdfRoot, 'legacy', 'build', 'pdf.mjs'));
-assert.equal(PDFJS_TEXT_PAINT_HOOK.version, 3, 'local solid-paint event evidence is a new derivative API version');
+assert.equal(PDFJS_TEXT_PAINT_HOOK.version, 4, 'operator identity augments the pinned text-paint derivative');
 assert.throws(() => derivePdfjsTextPaintModule(Buffer.concat([original, Buffer.from(' ')])), /SOURCE_MISMATCH/u);
 const canvasApi = require('../native/ocr/pilot/node_modules/@napi-rs/canvas');
 for (const key of ['DOMMatrix', 'Path2D', 'ImageData']) globalThis[key] = canvasApi[key];
 const derived = derivePdfjsTextPaintModule(original);
-// Create-only generated derivative; never alter the installed upstream package
-// or input fixtures. Retain it as diagnostic evidence if a test fails.
-const scope = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-pdf-visibility-'));
+// Only this invocation's new derivative scratch is removed after every group
+// succeeds. Failed runs retain their own evidence; older temp dirs are untouched.
+const scope = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-pdf-visibility-'));
+const ownedScope = capturePackageSmokeScope(root, scope);
 const moduleFile = path.join(scope, 'pdf.mjs');
 fs.writeFileSync(moduleFile, derived, { flag: 'wx' });
 const pdfjs = await import(pathToFileURL(moduleFile).href);
@@ -115,6 +121,7 @@ assert.ok(repeated.wordRegions[0].x1 < repeated.wordRegions[1].x0);
 const mixedCover = await check('hidden word in visible native item is not OCR coverage',
   'BT /F1 20 Tf 30 200 Td (Alpha Beta) Tj ET 1 1 1 rg 85 190 65 40 re f', ['Alpha Beta']);
 assert.deepEqual(mixedCover.wordRegions.map(region => region.text), ['Alpha']);
+assert.equal(mixedCover.paintedPhraseIndices.size, 0, 'one visible word cannot prove a partly covered phrase');
 console.log('PASS per-word visibility and repeated-position countercases');
 
 const viewport = { convertToViewportPoint: (x, y) => [x, y] };
@@ -183,7 +190,7 @@ const unstableColor = await check('actual solid-paint event change invalidates g
   });
 assert.equal(unstableColor.hiddenIndices.size, 0); assert.deepEqual(unstableColor.wordRegions, []);
 
-async function renderOcrPixels(stream, ocrRaster, wrongToUnicode = false) {
+async function renderOcrPixels(stream, ocrRaster, wrongToUnicode = false, phraseProof = false) {
   const task = pdfjs.getDocument({ data: pdf(stream, { wrongToUnicode }), CanvasFactory,
     isEvalSupported: false, stopAtErrors: true, disableAutoFetch: true,
     disableStream: true, disableRange: true, useWorkerFetch: false, useSystemFonts: false,
@@ -195,7 +202,16 @@ async function renderOcrPixels(stream, ocrRaster, wrongToUnicode = false) {
     const viewport = page.getViewport({ scale: 1 });
     if (ocrRaster) await renderPdfOcrLayer({ page, canvas, viewport, annotationMode: pdfjs.AnnotationMode.DISABLE });
     else await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white', annotationMode: pdfjs.AnnotationMode.DISABLE }).promise;
+    const analysis = phraseProof ? await classifyPdfTextVisibility({ page, textItems: content.items, viewport,
+      createCanvas: canvasApi.createCanvas, setTextPaintObserver: pdfjs.setDataSecureTextPaintObserver,
+      annotationMode: pdfjs.AnnotationMode.DISABLE,
+      ...(phraseProof === 'focused' ? { phraseIndices: new Set([content.items.findIndex(item => item.str?.trim())]) } : {}) }) : undefined;
+    const retained = content.items.map(item => item.str).join('\n');
     return { pixels: Uint8ClampedArray.from(canvas.getContext('2d').getImageData(0, 0, 400, 300).data), png: canvas.toBuffer('image/png'),
+      nativeRegions: nativePaintedPhraseRegions(content.items, content.styles, viewport, analysis?.paintedPhraseIndices || [], retained,
+        phraseProof === 'focused' ? analysis.paintedPhraseWords : undefined),
+      candidateIndices: data => coincidentNativePhraseCandidates(data, content.items, content.styles, viewport, retained),
+      wordRegions: analysis?.wordRegions || [],
       native: content.items.filter(item => item.str).map(item => item.str),
       ordered: nativeColumnOrder(content.items, viewport).filter(item => item.str).map(item => item.str) };
   } finally { canvas.width = 1; canvas.height = 1; await task.destroy(); }
@@ -289,6 +305,61 @@ try {
   const singleBlock = await ocrWorker.recognize(completeImage.png, {}, { text: true, blocks: true });
   const singleRetained = uncoveredOcrText(singleBlock.data, completeRegions.wordRegions, { singleTokenOnly: true });
   assert.match(singleRetained, /ABC/u); assert.match(singleRetained, /IMAGE\s+DETAIL/u);
+  const phraseImage = await renderOcrPixels(`${imageStream} BT /F1 32 Tf 30 230 Td (IMAGE DETAIL) Tj ET`, true, false, true);
+  const phraseData = (await ocrWorker.recognize(phraseImage.png, {}, { text: true, blocks: true })).data;
+  assert.equal([...phraseData.text.matchAll(/IMAGE\s+DETAIL/gu)].length, 2, 'one painted native phrase and one separate image-only phrase');
+  assert.equal(phraseImage.nativeRegions.length, 1, 'both text words have individual positive pixel differences');
+  const phraseRetained = uncoveredOcrText(phraseData, [], { singleTokenOnly: true, phrases: phraseImage.nativeRegions });
+  assert.equal([...phraseRetained.matchAll(/IMAGE\s+DETAIL/gu)].length, 1,
+    'coincident phrase proof only deduplicates the native-position occurrence');
+  const focused = await renderOcrPixels(`${imageStream} BT /F1 32 Tf 30 230 Td (IMAGE DETAIL) Tj ET`, true, false, 'focused');
+  assert.deepEqual(focused.candidateIndices(phraseData), [0], 'only exact OCR geometry may schedule focused proof');
+  assert.equal(focused.nativeRegions[0].words.length, 2, 'each focused word requires its own positive pixel evidence');
+  assert.equal(uncoveredOcrText(phraseData, [], { singleTokenOnly: true, phrases: focused.nativeRegions }), phraseRetained);
+  const rejectedProof = error => classifyPdfTextVisibility({
+    page: { render: () => ({ promise: Promise.reject(error) }) },
+    textItems: [], viewport: { width: 400, height: 300 }, createCanvas: canvasApi.createCanvas,
+    setTextPaintObserver: pdfjs.setDataSecureTextPaintObserver, phraseIndices: new Set([0])
+  });
+  const unavailable = await rejectedProof(new Error('optional proof failed'));
+  assert.equal(unavailable.paintedPhraseWords.size, 0);
+  assert.equal(uncoveredOcrText(phraseData, [], { phrases: [] }), phraseData.text);
+  await assert.rejects(rejectedProof(Object.assign(new Error('budget'), { code: 'CONVERSION_PIXEL_LIMIT' })),
+    { code: 'CONVERSION_PIXEL_LIMIT' });
+  const wrongPhrase = await renderOcrPixels(`${imageStream} BT /F1 40 Tf 30 180 Td (ABC ABC) Tj ET`, true, true, true);
+  const wrongPhraseData = (await ocrWorker.recognize(wrongPhrase.png, {}, { text: true, blocks: true })).data;
+  assert.match(wrongPhraseData.text, /ABC\s+ABC/u);
+  assert.match(wrongPhrase.nativeRegions.map(region => region.text).join(' '), /XYZ\s+XYZ/u);
+  assert.equal(uncoveredOcrText(wrongPhraseData, [], { singleTokenOnly: true, phrases: wrongPhrase.nativeRegions }), wrongPhraseData.text,
+    'exact agreement is required even for a whole OCR run positioned on incorrectly mapped native glyphs');
+  const contact = 'E-Mail: test@example.invalid';
+  const contactText = await renderOcrPixels(`BT /F1 24 Tf 30 60 Td (${contact}) Tj ET`, false);
+  const contactPixels = Buffer.alloc(400 * 300 * 3);
+  for (let source = 0, destination = 0; source < contactText.pixels.length; source += 4) {
+    contactPixels[destination++] = contactText.pixels[source];
+    contactPixels[destination++] = contactText.pixels[source + 1];
+    contactPixels[destination++] = contactText.pixels[source + 2];
+  }
+  const hiddenContactStream = `q 400 0 0 300 0 0 cm BI /W 400 /H 300 /CS /RGB /BPC 8 /F /AHx ID ${contactPixels.toString('hex')}> EI Q ` +
+    `BT /F1 24 Tf 3 Tr 30 60 Td (${contact}) Tj ET`;
+  const hiddenContact = await renderOcrPixels(hiddenContactStream, true, false, true);
+  assert.deepEqual(hiddenContact.native, [contact]);
+  assert.deepEqual(hiddenContact.nativeRegions, [], 'the congruent Tr3 run cannot supply positive phrase paint');
+  assert.deepEqual(hiddenContact.wordRegions, [], 'the contact has no native paint right to suppress an OCR word');
+  const contactData = (await ocrWorker.recognize(hiddenContact.png, {}, { text: true, blocks: true })).data;
+  assert.deepEqual(hiddenContact.candidateIndices(contactData), [], 'contact review cannot be shortened by a focused probe');
+  const contactRetained = uncoveredOcrText(contactData, hiddenContact.wordRegions, { singleTokenOnly: true, phrases: hiddenContact.nativeRegions });
+  assert.equal(contactRetained, contactData.text);
+  assert.equal(contactRetained.trim(), contact, 'native and raster independently contain the exact same review contact');
+  const cropCanvas = canvasApi.createCanvas(400, 300);
+  try {
+    cropCanvas.getContext('2d').putImageData(new canvasApi.ImageData(hiddenContact.pixels, 400, 300), 0, 0);
+    const contacts = contactSpans(contactRetained, contactQuality(contactData, contactRetained), 1);
+    const withCrops = attachContactCrops(contacts, contactRetained, contactData.blocks, cropCanvas, { bytes: 0 }, contactData.text);
+    assert.equal(withCrops.length, 1);
+    assert.ok(withCrops[0].image?.png_base64, 'source-raster crop remains available for explicit review');
+  } finally { cropCanvas.width = 1; cropCanvas.height = 1; }
+  console.log('PASS congruent Tr3 search text cannot suppress a real mixed-page raster contact or its original crop');
   // The identical production fixture is not native text: large vector-outline
   // CLOUD is classified as a graphic by AUTO on this page. SINGLE_BLOCK must
   // retain it without removing any pixels/native text or guessing its spelling.
@@ -376,6 +447,51 @@ const patternRegions = await directWordEvidence('/Pattern cs /Pat scn BT /F1 20 
 assert.ok(patternEvents>0); assert.deepEqual(patternRegions,[]);
 console.log('PASS real internal-page-composition color binding, immutable events, pattern refusal and unchanged normal raster');
 
+// Same short OCR surface, three different physical origins. An Artifact tag
+// alone and an apparently white counterfactual cannot delete visible text.
+for (const { marker, overlay, transcript, fragmentExpected, reason } of [
+  { marker: 'Artifact', overlay: '', transcript: 'i Il', fragmentExpected: true, reason: 'repeated closed decorative paint' },
+  { marker: 'Artifact', overlay: '', transcript: 'i Il', fragmentExpected: false, reason: 'unique marked graphic' },
+  { marker: 'Span', overlay: '', transcript: 'i Il', fragmentExpected: false, reason: 'untagged semantic paint' },
+  { marker: 'Artifact', overlay: 'q 1 1 1 rg 312 270 2 8 re f Q', transcript: 'i Il', fragmentExpected: false, reason: 'white independent glyph' },
+  { marker: 'Artifact', overlay: '', transcript: 'a@b.de', fragmentExpected: false, reason: 'contact review surface' }
+]) {
+  const tasks = [];
+  async function render() {
+    const task = pdfjs.getDocument({ data: pdf(`/${marker} BMC q 0 0 0 rg 300 265 40 18 re f Q EMC
+      ${overlay} BT /F1 12 Tf 32 150 Td (Meaningful label) Tj ET`),
+      CanvasFactory, isEvalSupported: false, useSystemFonts: false, verbosity: 0 });
+    tasks.push(task);
+    const page = await (await task.promise).getPage(1);
+    const viewport = page.getViewport({ scale: 1 });
+    const canvas = canvasApi.createCanvas(viewport.width, viewport.height);
+    const prefix = observePdfArtifactPrefix(pdfjs.OPS);
+    const annotationMode = pdfjs.AnnotationMode.DISABLE;
+    pdfjs.setDataSecureOperatorObserver(prefix.observe);
+    try { await renderPdfOcrLayer({ page, canvas, viewport, annotationMode }); }
+    finally { pdfjs.setDataSecureOperatorObserver(null); }
+    return { page, canvas, viewport, prefix, annotationMode };
+  }
+  try {
+    const prior = new Set();
+    if (reason !== 'unique marked graphic') {
+      const earlier = await render();
+      assert.equal(earlier.prefix.plan(earlier.viewport, prior), null, 'first occurrence must be retained');
+    }
+    const { page, canvas, viewport, prefix, annotationMode } = await render();
+    const tokens = transcript.split(' ');
+    const fragment = { text: `${transcript}\n`, words: tokens.map(text =>
+      ({ text, bbox: { x0: 307, x1: 320, y0: 20, y1: 32 } })) };
+    const sameWord = { text: `${tokens[0]}\n`, words: [{ text: tokens[0], bbox: { x0: 39, x1: 52, y0: 141, y1: 152 } }] };
+    const data = { text: fragment.text + sameWord.text, blocks: [{ paragraphs: [{ lines: [fragment, sameWord] }] }] };
+    const budget = { remainingPixels: 120000, remainingProbes: 1 };
+    const artifactWords = await provePdfArtifactWords({ data, plan: prefix.plan(viewport, prior), page, viewport, canvas,
+      annotationMode, createCanvas: canvasApi.createCanvas, setOperatorObserver: pdfjs.setDataSecureOperatorObserver, budget });
+    assert.equal(uncoveredOcrText(data, [], { artifactWords }), fragmentExpected ? sameWord.text : data.text, reason);
+  } finally { for (const task of tasks) await task.destroy(); }
+}
+console.log('PASS actual marginal Artifact proof retains same words elsewhere, white vector foreground and contact inputs');
+
 // Observe actual production tokenization, with modeled paint events only.
 // Real raster/paint authority is exercised above, not claimed by this model.
 {
@@ -400,4 +516,5 @@ console.log('PASS real internal-page-composition color binding, immutable events
   assert.equal(observer, null);
   assert.ok(model.tokenizations <= 1, 'the identical text item is tokenized at most once per bound run');
 }
+removePackageSmokeScope(root, scope, ownedScope);
 console.log('PASS actual word-helper tokenization observation with modeled paint input; no native timing claim');

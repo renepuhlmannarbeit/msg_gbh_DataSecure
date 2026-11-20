@@ -119,8 +119,11 @@ test('the curated release smoke matrix references twelve real cases and requires
     assert.throws(() => validateSmokePlan(mutated, corpus, {root, uatFiles}), /COWORK_UAT_PLAN_INVALID/);
   }
   const rendered = spawnSync(process.execPath, [path.join(root, 'scripts', 'print-cowork-candidate-smoke.mjs')], {
-    cwd: root, encoding: 'utf8'
+    cwd: root, encoding: 'utf8', windowsHide: true, shell: false,
+    timeout: 10000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024
   });
+  assert.ifError(rendered.error);
+  assert.strictEqual(rendered.signal, null, 'the smoke-plan printer must close without a signal');
   assert.strictEqual(rendered.status, 0, rendered.stderr);
   assert.match(rendered.stdout, /Jeden Fall 3× in einer frischen Cowork-Sitzung/u);
   assert.match(rendered.stdout, /\*\*Vorbereitung:\*\*/u);

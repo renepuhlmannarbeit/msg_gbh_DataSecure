@@ -15,6 +15,7 @@ function createBatchExecutorRunner(options = {}) {
   const liveLocalExecutor = options.liveLocalExecutor;
   const publicProgress = options.publicProgress;
   const prepareProcessingRun = options.prepareProcessingRun;
+  const createConversionWindow = options.createConversionWindow;
   const incrementPrivateIoSummary = options.incrementPrivateIoSummary;
   const processBatchNext = options.processBatchNext;
   const finalizePublishedPackageLocally = options.finalizePublishedPackageLocally;
@@ -87,8 +88,13 @@ function createBatchExecutorRunner(options = {}) {
     }
   }
 
-  function stopUnstartedConversionItems(token) {
+  function stopUnstartedConversionItems(token, claimed, executorPid) {
     const state = readState(token);
+    if (state.invalidated === true || !liveLocalExecutor(state) || executorPid !== state.local_executor_pid ||
+        ['local_executor_birth_id', 'local_executor_started_at', 'local_executor_lease_id', 'standalone_control_generation']
+          .some(key => claimed[key] !== state[key]))
+      throw Object.assign(new ErrorType('Die lokale Ausführungsberechtigung hat sich geändert.'),
+        { code: 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' });
     const conversion = isPureConversion(state);
     const pending = state.items.filter(item => ['pending', 'retryable'].includes(item.status));
     for (const item of pending) {
@@ -126,6 +132,7 @@ function createBatchExecutorRunner(options = {}) {
     let lifecycleEntered = false;
     let primaryFailed = false;
     let failurePhase = 'processing';
+    let conversionWindow;
     try {
       // Progress can fail while acquiring its read guard. The validated lease
       // still belongs to this executor and must pass through exact cleanup.
@@ -140,21 +147,23 @@ function createBatchExecutorRunner(options = {}) {
       const usesStandaloneConverter = claimed.product_channel === 'standalone';
       if (usesStandaloneConverter && claimed.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')) {
         interrupted = true;
-        stopUnstartedConversionItems(token);
+        stopUnstartedConversionItems(token, claimed, executorPid);
       }
       const preparedRun = conversion ? undefined : prepareProcessingRun(deps);
       if (!interrupted && incrementPrivateIoSummary(claimed.io_summary, 'batch_maintenance_runs')) {
         writeState(claimed);
       }
+      if (!interrupted) conversionWindow = createConversionWindow?.(claimed, deps);
       const batchDeps = { ...deps, preparedRun };
       const maximumSteps = claimed.items.length * 3 + 3;
       for (let step = 0; !interrupted && step < maximumSteps; step++) {
+        conversionWindow?.assertHealthy();
         if (lastProgress.delivery_pending > 0) {
           const state = readState(token);
           const pending = state.items.find((item) => item.status === deliveryPendingStatus);
           if (!pending) break;
           failurePhase = 'local_delivery_verify';
-          lastProgress = finalizePublishedPackageLocally(token, pending.artifact_id || pending.package_id, { ...batchDeps, executorPid });
+          lastProgress = await finalizePublishedPackageLocally(token, pending.artifact_id || pending.package_id, { ...batchDeps, executorPid });
           failurePhase = 'processing';
           continue;
         }
@@ -170,16 +179,16 @@ function createBatchExecutorRunner(options = {}) {
         // before pause. Pending sources remain untouched, not failed.
         if (pauseRequested(readState(token))) break;
         const before = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
-        const result = await processBatchNext(token, { ...batchDeps, executorPid });
+        const result = await processBatchNext(token, { ...batchDeps, executorPid }, conversionWindow);
         lastProgress = result;
         if (usesStandaloneConverter && result.error === 'CONVERSION_TERMINATION_UNCONFIRMED') {
           interrupted = true;
-          stopUnstartedConversionItems(token);
+          stopUnstartedConversionItems(token, claimed, executorPid);
           break;
         }
         if (typeof result.package_id === 'string' || typeof result.artifact_id === 'string') {
           failurePhase = 'local_delivery_verify';
-          lastProgress = finalizePublishedPackageLocally(token, result.artifact_id || result.package_id, { ...batchDeps, executorPid });
+          lastProgress = await finalizePublishedPackageLocally(token, result.artifact_id || result.package_id, { ...batchDeps, executorPid });
           failurePhase = 'processing';
           continue;
         }
@@ -187,6 +196,7 @@ function createBatchExecutorRunner(options = {}) {
         if (before === after) break;
       }
     } catch (error) {
+      if (usesUnconfirmedConversion(error)) interrupted = true;
       primaryFailed = true;
       recordFailure(failurePhase, error);
       if (lifecycleEntered && !String(error?.code || '').startsWith('STANDALONE_PAUSE_')) {
@@ -195,14 +205,32 @@ function createBatchExecutorRunner(options = {}) {
       }
       throw error;
     } finally {
+      let closeFailed = false;
       try {
-        if ((await releaseLocalBatchExecutor(token, executorPid)) !== true) {
-          throw Object.assign(new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.'),
-            { code: 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' });
+        try { await conversionWindow?.close(); }
+        catch (windowError) {
+          recordFailure('processing', windowError);
+          if (usesUnconfirmedConversion(windowError)) {
+            interrupted = true;
+            // A lookahead worker may have failed without having a claimed
+            // document. The existing hard stop still covers unstarted work.
+            try { stopUnstartedConversionItems(token, claimed, executorPid); }
+            catch (stopError) { recordFailure('processing', stopError); if (!primaryFailed) throw stopError; }
+          } else if (!primaryFailed) throw windowError;
         }
-      } catch (releaseError) {
-        recordFailure('executor_lease_release', releaseError);
-        if (!primaryFailed) throw releaseError;
+      } catch (error) {
+        closeFailed = true;
+        throw error;
+      } finally {
+        try {
+          if ((await releaseLocalBatchExecutor(token, executorPid)) !== true) {
+            throw Object.assign(new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.'),
+              { code: 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' });
+          }
+        } catch (releaseError) {
+          recordFailure('executor_lease_release', releaseError);
+          if (!primaryFailed && !closeFailed) throw releaseError;
+        }
       }
     }
     // Publication and stopped-item paths already attempt this commit. Reconcile
@@ -217,6 +245,10 @@ function createBatchExecutorRunner(options = {}) {
     }
     return { ok: !interrupted, ...finalProgress,
       ...(interrupted ? { error: 'CONVERSION_TERMINATION_UNCONFIRMED' } : {}), raw_content_sent_to_claude: false };
+  }
+
+  function usesUnconfirmedConversion(error) {
+    return ownErrorCode(error) === 'CONVERSION_TERMINATION_UNCONFIRMED';
   }
 
   return { runLocalBatchExecutor };

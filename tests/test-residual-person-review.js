@@ -430,9 +430,33 @@ test('plain generated table cells are reviewed per occurrence, not as a global w
     }), []);
   }
   for (const row of ['| Maria Novak\\ | x |', '| Maria \\Novak | x |']) {
-    assert.ok(pii.scanResidual(generatedHeader + row, 'general', [], options).some(item =>
-      item.type === 'PERSON_CANDIDATE' && !Number.isSafeInteger(item.start)),
-    'the candidate cell itself must remain unescaped before it can be reviewed');
+    const { unescapeMarkdownPunctuation } = require('../plugins/data-secure/server/privacy/markdown-table-cells');
+    const { canonicalizeRenderedText } = require('../plugins/data-secure/server/privacy/base');
+    assert.equal(unescapeMarkdownPunctuation(row), row,
+      'backslash before whitespace or a letter is literal content, not a Markdown escape');
+    assert.ok(canonicalizeRenderedText(generatedHeader + row).includes(row.slice(2, row.indexOf(' | x'))),
+      'do not manufacture a plain name by deleting an invalid escape');
+  }
+  for (const [row, name] of [["| Maria O\\'Novak | x |", "Maria O'Novak"],
+    ['| Maria No\\-vak | x |', 'Maria No-vak']]) {
+    const { canonicalizeRenderedText } = require('../plugins/data-secure/server/privacy/base');
+    const raw = generatedHeader + row;
+    const canonical = canonicalizeRenderedText(raw);
+    assert.equal(canonical, generatedHeader + `| ${name} | x |`);
+    const start = canonical.indexOf(name);
+    const findings = pii.scanResidual(raw, 'general', [], options);
+    assert.deepEqual(findings, [{ type: 'PERSON_CANDIDATE', text: name, start, end: start + name.length }]);
+    assert.throws(() => residualPersonAmbiguities(raw, raw, findings), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED',
+      'canonical coordinates never grant permission to use a shifted raw review body');
+    const ambiguities = residualPersonAmbiguities(canonical, canonical, findings);
+    const binding = createPersonReviewBinding(canonical, ambiguities);
+    assert.throws(() => binding.forPublication('', canonical, ''), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+    binding.confirm(decisions({ ambiguities }), [], canonical);
+    const token = binding.forPublication('', canonical, '');
+    assert.deepEqual(pii.scanResidual(canonical, 'general', [], { ...options, reviewedPersonCandidates: token }), []);
+    assert.ok(pii.scanResidual(canonical + '\n' + generatedHeader + `| ${name} | y |`, 'general', [],
+      { ...options, reviewedPersonCandidates: token }).some(item => item.type === 'PERSON_CANDIDATE'),
+    'neither an earlier approved spelling nor its canonicalization authorizes a changed body or namesake');
   }
   for (const prefix of ['technischer text\r\n'.repeat(52),
     'technischer text\ntechnischer text\r\n'.repeat(52)]) {
@@ -789,6 +813,43 @@ test('private dictionary coordinates use the unchanged scanner and retain type c
 });
 
 async function main() {
+  await testAsync('69 actual prose prefixes distinguish tabs and list digits from literal t or backslashes', async () => {
+    const { personProseCandidateSpans } = require('../plugins/data-secure/server/privacy/person-ambiguities');
+    const { prepareTextPrivacyReview, resolveTextPrivacyReview, finalizeTextPrivacyReview } =
+      require('../plugins/data-secure/server/gateway/privacy-text-operation');
+    const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } =
+      require('../plugins/data-secure/server/batch-pseudonym-registry');
+    const settings = { productChannel: 'standalone', ocrLineReview: true };
+    // #t is ordinary text, not an ATX heading (# followed by real whitespace).
+    // Both actual discovery and the real prepare/resolve/finalize operation
+    // must reserve the exact source name, without relying on a copied regex.
+    for (const prefix of ['#t ', '\t', '1. ', '1) ', '- ', '> ']) {
+      const text = prefix + 'Anna Berger berichtet über den Stand.';
+      const expected = { start: prefix.length, end: prefix.length + 11, value: 'Anna Berger' };
+      assert.ok(personProseCandidateSpans(text, settings).some(row =>
+        row.start === expected.start && row.end === expected.end && row.value === expected.value), prefix);
+      const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 69), { contractVersion: READABLE_CONTRACT_VERSION });
+      try {
+        const state = prepareTextPrivacyReview({ text, profile: 'general', productChannel: 'standalone',
+          consumerOptions: { productChannel: 'standalone' }, registry, captureTrace: true, ocrLineReview: true });
+        assert.equal(state.ambiguities.length, 1, prefix);
+        const candidate = state.ambiguities[0];
+        assert.deepEqual([candidate.original_start, candidate.original_end], [expected.start, expected.end]);
+        await assert.rejects(resolveTextPrivacyReview(state, null), { code: 'AMBIGUITY_REVIEW_REQUIRED' });
+        const body = await resolveTextPrivacyReview(state, null, { reviewPolicy: 'automatic-conservative' });
+        const result = finalizeTextPrivacyReview(state, body, { prefix: '', suffix: '' });
+        assert.equal(result.markdown, prefix + '[PERSON_001] berichtet über den Stand.');
+        assert.equal(result.original_text, text);
+        assert.deepEqual(pii.scanResidual(result.markdown, 'general', result.dictionary), []);
+      } finally { registry.dispose(); }
+    }
+    // A real tab can prefix an OCR-only isolated name. The letter t and the
+    // two literal backslash+t code units are source data, never whitespace.
+    assert.deepEqual(personProseCandidateSpans('\tAnna Berger', settings),
+      [{ start: 1, end: 12, value: 'Anna Berger' }]);
+    for (const text of ['t Anna Berger', '\\tAnna Berger'])
+      assert.deepEqual(personProseCandidateSpans(text, settings), [], text);
+  });
   await testAsync('partial-PDF presentation hypotheses are reviewed before a false global surname can be learned', async () => {
     const { prepareTextPrivacyReview, resolveTextPrivacyReview, finalizeTextPrivacyReview } =
       require('../plugins/data-secure/server/gateway/privacy-text-operation');

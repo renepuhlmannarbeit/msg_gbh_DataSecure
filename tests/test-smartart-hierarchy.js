@@ -186,4 +186,25 @@ test('actual extractor renders nineteen source rows once with their real nesting
   assert.doesNotMatch(extraction.markdown, /DO NOT DUPLICATE/u);
 });
 
+test('82 real extractor keeps an independently bound good sibling after a bad payload',()=>{
+ const owner='<p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>OWNER82</a:t></a:r></a:p></p:txBody></p:sp>'+
+  '<p:graphicFrame><a:graphic><a:graphicData><d:relIds r:dm="data"/></a:graphicData></a:graphic></p:graphicFrame>'+
+  '<p:graphicFrame><a:graphic><a:graphicData><d:relIds r:dm="bad"/></a:graphicData></a:graphic></p:graphicFrame>'+
+  '</p:spTree></p:cSld>';
+ const map=entries(owner,model(pt('good','GOOD82')));
+ map.set('ppt/diagrams/data2.xml',model(pt('a','BAD82A')+pt('b','BAD82B'),cxn('a','b')+cxn('b','a')));
+ map.set('ppt/slides/_rels/slide1.xml.rels',Buffer.from(`<Relationships xmlns="${PR}">`+
+  `<Relationship Id="data" Type="${R}/diagramData" Target="../diagrams/data1.xml"/>`+
+  `<Relationship Id="bad" Type="${R}/diagramData" Target="../diagrams/data2.xml"/></Relationships>`));
+ const bytes=zipStore([...opcControlEntries('pptx',{additionalOverrides:[
+  {part:'ppt/slides/slide1.xml',contentType:'application/vnd.openxmlformats-officedocument.presentationml.slide+xml'}
+ ]}),
+  ['ppt/presentation.xml',`<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s"/></p:sldIdLst></p:presentation>`],
+  ['ppt/_rels/presentation.xml.rels',`<Relationships xmlns="${PR}"><Relationship Id="s" Type="${R}/slide" Target="slides/slide1.xml"/></Relationships>`],
+  ...map]),before=Buffer.from(bytes);
+ const actual=extractMarkdownBuffer(bytes,'.pptx',{markdownOutput:'content-v1',partialExtraction:true});
+ assert.equal(actual.markdown.split('GOOD82').length-1,1);assert.match(actual.markdown,/OWNER82/u);
+ assert.doesNotMatch(actual.markdown,/BAD82[AB]/u);assert.equal(actual.coverage.status,'incomplete');
+ assert.deepEqual(bytes,before);
+});
 process.stdout.write(`${passed} SmartArt hierarchy cases PASS\n`);

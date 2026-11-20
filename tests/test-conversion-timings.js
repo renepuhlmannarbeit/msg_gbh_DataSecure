@@ -333,8 +333,10 @@ const { MAX_STREAM_BYTES, FRAME_PREFIX, FRAME_START } = require('../plugins/data
     const pdfStart=source.indexOf('async function pdfMarkdown('),pdfEnd=source.indexOf('\nasync function ',pdfStart+1);
     assert.ok(pdfStart>=0&&pdfEnd>pdfStart,'bind the actual PDF function instead of the first unrelated Office parameter');
     const pdfSource=source.slice(pdfStart,pdfEnd);
-    const statement=pdfSource.match(/await ocr\.setParameters\(\{ tessedit_pageseg_mode: [\s\S]*? \}\);/u)?.[0];assert.ok(statement);
-    const apply=new Function('ocr','pdfOcrLayoutMode','markdownOutput','hasRawNativeText','hasPaintedImage','hasNonTextGraphicPaint',`return ${statement.slice('await '.length)}`);
+    const pageMode=pdfSource.match(/const pageMode = [^;]+;/u)?.[0];assert.ok(pageMode);
+    const statement=pdfSource.match(/await ocr\.setParameters\(\{ tessedit_pageseg_mode: pageMode \}\);/u)?.[0];assert.ok(statement);
+    const apply=new Function('ocr','pdfOcrLayoutMode','markdownOutput','hasRawNativeText','hasPaintedImage','hasNonTextGraphicPaint',
+      `${pageMode} return ${statement.slice('await '.length)}`);
     const {pdfOcrLayoutMode}=require('../plugins/data-secure/server/standalone/pdf-ocr-layout-mode');
     for(const [mode,native,image,graphic,expected] of [
       ['content-v1',false,true,false,'3'],['content-v1',true,true,false,'6'],['content-v1',false,false,true,'6'],

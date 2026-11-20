@@ -13,6 +13,8 @@ const temporaryParent = fs.realpathSync(os.tmpdir());
 const base = fs.mkdtempSync(path.join(temporaryParent, 'datasecure-500mb-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 
 const { LIMITS, roots } = require('../../plugins/data-secure/server/gateway/common');
 const {

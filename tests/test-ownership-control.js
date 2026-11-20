@@ -59,7 +59,7 @@ function fixture(options = {}) {
     require(name) {
       if (name === 'node:path') return pathApi;
       if (name === 'node:util') return require(name);
-      if (name === './native-ownership-guard') return { createOwnershipGuard };
+      if (name === './native-ownership-guard') return { createOwnershipGuard, hasUnconfirmedCleanup: () => false };
       if (name === './macos-static-ownership-guard') return { loadStaticOwnershipGuard(input) {
         events.push('runtime-load'); runtimeInputs.push(input);
         if (options.runtimeLoadFailure) throw failure('OWNERSHIP_GUARD_UNAVAILABLE');

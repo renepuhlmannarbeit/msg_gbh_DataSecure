@@ -9,6 +9,7 @@ import { isolatedSidecarEnvironment, removePackageSmokeScope } from '../helpers/
 import { windowsPackagePrefix } from '../../scripts/lib/standalone-windows-layout.mjs';
 
 const require = createRequire(import.meta.url);
+const { firstFailure, within, ownChild, endTestCliFailure } = require('../helpers/qa-parent-lifecycle.cjs');
 const { readZip } = require('../../plugins/data-secure/server/zip-reader.js');
 const { desktopErrorCode } = require('../../plugins/data-secure/server/core/desktop-error-contract.js');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -26,13 +27,17 @@ const install = path.join(scope, 'Paket mit Leerzeichen');
 const source = path.join(scope, 'Korpus');
 const results = path.join(scope, 'Ergebnisse');
 const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-let child;
-let closed = false;
-let closePromise;
-let succeeded = false;
-let primaryFailed = false;
+let child, owned, closePromise;
+let succeeded = false, rootRemoved = false;
 let workersQuiescent = false;
 let report;
+const failure = firstFailure();
+let abortRequests = () => {};
+function recordFailure(error) {
+  failure.record(error);
+  process.exitCode = 1;
+  abortRequests();
+}
 function note(value) { try { process.stderr.write(value); } catch { /* never replace the exact primary failure */ } }
 
 function frame(value) {
@@ -45,11 +50,13 @@ function frame(value) {
 function protocolClient(processHandle, stderr) {
   let buffer = Buffer.alloc(0);
   const pending = new Map();
-  const fail = (error) => {
-    for (const waiter of pending.values()) { clearTimeout(waiter.timer); waiter.reject(error); }
+  abortRequests = () => {
+    for (const waiter of pending.values()) { clearTimeout(waiter.timer); waiter.reject(failure.value); }
     pending.clear();
   };
+  const fail = error => recordFailure(error);
   processHandle.stdout.on('data', (chunk) => {
+    if (failure.failed) return;
     try {
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 4) {
@@ -68,39 +75,36 @@ function protocolClient(processHandle, stderr) {
       fail(new Error('STANDALONE_CORPUS_RESPONSE_INVALID'));
     }
   });
-  processHandle.once('error', () => fail(new Error('STANDALONE_CORPUS_SPAWN_FAILED')));
-  processHandle.once('exit', (code) => fail(new Error(`STANDALONE_CORPUS_EXIT:${code}`)));
-  processHandle.stdin.once('error', () => fail(new Error('STANDALONE_CORPUS_STDIN_FAILED')));
-  return (value) => new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pending.delete(value.request_id);
-      reject(new Error(`STANDALONE_CORPUS_TIMEOUT:${stderr.value.slice(0, 500)}`));
-    }, 120000);
-    pending.set(value.request_id, { resolve, reject, timer });
-    processHandle.stdin.write(frame(value), (error) => {
-      if (!error) return;
-      clearTimeout(timer);
-      pending.delete(value.request_id);
-      reject(new Error('STANDALONE_CORPUS_STDIN_FAILED'));
-    });
+  processHandle.once('exit', (code, signal) => {
+    if (pending.size || code !== 0 || signal !== null) fail(new Error(`STANDALONE_CORPUS_EXIT:${code}`));
   });
+  return (value) => {
+    failure.throwIfFailed();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        fail(new Error(`STANDALONE_CORPUS_TIMEOUT:${stderr.value.slice(0, 500)}`));
+      }, 120000);
+      pending.set(value.request_id, { resolve, reject, timer });
+      try {
+        processHandle.stdin.write(frame(value), (error) => { if (error !== null && error !== undefined) fail(error); });
+      } catch (error) { fail(error); }
+    });
+  };
 }
 
-async function bounded(promise, milliseconds, code) {
-  let timer;
-  try {
-    return await Promise.race([promise, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(Object.assign(new Error(code), { code })), milliseconds);
-    })]);
-  } finally { clearTimeout(timer); }
-}
-
-async function boundedChildClose(processHandle, promise) {
-  if (!processHandle || closed) return;
-  if (processHandle.exitCode === null && processHandle.signalCode === null) processHandle.kill();
-  // exitCode is not a close receipt, and closing this host never proves that
-  // its intentionally detached batch worker has finished using the fixture.
-  await bounded(promise, 5000, 'STANDALONE_CORPUS_CLEANUP_TIMEOUT');
+async function boundedChildClose() {
+  if (!owned) return;
+  const cleanup = firstFailure();
+  if (!owned.closed && child.exitCode === null && child.signalCode === null) {
+    try {
+      if (!owned.terminate()) throw new Error('STANDALONE_CORPUS_STOP_REFUSED');
+    } catch (error) { cleanup.record(error); }
+  }
+  // A stop error never skips this separate true-close attempt.
+  try { await within(owned.done, 5000, 'STANDALONE_CORPUS_CLEANUP_TIMEOUT'); }
+  catch (error) { cleanup.record(error); }
+  if (owned.failure.failed) cleanup.record(owned.failure.value);
+  cleanup.throwIfFailed();
 }
 
 function relativeFiles(directory) {
@@ -145,18 +149,33 @@ try {
   child = childProcess.spawn(runtime, ['--require=../network-deny.cjs', 'desktop-sidecar.js'], {
     cwd: sidecarDirectory, windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'], env: environment
   });
-  closePromise = new Promise((resolve) => child.once('close', (code) => { closed = true; resolve(code); }));
+  owned = ownChild(child, recordFailure);
+  closePromise = owned.done;
+  for (const stream of [child.stdin, child.stdout, child.stderr]) stream?.on('error', recordFailure);
+  if (!child.stdin || !child.stdout || !child.stderr) {
+    // Borrow the existing first-request budget; null pipes are not the OS cause.
+    await within(Promise.race([
+      owned.error.then(error => { throw error; }),
+      owned.done.then(() => { failure.throwIfFailed(); throw new Error('STANDALONE_CORPUS_STDIO_UNAVAILABLE'); })
+    ]), 120000, 'STANDALONE_CORPUS_SETUP_TIMEOUT');
+  }
   const stderr = { value: '' };
-  child.stderr.on('data', (chunk) => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
+  child.stderr.on('data', (chunk) => {
+    try { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); }
+    catch (error) { recordFailure(error); }
+  });
   const send = protocolClient(child, stderr);
   let sequence = 1;
   const request = async (action, body = {}) => {
-    const answer = await send({ schema: 'datasecure-standalone-private-ipc/1',
-      request_id: (sequence++).toString(16).padStart(16, '0'), action, ...body });
-    // The first failing response must survive finally with its closed public
-    // cause, not merely "false !== true" or a later fixture cleanup exception.
-    assert.equal(answer?.ok, true, `STANDALONE_CORPUS_RESPONSE_FAILED:${action}:${desktopErrorCode(answer?.error_code)}`);
-    return answer;
+    failure.throwIfFailed();
+    try {
+      const answer = await send({ schema: 'datasecure-standalone-private-ipc/1',
+        request_id: (sequence++).toString(16).padStart(16, '0'), action, ...body });
+      failure.throwIfFailed();
+      // Keep the original closed public response cause before any teardown error.
+      assert.equal(answer?.ok, true, `STANDALONE_CORPUS_RESPONSE_FAILED:${action}:${desktopErrorCode(answer?.error_code)}`);
+      return answer;
+    } catch (error) { recordFailure(error); throw failure.value; }
   };
 
   assert.equal((await request('get_public_state')).ok, true);
@@ -209,28 +228,33 @@ try {
   assert.equal(history.result.entries[0].processing_mode, 'markdown-only');
   assert.equal(history.result.entries[0].result_count, 100);
   await request('shutdown');
-  const exitCode = await bounded(closePromise, 10000, 'STANDALONE_CORPUS_SHUTDOWN_TIMEOUT');
-  assert.equal(exitCode, 0);
+  const exit = await within(closePromise, 10000, 'STANDALONE_CORPUS_SHUTDOWN_TIMEOUT');
+  assert.equal(exit.code, 0);
+  assert.equal(exit.signal, null);
+  failure.throwIfFailed(); // Includes unsolicited frames received before true close.
   report = { schema: 'datasecure-standalone-package-corpus/1', version,
     archive_sha256: hash(archive), mode: 'markdown-only', selected: 100, results: 100,
     failures: 0, mapping: false, relative_tree_preserved: true, source_hashes_unchanged: true,
     processing_ms: processingMilliseconds, harness_duration_ms: Date.now() - startedAt };
   succeeded = true;
 } catch (error) {
-  primaryFailed = true;
-  throw error;
+  recordFailure(error);
 } finally {
-  let closeError;
-  try { await boundedChildClose(child, closePromise); }
+  try { abortRequests(); } catch (error) { recordFailure(error); }
+  try { await boundedChildClose(); }
   catch (error) {
-    closeError = error;
+    recordFailure(error);
     note('STANDALONE_CORPUS_SECONDARY:STANDALONE_CORPUS_CLEANUP_UNCONFIRMED\n');
   }
-  // Never partially destroy failure evidence, or race an autonomous worker.
-  // In particular ENOENT is not ignored or turned into cleanup authority.
-  if (primaryFailed || !succeeded || !workersQuiescent || !closed || closeError || process.env.DATASECURE_SMOKE_KEEP === '1')
-    note(`STANDALONE_CORPUS_KEPT:${scope}\n`);
-  else removePackageSmokeScope(repo, scope);
-  if (closeError && !primaryFailed) throw closeError;
+  // Failure or unknown autonomous writers never permit scope deletion.
+  if (!failure.failed && succeeded && workersQuiescent && owned?.closed && process.env.DATASECURE_SMOKE_KEEP !== '1') {
+    try { removePackageSmokeScope(repo, scope); rootRemoved = true; }
+    catch (error) { recordFailure(error); }
+  }
+  if (!rootRemoved) note(`STANDALONE_CORPUS_SCOPE_STATUS_UNCONFIRMED:${scope}\n`);
 }
-process.stdout.write(`${JSON.stringify(report)}\n`);
+if (!failure.failed) {
+  try { process.stdout.write(`${JSON.stringify(report)}\n`); } catch (error) { recordFailure(error); }
+}
+endTestCliFailure({ failed: failure.failed, error: failure.value, retainedRoots: rootRemoved ? [] : [scope],
+  unconfirmedChildren: !owned?.closed || !workersQuiescent });

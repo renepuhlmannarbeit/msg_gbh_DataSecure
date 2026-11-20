@@ -10,6 +10,8 @@ import layout from '../../plugins/data-secure/server/standalone/macos-bundle-lay
 import { checkedRelocator, buildMacRelocator, relocatorPath } from '../../scripts/lib/macos-build-relocator.mjs';
 import { planMacNativeRelocation, nativeRelocationArguments, relocateMacNative } from '../../scripts/lib/macos-bundle-native.mjs';
 import { removePackageSmokeScope } from '../helpers/standalone-package-scope.mjs';
+import qaLifecycle from '../helpers/qa-parent-lifecycle.cjs';
+const { firstFailure, ownChild, within, endTestCliFailure } = qaLifecycle;
 
 if (process.platform !== 'darwin') throw new Error('MACOS_RELOCATOR_NATIVE_PROBE_NOT_RUN_FOREIGN_HOST');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -62,23 +64,45 @@ function remove(value, link = null) {
 }
 async function race(role) {
   const value = fixture(), expected = outsideSnapshot(value), plan = planMacNativeRelocation(value.app, target);
-  let link = null, child = null, closed = false, timer;
+  const failure = firstFailure();
+  let link = null, owned;
+  const fail = error => failure.record(error);
   try {
-    child = childProcess.spawn(testHelper, nativeRelocationArguments(plan), {
+    const child = childProcess.spawn(testHelper, nativeRelocationArguments(plan), {
       env: {}, shell: false, stdio: ['pipe', 'pipe', 'pipe']
     });
-    let output = '';
-    const completed = new Promise(resolve => {
-      child.once('error', () => { closed = true; resolve(-1); });
-      child.once('close', code => { closed = true; resolve(code); });
+    owned = ownChild(child, fail);
+    const failed = owned.error.then(error => { throw error; });
+    void failed.catch(() => {});
+    if (!child.stdin || !child.stdout || !child.stderr) {
+      await within(Promise.race([failed, owned.done]), 10000, 'MACOS_RELOCATOR_NATIVE_HOOK_TIMEOUT');
+      failure.throwIfFailed(); throw new Error('MACOS_RELOCATOR_NATIVE_STDIO_UNAVAILABLE');
+    }
+    let output = '', stderr = '', rejectStream;
+    const streamFailure = new Promise((_, reject) => { rejectStream = reject; });
+    void streamFailure.catch(() => {});
+    const streamFail = error => { fail(error); rejectStream(error); };
+    for (const stream of [child.stdin, child.stdout, child.stderr]) stream.on('error', streamFail);
+    child.stderr.on('data', bytes => {
+      if (failure.failed) return;
+      try {
+        const next = bytes.toString('utf8'); assert.ok(Buffer.byteLength(stderr) + Buffer.byteLength(next) <= 4096);
+        stderr += next;
+      }
+      catch (error) { streamFail(error); }
     });
-    await new Promise((resolve, reject) => {
-      timer = setTimeout(() => reject(new Error('MACOS_RELOCATOR_NATIVE_HOOK_TIMEOUT')), 10000);
-      child.stdout.on('data', bytes => { output += bytes.toString('utf8'); if (output === 'READY\n') resolve(); });
-      child.once('error', reject);
-      child.once('close', () => reject(new Error('MACOS_RELOCATOR_NATIVE_HOOK_EARLY_EXIT')));
-    });
-    clearTimeout(timer);
+    const ready = new Promise((resolve, reject) => child.stdout.on('data', bytes => {
+      if (failure.failed) return;
+      try {
+        const next = bytes.toString('utf8'); assert.ok(Buffer.byteLength(output) + Buffer.byteLength(next) <= 64);
+        output += next;
+        if (output === 'READY\n') resolve();
+      } catch (error) { fail(error); reject(error); }
+    }));
+    await within(Promise.race([ready, failed, streamFailure, owned.done.then(() => {
+      failure.throwIfFailed(); throw new Error('MACOS_RELOCATOR_NATIVE_HOOK_EARLY_EXIT');
+    })]), 10000, 'MACOS_RELOCATOR_NATIVE_HOOK_TIMEOUT');
+    failure.throwIfFailed();
     // Reproduce the reviewer's race AFTER all helper directory descriptors and
     // sources are held and its last pre-copy pathname check has completed.
     const parents = {
@@ -90,23 +114,31 @@ async function race(role) {
     link = parents[role]; assert.ok(link, 'only a fixed fixture parent may be replaced');
     fs.renameSync(link, `${link}-retired`);
     fs.symlinkSync(value.outside, link, 'dir');
-    child.stdin.end('g');
-    const code = await Promise.race([completed, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('MACOS_RELOCATOR_NATIVE_CLOSE_TIMEOUT')), 10000);
-    })]);
-    clearTimeout(timer);
-    assert.notEqual(code, 0, 'changed parent identity must invalidate the build');
+    child.stdin.end('g', error => { if (error) streamFail(error); });
+    const ended = await within(Promise.race([owned.done, failed, streamFailure]), 10000, 'MACOS_RELOCATOR_NATIVE_CLOSE_TIMEOUT');
+    failure.throwIfFailed();
+    assert.equal(ended.code, 65, 'changed parent identity must reach the real native refusal');
+    assert.equal(ended.signal, null); assert.equal(output, 'READY\n'); assert.equal(stderr, 'MACOS_RELOCATOR_FAILED\n');
     assert.deepEqual(outsideSnapshot(value), expected, 'no outside copy, chmod or unlink is allowed');
     process.stdout.write(`MACOS RELOCATOR NATIVE PASS (${role})\n`);
-  } finally {
-    clearTimeout(timer);
-    if (child && !closed) {
-      child.kill('SIGTERM');
-      await new Promise(resolve => { const limit = setTimeout(resolve, 2000); child.once('close', () => { clearTimeout(limit); resolve(); }); });
-      if (!closed) throw new Error('MACOS_RELOCATOR_NATIVE_PROCESS_EXIT_UNCONFIRMED');
+  } catch (error) { fail(error); }
+  finally {
+    if (owned && !owned.closed) {
+      if (owned.child.exitCode === null && owned.child.signalCode === null) {
+        try { assert.equal(owned.terminate('SIGKILL'), true, 'MACOS_RELOCATOR_NATIVE_STOP_REFUSED'); }
+        catch (error) { fail(error); }
+      }
+      try { await within(owned.done, 2000, 'MACOS_RELOCATOR_NATIVE_PROCESS_EXIT_UNCONFIRMED'); }
+      catch (error) { fail(error); }
     }
-    remove(value, link);
+    if (owned?.failure.failed) fail(owned.failure.value);
+    if (!failure.failed && owned?.closed) {
+      try { remove(value, link); } catch (error) { fail(error); }
+    }
+    if (failure.failed) endTestCliFailure({ failed: true, error: failure.value, retainedRoots: [value.scope],
+      unconfirmedChildren: !owned?.closed });
   }
+  failure.throwIfFailed();
 }
 
 const normal = fixture();
@@ -130,11 +162,11 @@ for (const role of ['conversion_node', 'sandbox', 'canvas']) {
     replacedSource = source;
     fs.renameSync(source, `${source}.original`);
     const made = childProcess.spawnSync('/usr/bin/mkfifo', [source], {
-      env: {}, shell: false, stdio: 'pipe', timeout: 2000, maxBuffer: 4096
+      env: {}, shell: false, stdio: 'pipe', timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 4096
     });
     assert.ifError(made.error); assert.equal(made.status, 0);
     const rejected = childProcess.spawnSync(checkedRelocator(false), nativeRelocationArguments(plan), {
-      env: {}, shell: false, stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000, maxBuffer: 4096
+      env: {}, shell: false, stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 4096
     });
     assert.ifError(rejected.error, 'a replaced FIFO must fail immediately, not wait for the outer timeout');
     assert.equal(rejected.status, 65);
@@ -163,7 +195,7 @@ for (const [name, mutate] of [
   try {
     const plan = planMacNativeRelocation(value.app, target);
     const rejected = childProcess.spawnSync(checkedRelocator(false), mutate(nativeRelocationArguments(plan)), {
-      env: {}, shell: false, stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000, maxBuffer: 4096
+      env: {}, shell: false, stdio: ['ignore', 'pipe', 'pipe'], timeout: 2000, killSignal: 'SIGKILL', maxBuffer: 4096
     });
     assert.ifError(rejected.error); assert.equal(rejected.status, 65);
     assert.equal(rejected.stderr.toString('utf8'), 'MACOS_RELOCATOR_FAILED\n');

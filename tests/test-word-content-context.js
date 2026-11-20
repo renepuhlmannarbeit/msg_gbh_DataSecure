@@ -174,6 +174,27 @@ test('paragraph style inheritance binds the real abstract pStyle and ignores a s
   const r=n.next({pStyle:'Derived'});assert.equal(r.prefix,'1.\t');assert.equal(r.binding.ilvl,1);assert.deepEqual(r.binding.styleChain,['Derived','Base']);
   assert.equal(n.next({pStyle:'Derived',numId:'0'}).prefix,'');assert.equal(n.next({pStyle:'Derived',numId:'1',ilvl:0}).binding.ilvl,0);
 });
+test('style inheritance depth is the full chain in cold and parent-warmed sessions',()=>{
+  const count=LIMITS.styleDepth+2;
+  const ss=Array.from({length:count},(_,index)=>style(`S${index}`,index===0?pr(1):`<w:basedOn w:val="S${index-1}"/>`)).join('');
+  const body=abstract(level(0,{extra:'<w:pStyle w:val="S0"/>'}))+num();
+  for(const depth of [1,LIMITS.styleDepth-1,LIMITS.styleDepth]) {
+    const cold=session(body,ss).next({pStyle:`S${depth-1}`});
+    assert.deepEqual(cold.binding.styleChain,Array.from({length:depth},(_,i)=>`S${depth-1-i}`));
+    const warm=session(body,ss);for(let index=0;index<depth-1;index++)warm.next({pStyle:`S${index}`});
+    assert.deepEqual(warm.next({pStyle:`S${depth-1}`}).binding.styleChain,cold.binding.styleChain);
+  }
+  for(const depth of [LIMITS.styleDepth+1,LIMITS.styleDepth+2]) {
+    assert.throws(()=>session(body,ss).next({pStyle:`S${depth-1}`}),e=>e.code==='DOCX_STRUCTURE_UNSAFE');
+    const warm=session(body,ss);for(let index=0;index<LIMITS.styleDepth;index++)warm.next({pStyle:`S${index}`});
+    assert.throws(()=>warm.next({pStyle:`S${depth-1}`}),e=>e.code==='DOCX_STRUCTURE_UNSAFE',
+      'a cached suffix is not one inheritance step and must not grow a new overlong chain');
+  }
+  const branches=session(body,style('S0',pr(1))+style('A','<w:basedOn w:val="S0"/>')+style('B','<w:basedOn w:val="S0"/>'));
+  assert.deepEqual(branches.next({pStyle:'A'}).binding.styleChain,['A','S0']);
+  assert.deepEqual(branches.next({pStyle:'B'}).binding.styleChain,['B','S0']);
+});
+
 test('numbering-style indirection resolves the actual num instance without borrowing a similarly named style',()=>{
   const ss=style('NumStyle',pr(2),'numbering');
   const n=session(abstract('',0,'<w:numStyleLink w:val="NumStyle"/>')+abstract(level(0,{start:4}),1)+num(1,0)+num(2,1),ss);

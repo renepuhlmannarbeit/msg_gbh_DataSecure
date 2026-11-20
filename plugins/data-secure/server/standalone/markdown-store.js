@@ -10,6 +10,12 @@ const { ARTIFACT_ID_RE, createMarkdownArtifact, validateMarkdownArtifact, valida
 const { contentOptionsForConsumer } = require('../core/content-options');
 const { MAX_MARKDOWN_CHARS } = require('./markdown-contract');
 const { readBoundFile, bindDirectory, assertDirectory } = require('../core/bound-file-io');
+const { isOwnershipControlFailure } = require('../gateway/prepublication-error');
+
+// Keep postcommit control causes private. The public recovery code must not
+// lose the original refusal or serialize its message, path or stack.
+const publicationFailures = new WeakMap();
+const publicationFailureCause = error => publicationFailures.has(error) ? publicationFailures.get(error) : error;
 
 // This store is not the privacy Output tree. No public capability resolver
 // accepts its dm_ identities, paths, manifests or unredacted Markdown.
@@ -75,6 +81,7 @@ async function publishMarkdownArtifact(extraction, artifactId, hooks = {}) {
   const bound = identity(temporary);
   const parentBound = identity(root);
   let published = false;
+  let ownershipFailure = false;
   try {
     for (const [name, bytes] of [
       [artifact.manifest.document, Buffer.from(artifact.markdown, 'utf8')],
@@ -82,11 +89,18 @@ async function publishMarkdownArtifact(extraction, artifactId, hooks = {}) {
     ]) {
       assertPrivateDirectory(temporary, root);
       const fd = fs.openSync(path.join(temporary, name), fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
-      try { writeFully(fd, bytes, fs); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      let writeFailed = false, writeError;
+      try { writeFully(fd, bytes, fs); fs.fsyncSync(fd); }
+      catch (error) { writeFailed = true; writeError = error; }
+      // Exactly one close attempt; even a falsy primary keeps precedence.
+      try { fs.closeSync(fd); }
+      catch (error) { if (!writeFailed) { writeFailed = true; writeError = error; } }
+      if (writeFailed) throw writeError;
     }
     if (hooks.beforePublish) await hooks.beforePublish(result);
     assertPrivateDirectory(temporary, root);
     if (fs.existsSync(target)) throw invalid();
+    hooks.assertConversionHealth?.();
     renameWithTransientRetry(temporary, target);
     published = true;
     syncParentDirectory(target, fs, process.platform);
@@ -94,17 +108,20 @@ async function publishMarkdownArtifact(extraction, artifactId, hooks = {}) {
     if (hooks.afterPublish) await hooks.afterPublish(result);
     return result;
   } catch (error) {
+    ownershipFailure = isOwnershipControlFailure(error);
     if (published) {
       const failed = new Error('BATCH_PUBLICATION_UNCONFIRMED');
       failed.code = 'BATCH_PUBLICATION_UNCONFIRMED';
+      publicationFailures.set(failed, error);
       throw failed;
     }
     throw error;
   } finally {
     if (!published && fs.existsSync(temporary)) {
-      safeRemovePrivateTree(root, temporaryName, { expectedIdentity: bound, expectedParentIdentity: parentBound });
+      try { safeRemovePrivateTree(root, temporaryName, { expectedIdentity: bound, expectedParentIdentity: parentBound }); }
+      catch (cleanupError) { if (!ownershipFailure) throw cleanupError; }
     }
   }
 }
 
-module.exports = { artifactRoot, metadata, readMarkdownArtifact, inspectMarkdownArtifactForMaintenance, verifyMarkdownItem, publishMarkdownArtifact };
+module.exports = { artifactRoot, metadata, readMarkdownArtifact, inspectMarkdownArtifactForMaintenance, verifyMarkdownItem, publishMarkdownArtifact, publicationFailureCause };

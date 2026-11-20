@@ -11,20 +11,25 @@ const path = require('path');
 const { createSuite, assertAbsent, assertPresent } = require('./helpers');
 
 const runtimeDir = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-adv-'));
+const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-adv-'));
+const root = path.join(testRootScope, 'privacy');
+fs.mkdirSync(root, { mode: 0o700 });
 process.env.EU_PRIVACY_ROOT = root;
-process.env.LOCALAPPDATA = path.join(root, 'localapp');
+process.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');
 
 const pii = require(path.join(runtimeDir, 'pii-engine.js'));
 const gw = require(path.join(runtimeDir, 'gateway.js'));
 const { anonymizeNext } = require(path.join(runtimeDir, 'gateway', 'orchestrator.js'));
 const { convertDocument, SafeError } = require(path.join(runtimeDir, 'runtime.js'));
 const { encodePng, decodePng } = require(path.join(runtimeDir, 'image-sanitizer.js'));
-const { zipStore } = require('./lib/zip');
+const { zipStore, crc32 } = require('./lib/zip');
 
 const { test, testAsync, done, assert } = createSuite('Adversarial and robustness');
 
 const blankPng = encodePng({ width: 40, height: 20, rgba: Buffer.alloc(40 * 20 * 4, 255) });
+let concurrentPackageId;
 
 function verified(text, profile) {
   const first = pii.anonymize(text, profile);
@@ -304,19 +309,23 @@ async function main() {
 
   test('a PNG declaring an implausible size is refused before allocation', () => {
     const good = encodePng({ width: 4, height: 4, rgba: Buffer.alloc(4 * 4 * 4, 255) });
+    assert.strictEqual(decodePng(good).rgba.length, 4 * 4 * 4, 'same real decoder accepts a valid positive');
     const bomb = Buffer.from(good);
     bomb.writeUInt32BE(60000, 16); // IHDR width
     bomb.writeUInt32BE(60000, 20); // IHDR height
-    const { value, ms } = timed(() => {
-      try {
-        decodePng(bomb);
-        return 'decoded';
-      } catch {
-        return 'refused';
-      }
-    });
-    assert.strictEqual(value, 'refused', '3.6 gigapixel must be refused');
-    assert.ok(ms < 2000, `refusal took ${Math.round(ms)}ms`);
+    bomb.writeUInt32BE(crc32(bomb.subarray(12, 29)), 29);
+    const zlib = require('zlib'), originalInflate = zlib.inflateSync;
+    let inflates = 0;
+    zlib.inflateSync = (...args) => { inflates++; return originalInflate(...args); };
+    try {
+      const { ms } = timed(() => assert.throws(() => decodePng(bomb), error =>
+        error.message === 'PNG ist für die sichere lokale Bildverarbeitung zu groß.'));
+      assert.strictEqual(inflates, 0, 'the real size guard must run before decompression');
+      assert.ok(ms < 2000, `refusal took ${Math.round(ms)}ms`);
+      const badCrc = Buffer.from(bomb); badCrc[29] ^= 1;
+      assert.throws(() => decodePng(badCrc), error => error.message === 'PNG-Chunk-Prüfsumme stimmt nicht.');
+      assert.strictEqual(inflates, 0);
+    } finally { zlib.inflateSync = originalInflate; }
   });
 
   // -------------------------------------------------------------------------
@@ -352,27 +361,50 @@ async function main() {
   // Angle 6: concurrency and the MCP argument surface
   // -------------------------------------------------------------------------
 
-  await testAsync('two concurrent runs never produce two packages from one source', async () => {
-    const file = queue('concurrent.docx', docxBuffer(['Kunde: Max Mustermann', 'E-Mail: max@example.invalid'], [['word/media/i.png', blankPng]]));
-
-    const deps = { rasterizeToPng: async () => blankPng, ocrPngDetailed: async () => ({ text: '', words: [] }) };
-    const inputQueue = [{ name: path.basename(file), full: file, sourceBytes: fs.statSync(file).size }];
-    const before = gw.listOutputs().packages.length;
+  await testAsync('two explicit concurrent requests preserve their source and produce independently bound packages', async () => {
+    const { opcControlEntries } = require('./lib/opc');
+    const bytes = zipStore([...opcControlEntries('docx'),
+      ['word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Kunde: Max Mustermann</w:t></w:r></w:p><w:p><w:r><w:t>E-Mail: max@example.invalid</w:t></w:r></w:p></w:body></w:document>']]);
+    const baseline = queue('concurrent-positive.docx', bytes);
+    const positive = await anonymizeNext('customer', { inputQueue: [
+      { name: path.basename(baseline), full: baseline, stat: fs.statSync(baseline) }
+    ] });
+    assert.strictEqual(positive.ok, true, 'the same conversion path must produce a package without contention');
+    const file = queue('concurrent.docx', bytes);
+    const inputQueue = [{ name: path.basename(file), full: file, stat: fs.statSync(file) }];
+    const before = new Set(gw.listOutputs().packages.map(item => item.package_id));
     const results = await Promise.allSettled([
-      anonymizeNext('customer', { ...deps, inputQueue }),
-      anonymizeNext('customer', { ...deps, inputQueue })
+      anonymizeNext('customer', { inputQueue }),
+      anonymizeNext('customer', { inputQueue })
     ]);
-    const created = gw.listOutputs().packages.length - before;
+    const createdPackages = gw.listOutputs().packages.filter(item => !before.has(item.package_id));
+    const created = createdPackages.length;
     const ok = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
 
-    assert.ok(created <= 1, `one source file produced ${created} packages`);
-    assert.ok(ok <= 1, `${ok} concurrent runs both claimed success for one source`);
+    // This internal operation snapshots an immutable source for each explicit
+    // request. Single-use Standalone intake ownership is a separate caller.
+    assert.strictEqual(created, 2, `two explicit requests produced ${created} packages`);
+    assert.strictEqual(ok, 2, `${ok} explicit requests completed successfully`);
+    const ids = results.map(result => result.value.package_id);
+    assert.strictEqual(new Set(ids).size, 2, 'each request owns a different package');
+    assert.deepStrictEqual(createdPackages.map(item => item.package_id).sort(), [...ids].sort());
+    assert.deepStrictEqual(fs.readFileSync(file), bytes, 'the shared source remains byte-identical');
+    assert.deepStrictEqual(fs.readFileSync(baseline), bytes, 'the positive-control source also remains byte-identical');
+    const grants = ids.map(id => gw.issueReadCapability(id).read_capability);
+    for (const [index, id] of ids.entries()) {
+      const output = gw.readOutput(id, grants[index], 0, 10000);
+      assertAbsent(output.text, 'Max Mustermann', 'each actual package is anonymized');
+      assertAbsent(output.text, 'max@example.invalid', 'each actual package masks contact data');
+      assert.throws(() => gw.readOutput(id, grants[1 - index], 0, 1000), /Leseberechtigung/u,
+        'another successful request does not grant access to this package');
+    }
+    concurrentPackageId = createdPackages[0].package_id;
     console.log(`       (packages created: ${created}, successful runs: ${ok})`);
   });
 
   test('read tool arguments cannot be abused to reach other files', () => {
-    const packageId = gw.listOutputs().packages[0]?.package_id;
-    if (!packageId) return;
+    const packageId = concurrentPackageId;
+    assert.ok(packageId, 'the successful contention case must provide this exact read-capability fixture');
     const capability = gw.issueReadCapability(packageId).read_capability;
     for (const bad of ['../Processed', '..\\..\\Windows', 'pkg .md', 'pkg/../..', '.', './']) {
       assert.throws(() => gw.readOutput(bad, capability, 0, 1000), /Leseberechtigung|Ungültige Paket-ID|Paket nicht gefunden/, `accepted ${JSON.stringify(bad)}`);

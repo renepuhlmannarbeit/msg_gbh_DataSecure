@@ -34,10 +34,19 @@ for (const entry of documentIndex.documents) {
       !/^[A-Z0-9-]+$/u.test(entry.id) || !['active', 'historical', 'superseded'].includes(entry.status) ||
       !Array.isArray(entry.products) || entry.products.length === 0 || !Array.isArray(entry.decisions) ||
       !Array.isArray(entry.backlog_ids)) throw new Error(`invalid document index entry: ${entry?.id || 'unknown'}`);
+  const indexedPath = entry.path;
+  if (typeof indexedPath !== 'string' || indexedPath.length === 0 ||
+      path.posix.isAbsolute(indexedPath) || path.win32.isAbsolute(indexedPath) ||
+      /[\\:\0\r\n]/u.test(indexedPath) ||
+      indexedPath.split('/').some((component) => !component || component === '.' || component === '..')) {
+    throw new Error('invalid document index path: ' + entry.id);
+  }
   if (documentIds.has(entry.id) || documentPaths.has(entry.path)) throw new Error(`duplicate document index entry: ${entry.id}`);
   documentIds.add(entry.id);
   documentPaths.add(entry.path);
-  if (!fs.existsSync(path.join(root, entry.path))) throw new Error(`indexed document is missing: ${entry.path}`);
+  const indexedFile = path.join(root, ...indexedPath.split('/'));
+  if (!fs.existsSync(indexedFile)) throw new Error('indexed document is missing: ' + indexedPath);
+  if (!fs.lstatSync(indexedFile).isFile()) throw new Error('indexed document is not a regular file: ' + indexedPath);
 }
 for (const file of required) {
   if (!documentPaths.has(`docs/canonical/${file}`)) throw new Error(`canonical document missing from machine index: ${file}`);

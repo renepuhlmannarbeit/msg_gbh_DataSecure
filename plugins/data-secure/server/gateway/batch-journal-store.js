@@ -19,7 +19,8 @@ const {
 const { validatePackageIdentity } = require('./package-identity');
 const { identity, bindPrivateFile, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
 const { processingModeForBatch, isMarkdownBatch } = require('../core/processing-mode');
-const { CONTENT_BATCH_SCHEMA, contentOptionsForBatch } = require('../core/content-options');
+const { CONTENT_BATCH_SCHEMAS, contentOptionsForBatch } = require('../core/content-options');
+const { BATCH_SCHEMA, validateStorageItem } = require('../core/source-snapshot-storage');
 const { contentOptionsDigest } = require('./content-options-binding');
 const { resultNamingModeForBatch } = require('../core/result-naming-mode');
 const { reviewPolicyForBatch } = require('../core/standalone-review-policy');
@@ -89,6 +90,7 @@ function createBatchJournalStore(options = {}) {
       (state.ocr_contact_review === true ? `:ocr:${state.ocr_review_seed}` : ':ocr-off') +
       (state.standalone_document_review === true ? ':document-review' : ':document-review-off') +
       `:review-policy:${reviewPolicyForBatch(state) || 'guided'}` +
+      (state.schema === BATCH_SCHEMA ? ':source-storage:framed/1' : ':source-storage:legacy-raw') +
       (content ? `:content:${contentOptionsDigest(content)}` : ':legacy-content');
   }
 
@@ -170,7 +172,7 @@ function createBatchJournalStore(options = {}) {
     const durable = writeOptions.durable !== false;
     const target = pathForToken(state.token);
     const purpose = assertPurposeUnchanged(state, target);
-    if ([MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, CONTENT_BATCH_SCHEMA].includes(state.schema) && !validStateShape(state, state.token)) {
+    if ([MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ...CONTENT_BATCH_SCHEMAS].includes(state.schema) && !validStateShape(state, state.token)) {
       throw Object.assign(new Error('BATCH_MARKDOWN_STATE_INVALID'), { code: 'BATCH_MARKDOWN_STATE_INVALID' });
     }
     // A first intake publication may precede captureRun(). Every later write
@@ -294,7 +296,7 @@ function createBatchJournalStore(options = {}) {
     if (Object.hasOwn(state || {}, 'standalone_document_review') &&
         (state.product_channel !== 'standalone' || state.standalone_document_review !== true)) return false;
     if (Object.hasOwn(state || {}, 'ocr_contact_review') || Object.hasOwn(state || {}, 'ocr_review_seed')) {
-      if (state.product_channel !== 'standalone' || ![MARKDOWN_SCHEMA, CONTENT_BATCH_SCHEMA].includes(state.schema) || state.processing_mode !== 'markdown-only' ||
+      if (state.product_channel !== 'standalone' || ![MARKDOWN_SCHEMA, ...CONTENT_BATCH_SCHEMAS].includes(state.schema) || state.processing_mode !== 'markdown-only' ||
           state.ocr_contact_review !== true || !PSEUDONYM_SEED_RE.test(String(state.ocr_review_seed || '')) ||
           Buffer.from(state.ocr_review_seed, 'base64url').length !== 32 ||
           Buffer.from(state.ocr_review_seed, 'base64url').toString('base64url') !== state.ocr_review_seed) return false;
@@ -302,7 +304,7 @@ function createBatchJournalStore(options = {}) {
     if (!validStandaloneReviewChoices(state)) return false;
     const fields = ['pseudonym_contract_version', 'pseudonym_ruleset_version', 'pseudonym_seed'];
     const present = fields.filter((field) => Object.hasOwn(state || {}, field));
-    if (state.schema === CONTENT_BATCH_SCHEMA && state.processing_mode === 'markdown-and-anonymize' &&
+    if (CONTENT_BATCH_SCHEMAS.includes(state.schema) && state.processing_mode === 'markdown-and-anonymize' &&
         (present.length !== fields.length || !/^[a-f0-9]{64}$/u.test(String(state.core_policy_fingerprint || '')))) return false;
     // Pre-RC batches remain listable/retirable, but processing refuses them in
     // batch-pseudonym-context. Partial or malformed state is never accepted.
@@ -375,8 +377,8 @@ function createBatchJournalStore(options = {}) {
     // Storage validation must precede all status-specific early returns.
     if (Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
         /\.dsart$/iu.test(String(item.work_name || ''))) return false;
-    if (Object.hasOwn(item, 'work_name') && [SCHEMA, NAMED_ANONYMIZATION_SCHEMA, CONTENT_BATCH_SCHEMA].includes(schema) && item.private_artifact_plain !== true) return false;
-    if (![SCHEMA, NAMED_ANONYMIZATION_SCHEMA, CONTENT_BATCH_SCHEMA].includes(schema) && Object.hasOwn(item, 'private_artifact_plain')) return false;
+    if (Object.hasOwn(item, 'work_name') && [SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ...CONTENT_BATCH_SCHEMAS].includes(schema) && item.private_artifact_plain !== true) return false;
+    if (![SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ...CONTENT_BATCH_SCHEMAS].includes(schema) && Object.hasOwn(item, 'private_artifact_plain')) return false;
     if (Object.hasOwn(item, 'package_identity')) {
       if (item.status !== 'released') return false;
       try { validatePackageIdentity(item.package_identity); }
@@ -468,7 +470,7 @@ function createBatchJournalStore(options = {}) {
       if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/iu.test(item.work_name)) throw new ErrorType(INVALID);
       const target = path.join(work, item.work_name);
       try {
-        assertPlainWorkFile(target, io);
+        assertPlainWorkFile(target, io, state.schema === BATCH_SCHEMA ? { state, item } : undefined);
       } catch (error) {
         // Already-cleaned terminal snapshots are normal. Any uncertain read
         // must block maintenance instead of authorising recursive removal.
@@ -478,7 +480,8 @@ function createBatchJournalStore(options = {}) {
   }
 
   function validStateShape(state, token) {
-    const supportedSchema = [SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, CONTENT_BATCH_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
+    const supportedSchema = [SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ...CONTENT_BATCH_SCHEMAS, V2_SCHEMA, LEGACY_SCHEMA].includes(state?.schema);
+    try { for (const item of state?.items || []) validateStorageItem(state, item); } catch { return false; }
     const validProductChannel = !Object.hasOwn(state || {}, 'product_channel') ||
       ['plugin', 'standalone'].includes(state.product_channel);
     let markdown;
@@ -528,7 +531,7 @@ function createBatchJournalStore(options = {}) {
     return state;
   }
 
-  function readStateForMaintenance(token) {
+  function readMaintenanceRecord(token, inspectSources) {
     // Maintenance owns the surrounding lifecycle decision. This path is
     // intentionally read-only and preserves raw parse/validation errors so
     // callers can count them without deleting an unknown local record.
@@ -539,9 +542,11 @@ function createBatchJournalStore(options = {}) {
       throw new Error('invalid');
     }
     if (state.product_channel === 'standalone') assertContentBinding(state);
-    purposeBindings.set(state, purposeOf(state));
-    rejectRenamedEncryptedCopies(state);
-    if (state.product_channel === 'standalone' && state.invalidated !== true &&
+    if (inspectSources) {
+      purposeBindings.set(state, purposeOf(state));
+      rejectRenamedEncryptedCopies(state);
+    }
+    if (inspectSources && state.product_channel === 'standalone' && state.invalidated !== true &&
         state.items.every(item => ['released', 'stopped'].includes(item.status) &&
           item.local_mapping_exported !== false && item.work_copy_cleanup_pending !== true) &&
         !(state.zero_day_work === true && state.zero_day_work_cleaned !== true)) {
@@ -551,6 +556,17 @@ function createBatchJournalStore(options = {}) {
       if (terminalStatusHints.size > 1024) terminalStatusHints.delete(terminalStatusHints.keys().next().value);
     }
     return state;
+  }
+
+  function readStateForMaintenance(token) { return readMaintenanceRecord(token, true); }
+
+  // Projection only: fresh bound journal + immutable purpose anchor, no source
+  // content read, expiry cleanup, positive source-integrity claim or retry grant.
+  // A detached value cannot inherit the writer's process-local journal binding.
+  // Recovery and deletion retain maintenance classification; exactPendingEntry
+  // independently verifies complete stored and raw hashes for content use.
+  function readStateForStatus(token) {
+    return JSON.parse(JSON.stringify(readMaintenanceRecord(token, false)));
   }
 
   function terminalStatusUnchanged(token) {
@@ -565,7 +581,7 @@ function createBatchJournalStore(options = {}) {
     } catch { /* unknown/changed/removed bytes must take the full original path */ }
     terminalStatusHints.delete(key); return false;
   }
-  return { writeState, readState, readStateForMaintenance, terminalStatusUnchanged, removeState };
+  return { writeState, readState, readStateForMaintenance, readStateForStatus, terminalStatusUnchanged, removeState };
 }
 
 module.exports = { SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, MAX_JOURNAL_BYTES, createBatchJournalStore };

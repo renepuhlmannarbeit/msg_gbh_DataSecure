@@ -62,9 +62,9 @@ function readOfficeChartEx(xml,decode,error){
   }
   if(!dimensions.length)issues.add('CACHE_MISSING');data.set(id,{id,dimensions});
  }
- const title=text(once(once(chart,'title',error),'tx',error));
+ const title=text(once(once(chart,'title',error),'tx',error)),seenAxisIds=new Set();
  for(const axis of children(plot,'axis')){
-  const id=uint(attr(axis,'id'),error);if(axes.some(value=>value.id===id))throw error();
+  const id=uint(attr(axis,'id'),error);if(seenAxisIds.has(id))throw error();seenAxisIds.add(id);
   const cat=once(axis,'catScaling',error),val=once(axis,'valScaling',error);if(cat&&val)throw error();
   if(!cat&&!val)issues.add('AXIS_ROLE_UNRESOLVED');
   const units=once(axis,'units',error),format=once(axis,'numFmt',error);

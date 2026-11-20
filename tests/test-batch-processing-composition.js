@@ -117,6 +117,8 @@ function fixture(platform, options = {}) {
   }).createBatchReviewOrchestrator;
   const modules = {
     fs: memory.io, path, crypto: require('node:crypto'), '../runtime': runtime,
+    // Fixed pure storage constants are real; unexpected dependencies still fail.
+    '../core/source-snapshot-storage': require('../plugins/data-secure/server/core/source-snapshot-storage'),
     '../core/ownership-control': { withOwnershipControl: control }, './batch-active-lock': importedOwner,
     './batch-private-store': privateStore, './common': { PROFILES: {}, LIMITS: { MAX_BATCH_FILES: 100 } },
     './batch-processing-admission': { createBatchProcessingAdmission(deps) {

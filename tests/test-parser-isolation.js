@@ -45,6 +45,8 @@ function fakeChild(action) {
   child.stdout = new PassThrough();
   child.killed = false;
   child.kill = () => { child.killed = true; queueMicrotask(() => child.emit('close', null)); return true; };
+  // A successfully created Node child reports spawn before transport events.
+  process.nextTick(() => child.emit('spawn'));
   // A real process cannot finish reading stdin before the local stream has
   // flushed. Let stream callbacks run first, including when a test resumes
   // from an awaited promise; a microtask-only fake races Node's nextTick queue.
@@ -61,6 +63,135 @@ function parserResult(markdown) {
 }
 
 async function main() {
+  await testAsync('SOURCE-LAUNCH-MODEL: EMFILE and ENFILE without streams are handled for both input transports without kill', async () => {
+    for (const inputKind of ['buffer', 'descriptor']) for (const code of ['EMFILE', 'ENFILE']) {
+      const bytes = Buffer.from('synthetic source ÄÖÜß'); let kills = 0;
+      await assert.rejects(convertDocument(source(`nostream-${inputKind}-${code}.txt`), {
+        ...nativeOptions,
+        ...(inputKind === 'buffer' ? { inputBuffer: bytes, sourceName: 'source.txt' } : {}),
+        spawn() {
+          const child = new EventEmitter();
+          child.kill = () => { kills++; return false; };
+          process.nextTick(() => child.emit('error', Object.assign(new Error('private OS detail'), { code })));
+          return child;
+        }
+      }), error => error.code === 'PARSER_ISOLATION_FAILED' && !/private OS/u.test(error.message));
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(kills, 0);
+      assert.equal(bytes.toString(), 'synthetic source ÄÖÜß');
+    }
+  });
+
+  await testAsync('SOURCE-LAUNCH-MODEL: abort before spawn sends no input and kills the actually started child once', async () => {
+    const controller = new AbortController(); let sends = 0, kills = 0;
+    await assert.rejects(convertDocument('opaque-source', { ...nativeOptions,
+      signal: controller.signal, inputBuffer: Buffer.from('synthetic source'), sourceName: 'source.txt',
+      spawn() {
+        const child = fakeChild(() => {});
+        child.stdin.end = () => { sends++; };
+        child.kill = () => { kills++; queueMicrotask(() => child.emit('close', null)); return true; };
+        controller.abort();
+        return child;
+      }
+    }), { code: 'REQUEST_CANCELLED' });
+    assert.equal(sends, 0); assert.equal(kills, 1);
+  });
+
+  await testAsync('SOURCE-LAUNCH-MODEL: failed start plus pending abort or FD-close failure consumes the error without kill or live timers', async () => {
+    for (const mode of ['abort', 'close']) for (const code of ['EMFILE', 'ENFILE']) {
+      const controller = new AbortController(), timers = new Set();
+      const schedule = global.setTimeout, cancel = global.clearTimeout, originalClose = fs.closeSync;
+      let descriptor, kills = 0;
+      global.setTimeout = (callback, delay, ...args) => {
+        const timer = schedule(() => { timers.delete(timer); callback(...args); }, delay);
+        timers.add(timer); return timer;
+      };
+      global.clearTimeout = timer => { timers.delete(timer); return cancel(timer); };
+      try {
+        await assert.rejects(convertDocument(source(`pending-${mode}-${code}.txt`), { ...nativeOptions,
+          ...(mode === 'abort' ? { signal: controller.signal, inputBuffer: Buffer.from('synthetic source'), sourceName: 'source.txt' } : {}),
+          spawn(_command, _args, options) {
+            const child = new EventEmitter(); child.kill = () => { kills++; return false; };
+            if (mode === 'abort') controller.abort();
+            else {
+              descriptor = options.stdio[0];
+              fs.closeSync = fd => {
+                if (fd === descriptor) throw new Error('synthetic pending close');
+                return originalClose(fd);
+              };
+            }
+            process.nextTick(() => child.emit('error', Object.assign(new Error('synthetic start'), { code })));
+            return child;
+          }
+        }), { code: mode === 'abort' ? 'REQUEST_CANCELLED' : 'PARSER_ISOLATION_FAILED' });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(kills, 0); assert.equal(timers.size, 0);
+      } finally {
+        global.setTimeout = schedule; global.clearTimeout = cancel; fs.closeSync = originalClose;
+        if (descriptor !== undefined) originalClose(descriptor);
+        for (const timer of timers) cancel(timer);
+      }
+    }
+  });
+
+  await testAsync('SOURCE-LAUNCH-MODEL: parent descriptor close failure retains handlers until child termination', async () => {
+    const originalClose = fs.closeSync; let descriptor, refusals = 0, kills = 0;
+    try {
+      await assert.rejects(convertDocument(source('close-refusal.txt'), { ...nativeOptions,
+        spawn(_command, _args, options) {
+          descriptor = options.stdio[0];
+          fs.closeSync = fd => {
+            if (fd === descriptor) { refusals++; throw new Error('private close detail'); }
+            return originalClose(fd);
+          };
+          const child = fakeChild(() => {});
+          child.kill = () => { kills++; queueMicrotask(() => child.emit('close', null)); return true; };
+          return child;
+        }
+      }), error => error.code === 'PARSER_ISOLATION_FAILED' && !/private close/u.test(error.message));
+      assert.equal(refusals, 1); assert.equal(kills, 1);
+    } finally {
+      fs.closeSync = originalClose;
+      if (descriptor !== undefined) originalClose(descriptor);
+    }
+  });
+
+  await testAsync('SOURCE-LAUNCH-MODEL: incomplete channel contracts still consume errors from present output', async () => {
+    let kills = 0;
+    await assert.rejects(convertDocument('opaque-source', { ...nativeOptions,
+      inputBuffer: Buffer.from('synthetic source'), sourceName: 'source.txt',
+      spawn() {
+        const child = fakeChild(() => {}); child.stdin = null;
+        child.kill = () => {
+          kills++;
+          queueMicrotask(() => { child.stdout.emit('error', new Error('private transport detail')); child.emit('close', null); });
+          return true;
+        };
+        return child;
+      }
+    }), { code: 'PARSER_ISOLATION_FAILED' });
+    assert.equal(kills, 1);
+  });
+
+  await testAsync('SOURCE-LAUNCH-MODEL: synchronous and callback-only input-end failures stop the started child', async () => {
+    for (const mode of ['throw', 'callback']) {
+      let kills = 0;
+      await assert.rejects(convertDocument('opaque-source', { ...nativeOptions,
+        inputBuffer: Buffer.from('synthetic source'), sourceName: 'source.txt',
+        spawn() {
+          const child = fakeChild(() => {});
+          child.stdin.end = (_bytes, callback) => {
+            if (mode === 'throw') throw new Error('private write detail');
+            process.nextTick(() => callback(new Error('private write detail')));
+          };
+          child.kill = () => { kills++; queueMicrotask(() => child.emit('close', null)); return true; };
+          return child;
+        }
+      }), error => error.code === 'PARSER_INPUT_INCOMPLETE' && !/private write/u.test(error.message));
+      assert.equal(kills, 1);
+    }
+  });
+
   await testAsync('worker source-format substitution is rejected on Windows, macOS and Linux launch paths', async () => {
     for (const platform of ['win32', 'darwin', 'linux']) {
       await assert.rejects(convertDocument('opaque-private-artifact', {
@@ -169,14 +300,43 @@ async function main() {
 
   test('the packaged parser worker has no direct PDF implementation', () => {
     const worker = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'parser-worker.js');
-    const result = childProcess.spawnSync(process.execPath, [
-      '--permission', `--allow-fs-read=${path.dirname(worker)}`, '--disable-proto=throw', worker, '.pdf', '0'
-    ], {
-      input: Buffer.from('%PDF-1.4\n%%EOF', 'ascii'), encoding: 'utf8', env: {}, windowsHide: true
-    });
-    const response = JSON.parse(result.stdout);
-    assert.strictEqual(result.status, 2);
-    assert.deepStrictEqual(response, { schema: 'data-secure-parser-result/1', ok: false, error: 'parse_failed' });
+    const guard = path.join(path.dirname(worker), 'network-deny.cjs');
+    const scopes = ['fs.write', 'child', 'worker', 'addon', 'inspector', 'wasi'];
+    function runWorker(extension, input) {
+      // The real child records its native permission/immutable preload boundary
+      // before requiring the unchanged actual worker. No parser result is mocked.
+      const startup = [
+        "'use strict';",
+        "const permissions = " + JSON.stringify(scopes) + ".map(scope => [scope, process.permission.has(scope)]);",
+        "const marker = Object.getOwnPropertyDescriptor(globalThis, '__DATASECURE_NETWORK_DENY_ACTIVE__');",
+        "const guard = marker ? { value: marker.value, writable: marker.writable, configurable: marker.configurable } : null;",
+        "process.stdout.write(JSON.stringify({ schema: 'datasecure-parser-start-witness/1', permissions, guard }) + '\\n');",
+        "process.argv = [process.execPath, " + JSON.stringify(worker) + ", " + JSON.stringify(extension) + ", '0'];",
+        "require(" + JSON.stringify(worker) + ");"
+      ].join('\n');
+      const result = childProcess.spawnSync(process.execPath, [
+        '--no-warnings', '--permission', `--allow-fs-read=${path.dirname(worker)}`, '--disable-proto=throw',
+        `--require=${guard}`, '--eval', startup
+      ], { input, encoding: 'utf8', env: {}, windowsHide: true, shell: false,
+        timeout: 5000, maxBuffer: 1024 * 1024 });
+      assert.ifError(result.error); assert.strictEqual(result.signal, null); assert.strictEqual(result.stderr, '');
+      const lines = result.stdout.trimEnd().split('\n');
+      assert.strictEqual(lines.length, 2, 'one actual startup witness and one worker response');
+      const witness = JSON.parse(lines[0]), response = JSON.parse(lines[1]);
+      assert.deepStrictEqual(witness, {
+        schema: 'datasecure-parser-start-witness/1', permissions: scopes.map(scope => [scope, false]),
+        guard: { value: true, writable: false, configurable: false }
+      });
+      return { status: result.status, response };
+    }
+    const valid = runWorker('.txt', Buffer.from('PARSER_PDF_GATE_POSITIVE', 'ascii'));
+    assert.strictEqual(valid.status, 0); assert.strictEqual(valid.response.schema, 'data-secure-parser-result/1');
+    assert.strictEqual(valid.response.ok, true);
+    assert.ok(valid.response.result.markdown.includes('PARSER_PDF_GATE_POSITIVE'));
+    assert.deepStrictEqual(valid.response.result.warnings, []);
+    const rejected = runWorker('.pdf', Buffer.from('%PDF-1.4\n%%EOF', 'ascii'));
+    assert.strictEqual(rejected.status, 2);
+    assert.deepStrictEqual(rejected.response, { schema: 'data-secure-parser-result/1', ok: false, error: 'parse_failed' });
   });
 
   await testAsync('real isolated CSV parser distinguishes valid input from a confirmed permanent rejection', async () => {
@@ -379,6 +539,40 @@ async function main() {
       (error) => error instanceof SafeError && error.code === 'PARSER_TIMEOUT' && /Zeitlimit/.test(error.message)
     );
     assert.strictEqual(child.killed, true);
+  });
+
+  await testAsync('a real readable error enters the fixed parser termination path', async () => {
+    let child;
+    await assert.rejects(convertDocument(source('read-error.txt'), { ...nativeOptions,
+      spawn: () => (child = fakeChild(value => value.stdout.destroy(Object.assign(new Error('private vendor path'), { code: 'EIO' }))))
+    }), error => error.code === 'PARSER_ISOLATION_FAILED' && !/private vendor/u.test(error.message));
+    assert.equal(child.killed, true);
+  });
+
+  await testAsync('a late hard readable error outranks timeout without a second kill or grace', async () => {
+    let kills = 0, graceSchedules = 0;
+    const schedule = global.setTimeout;
+    global.setTimeout = (callback, delay, ...args) => {
+      if (delay === 100) graceSchedules++;
+      return schedule(callback, delay, ...args);
+    };
+    try { await assert.rejects(convertDocument(source('read-after-timeout.txt'), { ...nativeOptions, timeoutMs: 5, terminationGraceMs: 100,
+      spawn() {
+        const child = fakeChild(() => {});
+        child.kill = () => {
+          kills++;
+          setImmediate(() => {
+            child.stdout.destroy(new Error('private late read failure'));
+            setImmediate(() => child.emit('close', null));
+          });
+          return true;
+        };
+        return child;
+      }
+    }), { code: 'PARSER_ISOLATION_FAILED' }); }
+    finally { global.setTimeout = schedule; }
+    assert.equal(kills, 1);
+    assert.equal(graceSchedules, 1);
   });
 
   await testAsync('an AbortSignal terminates the isolated parser and returns a content-free cancellation', async () => {

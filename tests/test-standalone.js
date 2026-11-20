@@ -543,18 +543,20 @@ testAsync('real broker lifecycle binds first-draft failure, safe retry and the s
   assert.strictEqual(service.reviewSession().continuation_available, true);
   assert.deepStrictEqual(service.reviewSession().affected_files, ['Folien.pdf', 'Tabelle.xlsx'],
     'the bound retry targets are available before a possibly unconfirmed continuation');
-  broker.begin(owner, batchId);
-  broker.failed(owner, 'BATCH_REVIEW_RECONSTRUCTION_FAILED');
+  const retryOwner = { send() {} };
+  broker.begin(retryOwner, batchId);
+  broker.failed(retryOwner, 'BATCH_REVIEW_RECONSTRUCTION_FAILED');
   assert.strictEqual(service.reviewSession().retry_available, false);
-  broker.release(owner, { failed: true });
+  broker.release(retryOwner, { failed: true });
   assert.strictEqual(service.reviewSession().phase, 'failed');
   assert.strictEqual(service.reviewSession().retry_available, true);
   assert.deepStrictEqual(service.reviewSession().affected_files, ['Folien.pdf', 'Tabelle.xlsx']);
   assert.deepStrictEqual(await service.continueReviewSession(), { ok: true });
   assert.deepStrictEqual(calls, [batchId]);
-  broker.begin(owner, batchId);
-  broker.failed(owner, 'LOCAL_REVIEW_TOO_LARGE');
-  broker.release(owner, { failed: true });
+  const limitedOwner = { send() {} };
+  broker.begin(limitedOwner, batchId);
+  broker.failed(limitedOwner, 'LOCAL_REVIEW_TOO_LARGE');
+  broker.release(limitedOwner, { failed: true });
   assert.strictEqual(service.reviewSession().continuation_available, false);
   assert.strictEqual(service.reviewSession().error_code, 'LOCAL_REVIEW_TOO_LARGE');
   await assert.rejects(service.continueReviewSession(), { code: 'STANDALONE_NOTHING_TO_CONTINUE' });
@@ -682,6 +684,18 @@ test('Standalone reports an incomplete visible export instead of a false finishe
   assert.strictEqual(status.results_available, false);
   assert.strictEqual(status.result_count, 0);
   assert.strictEqual(status.export_pending_count, 2);
+});
+
+test('export abandonment uses a fresh action reader before any mutating leaf', () => {
+  const batchId='e'.repeat(64);let projections=0,actions=0,writes=0;
+  const refusal=Object.assign(new Error('invalid private source header'),{code:'STANDALONE_HISTORY_UNAVAILABLE'});
+  const service=new StandaloneApplicationService({dependencies:fakeDependencies({
+    runHistory:{find:()=>({processing_mode:'markdown-and-anonymize',status:'export_pending'})},
+    readState:()=>{projections++;return{token:batchId};},
+    readActionState:()=>{actions++;throw refusal;},abandonPendingResultExport:()=>{writes++;}
+  })});
+  assert.throws(()=>service.abandonResultExport(batchId),error=>error===refusal);
+  assert.equal(actions,1);assert.equal(projections,0);assert.equal(writes,0);
 });
 
 test('only the exact inactive pending anonymization run can be abandoned', () => {

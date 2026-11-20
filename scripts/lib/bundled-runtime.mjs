@@ -88,7 +88,7 @@ function tarNumber(bytes, start, length) {
   return result;
 }
 
-function extractTarFile(tar, wanted, minimum = 1) {
+function extractTarFile(tar, wanted, minimum = 1, maximum = MAX_RUNTIME) {
   if (!Buffer.isBuffer(tar) || tar.length > 512 * 1024 * 1024 || !/^[A-Za-z0-9._/-]+$/u.test(wanted) || wanted.includes('..')) {
     throw new Error('BUNDLED_RUNTIME_ARCHIVE_INVALID');
   }
@@ -106,6 +106,7 @@ function extractTarFile(tar, wanted, minimum = 1) {
     if (dataEnd > tar.length) throw new Error('BUNDLED_RUNTIME_ARCHIVE_INVALID');
     if (full === wanted) {
       if (![0, 48].includes(type) || size < minimum) throw new Error('BUNDLED_RUNTIME_ARCHIVE_INVALID');
+      if (size > maximum) throw new Error('BUNDLED_RUNTIME_ARCHIVE_LIMIT');
       return Buffer.from(tar.subarray(dataStart, dataEnd));
     }
     offset = dataStart + Math.ceil(size / 512) * 512;
@@ -114,7 +115,9 @@ function extractTarFile(tar, wanted, minimum = 1) {
 }
 
 export function extractArchiveEntry(archive, target, entry, { minimum = 1, maximum = MAX_RUNTIME } = {}) {
-  if (!Buffer.isBuffer(archive) || archive.length > MAX_ARCHIVE || !target || typeof target !== 'object') {
+  if (!Buffer.isBuffer(archive) || archive.length > MAX_ARCHIVE || !target || typeof target !== 'object' ||
+      !Number.isSafeInteger(minimum) || minimum < 0 || !Number.isSafeInteger(maximum) ||
+      maximum < minimum || maximum > MAX_RUNTIME) {
     throw new Error('BUNDLED_RUNTIME_ARCHIVE_INVALID');
   }
   if (target.archive.endsWith('.zip')) {
@@ -127,7 +130,7 @@ export function extractArchiveEntry(archive, target, entry, { minimum = 1, maxim
     let tar;
     try { tar = zlib.gunzipSync(archive, { maxOutputLength: 512 * 1024 * 1024 }); }
     catch { throw new Error('BUNDLED_RUNTIME_ARCHIVE_INVALID'); }
-    return extractTarFile(tar, entry, minimum);
+    return extractTarFile(tar, entry, minimum, maximum);
   }
   throw new Error('BUNDLED_RUNTIME_ARCHIVE_INVALID');
 }

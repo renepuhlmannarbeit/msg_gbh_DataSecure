@@ -10,17 +10,30 @@ const assert = require('assert');
 const { fork } = require('child_process');
 const base = process.argv[2] === '--worker' ? process.argv[3]
   : fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-stage-integration-'));
-process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
-process.env.LOCALAPPDATA = path.join(base, 'appdata');
+if (process.argv[2] !== '--worker') {
+  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+  process.env.LOCALAPPDATA = path.join(base, 'appdata');
+  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
+} else {
+  for (const [key, leaf] of [['EU_PRIVACY_ROOT', 'privacy'], ['EU_PRIVACY_DATA_ROOT', 'product-data'], ['EU_PRIVACY_RESULT_ROOT', 'results'], ['LOCALAPPDATA', 'appdata']]) {
+    assert.strictEqual(process.env[key], path.join(base, leaf), 'worker must inherit its exact parent namespace');
+  }
+}
 const source = path.join(base, 'source.txt');
 const originalText = 'Technologien: Java, TypeScript. Kontakt: test.person@example.org';
 const { anonymizeSelectedSource, prepareProcessingRun } = require('../plugins/data-secure/server/gateway/orchestrator');
 const { inspectStaging } = require('../plugins/data-secure/server/gateway/package-staging');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
+const { ownChild, within, firstFailure, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
+const children = new Set();
 const convertDocument = async () => ({ markdown: originalText, attachments: [], warnings: [] });
 const dependencies = { convertDocument, cleanupLocalData: () => ({}), migrateLegacyAuditReceipts: () => ({}) };
 
 async function worker() {
+  // Independent fixture guard: a failed parent stop cannot leave this writer
+  // indefinitely alive. Exit78 never satisfies the intentional crash oracle.
+  setTimeout(() => process.exit(78), 40000);
   const phase = process.argv[4];
   const hold = async () => {
     process.send({ ready: phase });
@@ -43,31 +56,40 @@ async function crashAt(phase) {
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'], windowsHide: true,
     env: { ...process.env, NODE_OPTIONS: '' }
   });
-  let ready = false, timedOut = false, errorText = '', observationError = null;
-  child.stderr.on('data', (data) => { errorText += data.toString().slice(0, 2000); });
-  child.on('message', (message) => {
-    if (message?.ready === phase && phase === 'before-publish') {
-      ready = true;
-      try { assert.strictEqual(inspectStaging().pending, 1); }
-      catch (error) { observationError = error; }
-      finally {
-        // Stop our fixture even when an assertion fails; report only after
-        // close confirms the child and its inherited pipes have finished.
-        child.kill('SIGKILL');
+  const failure = firstFailure(), owned = ownChild(child, error => failure.record(error));
+  children.add(owned);
+  let ready = false, errorText = '', closed;
+  try {
+    child.stderr.on('error', error => failure.record(error));
+    child.stderr.on('data', data => { errorText += data.toString().slice(0, 2000 - errorText.length); });
+    child.on('message', message => {
+      if (message?.ready === phase && phase === 'before-publish') {
+        ready = true;
+        try { assert.strictEqual(inspectStaging().pending, 1); }
+        catch (error) { failure.record(error); }
+        finally {
+          try { owned.terminate('SIGKILL'); } catch (error) { failure.record(error); }
+        }
       }
+    });
+    closed = await within(Promise.race([owned.done, owned.error.then(error => { throw error; })]),
+      20000, 'STAGING_FIXTURE_DEADLINE');
+    failure.throwIfFailed();
+    assert.strictEqual(errorText, '', 'fixture stderr');
+    assert.notStrictEqual(closed.code, 78, 'the independent fixture guard is a failure, never the intended crash');
+    if (phase === 'before-publish') assert.strictEqual(ready, true);
+    else assert.strictEqual(closed.code, 79);
+    assert.notStrictEqual(closed.code, 0);
+  } catch (error) { failure.record(error); }
+  finally {
+    if (!owned.closed) {
+      try { owned.terminate('SIGKILL'); } catch (error) { failure.record(error); }
+      try { await within(owned.done, 2000, 'STAGING_FIXTURE_CLOSE_UNCONFIRMED'); }
+      catch (error) { failure.record(error); }
     }
-  });
-  const closed = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, 20000);
-    child.once('error', (error) => { clearTimeout(timer); reject(error); });
-    child.once('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal }); });
-  });
-  assert.strictEqual(timedOut, false, 'fixture deadline');
-  assert.strictEqual(errorText, '', 'fixture stderr');
-  if (observationError) throw observationError;
-  if (phase === 'before-publish') assert.strictEqual(ready, true);
-  else assert.strictEqual(closed.code, 79);
-  assert.notStrictEqual(closed.code, 0);
+    if (owned.closed) children.delete(owned);
+  }
+  failure.throwIfFailed();
 }
 
 async function main() {
@@ -122,6 +144,7 @@ async function main() {
   console.log('PASS staging recovery is amortized once for three sequential prepared-run documents');
 }
 
-(process.argv[2] === '--worker' ? worker() : main()).catch(() => {
-  console.error('FAIL staging integration'); process.exitCode = 1;
+(process.argv[2] === '--worker' ? worker() : main()).catch(error => {
+  endTestCliFailure({ failed: true, error, retainedRoots: [base],
+    unconfirmedChildren: [...children].some(child => !child.closed) });
 });

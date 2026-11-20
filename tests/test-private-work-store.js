@@ -128,6 +128,103 @@ test('post-publication directory sync failure preserves the published bytes', ()
   assert.strictEqual(fs.readFileSync(file, 'utf8'), 'x');
 });
 
+test('a replaced regular parent is refused before any private byte is written', () => {
+  const fixture = path.join(root, `parent-${++sequence}`); fs.mkdirSync(fixture);
+  const parent = path.join(fixture, 'work'); fs.mkdirSync(parent);
+  const parked = path.join(fixture, 'retained');
+  const file = path.join(parent, 'private.snapshot');
+  const io = Object.create(fs); let written = 0, temporary;
+  io.openSync = (name, ...args) => {
+    if (name.endsWith('.tmp')) {
+      fs.renameSync(parent, parked); fs.mkdirSync(parent); temporary = name;
+    }
+    return fs.openSync(name, ...args);
+  };
+  io.writeSync = (...args) => { written++; return fs.writeSync(...args); };
+  const subject = createPrivateWorkStore({ privateRoot: fixture, fs: io });
+  assert.throws(() => subject.writeFile(file, Buffer.from('private synthetic text')), { code: 'PRIVATE_ARTIFACT_PATH_INVALID' });
+  assert.equal(written, 0); assert.equal(fs.existsSync(file), false);
+  // An uncertain parent is not cleanup authority, even for an empty leaf.
+  assert.equal(fs.statSync(temporary).size, 0);
+  assert.equal(fs.readdirSync(parked).length, 0);
+});
+test('a descendant redirect before temporary open receives no private bytes', () => {
+  const fixture = path.join(root, `redirect-${++sequence}`); fs.mkdirSync(fixture);
+  const privateRoot = path.join(fixture, 'private'); fs.mkdirSync(privateRoot);
+  const parent = path.join(privateRoot, 'work'); fs.mkdirSync(parent);
+  const parked = path.join(privateRoot, 'retained');
+  const sibling = path.join(fixture, 'own-sibling'); fs.mkdirSync(sibling);
+  const marker = path.join(sibling, 'marker.txt'); fs.writeFileSync(marker, 'unchanged');
+  const file = path.join(parent, 'private.snapshot');
+  const io = Object.create(fs); let written = 0, temporary;
+  io.openSync = (name, ...args) => {
+    if (name.endsWith('.tmp')) {
+      fs.renameSync(parent, parked);
+      fs.symlinkSync(sibling, parent, process.platform === 'win32' ? 'junction' : 'dir');
+      temporary = path.join(sibling, path.basename(name));
+    }
+    return fs.openSync(name, ...args);
+  };
+  io.writeSync = (...args) => { written++; return fs.writeSync(...args); };
+  const subject = createPrivateWorkStore({ privateRoot, fs: io });
+  assert.throws(() => subject.writeFile(file, Buffer.from('private synthetic text')), { code: 'PRIVATE_ARTIFACT_PATH_INVALID' });
+  assert.equal(written, 0); assert.equal(fs.existsSync(file), false);
+  assert.equal(fs.statSync(temporary).size, 0);
+  assert.equal(fs.readFileSync(marker, 'utf8'), 'unchanged');
+  fs.unlinkSync(parent);
+});
+test('an extra link created while opening the temporary refuses its first write', () => {
+  const file = target(); const io = Object.create(fs); let written = 0, temporary;
+  const link = target();
+  io.openSync = (name, ...args) => {
+    const fd = fs.openSync(name, ...args);
+    if (name.endsWith('.tmp')) { temporary = name; fs.linkSync(name, link); }
+    return fd;
+  };
+  io.writeSync = (...args) => { written++; return fs.writeSync(...args); };
+  assert.throws(() => store({ fs: io }).writeFile(file, Buffer.from('synthetic')), { code: 'PRIVATE_ARTIFACT_PATH_INVALID' });
+  assert.equal(written, 0); assert.equal(fs.existsSync(file), false);
+  assert.equal(fs.statSync(link).size, 0); assert.equal(fs.existsSync(temporary), true);
+});
+test('growth or truncation before publication refuses the complete snapshot', () => {
+  for (const length of [0, 8]) {
+    const file = target(); const io = Object.create(fs); let temporary;
+    io.openSync = (name, ...args) => { const fd = fs.openSync(name, ...args); if (name.endsWith('.tmp')) temporary = name; return fd; };
+    io.fsyncSync = fd => { fs.fsyncSync(fd); fs.ftruncateSync(fd, length); };
+    assert.throws(() => store({ fs: io }).writeFile(file, Buffer.from('four')), { code: 'PRIVATE_ARTIFACT_PATH_INVALID' });
+    assert.equal(fs.existsSync(file), false); assert.equal(fs.existsSync(temporary), false);
+  }
+});
+test('temporary replacement during publication preserves the foreign object', () => {
+  const file = target(); const io = Object.create(fs); const retained = target(); let temporary;
+  io.linkSync = (from, to) => {
+    temporary = from; fs.renameSync(from, retained); fs.writeFileSync(from, 'foreign'); fs.linkSync(from, to);
+  };
+  assert.throws(() => store({ fs: io }).writeFile(file, Buffer.from('private')), { code: 'PRIVATE_ARTIFACT_DURABILITY_UNCERTAIN' });
+  assert.equal(fs.readFileSync(retained, 'utf8'), 'private');
+  assert.equal(fs.readFileSync(temporary, 'utf8'), 'foreign');
+  assert.equal(fs.readFileSync(file, 'utf8'), 'foreign');
+});
+test('lost link acknowledgement preserves the committed target and original failure', () => {
+  const file = target(); const io = Object.create(fs); let temporary;
+  const original = Object.assign(new Error('lost acknowledgement'), { code: 'EIO' });
+  io.linkSync = (from, to) => { temporary = from; fs.linkSync(from, to); throw original; };
+  const subject = store({ fs: io });
+  assert.throws(() => subject.writeFile(file, Buffer.from('committed')), error => error === original);
+  assert.equal(fs.existsSync(temporary), false);
+  assert.equal(fs.statSync(file).nlink, 1);
+  assert.equal(subject.readFile(file).toString(), 'committed');
+});
+test('an unowned second link is never mistaken for a committed target', () => {
+  const file = target(); const io = Object.create(fs); const other = target(); let temporary;
+  const original = Object.assign(new Error('not committed'), { code: 'EIO' });
+  io.linkSync = from => { temporary = from; fs.linkSync(from, other); throw original; };
+  assert.throws(() => store({ fs: io }).writeFile(file, Buffer.from('uncommitted')), error => error === original);
+  assert.equal(fs.existsSync(file), false); assert.equal(fs.existsSync(temporary), true);
+  assert.equal(fs.statSync(other).nlink, 2);
+  assert.equal(fs.readFileSync(other, 'utf8'), 'uncommitted');
+});
+
 // Only this freshly-created test directory is owned by this suite.
 fs.rmSync(root, { recursive: true, force: true });
 done();

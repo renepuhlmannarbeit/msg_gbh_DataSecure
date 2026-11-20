@@ -289,6 +289,36 @@ testAsync('unconfirmed wide privacy converter termination stops every unstarted 
     'a stopped pure conversion has no mapping projection to repair');
 });
 
+testAsync('actual converter closure and SafeError cause compose with the two-source executor stop', async () => {
+  const { createParentModel, CONTENT_OPTIONS } = require('./lib/conversion-parent-model.cjs');
+  const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
+  const { preserveOpaqueErrorCode, classifyPrepublicationError } = require('../plugins/data-secure/server/gateway/prepublication-error');
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const value = fixture({ state: { schema: 'datasecure-batch/4', processing_mode: 'markdown-and-anonymize',
+      product_channel: 'standalone', token, local_executor_pid: pid, io_summary: {},
+      items: [{ status: 'processing', name: 'first.pdf' }, { status: 'pending', name: 'second.txt' }],
+      progress: progress({ remaining: 2 }) },
+    async process() {
+      const parent = createParentModel({ platform });
+      parent.send({ schema: 'datasecure-conversion-unit/1', sequence: 1, index: 0,
+        result: createMarkdownExtraction({ source_type: 'pdf', content_options: CONTENT_OPTIONS,
+          markdown: 'Own synthetic completed unit', coverage: { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] } }) });
+      parent.tick(1000); parent.child.stderr.emit('data', Buffer.alloc(64 * 1024 + 1));
+      parent.close(null, 'SIGTERM');
+      let failure; try { await parent.promise; assert.fail('unconfirmed end cannot publish'); } catch (error) { failure = error; }
+      const wrapped = preserveOpaqueErrorCode(failure, new SafeError('fixed safe message'));
+      assert.deepEqual(wrapped.cause, { code: 'CONVERSION_OUTPUT_LIMIT' });
+      const classification = classifyPrepublicationError(wrapped, new Set(['CONVERSION_TIMEOUT']));
+      assert.equal(classification.retryable, false);
+      return { ...progress({ remaining: 1 }), error: classification.code };
+    } });
+    const result = await value.run();
+    assert.equal(result.error, 'CONVERSION_TERMINATION_UNCONFIRMED');
+    assert.equal(value.counts().processCalls, 1); assert.equal(value.stoppedMappings(), 1);
+    assert.ok(value.state().items.every(item => item.status !== 'pending'));
+  }
+});
+
 testAsync('a new package is finalized immediately while zero remaining does no work', async () => {
   const published = fixture({
     state: { token, local_executor_pid: pid, items: [{}], io_summary: {}, progress: progress({ remaining: 1 }) },

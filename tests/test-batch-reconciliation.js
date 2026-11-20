@@ -6,6 +6,8 @@ const os = require('os');
 const crypto = require('crypto');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchReconciliation } = require('../plugins/data-secure/server/gateway/batch-reconciliation');
+const { createBatchMappingMaintenance } = require('../plugins/data-secure/server/gateway/batch-mapping-maintenance');
+const mapping = require('../plugins/data-secure/server/gateway/mapping');
 const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { createSuite } = require('./helpers');
 
@@ -402,6 +404,99 @@ test('the batch composition root preserves every reconciliation test facade', ()
     'reconcilePublishedItems',
     'markInterruptedItemsRetryable'
   ]) assert.strictEqual(typeof _test[name], 'function', name);
+});
+
+test('real legacy outbox keeps unsafe existing package paths and commits verified mappings before removal', () => {
+  for (const kind of ['missing', 'verified', 'regular-file', 'live-link', 'dangling-link']) {
+    const own = fs.mkdtempSync(path.join(fixtureRoot, 'outbox-')), output = path.join(own, 'Output'), exports = path.join(own, 'Exports');
+    fs.mkdirSync(output); fs.mkdirSync(exports);
+    const id = 'ds_' + crypto.randomBytes(16).toString('hex'), target = path.join(output, id);
+    if (kind === 'regular-file') fs.writeFileSync(target, 'Own synthetic file', { flag: 'wx' });
+    if (kind === 'verified') {
+      fs.mkdirSync(target); const bytes = Buffer.from('# Own synthetic Markdown\n');
+      fs.writeFileSync(path.join(target, id + '.md'), bytes, { flag: 'wx' });
+      fs.writeFileSync(path.join(target, 'manifest.json'), JSON.stringify({ schema: 'eu-privacy-package/2', package_id: id,
+        document: id + '.md', document_sha256: crypto.createHash('sha256').update(bytes).digest('hex') }), { flag: 'wx' });
+    }
+    if (kind.endsWith('link')) {
+      const linkTarget = path.join(own, 'own-empty-target'); fs.mkdirSync(linkTarget);
+      fs.symlinkSync(linkTarget, target, process.platform === 'win32' ? 'junction' : 'dir');
+      if (kind === 'dangling-link') {
+        assert.ok(path.resolve(linkTarget).startsWith(path.resolve(fixtureRoot) + path.sep));
+        assert.deepEqual(fs.readdirSync(linkTarget), []); fs.rmdirSync(linkTarget);
+        assert.equal(fs.existsSync(target), false); assert.equal(fs.lstatSync(target).isSymbolicLink(), true);
+      }
+    }
+    const roots = () => ({ output, exports }), settings = { roots }, events = [];
+    const intent = mapping.ensureMappingOutbox('synthetic.docx', id, undefined, settings), before = fs.readFileSync(intent.file);
+    const actual = createBatchReconciliation({ roots });
+    const maintenance = createBatchMappingMaintenance({ readOutboxEntries: () => mapping.readOutboxEntries(settings),
+      publishedPackageRecord: actual.publishedPackageRecord,
+      appendMapping(name, id, status, options) { events.push('append'); return mapping.appendMapping(name, id, status, { ...options, ...settings }); },
+      removeMappingOutbox(value) { events.push('remove'); return mapping.removeMappingOutbox(value, settings); } });
+    const result = maintenance.replayMappingOutbox();
+    if (kind === 'missing') { assert.equal(result.orphaned_removed, 1); assert.deepEqual(events, ['remove']); }
+    else if (kind === 'verified') { assert.equal(result.repaired, 1); assert.deepEqual(events, ['append', 'remove']); }
+    else { assert.equal(result.pending, 1); assert.equal(result.orphaned_removed, 0); assert.deepEqual(events, []); assert.deepEqual(fs.readFileSync(intent.file), before); }
+  }
+});
+
+test('a real output-parent exchange after positive member reads cannot verify or discharge a legacy intent', () => {
+  const own = fs.mkdtempSync(path.join(fixtureRoot, 'after-read-')), output = path.join(own, 'Output'), exports = path.join(own, 'Exports');
+  fs.mkdirSync(output); fs.mkdirSync(exports);
+  const id = 'ds_' + crypto.randomBytes(16).toString('hex'), target = path.join(output, id); fs.mkdirSync(target);
+  const bytes = Buffer.from('# Own verified old package\n'), document = path.join(target, id + '.md');
+  fs.writeFileSync(document, bytes, { flag: 'wx' });
+  fs.writeFileSync(path.join(target, 'manifest.json'), JSON.stringify({ schema: 'eu-privacy-package/2', package_id: id,
+    document: id + '.md', document_sha256: crypto.createHash('sha256').update(bytes).digest('hex') }), { flag: 'wx' });
+  const roots = () => ({ output, exports }), settings = { roots }, descriptors = new Map();
+  const intent = mapping.ensureMappingOutbox('synthetic.docx', id, undefined, settings), before = fs.readFileSync(intent.file);
+  const retired = path.join(own, 'retired-Output'); let didSwap = false, deletes = 0, writes = 0;
+  const io = { ...fs,
+    openSync(file, flags, mode) { const fd = fs.openSync(file, flags, mode); descriptors.set(fd, file); return fd; },
+    closeSync(fd) {
+      const file = descriptors.get(fd); descriptors.delete(fd); fs.closeSync(fd);
+      if (file === document && !didSwap) {
+        for (const entry of [output, retired]) assert.ok(path.resolve(entry).startsWith(path.resolve(fixtureRoot) + path.sep));
+        fs.renameSync(output, retired); fs.mkdirSync(output); didSwap = true;
+      }
+    }
+  };
+  const actual = createBatchReconciliation({ io, roots });
+  const maintenance = createBatchMappingMaintenance({ readOutboxEntries: () => mapping.readOutboxEntries(settings),
+    publishedPackageRecord: actual.publishedPackageRecord, removeMappingOutbox() { deletes++; }, appendMapping() { writes++; } });
+  const result = maintenance.replayMappingOutbox();
+  assert.equal(didSwap, true, 'the exchange after the real held document read must actually occur');
+  assert.equal(result.pending, 1); assert.equal(deletes, 0); assert.equal(writes, 0);
+  assert.deepEqual(fs.readFileSync(intent.file), before);
+  assert.deepEqual(fs.readFileSync(path.join(retired, id, id + '.md')), bytes);
+});
+
+test('modeled metadata errors and a real parent exchange cannot authorize legacy intent removal', () => {
+  for (const code of ['EACCES', 'EIO', 'ENOTDIR', 'PARENT_EXCHANGE']) {
+    const own = fs.mkdtempSync(path.join(fixtureRoot, 'parent-')), output = path.join(own, 'Output'), exports = path.join(own, 'Exports');
+    fs.mkdirSync(output); fs.mkdirSync(exports);
+    const id = 'ds_' + crypto.randomBytes(16).toString('hex'), target = path.join(output, id); let swapped = false, inspections = 0;
+    const roots = () => ({ output, exports }), settings = { roots };
+    const intent = mapping.ensureMappingOutbox('synthetic.docx', id, undefined, settings), before = fs.readFileSync(intent.file);
+    const io = { ...fs, lstatSync(leaf, options) {
+      if (leaf !== target) return fs.lstatSync(leaf, options);
+      inspections++;
+      if (code === 'PARENT_EXCHANGE') {
+        const retired = path.join(own, 'retired-empty-Output');
+        for (const value of [output, retired]) assert.ok(path.resolve(value).startsWith(path.resolve(fixtureRoot) + path.sep));
+        assert.deepEqual(fs.readdirSync(output), []); fs.renameSync(output, retired); fs.mkdirSync(output); swapped = true;
+      }
+      throw Object.assign(Error('modeled metadata boundary'), { code: code === 'PARENT_EXCHANGE' ? 'ENOENT' : code });
+    } };
+    const actual = createBatchReconciliation({ io, roots }); let deletes = 0, writes = 0;
+    const maintenance = createBatchMappingMaintenance({ readOutboxEntries: () => mapping.readOutboxEntries(settings),
+      publishedPackageRecord: actual.publishedPackageRecord, removeMappingOutbox() { deletes++; }, appendMapping() { writes++; } });
+    const result = maintenance.replayMappingOutbox();
+    assert.equal(inspections, 1); if (code === 'PARENT_EXCHANGE') assert.equal(swapped, true);
+    assert.equal(result.pending, 1); assert.equal(result.orphaned_removed, 0); assert.equal(deletes, 0); assert.equal(writes, 0);
+    assert.deepEqual(fs.readFileSync(intent.file), before);
+  }
 });
 
 done().finally(() => {

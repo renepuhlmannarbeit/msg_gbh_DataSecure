@@ -7,22 +7,48 @@ const readline = require('node:readline');
 const assert = require('node:assert/strict');
 const { performance } = require('node:perf_hooks');
 const { observeChild, waitForChildCompletion } = require('./lib/native-export-test-lifecycle.cjs');
+const { firstFailure, within, ownChild, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
 const testArgs = process.argv.slice(2);
 assert.ok(testArgs.length === 0 || testArgs.length === 1 && testArgs[0] === '--first-install-only', 'closed native export test mode');
 const firstInstallOnly = testArgs.length === 1;
 const { NativeExportChannel } = require('../plugins/data-secure/server/standalone/native-export-channel');
 const { createDocumentReviewStore } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
-const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-native-store-'));
+async function main() {
+  const failure = firstFailure();
+  let child, owned, observedChild, root, deadline, stderrLines, stdoutLines, writeDiagnostic;
+  let stderr = '', finishing = false, stopRequested = false, body, bodyUnconfirmed = false;
+  const deadlineAt = performance.now() + 180000;
+  let notifyFailure, abortChannel = () => {};
+  const failed = new Promise(resolve => { notifyFailure = resolve; });
+  const recordFailure = error => {
+    failure.record(error);
+    try { abortChannel(); } catch (secondary) { failure.record(secondary); }
+    notifyFailure(error);
+  };
+  const stopNative = () => {
+    if (!owned || owned.closed || stopRequested || owned.child.exitCode !== null || owned.child.signalCode !== null) return;
+    stopRequested = true;
+    try { if (!owned.terminate()) recordFailure(new Error('native pipe helper stop refused')); }
+    catch (error) { recordFailure(error); }
+  };
+  let completion = { close_confirmed: false, exit_confirmed: false, exit_code: null,
+    exit_signal: null, error_observed: false };
+  try {
+root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-native-store-'));
 const data = path.join(root, 'private'), results = path.join(root, 'public'), packages = path.join(root, 'packages');
 for (const p of [data, results, packages]) fs.mkdirSync(p, { mode: 0o700 });
 process.env.EU_PRIVACY_DATA_ROOT = data;
 process.env.EU_PRIVACY_ROOT = path.join(root, 'workspace');
 delete process.env.EU_PRIVACY_RESULT_ROOT;
 const resultConfig = require('../plugins/data-secure/server/gateway/result-folder-config');
-const child = spawn('cargo', ['test', '--locked', 'native_export_broker::tests::pipe_helper', '--', '--ignored', '--exact', '--nocapture', '--test-threads=1'],
+child = spawn('cargo', ['test', '--locked', 'native_export_broker::tests::pipe_helper', '--', '--ignored', '--exact', '--nocapture', '--test-threads=1'],
   { cwd: path.resolve(__dirname, '../apps/datasecure-standalone/tauri-contract'), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false, configuredAdmissions = 0, preparationService;
+owned = ownChild(child, recordFailure);
+observedChild = observeChild(child);
+for (const stream of [child.stdin, child.stdout, child.stderr].filter(Boolean)) stream.on('error', recordFailure);
+let outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false, configuredAdmissions = 0, preparationService;
+let expectedHarnessRefusal;
 const nativeCommands = [], nativeActions = [];
 const admissionSnapshots = [], nativeConfigureFailures = [];
 let invalidNativeConfigureFailures = 0;
@@ -82,8 +108,13 @@ const publicationPhaseDiagnostics = createPublicationPhaseDiagnostics();
 const configureStages = new Set(('nonce guard public_open data_open roots anonymize_bind anonymize_volume markdown_bind markdown_volume private_create private_sync data_sync public_sync root_encoding ' +
   'admission_digest_encoding admission_guard admission_data_open admission_settings_open admission_settings_read admission_settings_digest admission_settings_parse admission_root admission_record admission_native_identity admission_public_open admission_node_identity admission_identity_match admission_settings_binding admission_data_reopen admission_repeat_data_open admission_repeat_settings_binding admission_repeat_settings_read admission_repeat_settings_match').split(' '));
 const configureKinds = new Set('NotFound PermissionDenied ConnectionRefused ConnectionReset HostUnreachable NetworkUnreachable ConnectionAborted NotConnected AddrInUse AddrNotAvailable NetworkDown BrokenPipe AlreadyExists WouldBlock NotADirectory IsADirectory DirectoryNotEmpty ReadOnlyFilesystem FilesystemLoop StaleNetworkFileHandle InvalidInput InvalidData TimedOut WriteZero StorageFull NotSeekable QuotaExceeded FileTooLarge ResourceBusy ExecutableFileBusy Deadlock CrossesDevices TooManyLinks InvalidFilename ArgumentListTooLong Interrupted Unsupported UnexpectedEof OutOfMemory InProgress Other Uncategorized'.split(' '));
-child.stderr.on('data', bytes => { stderr = `${stderr}${bytes}`.slice(-8192); });
-readline.createInterface({ input: child.stderr }).on('line', line => {
+if (!child.stdin || !child.stdout || !child.stderr) {
+  await within(Promise.race([failed.then(error => { throw error; }), owned.done.then(() => {
+    failure.throwIfFailed(); throw new Error('native pipe helper stdio unavailable');
+  })]), Math.max(0, deadlineAt - performance.now()), 'NATIVE_EXPORT_DEADLINE');
+}
+child.stderr.on('data', bytes => { try { stderr = `${stderr}${bytes}`.slice(-8192); } catch (error) { recordFailure(error); } });
+stderrLines = readline.createInterface({ input: child.stderr }).on('line', line => {
   const bodyPrefix = 'NATIVE_BODY_DIAGNOSTIC:';
   if (line.startsWith(bodyPrefix)) {
     try {
@@ -113,6 +144,7 @@ readline.createInterface({ input: child.stderr }).on('line', line => {
     nativeConfigureFailures.push(value);
   } catch { invalidNativeConfigureFailures++; }
 });
+stderrLines.on('error', recordFailure);
 function observeAdmissionSnapshot(snapshot, batchId, operationId) {
   // Test evidence only, beneath this process's create-only synthetic root.
   // These fresh reads never authorize or repair the real native request.
@@ -131,33 +163,65 @@ function observeAdmissionSnapshot(snapshot, batchId, operationId) {
   } catch { admissionSnapshots.push({ diagnostic_unavailable: true }); }
 }
 const channel = new NativeExportChannel({ write: frame => {
+  failure.throwIfFailed();
+  if (expectedHarnessRefusal) {
+    assert.equal(expectedHarnessRefusal.request, null, 'one expected refusal owns exactly one native request');
+    assert.equal(frame.command, expectedHarnessRefusal.command);
+    assert.equal(frame.request_id, expectedHarnessRefusal.outerRequest);
+    expectedHarnessRefusal.request = frame;
+  }
   publicationPhaseDiagnostics.request(frame);
   if (frame.action) nativeActions.push(frame.action);
   if (frame.command) nativeCommands.push(frame.command);
   if (poisonedBody && frame.command === 'write_body') {
     frame.body.hex = frame.body.hex.replace(/^../u, '00'); poisonedBody = false;
   }
-  child.stdin.write(`${JSON.stringify({ data, frame, outer })}\n`);
+  try { child.stdin.write(`${JSON.stringify({ data, frame, outer })}\n`, error => { if (error) recordFailure(error); }); }
+  catch (error) { recordFailure(error); throw error; }
 } });
-readline.createInterface({ input: child.stdout }).on('line', line => {
-  const marker = line.indexOf('NATIVE:');
-  if (marker < 0) return;
-  const reply = JSON.parse(line.slice(marker + 7));
-  publicationPhaseDiagnostics.response(reply);
-  if (reply.harness_error) console.error(reply.harness_error);
-  try { channel.accept(reply); } catch (e) { channel.abort(e.code); }
+abortChannel = () => channel.abort('STANDALONE_IPC_FAILED');
+stdoutLines = readline.createInterface({ input: child.stdout }).on('line', line => {
+  if (failure.failed) return;
+  try {
+    const marker = line.indexOf('NATIVE:');
+    if (marker < 0) return;
+    const reply = JSON.parse(line.slice(marker + 7));
+    publicationPhaseDiagnostics.response(reply);
+    // The test-only Rust pipe reports rejected outer DTOs out of band. Only
+    // explicitly armed negative cases may consume this exact refusal envelope.
+    if (expectedHarnessRefusal && reply && Object.keys(reply).join(',') === 'harness_error' &&
+        reply.harness_error === 'Err("STANDALONE_IPC_FAILED")' &&
+        expectedHarnessRefusal.request && channel.pending?.request === expectedHarnessRefusal.request) {
+      expectedHarnessRefusal.observed++;
+      assert.equal(expectedHarnessRefusal.observed, 1);
+      channel.abort('STANDALONE_IPC_FAILED');
+      return;
+    }
+    channel.accept(reply);
+  } catch (error) { recordFailure(error); }
 });
-const observedChild = observeChild(child);
-child.once('exit', () => { channel.abort('STANDALONE_IPC_FAILED'); });
-child.once('error', () => { channel.abort('STANDALONE_IPC_FAILED'); });
-const deadlineAt = performance.now() + 180000;
-const deadline = setTimeout(() => { channel.abort('STANDALONE_IPC_FAILED'); child.kill(); }, 180000);
+stdoutLines.on('error', recordFailure);
+async function expectHarnessRefusal(command, action, message) {
+  assert.equal(expectedHarnessRefusal, undefined);
+  const expected = { command, outerRequest: outer.request_id, request: null, observed: 0 };
+  expectedHarnessRefusal = expected;
+  try {
+    await assert.rejects(action, { code: 'STANDALONE_IPC_FAILED' }, message);
+    assert.equal(expected.observed, 1, 'the real Rust pipe must produce the exact expected outer-DTO refusal');
+  } finally { expectedHarnessRefusal = undefined; }
+}
+child.once('exit', () => { if (!finishing) recordFailure(new Error('native pipe helper exited during the body')); });
+deadline = setTimeout(() => {
+  recordFailure(new Error('NATIVE_EXPORT_DEADLINE')); stopNative();
+}, Math.max(0, deadlineAt - performance.now()));
 function context(action, extra = {}) {
+  failure.throwIfFailed();
   publicationPhaseDiagnostics.begin(loseNextPublish);
   outer = { schema: 'datasecure-standalone-private-ipc/1', request_id: (++seq).toString(16).padStart(16, '0'), action, ...extra };
   nativeSession = channel.publication(outer);
 }
 function fixture(mode, index, extraText = '', raw = null, native = true) {
+  failure.throwIfFailed();
   const batchId = index.toString(16).padStart(64, '0'), documentId = index.toString(16).padStart(32, '0');
   const actual = raw === null ? null : require('../plugins/data-secure/server/pii-engine').anonymize(raw, 'general', { captureTransformPlan: true });
   const item = { id: documentId, name: 'nested/Quelle.pdf', sha256: sha(raw ?? 'synthetic source'), status: 'released' };
@@ -212,6 +276,7 @@ async function exportCall(f, operationId, acknowledge = false) {
   return f.store.exportApproved(f.batchId, operationId, selection, acknowledge);
 }
 async function run() {
+  failure.throwIfFailed();
   let i = 0;
   // First installation: no picker and no pre-existing destination. Execute the
   // actual application method with real FS/config dependencies, then the real
@@ -266,6 +331,7 @@ async function run() {
   }
   if (firstInstallOnly) { console.log('ok first-install-only: complete unchanged first-installation/export/restart/ACK block; remaining full-suite cases intentionally not run'); return; }
   {
+    failure.throwIfFailed();
     // Force the NEW lossless representation even on APFS with small inode IDs.
     // This is a test settings fixture, not an upgrade/adoption of a legacy /2.
     const exactRoot = path.join(root, 'new-exact-admission'); fs.mkdirSync(exactRoot);
@@ -352,14 +418,14 @@ async function run() {
     assert.ok(operation.files.every(file => file.name.endsWith('.md')));
     for (const command of ['publish', 'acknowledge', 'abandon']) {
       context('resolve_history_results', { batch_id: batchId });
-      await assert.rejects(send(command), { code: 'STANDALONE_IPC_FAILED' }, `history cannot ${command}`);
+      await expectHarnessRefusal(command, () => send(command), `history cannot ${command}`);
     }
     context('publish_result_documents', { batch_id: 'f'.repeat(64) });
-    await assert.rejects(send('reconcile'), { code: 'STANDALONE_IPC_FAILED' }, 'a different outer batch grants no capability');
+    await expectHarnessRefusal('reconcile', () => send('reconcile'), 'a different outer batch grants no capability');
     context('publish_result_documents', { batch_id: batchId, selection: [] });
-    await assert.rejects(send('reconcile'), { code: 'STANDALONE_IPC_FAILED' }, 'new outer is closed; even a selection field is refused');
+    await expectHarnessRefusal('reconcile', () => send('reconcile'), 'new outer is closed; even a selection field is refused');
     context('resolve_document_export', { batch_id: batchId, operation_id: operationId });
-    await assert.rejects(send('reconcile'), { code: 'STANDALONE_IPC_FAILED' }, 'legacy copy opener cannot adopt results role');
+    await expectHarnessRefusal('reconcile', () => send('reconcile'), 'legacy copy opener cannot adopt results role');
     // Reusing the private operation ID under the old role is a real durable
     // intent conflict even though the body and all other fields are identical.
     const { publication_role: _role, confidential: _confidential, ...legacyOperation } = operation;
@@ -386,6 +452,7 @@ async function run() {
   }
   for (const [modeIndex, [mode, naming]] of [['markdown-only', 'neutral'], ['markdown-and-anonymize', 'neutral'],
     ['markdown-and-anonymize', 'source-with-suffix']].entries()) {
+    failure.throwIfFailed();
     // Full production composition: real content-bound initial publication,
     // private correction journal, current-vector planner AND native Rust pipe.
     const anonymous = mode === 'markdown-and-anonymize', serial = 800 + modeIndex * 10;
@@ -535,6 +602,7 @@ async function run() {
     console.log(`ok ${mode}/${naming}: production initial ID/name map -> correction -> native recursive full-vector generation -> LostReceipt -> fresh store -> readonly working-copy opener; public edits preserved, new private generation never imports them`);
   }
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
+    failure.throwIfFailed();
     const admissionsBefore = configuredAdmissions;
     const targetRoot = path.join(root, `configured-${++i}`); fs.mkdirSync(targetRoot);
     resultConfig.saveConfiguredResultRoot(targetRoot);
@@ -627,6 +695,7 @@ async function run() {
     }
     console.log(`ok ${native ? 'native Rust' : 'Node'}: real 10,001-contact core trace, person/company, approval, exact export and identity reread`);
   }
+  failure.throwIfFailed();
   const old = path.join(data, binding.private_name), displaced = `${old}-displaced`;
   fs.renameSync(old, displaced); fs.mkdirSync(old);
   const replaced = fixture('markdown-only', ++i), refusedOp = crypto.randomBytes(16).toString('hex');
@@ -635,22 +704,9 @@ async function run() {
   assert.equal(fs.existsSync(path.join(results, 'DataSecure-Markdown-Korrektur', `Export-${refusedOp}`)), false);
   console.log('ok replaced private native binding receives no source text or publication');
 }
-(async () => {
-  try { await run(); }
-  catch (e) { console.error(e); console.error(stderr); process.exitCode = 1; }
-  finally {
-    child.stdin.end();
-    const completion = await waitForChildCompletion(observedChild, deadlineAt);
-    clearTimeout(deadline);
-    if (!completion.close_confirmed || !completion.exit_confirmed) {
-      console.error('Native pipe helper exit/close unconfirmed within original deadline; fixture retained'); process.exitCode = 1;
-      // Detach only this harness's own pipes after failure. This is not a
-      // successful join, writer-quiescence proof or authority to delete data.
-      child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); child.unref();
-    }
-    if (completion.exit_code !== 0 || completion.error_observed) { console.error('Native pipe helper did not exit cleanly', completion, stderr); process.exitCode = 1; }
-    if (invalidNativeConfigureFailures !== 0) { console.error('Closed native configure diagnostic rejected'); process.exitCode = 1; }
-    if (invalidNativeBodyDiagnostics !== 0) { console.error('Closed native body diagnostic rejected'); process.exitCode = 1; }
+  writeDiagnostic = () => {
+    if (invalidNativeConfigureFailures !== 0) recordFailure(new Error('Closed native configure diagnostic rejected'));
+    if (invalidNativeBodyDiagnostics !== 0) recordFailure(new Error('Closed native body diagnostic rejected'));
     fs.writeFileSync(path.join(root, 'NATIVE-ADMISSION-DIAGNOSTIC.json'), JSON.stringify({
       schema: 'datasecure-native-export-test-diagnostics/1', test_mode: firstInstallOnly ? 'first-install-only' : 'full',
       configured_admissions: configuredAdmissions, admission_snapshots: admissionSnapshots,
@@ -659,10 +715,51 @@ async function run() {
       native_body_diagnostic_maximum: 64, native_body_diagnostic_may_be_truncated: nativeBodyDiagnostics.length === 64,
       publication_phase_diagnostics: publicationPhaseDiagnostics.snapshot(),
       child_exit_code: completion.exit_code, child_exit_confirmed: completion.exit_confirmed,
-      child_close_confirmed: completion.close_confirmed, test_exit_code: process.exitCode || 0
+      child_close_confirmed: completion.close_confirmed, test_exit_code: failure.failed ? 1 : 0
     }, null, 2), { flag: 'wx', mode: 0o600 });
-    // Retain these strictly synthetic fault fixtures for inspection; never
-    // recursively delete a directory that has been deliberately tampered with.
-    console.log(`Synthetic native-export evidence: ${root}`);
+  };
+  body = run();
+  await within(Promise.race([body, failed.then(error => { throw error; })]),
+    Math.max(0, deadlineAt - performance.now()), 'NATIVE_EXPORT_DEADLINE');
+  failure.throwIfFailed();
+  } catch (error) { recordFailure(error); }
+  finally {
+    finishing = true;
+    // Every known own stage is attempted before this TEST CLI may end in failure.
+    try { abortChannel(); } catch (error) { failure.record(error); }
+    try { if (child?.stdin) child.stdin.end(); } catch (error) { recordFailure(error); }
+    if (failure.failed) stopNative();
+    if (body) {
+      try { await within(body.then(() => {}, () => {}), Math.max(0, deadlineAt - performance.now()),
+        'NATIVE_EXPORT_BODY_UNSETTLED'); }
+      catch (error) { bodyUnconfirmed = true; recordFailure(error); }
+    }
+    try {
+      if (observedChild) completion = await waitForChildCompletion(observedChild, deadlineAt);
+    } catch (error) { recordFailure(error); }
+    if (!completion.close_confirmed || !completion.exit_confirmed) {
+      recordFailure(new Error('native pipe helper exit/close unconfirmed within original deadline'));
+      stopNative();
+    }
+    try { clearTimeout(deadline); } catch (error) { recordFailure(error); }
+    for (const lines of [stderrLines, stdoutLines].filter(Boolean)) {
+      try { lines.close(); } catch (error) { recordFailure(error); }
+    }
+    if (!completion.close_confirmed || !completion.exit_confirmed) {
+      // Failure-only detach is not a close/writer witness or deletion authority.
+      for (const stream of child ? [child.stdin, child.stdout, child.stderr].filter(Boolean) : []) {
+        try { stream.destroy(); } catch (error) { recordFailure(error); }
+      }
+      try { if (child) child.unref(); } catch (error) { recordFailure(error); }
+    }
+    if (observedChild && (completion.exit_code !== 0 || completion.exit_signal !== null || completion.error_observed))
+      recordFailure(new Error('native pipe helper did not exit cleanly'));
+    try { if (writeDiagnostic) writeDiagnostic(); } catch (error) { recordFailure(error); }
+    if (failure.failed) { try { console.error(stderr); } catch (error) { recordFailure(error); } }
+    // Retain these strictly synthetic fault fixtures; never traverse tampered trees.
+    try { if (root) console.log(`Synthetic native-export evidence: ${root}`); } catch (error) { recordFailure(error); }
+    endTestCliFailure({ failed: failure.failed, error: failure.value, retainedRoots: root ? [root] : [],
+      unconfirmedChildren: bodyUnconfirmed || !completion.close_confirmed || !completion.exit_confirmed });
   }
-})();
+}
+main();

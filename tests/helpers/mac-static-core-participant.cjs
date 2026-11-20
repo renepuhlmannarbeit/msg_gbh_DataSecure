@@ -79,6 +79,27 @@ function releaseHeld() {
   if (failed) throw primary;
   return { released: true, root_closed: true };
 }
+function hold() {
+  if (held) throw fail('MAC_NATIVE_PARTICIPANT_FAILED');
+  const factory = newFactory(); let guard, failed = false, primary;
+  const remember = error => {
+    if (!failed) { failed = true; primary = error; }
+    else { try { process.stderr.write('MAC_NATIVE_HOLD_SECONDARY_CLEANUP_FAILURE\n'); } catch {} }
+  };
+  try {
+    guard = factory.tryAcquire();
+    if (!guard) throw fail('OWNERSHIP_GUARD_BUSY');
+    assert.equal(guard.assertHeld(), true); held = { factory, guard };
+  } catch (error) { remember(error); }
+  finally {
+    if (!held) {
+      if (guard) { try { assert.equal(guard.release(), true); } catch (error) { remember(error); } }
+      try { assert.equal(factory.close(), true); } catch (error) { remember(error); }
+    }
+  }
+  if (failed) throw primary;
+  return { acquired: true };
+}
 async function workerProbe(expectBusy) {
   if (worker) throw fail('MAC_NATIVE_PARTICIPANT_FAILED');
   const active = new Worker(__filename, { workerData: options, env: { ...process.env },
@@ -135,16 +156,7 @@ if (!isMainThread) {
     try {
       switch (message.operation) {
         case 'identity': result = { node: process.version, target: options.target, builtin: true, clean_env: true }; break;
-        case 'hold': {
-          if (held) throw fail('MAC_NATIVE_PARTICIPANT_FAILED');
-          const factory = newFactory(); let guard;
-          try {
-            guard = factory.tryAcquire();
-            if (!guard) throw fail('OWNERSHIP_GUARD_BUSY');
-            assert.equal(guard.assertHeld(), true); held = { factory, guard }; result = { acquired: true };
-          } finally { if (!held) { if (guard) assert.equal(guard.release(), true); assert.equal(factory.close(), true); } }
-          break;
-        }
+        case 'hold': result = hold(); break;
         case 'release': result = releaseHeld(); break;
         case 'admit': result = admission(); break;
         case 'worker_busy': result = await workerProbe(true); break;

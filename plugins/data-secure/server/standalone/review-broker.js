@@ -17,6 +17,7 @@ function createReviewBroker() {
   let active = null;
   let lastReviewedBatchId = null;
   let run = null;
+  const retired = new WeakSet();
 
   function beginAttempt(batchId) {
     if (active || run?.workerActive || !BATCH_ID_RE.test(String(batchId || ''))) {
@@ -28,14 +29,15 @@ function createReviewBroker() {
   }
 
   function begin(child, batchId) {
-    if (active || !child || typeof child.send !== 'function' ||
+    if (active || !child || typeof child.send !== 'function' || retired.has(child) ||
         !BATCH_ID_RE.test(String(batchId || ''))) throw failure('STANDALONE_REVIEW_SESSION_INVALID');
     const attempt = run?.batchId === batchId ? run.attempt : Object.freeze({});
     run = { child, batchId, phase: 'preparing', workerActive: true, errorCode: null, attempt };
   }
 
   function failed(child, code = 'LOCAL_REVIEW_FAILED') {
-    if (run?.child !== child) return;
+    if (!run || run.child !== child) return;
+    if (active && active.child === child) { active.bytes.fill(0); active = null; }
     if (run.phase === 'failed' && run.errorCode && code === 'LOCAL_REVIEW_WORKER_EXITED') return;
     run.phase = 'failed';
     run.errorCode = ['LOCAL_REVIEW_TOO_LARGE', 'OCR_CONTACT_REVIEW_INVALID', 'LOCAL_REVIEW_TIMEOUT',
@@ -57,12 +59,12 @@ function createReviewBroker() {
 
   function receive(child, message) {
     if (message?.type === 'standalone-review-failed') {
-      if (run?.child === child && message.batch_token === run.batchId) failed(child, message.error_code);
+      if (run && run.child === child && message.batch_token === run.batchId) failed(child, message.error_code);
       return true;
     }
     if (message?.type !== 'standalone-review-draft') return false;
-    if (active || !child || typeof child.send !== 'function' ||
-        (run?.workerActive && (run.child !== child || run.batchId !== message.batch_token)) ||
+    if (active || !child || typeof child.send !== 'function' || !run ||
+        !run.workerActive || run.phase === 'failed' || run.child !== child || run.batchId !== message.batch_token || retired.has(child) ||
         !REVIEW_ID_RE.test(String(message.review_id || '')) ||
         !BATCH_ID_RE.test(String(message.batch_token || '')) ||
         message.draft?.schema !== 'data-secure-text-review/3' ||
@@ -71,7 +73,6 @@ function createReviewBroker() {
       catch { /* worker disconnect remains fail-closed */ }
       return true;
     }
-    if (!run || run.child !== child) begin(child, message.batch_token);
     if (message.draft.ambiguities.length > MAX_STANDALONE_REVIEW_FINDINGS) {
       failed(child, 'LOCAL_REVIEW_TOO_LARGE');
       try { child.send({ type: 'standalone-review-answer', review_id: message.review_id, answer: { action: 'deferred' } }); }
@@ -137,8 +138,9 @@ function createReviewBroker() {
   }
 
   function release(child, options = {}) {
-    if (active?.child === child) { active.bytes.fill(0); active = null; }
-    if (run?.child !== child) return;
+    if (child && ['object', 'function'].includes(typeof child)) retired.add(child);
+    if (active && active.child === child) { active.bytes.fill(0); active = null; }
+    if (!run || run.child !== child) return;
     if (options.failed === true || ['preparing', 'ready'].includes(run.phase)) {
       failed(child, options.errorCode || 'LOCAL_REVIEW_WORKER_EXITED');
     }

@@ -1,0 +1,336 @@
+{
+  "schema": "datasecure-test-root-bootstrap-contracts/2",
+  "scopes": [
+    {
+      "id": "tests/test-batch-session.js",
+      "file": "tests/test-batch-session.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.XDG_DATA_HOME = path.join(base, 'xdg-data');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-batch-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.XDG_DATA_HOME = path.join(base, 'xdg-data');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-batch-active-lock.js",
+      "file": "tests/test-batch-active-lock.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-active-lock-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-active-lock-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-audit-privacy.js",
+      "file": "tests/test-audit-privacy.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-audit-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(root, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');",
+      "after": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-audit-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(root, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(root, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(root, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-rc80-semantics.js",
+      "file": "tests/test-rc80-semantics.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-rc80-semantics-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(root, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');\nprocess.env.XDG_DATA_HOME = path.join(root, 'xdg');",
+      "after": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-rc80-semantics-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(root, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');\nprocess.env.XDG_DATA_HOME = path.join(root, 'xdg');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(root, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(root, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-batch-retention-protection.js",
+      "file": "tests/test-batch-retention-protection.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-batch-retention-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-batch-retention-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-batch-processing-lock.js",
+      "file": "tests/test-batch-processing-lock.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-processing-lock-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-processing-lock-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-batch-intake-reservation.js",
+      "file": "tests/test-batch-intake-reservation.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intake-reservation-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intake-reservation-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-batch-post-publish-recovery.js",
+      "file": "tests/test-batch-post-publish-recovery.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-post-publish-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-post-publish-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-batch-snapshot.js",
+      "file": "tests/test-batch-snapshot.js",
+      "kind": "top",
+      "before": "const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-snapshot-')));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');",
+      "after": "const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-snapshot-')));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-direct-picker-batch.js",
+      "file": "tests/test-direct-picker-batch.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-direct-picker-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-direct-picker-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-direct-picker-intake-worker.js",
+      "file": "tests/test-direct-picker-intake-worker.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intake-worker-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intake-worker-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'localapp', 'SecureDataMsg');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-companion-processor.js",
+      "file": "tests/test-companion-processor.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-companion-processor-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-companion-processor-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-companion-supervisor.js",
+      "file": "tests/test-companion-supervisor.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-supervisor-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-supervisor-'));\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-format-acceptance-matrix.js",
+      "file": "tests/test-format-acceptance-matrix.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-format-matrix-'));\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');",
+      "after": "const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-format-matrix-'));\nconst root = path.join(testRootScope, 'privacy');\nfs.mkdirSync(root, { mode: 0o700 });\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-adversarial.js",
+      "file": "tests/test-adversarial.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-adv-'));\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');",
+      "after": "const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-adv-'));\nconst root = path.join(testRootScope, 'privacy');\nfs.mkdirSync(root, { mode: 0o700 });\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-visual.js",
+      "file": "tests/test-visual.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-visual-'));\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');\nprocess.env.EU_PRIVACY_VISUAL_MODE = 'strict';",
+      "after": "const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-visual-'));\nconst root = path.join(testRootScope, 'privacy');\nfs.mkdirSync(root, { mode: 0o700 });\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');\nprocess.env.EU_PRIVACY_VISUAL_MODE = 'strict';",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-package-read-capabilities.js",
+      "file": "tests/test-package-read-capabilities.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-read-capability-'));\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');",
+      "after": "const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-read-capability-'));\nconst root = path.join(testRootScope, 'privacy');\nfs.mkdirSync(root, { mode: 0o700 });\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-package-snapshot-async.js",
+      "file": "tests/test-package-snapshot-async.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-async-snapshot-'));\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');",
+      "after": "const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-async-snapshot-'));\nconst root = path.join(testRootScope, 'privacy');\nfs.mkdirSync(root, { mode: 0o700 });\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/test-review-private-artifact-migration.js",
+      "file": "tests/test-review-private-artifact-migration.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-review-plain-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-review-plain-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/manual/batch-500mb-acceptance.js",
+      "file": "tests/manual/batch-500mb-acceptance.js",
+      "kind": "top",
+      "before": "const base = fs.mkdtempSync(path.join(temporaryParent, 'datasecure-500mb-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "const base = fs.mkdtempSync(path.join(temporaryParent, 'datasecure-500mb-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": true,
+      "worker": false
+    },
+    {
+      "id": "tests/windows-visual-acceptance.js",
+      "file": "tests/windows-visual-acceptance.js",
+      "kind": "top",
+      "before": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-windows-visual-'));\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(root, 'localapp');",
+      "after": "const testRootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-windows-visual-'));\nconst root = path.join(testRootScope, 'privacy');\nfs.mkdirSync(root, { mode: 0o700 });\nprocess.env.EU_PRIVACY_ROOT = root;\nprocess.env.LOCALAPPDATA = path.join(testRootScope, 'localapp');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(testRootScope, 'product-data');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(testRootScope, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": false,
+      "worker": false
+    },
+    {
+      "id": "delivery-0",
+      "file": "tests/test-batch-delivery.js",
+      "kind": "case",
+      "before": "  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-guard-'));\n  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA };\n  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\n  process.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-guard-'));\n  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA, data: process.env.EU_PRIVACY_DATA_ROOT, result: process.env.EU_PRIVACY_RESULT_ROOT };\n  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\n  process.env.LOCALAPPDATA = path.join(base, 'localapp');\n  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\n  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local]]) {\n      if (value === undefined) delete process.env[name]; else process.env[name] = value;\n    }",
+      "after_restore": "    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local], ['EU_PRIVACY_DATA_ROOT', previous.data], ['EU_PRIVACY_RESULT_ROOT', previous.result]]) {\n      if (value === undefined) delete process.env[name]; else process.env[name] = value;\n    }",
+      "top_admission": false,
+      "worker": false,
+      "next_title": "whole-work cleanup retries bounded transient Windows delete failures without weakening identity checks"
+    },
+    {
+      "id": "delivery-1",
+      "file": "tests/test-batch-delivery.js",
+      "kind": "case",
+      "before": "  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-retry-'));\n  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA };\n  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\n  process.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-retry-'));\n  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA, data: process.env.EU_PRIVACY_DATA_ROOT, result: process.env.EU_PRIVACY_RESULT_ROOT };\n  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\n  process.env.LOCALAPPDATA = path.join(base, 'localapp');\n  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\n  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local]]) {\n      if (value === undefined) delete process.env[name]; else process.env[name] = value;\n    }",
+      "after_restore": "    for (const [name, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local], ['EU_PRIVACY_DATA_ROOT', previous.data], ['EU_PRIVACY_RESULT_ROOT', previous.result]]) {\n      if (value === undefined) delete process.env[name]; else process.env[name] = value;\n    }",
+      "top_admission": false,
+      "worker": false,
+      "next_title": "a real interrupted OCR correction write stays private and both owned hardlinks can be safely cleaned"
+    },
+    {
+      "id": "package-staging-scoped",
+      "file": "tests/test-package-staging.js",
+      "kind": "function",
+      "before": "  const previousPrivacy = process.env.EU_PRIVACY_ROOT;\n  const previousLocal = process.env.LOCALAPPDATA;\n  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-package-stage-test-'));\n  const privacy = path.join(base, 'privacy');\n  process.env.EU_PRIVACY_ROOT = privacy;\n  process.env.LOCALAPPDATA = path.join(base, 'localapp');",
+      "after": "  const previousPrivacy = process.env.EU_PRIVACY_ROOT;\n  const previousLocal = process.env.LOCALAPPDATA;\n  const previousData = process.env.EU_PRIVACY_DATA_ROOT, previousResult = process.env.EU_PRIVACY_RESULT_ROOT;\n  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-package-stage-test-'));\n  const privacy = path.join(base, 'privacy');\n  process.env.EU_PRIVACY_ROOT = privacy;\n  process.env.LOCALAPPDATA = path.join(base, 'localapp');\n  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\n  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "    if (previousPrivacy === undefined) delete process.env.EU_PRIVACY_ROOT;\n    else process.env.EU_PRIVACY_ROOT = previousPrivacy;\n    if (previousLocal === undefined) delete process.env.LOCALAPPDATA;\n    else process.env.LOCALAPPDATA = previousLocal;",
+      "after_restore": "    if (previousPrivacy === undefined) delete process.env.EU_PRIVACY_ROOT;\n    else process.env.EU_PRIVACY_ROOT = previousPrivacy;\n    if (previousLocal === undefined) delete process.env.LOCALAPPDATA;\n    else process.env.LOCALAPPDATA = previousLocal;\n    if (previousData === undefined) delete process.env.EU_PRIVACY_DATA_ROOT; else process.env.EU_PRIVACY_DATA_ROOT = previousData;\n    if (previousResult === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT; else process.env.EU_PRIVACY_RESULT_ROOT = previousResult;",
+      "top_admission": false,
+      "worker": false
+    },
+    {
+      "id": "performance-durability",
+      "file": "tests/test-batch-performance-contract.js",
+      "kind": "case",
+      "before": "  const fs = require('fs');\n  const os = require('os');\n  const path2 = require('path');\n  const base = fs.mkdtempSync(path2.join(os.tmpdir(), 'datasecure-perf-durability-'));\n  process.env.EU_PRIVACY_ROOT = path2.join(base, 'privacy');\n  process.env.LOCALAPPDATA = path2.join(base, 'localapp');",
+      "after": "  const fs = require('fs');\n  const os = require('os');\n  const path2 = require('path');\n  const previousNamespace = new Map(['EU_PRIVACY_ROOT', 'EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'LOCALAPPDATA'].map(key => [key, process.env[key]]));\n  const base = fs.mkdtempSync(path2.join(os.tmpdir(), 'datasecure-perf-durability-'));\n  process.env.EU_PRIVACY_ROOT = path2.join(base, 'privacy');\n  process.env.LOCALAPPDATA = path2.join(base, 'localapp');\n  process.env.EU_PRIVACY_DATA_ROOT = path2.join(base, 'product-data');\n  process.env.EU_PRIVACY_RESULT_ROOT = path2.join(base, 'results');",
+      "before_restore": "",
+      "after_restore": "    for (const [key, value] of previousNamespace) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }",
+      "top_admission": false,
+      "worker": false
+    },
+    {
+      "id": "markdown-artifact-real-io",
+      "file": "tests/test-markdown-artifact.js",
+      "kind": "segment",
+      "before": "const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-markdown-artifact-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(temporaryRoot, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(temporaryRoot, 'state', 'data');\nprocess.env.LOCALAPPDATA = path.join(temporaryRoot, 'localapp');",
+      "after": "const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-markdown-artifact-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(temporaryRoot, 'privacy');\nprocess.env.EU_PRIVACY_DATA_ROOT = path.join(temporaryRoot, 'state', 'data');\nprocess.env.LOCALAPPDATA = path.join(temporaryRoot, 'localapp');\nprocess.env.EU_PRIVACY_RESULT_ROOT = path.join(temporaryRoot, 'results');",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": false,
+      "worker": false
+    },
+    {
+      "id": "private-root-session",
+      "file": "tests/test-private-root-session.js",
+      "kind": "case",
+      "before": "  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-root-session-'));\n  const previousRoot = process.env.EU_PRIVACY_ROOT;\n  const previousDataRoot = process.env.EU_PRIVACY_DATA_ROOT;\n  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\n  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'runtime');",
+      "after": "  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-root-session-'));\n  const previousRoot = process.env.EU_PRIVACY_ROOT;\n  const previousDataRoot = process.env.EU_PRIVACY_DATA_ROOT;\n  const previousResultRoot = process.env.EU_PRIVACY_RESULT_ROOT;\n  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\n  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'runtime');\n  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');",
+      "before_restore": "    if (previousRoot === undefined) delete process.env.EU_PRIVACY_ROOT;\n    else process.env.EU_PRIVACY_ROOT = previousRoot;\n    if (previousDataRoot === undefined) delete process.env.EU_PRIVACY_DATA_ROOT;\n    else process.env.EU_PRIVACY_DATA_ROOT = previousDataRoot;",
+      "after_restore": "    if (previousRoot === undefined) delete process.env.EU_PRIVACY_ROOT;\n    else process.env.EU_PRIVACY_ROOT = previousRoot;\n    if (previousDataRoot === undefined) delete process.env.EU_PRIVACY_DATA_ROOT;\n    else process.env.EU_PRIVACY_DATA_ROOT = previousDataRoot;\n    if (previousResultRoot === undefined) delete process.env.EU_PRIVACY_RESULT_ROOT; else process.env.EU_PRIVACY_RESULT_ROOT = previousResultRoot;",
+      "top_admission": false,
+      "worker": false
+    },
+    {
+      "id": "package-staging-parent-worker",
+      "file": "tests/test-package-staging-integration.js",
+      "kind": "parent-worker",
+      "before": "const base = process.argv[2] === '--worker' ? process.argv[3]\n  : fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-stage-integration-'));\nprocess.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\nprocess.env.LOCALAPPDATA = path.join(base, 'appdata');",
+      "after": "const base = process.argv[2] === '--worker' ? process.argv[3]\n  : fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-stage-integration-'));\nif (process.argv[2] !== '--worker') {\n  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');\n  process.env.LOCALAPPDATA = path.join(base, 'appdata');\n  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');\n  process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');\n} else {\n  for (const [key, leaf] of [['EU_PRIVACY_ROOT', 'privacy'], ['EU_PRIVACY_DATA_ROOT', 'product-data'], ['EU_PRIVACY_RESULT_ROOT', 'results'], ['LOCALAPPDATA', 'appdata']]) {\n    assert.strictEqual(process.env[key], path.join(base, leaf), 'worker must inherit its exact parent namespace');\n  }\n}",
+      "before_restore": "",
+      "after_restore": "",
+      "top_admission": false,
+      "worker": true
+    }
+  ],
+  "mcp": {
+    "before": {
+      "parent": "const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));",
+      "talk": "    const resultRoot = path.join(privacyRoot, '..', 'cowork-results');",
+      "selected": "path.join(root, '..', 'OneDrive - Synthetic')",
+      "namespace": "        EU_PRIVACY_ROOT: privacyRoot,\n        EU_PRIVACY_RESULT_ROOT: resultRoot,\n        EU_PRIVACY_DATA_ROOT: path.join(privacyRoot, 'localapp', 'SecureDataMsg'),\n        LOCALAPPDATA: path.join(privacyRoot, 'localapp'),"
+    },
+    "after": {
+      "parent": "const rootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));\nconst root = path.join(rootScope, 'privacy');\nfs.mkdirSync(root, { mode: 0o700 });",
+      "talk": "    const talkScope = fs.mkdtempSync(path.join(rootScope, 'talk-'));\n    const resultRoot = path.join(talkScope, 'cowork-results');",
+      "selected": "path.join(talkScope, 'OneDrive - Synthetic')",
+      "namespace": "        EU_PRIVACY_ROOT: privacyRoot,\n        EU_PRIVACY_RESULT_ROOT: resultRoot,\n        EU_PRIVACY_DATA_ROOT: path.join(privacyRoot, 'localapp', 'SecureDataMsg'),\n        LOCALAPPDATA: path.join(privacyRoot, 'localapp'),"
+    }
+  },
+  "default_fixture": {
+    "file": "tests/test-batch-session.js",
+    "before": "    delete process.env.EU_PRIVACY_ROOT;",
+    "after": "    delete process.env.EU_PRIVACY_ROOT;\n    delete process.env.EU_PRIVACY_DATA_ROOT;\n    os.homedir = () => path.join(base, 'default-home');",
+    "restore": "      os.homedir = originalHomedir;\n      if (configured === undefined) delete process.env.EU_PRIVACY_ROOT; else process.env.EU_PRIVACY_ROOT = configured;\n      if (configuredDataRoot === undefined) delete process.env.EU_PRIVACY_DATA_ROOT; else process.env.EU_PRIVACY_DATA_ROOT = configuredDataRoot;",
+    "save": "    const configured = process.env.EU_PRIVACY_ROOT;\n    const configuredDataRoot = process.env.EU_PRIVACY_DATA_ROOT, originalHomedir = os.homedir;"
+  }
+}

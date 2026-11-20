@@ -5,7 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const { createSuite } = require('./helpers');
-const { continueIntoLocalReview } = require('../plugins/data-secure/server/gateway/automatic-local-review');
+const defaultAutomaticReview = require('../plugins/data-secure/server/gateway/product-automatic-review');
+const standaloneAutomaticReview = require('../apps/datasecure-standalone/runtime-adapters/gateway/product-automatic-review');
 const { readBatchExecutionDiagnostic } = require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
 const processingMode = require('../plugins/data-secure/server/core/processing-mode');
 const resultNamingMode = require('../plugins/data-secure/server/core/result-naming-mode');
@@ -34,18 +35,19 @@ const complete = Object.freeze({
   result_grades_verified: true, raw_content_sent_to_claude: false
 });
 
-async function runWorker(reviewOutcome, initial = waiting, { executorError = null } = {}) {
+async function runWorker(reviewOutcome, initial = waiting, { executorError = null,
+  productChannel = 'plugin', workerMode = processingMode.MODES.ANONYMIZE } = {}) {
   const calls = { review: 0, claim: 0, release: 0, exports: 0, presentations: 0, notices: 0, events: [], sent: [], exits: [] };
   const listeners = {};
   const fakeProcess = {
     pid: 8080,
-    env: {},
+    env: productChannel === 'standalone' ? { DATASECURE_PRODUCT_CHANNEL: 'standalone' } : {},
     send(payload, callback) { calls.sent.push(payload); callback?.(null); },
     once(event, listener) { listeners[event] = listener; },
     exit(code) { calls.exits.push(code); }
   };
   const batch = {
-    readBatchProcessingMode(value) { assert.strictEqual(value, token); return processingMode.MODES.ANONYMIZE; },
+    readBatchProcessingMode(value) { assert.strictEqual(value, token); return workerMode; },
     async runLocalBatchExecutor() { if (executorError) throw executorError; return initial; },
     claimLocalBatchExecutor(value, pid) { calls.claim++; assert.strictEqual(value, token); assert.strictEqual(pid, 8080); return { ok: true }; },
     releaseLocalBatchExecutor(value, pid) { calls.release++; assert.strictEqual(value, token); assert.strictEqual(pid, 8080); return true; },
@@ -103,19 +105,57 @@ async function runWorker(reviewOutcome, initial = waiting, { executorError = nul
         showLocalIntakeNoticeConfirmed() { throw new Error('unexpected failure notice'); }
       };
       if (name === './workflow-diagnostics') return workflowDiagnostics;
+      if (name === './standalone-publication-timings')
+        return require('../plugins/data-secure/server/gateway/standalone-publication-timings');
       if (name === './batch-execution-diagnostic') return diagnosticModule.exports;
-      if (name === './automatic-local-review') return { continueIntoLocalReview };
+      if (name === './product-automatic-review') return productChannel === 'standalone'
+        ? standaloneAutomaticReview : defaultAutomaticReview;
       if (name === './batch-queue-envelope') {
         return require('../plugins/data-secure/server/gateway/batch-queue-envelope');
       }
       throw new Error(`Unexpected dependency ${name}`);
     }
   }, { filename: workerFile, timeout: 1000 });
-  await listeners.message({ type: 'start-local-batch', batch_token: token });
+  await listeners.message(workerMode === processingMode.MODES.MARKDOWN
+    ? { type: 'start-local-markdown-batch', batch_token: token, processing_mode: workerMode }
+    : { type: 'start-local-batch', batch_token: token });
   return calls;
 }
 
 async function main() {
+  await testAsync('the actual Standalone adapter never opens automatic review or a detached terminal presenter', async () => {
+    for (const workerMode of [processingMode.MODES.ANONYMIZE, processingMode.MODES.MARKDOWN]) {
+      const calls = await runWorker(new Error('must not enter automatic review'), waiting,
+        { productChannel: 'standalone', workerMode });
+      assert.strictEqual(calls.review, 0);
+      assert.strictEqual(calls.claim, 0);
+      assert.strictEqual(calls.release, 0);
+      assert.strictEqual(calls.exports, 0);
+      assert.strictEqual(calls.presentations, 0);
+      assert.strictEqual(calls.notices, 0);
+      const messages = JSON.parse(JSON.stringify(calls.sent));
+      assert.deepStrictEqual(messages.map(message => message.type), ['local-batch-accepted', 'local-batch-state']);
+      assert.strictEqual(messages[1].complete, false);
+      assert.strictEqual(messages[1].batch_phase, waiting.batch_phase);
+      assert.deepStrictEqual(calls.exits, [0]);
+      assert.ok(calls.events.some(event => event.event === 'terminal_state_delegated_to_product_ui'));
+      const finished = await runWorker(null, complete, { productChannel: 'standalone', workerMode });
+      assert.strictEqual(finished.review, 0);
+      assert.strictEqual(finished.claim, 0);
+      assert.strictEqual(finished.release, 0);
+      assert.strictEqual(finished.exports, 1);
+      assert.strictEqual(finished.presentations, 0);
+      assert.deepStrictEqual(finished.exits, [0]);
+    }
+  });
+  await testAsync('the default adapter preserves its defensive conversion-only skip without widening worker purpose admission', async () => {
+    const denied = () => { throw Error('CONVERSION_REVIEW_MUST_NOT_RUN'); };
+    const result = await defaultAutomaticReview.continueBatchReviewForProduct(token, waiting,
+      processingMode.MODES.MARKDOWN, { claimLocalBatchExecutor: denied, releaseLocalBatchExecutor: denied,
+        reviewDeferredBatch: denied, readBatchProgress: denied, onReviewLifecycle: denied });
+    assert.deepStrictEqual(result, { progress: waiting, attempted: false });
+    assert.strictEqual(result.progress, waiting);
+  });
   await testAsync('an awaiting batch opens review automatically and presents only the reviewed terminal state', async () => {
     const calls = await runWorker(complete);
     assert.strictEqual(calls.review, 1);

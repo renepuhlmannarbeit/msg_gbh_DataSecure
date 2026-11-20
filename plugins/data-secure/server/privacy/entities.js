@@ -1,4 +1,5 @@
 'use strict';
+const { scanTableCells, unescapeMarkdownPunctuation } = require('./markdown-table-cells');
 const { LEGACY_PERSON_FIELD_POLICY, personFieldPattern } = require('../core/person-field-policy');
 
 const { lineBoundsAt } = require('./spans');
@@ -113,7 +114,7 @@ function hasPartySentenceBoundary(gap, followedByPartyConnector = false) {
 
 function collectContextOrganizations(text) {
   const out = [];
-  for (const line of lines(text)) {
+  for (const line of entityDiscoveryView(text).lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     const table = trimmed.match(COMPANY_TABLE_RE);
@@ -185,29 +186,65 @@ const ACADEMIC_HONORIFIC = `(?:${ACADEMIC_TITLE}(?:\\s+(?:${ACADEMIC_TITLE}|${HO
 function markdownTableCells(line, allowSingleColumn = false) {
   const source = String(line || '').trim();
   if (!source.includes('|')) return null;
-  const body = source.replace(/^\|/u, '').replace(/\|$/u, '');
   const cells = [];
-  let value = '';
-  let escaped = false;
-  for (const char of body) {
-    if (escaped) {
-      value += char;
-      escaped = false;
-    } else if (char === '\\') {
-      escaped = true;
-    } else if (char === '|') {
-      cells.push(value.trim());
-      value = '';
-    } else {
-      value += char;
-    }
-  }
-  if (escaped) value += '\\';
-  cells.push(value.trim());
-  // Only the callers that validate the complete table opt into a sole
-  // column. Generic context consumers must not reinterpret the surviving
-  // second cell of an optional-outer-pipe row after its first cell is masked.
+  const geometry = scanTableCells(source, (start, end) => {
+    cells.push(unescapeMarkdownPunctuation(source.slice(start, end)).trim());
+  });
+  if (!geometry.separators) return null;
+  // Preserve the explicit sole empty-cell contract of the opt-in reader.
+  if (!cells.length && geometry.leadingPipe && geometry.trailingPipe) cells.push('');
+  // Full-table validators alone opt into a single column.
   return cells.length >= (allowSingleColumn ? 1 : 2) ? cells : null;
+}
+
+// CR is a prose line boundary, but may also be literal data inside an existing
+// LF-delimited GFM cell. Establish that original table ownership before making
+// a discovery-only line view. The field/table reader keeps its unchanged grammar.
+// No document normalization, global text cache or new pure-CR table authority.
+function entityDiscoveryView(text) {
+  const source = String(text || ''), physical = lines(source);
+  if (!/\r(?!\n)/u.test(source)) return { lines: physical, boundsAt: index => lineBoundsAt(source, index) };
+  const starts = [0];
+  for (const separator of source.matchAll(/\r?\n/gu)) starts.push(separator.index + separator[0].length);
+  const parsed = physical.map(line => markdownTableCells(line, true));
+  const delimiters = parsed.map(cells => Boolean(cells && cells.every(cell => /^:?-{3,}:?$/u.test(cell))));
+  const headerStarts = parsed.map((_cells, index) => index);
+  for (let index = 1; index < parsed.length; index++) {
+    if (parsed[index] && parsed[index - 1] && !delimiters[index - 1] &&
+        parsed[index].length === parsed[index - 1].length) headerStarts[index] = headerStarts[index - 1];
+  }
+  const protectedRows = new Set(), blocks = [];
+  for (let index = 1; index + 1 < physical.length; index++) {
+    if (!delimiters[index] || !parsed[index - 1] || delimiters[index - 1] ||
+        parsed[index - 1].length !== parsed[index].length) continue;
+    let end = index + 1;
+    while (end < physical.length && parsed[end]?.length === parsed[index].length) end++;
+    if (end === index + 1) continue;
+    const first = headerStarts[index - 1];
+    for (let row = first; row < end; row++) protectedRows.add(row);
+    blocks.push({ from: starts[first], to: starts[end - 1] + physical[end - 1].length });
+    index = end - 1;
+  }
+  const discovery = [];
+  for (let index = 0; index < physical.length; index++) {
+    if (protectedRows.has(index)) discovery.push(physical[index]);
+    else for (const line of physical[index].split('\r')) discovery.push(line);
+  }
+  return { lines: discovery, boundsAt(index) {
+    let from = 0, to = blocks.length;
+    while (from < to) {
+      const middle = Math.floor((from + to) / 2);
+      if (blocks[middle].to <= index) from = middle + 1; else to = middle;
+    }
+    const block = blocks[from];
+    if (block && block.from <= index && index < block.to) {
+      // A CR inside this same original cell cannot introduce a new context.
+      const start = source.lastIndexOf('\n', Math.max(0, index - 1)) + 1;
+      const end = source.indexOf('\n', index);
+      return { from: start, to: end < 0 ? source.length : end };
+    }
+    return lineBoundsAt(source, index);
+  } };
 }
 
 function markdownTableColumnValues(text, label) {
@@ -412,7 +449,7 @@ function nestedMarkdownValue(line) {
 function collectNestedMarkdownPersonCandidates(text, profile) {
   const out = [];
   if (profile !== 'personnel_profile' && profile !== 'applicant') return out;
-  for (const line of lines(text)) {
+  for (const line of entityDiscoveryView(text).lines) {
     const value = nestedMarkdownValue(line);
     if (value && !hasAbstractNounShape(value)) pushFullPerson(out, value, 'markdown_structure');
   }
@@ -557,7 +594,7 @@ function collectPersonAnchors(text, profile = 'general', personFieldPolicy = LEG
 
   // A standalone all-caps line in a profile header is the person's name.
   const capsLine = new RegExp(`^${CAPS_TOKEN}(?:\\s+${CAPS_TOKEN}){1,3}$`, 'u');
-  for (const line of lines(src)) {
+  for (const line of entityDiscoveryView(src).lines) {
     const s = line.trim();
     if (!s || s.startsWith('#')) continue;
     if (capsLine.test(s) && looksName(titleCase(s))) pushPerson(out, s, 'caps_line');
@@ -593,7 +630,7 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPers
       `\\s+(?:${NAME_TOKEN}|${CAPS_TOKEN})$`,
     'u'
   );
-  const allLines = lines(text);
+  const allLines = entityDiscoveryView(text).lines;
   let seen = 0;
   let inHeader = true;
   let inSecondaryIdentityArea = false;
@@ -699,6 +736,7 @@ function capitalisedRuns(text) {
 // followed by contact details.
 function collectContextualNameCandidates(text, profile, { includeNegation = false } = {}) {
   const src = String(text || '');
+  const discovery = entityDiscoveryView(src);
   const out = [];
   const before =
     /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|person|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/iu;
@@ -735,7 +773,7 @@ function collectContextualNameCandidates(text, profile, { includeNegation = fals
 
         const start = window[0].start;
         const end = window[window.length - 1].end;
-        const { from, to } = lineBoundsAt(src, start);
+        const { from, to } = discovery.boundsAt(start);
         const sourceLine = src.slice(from, to);
         const ctxBefore = src.slice(Math.max(0, start - 45), start);
         const ctxAfter = src.slice(end, end + 30);
@@ -788,6 +826,7 @@ function collectPersonSeeds(
   personFieldPolicy = LEGACY_PERSON_FIELD_POLICY
 ) {
   personFieldPattern(personFieldPolicy);
+  const discoveryLines = entityDiscoveryView(text).lines;
   const anchors = precomputedAnchors === null ? collectPersonAnchors(text, profile, personFieldPolicy) : precomputedAnchors;
   const anchorInText = anchors.length > 0 || PERSON_PLACEHOLDER_RE.test(String(text || ''));
   const hasStrongPersonAnchor =
@@ -801,7 +840,7 @@ function collectPersonSeeds(
     // A typographic title followed by a dash is not, by itself, evidence of
     // a customer/project relationship. Keep the left-hand name hypothesis
     // visible to the existing local review and independent residual gate.
-    for (const line of lines(text)) {
+    for (const line of discoveryLines) {
       const match = String(line).match(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)?(.{2,120}?)[ \t]+[–—-][ \t]+.{3,180}$/u);
       if (match && /\p{Lu}/u.test(match[1]) && !/\p{Ll}/u.test(match[1]) && looksName(titleCase(match[1]))) {
         pushPerson(seeds, match[1], 'caps_dash');
@@ -810,7 +849,7 @@ function collectPersonSeeds(
   }
   if (profile === 'personnel_profile' || profile === 'applicant') {
     let seen = 0;
-    for (const line of lines(text)) {
+    for (const line of discoveryLines) {
       if (String(line).trim() && ++seen > 12) break;
       const match = String(line).match(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)(.+?)\s*$/u);
       if (match && looksName(match[1]) && !hasAbstractNounShape(match[1])) pushPerson(seeds, match[1], 'profile_structure');

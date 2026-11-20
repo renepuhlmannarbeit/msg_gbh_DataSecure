@@ -90,14 +90,18 @@ function parseQuotedRows(text) {
     }
     if (!closed) throw new SafeError('Der lokale Zuordnungsexport hat ein ungültiges Format.');
     row.push(field);
-    if (text[index] === ';') { index++; continue; }
+    if (text[index] === ';') {
+      index++;
+      if (index === text.length) throw new SafeError('Der lokale Zuordnungsexport hat ein ungültiges Format.');
+      continue;
+    }
     if (text.slice(index, index + 2) === '\r\n') {
       rows.push(row);
       row = [];
       index += 2;
       continue;
     }
-    if (index === text.length) { rows.push(row); break; }
+    if (index === text.length) break;
     throw new SafeError('Der lokale Zuordnungsexport hat ein ungültiges Format.');
   }
   if (row.length > 0) rows.push(row);
@@ -129,7 +133,9 @@ function normalizeExistingMapping(previous) {
     if (!rows.every((row) => row.length === 6)) {
       throw new SafeError('Der lokale Zuordnungsexport hat ein ungültiges Format.');
     }
-    return { text: previous, rows };
+    // EOF after a closed final quoted field is valid. Keep its field bytes,
+    // but normalize the record separator before a later append.
+    return { text: previous.endsWith('\r\n') ? previous : previous + '\r\n', rows };
   }
   if (!previous.startsWith(LEGACY_HEADER)) {
     throw new SafeError('Der lokale Zuordnungsexport hat ein ungültiges Format.');

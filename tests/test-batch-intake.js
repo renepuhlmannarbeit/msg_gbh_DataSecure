@@ -11,6 +11,9 @@ const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchIntake } = require('../plugins/data-secure/server/gateway/batch-intake');
 const { createBatchIntakeIntent } = require('../plugins/data-secure/server/gateway/batch-intake-intent');
 const { createBatchRecovery } = require('../plugins/data-secure/server/gateway/batch-recovery');
+const { copySnapshotFile: copySourceSnapshot } = require('../plugins/data-secure/server/gateway/batch-snapshot');
+const { createPrivateWorkStore } = require('../plugins/data-secure/server/gateway/private-work-store');
+const { BATCH_SCHEMA, MAX_STORED_BYTES } = require('../plugins/data-secure/server/core/source-snapshot-storage');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch intake boundary');
@@ -46,18 +49,22 @@ function fixture(options = {}) {
     hasReparseComponent: () => false,
     planBatchAdmission(queue, settings) {
       events.push('plan');
-      return typeof options.planBatchAdmission === 'function'
+      const plan = typeof options.planBatchAdmission === 'function'
         ? options.planBatchAdmission(queue, settings)
         : queue.map((entry) => ({ entry, admission: 'candidate', error_code: null }));
+      return plan.map(row => row.admission === 'candidate' && row.source_sha256 === undefined
+        ? { ...row, source_sha256: crypto.createHash('sha256').update(fs.readFileSync(row.entry.full)).digest('hex') } : row);
     },
     assertStagingCapacity(queue) { events.push(`capacity:${queue.length}`); },
     tokenPattern: /^[a-f0-9]{64}$/,
     batchPath: () => journal,
     workPath: () => work,
-    copySnapshotFile(from, to, stat) {
+    copySnapshotFile(from, to, stat, settings) {
       const intent = JSON.parse(fs.readFileSync(path.join(root, `${token}.intake`), 'utf8'));
       assert.strictEqual(intent.schema, options.expectedIntakeSchema || 'datasecure-intake/1', 'ownership is durable before any source copying');
       events.push(`copy:${from}:${to}`);
+      if (settings.sourceSnapshot) return copySourceSnapshot(from, to, stat, { ...settings,
+        privateWorkStore: createPrivateWorkStore({ privateRoot: root, maxBytes: MAX_STORED_BYTES }) });
       fs.copyFileSync(from, to);
       return { size: stat.size, sha256: 'b'.repeat(64) };
     },
@@ -672,7 +679,8 @@ test('conservative automatic intake seals the policy only for the new Standalone
         ...(automatic ? { reviewPolicy: 'automatic-conservative' } : {}) });
       assert.equal(result.ok, true);
       const stored = JSON.parse(fs.readFileSync(item.journal));
-      assert.equal(stored.schema, 'datasecure-batch/7');
+      assert.equal(stored.schema, BATCH_SCHEMA);
+      assert.ok(stored.items[0].source_snapshot_storage, 'the current intake really frames its source');
       assert.equal(stored.standalone_review_policy, automatic ? 'automatic-conservative' : undefined);
       assert.equal(Object.hasOwn(stored, 'standalone_review_policy'), automatic);
       assert.deepEqual(captured, stored);
@@ -689,5 +697,188 @@ test('conservative automatic intake seals the policy only for the new Standalone
     } finally { item.cleanup(); }
   }
 });
+
+//74: actual create/read/remove APIs on fresh synthetic directories. IO seams
+// schedule faults or substitutions only after their own real writer is closed;
+// this is no native race, ACL or hostile-process guarantee.
+function producerIntentFixture74(settings = {}) {
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-intent-producer74-')));
+  const work = path.join(root, token + '.work'), target = path.join(root, token + '.intake');
+  const journal = path.join(root, token + '.json'), source = path.join(root, 'original-source.txt');
+  const sourceBytes = Buffer.from('Own synthetic original; never an intake cleanup target. ÄÖÜß');
+  fs.mkdirSync(work); fs.writeFileSync(source, sourceBytes, { mode: 0o600, flag: 'wx' });
+  const stat = fs.lstatSync(work, { bigint: true });
+  const workIdentity = { dev: String(stat.dev), ino: String(stat.ino), birthtimeNs: String(stat.birthtimeNs) };
+  const stats = { writerOpens: 0, writerCloses: 0, writerFstats: 0, readerOpens: 0, faults: 0 };
+  let writer, writerOpen = false;
+  const io = { ...fs };
+  const scope = { root, work, target, journal, source, sourceBytes, stats };
+  const fault = phase => {
+    if (settings.fault && settings.fault.phase === phase) { stats.faults++; throw settings.fault.value; }
+  };
+  io.openSync = (file, flags, ...rest) => {
+    const fd = fs.openSync(file, flags, ...rest);
+    if (file === target && (flags & fs.constants.O_WRONLY) === fs.constants.O_WRONLY) {
+      assert.strictEqual(writerOpen, false); writer = fd; writerOpen = true; stats.writerOpens++;
+    } else if (file === target) stats.readerOpens++;
+    return fd;
+  };
+  io.writeSync = (fd, ...rest) => {
+    if (writerOpen && fd === writer) fault('write');
+    return fs.writeSync(fd, ...rest);
+  };
+  io.fsyncSync = fd => {
+    if (writerOpen && fd === writer) fault('fsync');
+    const result = fs.fsyncSync(fd);
+    if (writerOpen && fd === writer && settings.afterFsync) settings.afterFsync(scope);
+    return result;
+  };
+  io.fstatSync = (fd, options) => {
+    if (writerOpen && fd === writer) { stats.writerFstats++; fault('fstat'); }
+    return fs.fstatSync(fd, options);
+  };
+  io.closeSync = fd => {
+    if (!writerOpen || fd !== writer) return fs.closeSync(fd);
+    writerOpen = false; stats.writerCloses++;
+    fs.closeSync(fd); // The test never leaves its real writer open to model a failure.
+    if (settings.afterClose) settings.afterClose(scope);
+    if (Object.hasOwn(settings, 'closeFailure')) throw settings.closeFailure;
+  };
+  const intent = createBatchIntakeIntent({ io, batchPath: () => journal, workPath: () => work });
+  const expires = new Date(Date.now() + 60_000).toISOString();
+  return Object.assign(scope, {
+    io, intent,
+    create() { return intent.create(token, expires, workIdentity, settings.purpose || {}); },
+    assertOriginal() { assert.deepStrictEqual(fs.readFileSync(scope.source), sourceBytes); },
+    assertNoJournal() { assert.strictEqual(fs.existsSync(journal), false); }
+  });
+}
+function attemptIntent74(action) {
+  let threw = false, error, value;
+  try { value = action(); } catch (caught) { threw = true; error = caught; }
+  return { threw, error, value };
+}
+const faultValues74 = [
+  { label: 'frozen EIO object', value: Object.freeze(Object.assign(new Error('74 synthetic primary'), { code: 'EIO' })) },
+  ...[undefined, null, false, 0, ''].map((value, index) => ({ label: 'falsy ' + index, value }))
+];
+const secondaryClose74 = Object.freeze(Object.assign(new Error('74 synthetic secondary close'), { code: 'EBUSY' }));
+for (const [schema, purpose] of [
+  ['datasecure-intake/1', {}],
+  ['datasecure-intake/2', { productChannel: 'standalone', processingMode: 'markdown-only' }],
+  ['datasecure-intake/3', { productChannel: 'standalone', processingMode: 'markdown-and-anonymize',
+    contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } }]
+]) test('74 positive create/read/remove retains the existing purpose schema ' + schema, () => {
+  const f = producerIntentFixture74({ purpose }), record = f.create();
+  assert.strictEqual(record.schema, schema); assert.strictEqual(record.pid, process.pid);
+  assert.strictEqual(record.token, token); assert.deepStrictEqual(f.intent.read(token), record);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(f.target)), record);
+  assert.strictEqual(f.stats.writerOpens, 1); assert.strictEqual(f.stats.writerCloses, 1);
+  f.intent.remove(token, record);
+  assert.strictEqual(fs.existsSync(f.target), false);
+  assert.strictEqual(fs.statSync(f.work).isDirectory(), true);
+  f.assertNoJournal(); f.assertOriginal();
+});
+for (const kind of ['leaf', 'parent'])
+  test('74 after-close ' + kind + ' replacement never becomes the producer remove capability', () => {
+    const replacement = Buffer.from('Unknown synthetic replacement at the former intent name. ÄÖÜß');
+    let owned;
+    const f = producerIntentFixture74({ afterClose(scope) {
+      owned = fs.readFileSync(scope.target);
+      if (kind === 'leaf') {
+        scope.retained = scope.target + '.owned-before-bind';
+        fs.renameSync(scope.target, scope.retained);
+      } else {
+        const retired = scope.root + '-original-parent';
+        fs.renameSync(scope.root, retired); fs.mkdirSync(scope.root); fs.mkdirSync(scope.work);
+        scope.retained = path.join(retired, path.basename(scope.target));
+        scope.source = path.join(retired, path.basename(scope.source));
+      }
+      fs.writeFileSync(scope.target, replacement, { flag: 'wx', mode: 0o600 });
+    } });
+    const created = attemptIntent74(() => f.create());
+    // On the old implementation this reaches the real remover and exposes the
+    // wrongly adopted replacement. On the fixed implementation no capability escapes.
+    if (!created.threw) f.intent.remove(token, created.value);
+    assert.strictEqual(fs.existsSync(f.target), true, 'never delete the replacement through an adopted binding');
+    assert.deepStrictEqual(fs.readFileSync(f.target), replacement);
+    assert.deepStrictEqual(fs.readFileSync(f.retained), owned);
+    assert.strictEqual(created.threw, true, 'create must refuse before returning an unproven producer binding');
+    assert.match(String(created.error?.message), /BATCH_INTAKE_INTENT_INVALID/u);
+    assert.strictEqual(f.stats.writerCloses, 1);
+    f.assertNoJournal(); f.assertOriginal();
+    // Preserve both sides and their directories as evidence; no guessed cleanup.
+  });
+test('74 an existing intent leaf stays byte-identical after real exclusive-create EEXIST', () => {
+  const f = producerIntentFixture74(), sentinel = Buffer.from('Pre-existing own synthetic sentinel');
+  fs.writeFileSync(f.target, sentinel, { flag: 'wx', mode: 0o600 });
+  const outcome = attemptIntent74(() => f.create());
+  assert.strictEqual(outcome.threw, true); assert.strictEqual(outcome.error?.code, 'EEXIST');
+  assert.strictEqual(f.stats.writerOpens, 0); assert.strictEqual(f.stats.writerCloses, 0);
+  assert.deepStrictEqual(fs.readFileSync(f.target), sentinel);
+  f.assertNoJournal(); f.assertOriginal();
+});
+for (const phase of ['write', 'fsync', 'fstat']) for (const primary of faultValues74)
+  for (const secondary of [false, true])
+    test('74 ' + phase + ': preserve exact ' + primary.label + (secondary ? ' before secondary close' : ''), () => {
+      const f = producerIntentFixture74({ fault: { phase, value: primary.value },
+        ...(secondary ? { closeFailure: secondaryClose74 } : {}) });
+      const outcome = attemptIntent74(() => f.create());
+      assert.strictEqual(f.stats.faults, 1, 'the actual producer FD must reach this fault');
+      assert.strictEqual(outcome.threw, true);
+      assert.strictEqual(outcome.error, primary.value, 'first failure identity includes falsy values');
+      assert.strictEqual(f.stats.writerOpens, 1); assert.strictEqual(f.stats.writerCloses, 1);
+      assert.strictEqual(f.stats.readerOpens, 0, 'no bind/delete capability after producer failure');
+      assert.strictEqual(fs.existsSync(f.target), true, 'uncertain own write remains for diagnosis');
+      f.assertNoJournal(); f.assertOriginal();
+    });
+for (const phase of ['write', 'fsync', 'fstat']) for (const secondary of faultValues74.slice(1))
+  test('74 ' + phase + ': a falsy secondary close cannot mask the frozen primary (' + secondary.label + ')', () => {
+    const primary = faultValues74[0].value;
+    const f = producerIntentFixture74({ fault: { phase, value: primary }, closeFailure: secondary.value });
+    const outcome = attemptIntent74(() => f.create());
+    assert.strictEqual(f.stats.faults, 1); assert.strictEqual(outcome.threw, true);
+    assert.strictEqual(outcome.error, primary); assert.strictEqual(f.stats.writerCloses, 1);
+    assert.strictEqual(f.stats.readerOpens, 0); assert.strictEqual(fs.existsSync(f.target), true);
+    f.assertNoJournal(); f.assertOriginal();
+  });
+for (const closing of faultValues74)
+  test('74 close-only ' + closing.label + ' remains a hard exact failure', () => {
+    const f = producerIntentFixture74({ closeFailure: closing.value });
+    const outcome = attemptIntent74(() => f.create());
+    assert.strictEqual(outcome.threw, true); assert.strictEqual(outcome.error, closing.value);
+    assert.strictEqual(f.stats.writerOpens, 1); assert.strictEqual(f.stats.writerCloses, 1);
+    assert.strictEqual(f.stats.readerOpens, 0); assert.strictEqual(fs.existsSync(f.target), true);
+    f.assertNoJournal(); f.assertOriginal();
+  });
+test('74 the actual writer FD with an added hardlink cannot mint a producer binding', () => {
+  const f = producerIntentFixture74({ afterFsync(scope) {
+    scope.hardlink = scope.target + '.own-hardlink'; fs.linkSync(scope.target, scope.hardlink);
+  } });
+  const outcome = attemptIntent74(() => f.create());
+  assert.strictEqual(outcome.threw, true);
+  assert.strictEqual(f.stats.writerCloses, 1);
+  assert.deepStrictEqual(fs.readFileSync(f.target), fs.readFileSync(f.hardlink));
+  assert.strictEqual(fs.lstatSync(f.target).nlink, 2);
+  f.assertNoJournal(); f.assertOriginal();
+});
+for (const kind of ['leaf', 'parent'])
+  test('74 a later ' + kind + ' swap after successful create still refuses the original remove', () => {
+    const f = producerIntentFixture74(), record = f.create(), owned = fs.readFileSync(f.target);
+    const replacement = Buffer.from('Late foreign synthetic replacement');
+    if (kind === 'leaf') {
+      f.retained = f.target + '.owned-after-bind'; fs.renameSync(f.target, f.retained);
+    } else {
+      const retired = f.root + '-later-parent';
+      fs.renameSync(f.root, retired); fs.mkdirSync(f.root); fs.mkdirSync(f.work);
+      f.retained = path.join(retired, path.basename(f.target));
+      f.source = path.join(retired, path.basename(f.source));
+    }
+    fs.writeFileSync(f.target, replacement, { flag: 'wx', mode: 0o600 });
+    assert.throws(() => f.intent.remove(token, record), /BATCH_INTAKE_INTENT_INVALID/u);
+    assert.deepStrictEqual(fs.readFileSync(f.target), replacement);
+    assert.deepStrictEqual(fs.readFileSync(f.retained), owned);
+    f.assertNoJournal(); f.assertOriginal();
+  });
 
 done();

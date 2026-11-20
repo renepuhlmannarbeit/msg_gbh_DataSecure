@@ -8,6 +8,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { fork, execFileSync } = require('node:child_process');
 const { createSuite } = require('./helpers');
+const { firstFailure, within, ownChild, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
+const { performance } = require('node:perf_hooks');
 const { createBatchIntake } = require('../plugins/data-secure/server/gateway/batch-intake');
 const { createBatchJournalStore } = require('../plugins/data-secure/server/gateway/batch-journal-store');
 const { createBatchIntakeIntent } = require('../plugins/data-secure/server/gateway/batch-intake-intent');
@@ -20,7 +22,9 @@ const { MODES, processingModeForBatch } = require('../plugins/data-secure/server
 const { resultNamingModeForBatch } = require('../plugins/data-secure/server/core/result-naming-mode');
 const { validateBatchMessagePurpose } = require('../plugins/data-secure/server/gateway/batch-queue-envelope');
 const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
-const { test, testAsync, assert, done } = createSuite('Persistent batch processing purpose');
+const { test, testAsync, assert, done, failure: suiteFailure } = createSuite('Persistent batch processing purpose');
+const purposeChildren = [], retainedPurposeRoots = new Set(), purposeFailures = firstFailure();
+let purposeEndUnconfirmed = false;
 const token = 'a'.repeat(64);
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
@@ -352,36 +356,68 @@ test('a new actual batch process resumes an interrupted conversion without creat
 });
 
 async function realWorkerReject(message, channel, existing) {
+  assert.equal(purposeEndUnconfirmed, false, 'no next worker after an unconfirmed child');
   const root = existing?.root || fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-purpose-')));
-  const child = fork(path.join(__dirname, '../plugins/data-secure/server/gateway/batch-worker.js'), [], {
-    windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-    env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: channel, EU_PRIVACY_ROOT: path.join(root, 'workspace'),
-      EU_PRIVACY_DATA_ROOT: existing?.privateRoot || path.join(root, 'private'),
-      LOCALAPPDATA: path.join(root, 'localapp') }
-  });
-  const messages = []; let output = '';
-  child.stdout.on('data', bytes => { output += bytes; });
-  child.stderr.on('data', bytes => { output += bytes; });
-  child.on('message', value => messages.push(value));
-  let timer;
-  const exited = new Promise((resolve, reject) => {
-    child.once('error', reject); child.once('close', resolve);
-    timer = setTimeout(() => child.kill(), 10000);
-  });
+  retainedPurposeRoots.add(root);
+  const failure = firstFailure(), deadlineAt = performance.now() + 10000;
+  let owned, rejectFailure;
+  const failed = new Promise(resolve => { rejectFailure = resolve; });
+  const fail = error => { failure.record(error); purposeFailures.record(error); rejectFailure(error); };
   try {
+    const child = fork(path.join(__dirname, '../plugins/data-secure/server/gateway/batch-worker.js'), [], {
+      windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: channel, EU_PRIVACY_ROOT: path.join(root, 'workspace'),
+        EU_PRIVACY_DATA_ROOT: existing?.privateRoot || path.join(root, 'private'),
+        LOCALAPPDATA: path.join(root, 'localapp') }
+    });
+    owned = ownChild(child, fail); purposeChildren.push(owned);
+    const messages = []; let output = '';
+    for (const stream of [child.stdout, child.stderr].filter(Boolean)) {
+      stream.on('error', fail);
+      stream.on('data', bytes => { try { output += bytes; } catch (error) { fail(error); } });
+    }
+    child.on('message', value => { try { messages.push(value); } catch (error) { fail(error); } });
+    const abort = failed.then(error => { throw error; });
+    void abort.catch(() => {}); // Keep a synchronous setup/send throw observed too.
+    if (!child.stdout || !child.stderr) {
+      await within(Promise.race([abort, owned.done.then(() => {
+        failure.throwIfFailed(); throw new Error('purpose worker stdio unavailable');
+      })]), Math.max(0, deadlineAt - performance.now()), 'PURPOSE_WORKER_DEADLINE');
+    }
     const full = path.join(root, 'never-read.txt');
     child.send({ batch_token: token, intake_reservation_id: 'b'.repeat(64), profile: 'auto',
-      queue: [{ name: path.basename(full), full, sourceBytes: 10 }], ...message });
-    assert.strictEqual(await exited, 2);
+      queue: [{ name: path.basename(full), full, sourceBytes: 10 }], ...message },
+      error => { if (error) fail(error); });
+    const closed = await within(Promise.race([owned.done, abort]),
+      Math.max(0, deadlineAt - performance.now()), 'PURPOSE_WORKER_DEADLINE');
+    failure.throwIfFailed();
+    assert.strictEqual(closed.code, 2);
+    assert.strictEqual(closed.signal, null);
     assert.strictEqual(output, '');
     assert.strictEqual(messages.length, 1);
     assert.strictEqual(messages[0].type, existing ? 'local-batch-rejected' : 'local-intake-rejected');
     assert.ok(['PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'RESULT_NAMING_MODE_INVALID'].includes(messages[0].error_code));
-  } finally {
-    clearTimeout(timer);
-    if (child.exitCode === null && child.signalCode === null) { child.kill(); await exited; }
-    if (!existing) removeFixture(root);
+  } catch (error) { fail(error); }
+  finally {
+    if (owned && !owned.closed) {
+      if (owned.child.exitCode === null && owned.child.signalCode === null) {
+        try { if (!owned.terminate('SIGKILL')) fail(new Error('purpose worker stop refused')); } catch (error) { fail(error); }
+      }
+      try { await within(owned.done, 2000, 'PURPOSE_WORKER_CLOSE_UNCONFIRMED'); } catch (error) { fail(error); }
+    }
+    if (owned) { try { owned.failure.throwIfFailed(); } catch (error) { fail(error); } }
+    if (owned && !owned.closed) purposeEndUnconfirmed = true;
+    if (!failure.failed && !purposeFailures.failed && !suiteFailure().failed && owned?.closed && !existing) {
+      try { removeFixture(root); retainedPurposeRoots.delete(root); } catch (error) { fail(error); }
+    }
   }
+  failure.throwIfFailed();
+}
+function finishPurposeCli(result = suiteFailure()) {
+  endTestCliFailure({ failed: result.failed || purposeFailures.failed,
+    error: result.failed ? result.error : purposeFailures.value,
+    retainedRoots: [...retainedPurposeRoots],
+    unconfirmedChildren: purposeEndUnconfirmed || purposeChildren.length === 0 || purposeChildren.some(owned => !owned.closed) });
 }
 
 async function main() {
@@ -393,15 +429,25 @@ async function main() {
     await realWorkerReject({ type: 'start-local-markdown-intake', processing_mode: MODES.MARKDOWN,
       output_naming_mode: 'neutral' }, 'standalone');
   });
+  if (purposeEndUnconfirmed) { await done(); finishPurposeCli(); return; }
   await testAsync('actual resume worker rejects a legacy message for a v5 journal before accepting ownership', async () => {
-    const f = fixture();
+    const f = fixture(); let succeeded = false;
     try {
       f.begin(MODES.MARKDOWN);
       const before = digest(fs.readFileSync(f.paths.batchPath(token)));
       await realWorkerReject({ type: 'start-local-batch' }, 'standalone', f);
       assert.strictEqual(digest(fs.readFileSync(f.paths.batchPath(token))), before);
-    } finally { f.cleanup(); }
+      succeeded = true;
+    } finally {
+      if (succeeded && !purposeEndUnconfirmed && !purposeFailures.failed && !suiteFailure().failed) {
+        f.cleanup(); retainedPurposeRoots.delete(f.root);
+      }
+      else retainedPurposeRoots.add(f.root);
+    }
   });
-  done();
+  await done(); finishPurposeCli();
 }
-main().catch(() => { console.error('Batch purpose test failed'); process.exitCode = 1; });
+main().catch(error => {
+  const result = suiteFailure();
+  finishPurposeCli(result.failed ? result : { failed: true, error });
+});

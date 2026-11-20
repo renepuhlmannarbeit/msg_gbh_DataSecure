@@ -4,17 +4,77 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawn } = require('node:child_process');
+const { firstFailure, within, ownChild, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
+const { performance } = require('node:perf_hooks');
 const { createSuite } = require('./helpers');
 const { createStandalonePause } = require('../plugins/data-secure/server/gateway/standalone-pause');
 const { progressFacts } = require('../plugins/data-secure/server/core/batch-progress');
 const { validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
-const { test, testAsync, done, assert } = createSuite('Standalone durable pause');
+const { test, testAsync, done, assert, failure: suiteFailure } = createSuite('Standalone durable pause');
+const restartChildren = [], restartFailures = firstFailure();
+let restartEndUnconfirmed = false;
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-pause-'));
 const token = 'a'.repeat(64);
 const state = () => ({ product_channel: 'standalone', token });
 const store = createStandalonePause({ root: () => root });
 const config = { deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review', mappingPendingStatus: 'mapping_pending' };
+
+// Only the two formerly unbounded fresh-process sites below use this boundary.
+async function restartJson(program, configuration) {
+  assert.equal(restartEndUnconfirmed, false, 'no next restart after an unconfirmed child');
+  const failure = firstFailure(), deadlineAt = performance.now() + 30000;
+  let owned, notifyFailure, result;
+  const failed = new Promise(resolve => { notifyFailure = resolve; });
+  const fail = error => { failure.record(error); restartFailures.record(error); notifyFailure(error); };
+  try {
+    const child = spawn(process.execPath, ['-e', program], { ...configuration,
+      stdio: ['ignore', 'pipe', 'pipe'], shell: false });
+    owned = ownChild(child, fail); restartChildren.push(owned);
+    const stdout = [], stderr = [];
+    const abort = failed.then(error => { throw error; });
+    void abort.catch(() => {});
+    if (!child.stdout || !child.stderr) {
+      await within(Promise.race([abort, owned.done.then(() => {
+        failure.throwIfFailed(); throw new Error('pause restart stdio unavailable');
+      })]), Math.max(0, deadlineAt - performance.now()), 'PAUSE_RESTART_DEADLINE');
+    }
+    for (const [stream, chunks] of [[child.stdout, stdout], [child.stderr, stderr]]) {
+      let bytes = 0;
+      stream.on('error', fail);
+      stream.on('data', chunk => {
+        try {
+          const value = Buffer.from(chunk); bytes += value.length;
+          assert.ok(bytes <= 1024 * 1024, 'fresh-process output remains within the original capture bound');
+          chunks.push(value);
+        } catch (error) { fail(error); }
+      });
+    }
+    const closed = await within(Promise.race([owned.done, abort]),
+      Math.max(0, deadlineAt - performance.now()), 'PAUSE_RESTART_DEADLINE');
+    failure.throwIfFailed();
+    assert.equal(closed.code, 0, Buffer.concat(stderr).toString('utf8'));
+    assert.equal(closed.signal, null);
+    result = JSON.parse(Buffer.concat(stdout).toString('utf8'));
+  } catch (error) { fail(error); }
+  finally {
+    if (owned && !owned.closed) {
+      if (owned.child.exitCode === null && owned.child.signalCode === null) {
+        try { if (!owned.terminate('SIGKILL')) fail(new Error('pause restart stop refused')); } catch (error) { fail(error); }
+      }
+      try { await within(owned.done, 2000, 'PAUSE_RESTART_CLOSE_UNCONFIRMED'); } catch (error) { fail(error); }
+    }
+    if (owned) { try { owned.failure.throwIfFailed(); } catch (error) { fail(error); } }
+    if (owned && !owned.closed) restartEndUnconfirmed = true;
+  }
+  failure.throwIfFailed();
+  return result;
+}
+function finishPauseCli(result = suiteFailure()) {
+  endTestCliFailure({ failed: result.failed || restartFailures.failed,
+    error: result.failed ? result.error : restartFailures.value, retainedRoots: [root],
+    unconfirmedChildren: restartEndUnconfirmed || restartChildren.length === 0 || restartChildren.some(owned => !owned.closed) });
+}
 
 test('pause intent is durable, idempotent and invalidated only by explicit generation advance', () => {
   const value = state();
@@ -182,7 +242,7 @@ const projectedBatchCases = testAsync('real Markdown and anonymization stop afte
     assert.equal(before.items.filter(row => row.status === 'deferred_review').length, 2 - expected);
     assert.equal(prompts, 1);
     assert.ok(before.standalone_review_choices.entries.length > 0, 'decisions survive before publication');
-    const restart = JSON.parse(execFileSync(process.execPath, ['-e', `
+    const restart = await restartJson(`
       (async()=>{const b=require(${JSON.stringify(path.join(server, 'gateway/batch'))});
       const paused=b.readBatchProgress('${id}').paused;
       b.continueStandaloneBatch('${id}');
@@ -190,7 +250,7 @@ const projectedBatchCases = testAsync('real Markdown and anonymization stop afte
         reviewTextLocally:async()=>{throw Error('already decided: no second prompt');}});
       process.stdout.write(JSON.stringify({paused,result,items:b._test.readState('${id}').items}));
       })().catch(e=>{console.error(e);process.exitCode=1;});
-    `], { cwd: repo, env: process.env, encoding: 'utf8', windowsHide: true }));
+    `, { cwd: repo, env: process.env, windowsHide: true });
     assert.equal(restart.paused, true); assert.equal(restart.result.complete, true);
     assert.equal(restart.result.reviewed_documents, 2 - expected);
     assert.equal(restart.items.filter(row => row.status === 'released').length, 2);
@@ -273,13 +333,13 @@ const projectedBatchCases = testAsync('real Markdown and anonymization stop afte
       }
       const manifest = path.join(root, 'data/document-reviews', id, 'manifest.json'), expected = fs.readFileSync(manifest);
       fs.renameSync(manifest, `${manifest}.crash-gap-fixture`);
-      const restarted = JSON.parse(execFileSync(process.execPath, ['-e', `
+      const restarted = await restartJson(`
         const b=require(${JSON.stringify(path.join(server, 'gateway/batch'))});
         let result;
         ${recovery === 'readState' ? `try { b._test.readState('${id}'); } catch(error) { result={expired:/abgelaufen/u.test(error.message)}; }`
           : `result=b.${recovery}();`}
         process.stdout.write(JSON.stringify(result));
-      `], { cwd: repo, env: process.env, encoding: 'utf8', windowsHide: true }));
+      `, { cwd: repo, env: process.env, windowsHide: true });
       if (recovery === 'readState') assert.equal(restarted.expired, true);
       else assert.equal(restarted.failures, 0, `${mode} ${recovery}`);
       assert.deepEqual(fs.readFileSync(manifest), expected, 'fresh gateway repairs exact membership, no body or approval');
@@ -302,6 +362,7 @@ testAsync('projected OCR-review opt-out changes only deferred Markdown work and 
   // roots above, after its executor lifecycles have settled. No journal state,
   // converter result, contact answer or batch service is fabricated here.
   await projectedBatchCases;
+  if (restartEndUnconfirmed) return; // The earlier registered case is already red; retain its writer evidence.
   const server = path.join(root, 'server'), batch = require(path.join(server, 'gateway/batch'));
   const markdownStore = require(path.join(server, 'standalone/markdown-store'));
   const { image } = await import('./helpers/conversion-fixtures.mjs');
@@ -407,4 +468,7 @@ testAsync('projected OCR-review opt-out changes only deferred Markdown work and 
   queue.forEach((item, index) => assert.deepEqual(fs.readFileSync(item.full), sourceBytes[index], 'selected source bytes stay unchanged'));
 });
 
-done();
+done().then(() => finishPauseCli(), error => {
+  const result = suiteFailure();
+  finishPauseCli(result.failed ? result : { failed: true, error });
+});

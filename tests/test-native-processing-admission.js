@@ -64,7 +64,8 @@ async function main() {
   report.native_artifact_sha256 = hash(readBounded(artifact.path, 4 * 1024 * 1024));
   check(artifact.sha256, report.native_artifact_sha256, 'ADMISSION_GATE_MANIFEST_ARTIFACT_PIN');
   report.sources_before = sources();
-  const { configureOwnershipControl, withOwnershipControl } = require(path.join(repo, core, 'ownership-control.js'));
+  const { configureOwnershipControl, withOwnershipControl, isConfirmedOwnershipBusy } =
+    require(path.join(repo, core, 'ownership-control.js'));
   const { createBatchActiveLock } = require(path.join(repo, gateway, 'batch-active-lock.js'));
   const { createBatchProcessingAdmission, BACKOFF_MS, MAX_WAIT_MS } = require(path.join(repo, gateway, 'batch-processing-admission.js'));
   const { dataRoot } = require(path.join(repo, 'plugins/data-secure/server/runtime.js'));
@@ -165,7 +166,7 @@ async function main() {
       // reentrant only through the actual product's held-root context.
       withOwnershipControl(root, guard => { guard.assertHeld(); return true; });
       return 'one-action';
-    });
+    }, { isRetryableBusy: isConfirmedOwnershipBusy });
     check(result, 'one-action', 'ADMISSION_GATE_EXPORT_RETURN');
     check([observation.actions, observation.waits], [1, 1], 'ADMISSION_GATE_EXPORT_ONE_ACTION_AFTER_BUSY');
     check(fs.existsSync(target), false, 'ADMISSION_GATE_EXPORT_EXACT_LOGICAL_RELEASE');

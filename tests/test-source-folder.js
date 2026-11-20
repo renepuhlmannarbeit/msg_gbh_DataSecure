@@ -7,7 +7,9 @@ const { createSuite } = require('./helpers');
 const {
   SOURCE_FOLDER_CANCELLED, sourceFolderPickerCommands, pickSourceFolder, enumerateSourceFolder, enumerateSourceFolderAsync
 } = require('../plugins/data-secure/server/companion/source-folder');
-const { batchQueueFromSelection, validateSelectedPath, validateSelectedPathAsync } = require('../plugins/data-secure/server/companion/file-picker');
+const { batchQueueFromSelection, validateSelectedPath, validateSelectedPathAsync,
+  sourceArtifactReason, sourceArtifactReasonAsync } = require('../plugins/data-secure/server/companion/file-picker');
+const { reviewDocx, paragraph } = require('./lib/docx-review-fixtures');
 
 const { test, testAsync, done, assert } = createSuite('Secure recursive source folder');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-source-folder-'));
@@ -360,7 +362,231 @@ test('a selected root replacement during listing rejects the complete synchronou
   assert.strictEqual(fs.readFileSync(path.join(root, 'unexpected.txt'), 'utf8'), 'unexpected');
 });
 
+// These models retain real open/read/stat/close operations. A close failure is
+// injected only after a successful real close; it is not an OS leak claim.
+function artifactIoModel(targetPath, options = {}) {
+  const records = [], descriptors = new Map();
+  const recordOpen = (candidate) => {
+    const record = { target: path.resolve(candidate) === path.resolve(targetPath),
+      reads: [], buffers: new Set(), closeAttempts: 0, closed: false };
+    records.push(record);
+    return record;
+  };
+  const beforeRead = (record, buffer, offset, length, position) => {
+    record.buffers.add(buffer);
+    record.reads.push({ offset, length, position });
+    if (!record.target) return { length };
+    if (options.failRead && record.reads.length > (options.afterReads ?? 0)) throw options.readError;
+    if (Object.prototype.hasOwnProperty.call(options, 'invalidCount')) {
+      return { invalid: true, count: options.invalidCount };
+    }
+    return { length: Math.min(length, options.chunk ?? Infinity) };
+  };
+  const syncIo = {
+    ...fs,
+    openSync(candidate, flags) {
+      const descriptor = fs.openSync(candidate, flags);
+      descriptors.set(descriptor, recordOpen(candidate));
+      return descriptor;
+    },
+    fstatSync(descriptor) {
+      if (descriptors.get(descriptor).target && options.failStat) throw options.statError;
+      return fs.fstatSync(descriptor);
+    },
+    readSync(descriptor, buffer, offset, length, position) {
+      const request = beforeRead(descriptors.get(descriptor), buffer, offset, length, position);
+      return request.invalid ? request.count : fs.readSync(descriptor, buffer, offset, request.length, position);
+    },
+    closeSync(descriptor) {
+      const record = descriptors.get(descriptor);
+      record.closeAttempts++;
+      fs.closeSync(descriptor);
+      record.closed = true;
+      descriptors.delete(descriptor);
+      if (record.target && options.failClose) throw options.closeError;
+    }
+  };
+  const asyncIo = {
+    ...fs.promises,
+    async open(candidate, flags) {
+      const handle = await fs.promises.open(candidate, flags);
+      const record = recordOpen(candidate);
+      return {
+        async stat() {
+          if (record.target && options.failStat) throw options.statError;
+          return handle.stat();
+        },
+        async read(buffer, offset, length, position) {
+          const request = beforeRead(record, buffer, offset, length, position);
+          return request.invalid ? { bytesRead: request.count, buffer }
+            : handle.read(buffer, offset, request.length, position);
+        },
+        async close() {
+          record.closeAttempts++;
+          await handle.close();
+          record.closed = true;
+          if (record.target && options.failClose) throw options.closeError;
+        }
+      };
+    }
+  };
+  return { fs: syncIo, fsPromises: asyncIo, records,
+    assertClosed() {
+      assert.ok(records.every(record => record.closed && record.closeAttempts === 1),
+        'every successfully opened owned descriptor has exactly one real close attempt');
+    },
+    assertZeroed() {
+      assert.ok(records.filter(record => record.target).every(record =>
+        [...record.buffers].every(buffer => buffer.every(byte => byte === 0))),
+      'metadata buffers are zeroed before either primary or close-only failure escapes');
+    }
+  };
+}
+
+async function expectExactArtifactFailure(operation, expected) {
+  let failed = false, actual;
+  try { await operation(); }
+  catch (error) { failed = true; actual = error; }
+  assert.strictEqual(failed, true, 'an IO failure must not become null or a successful descriptor');
+  assert.strictEqual(actual, expected, 'the first thrown value wins, including falsy values');
+}
+
 async function main() {
+  await testAsync('short owned prefix reads preserve a real small OPC document in direct and recursive admission', async () => {
+    const root = clean('short-owner-prefix');
+    const source = path.join(root, '~$-report.docx');
+    const sibling = path.join(root, '04-report.docx');
+    const original = reviewDocx(paragraph('PRIVATE_OWNER_NAME_SOURCE'));
+    const control = reviewDocx(paragraph('PRIVATE_SIBLING_CONTROL '.repeat(100)));
+    assert.ok(original.length < 8192 && control.length > original.length);
+    fs.writeFileSync(source, original); fs.writeFileSync(sibling, control);
+    for (const chunk of [1, 2, 3]) {
+      for (const operation of ['reasonSync', 'reasonAsync', 'fileSync', 'fileAsync', 'folderSync', 'folderAsync']) {
+        const model = artifactIoModel(source, { chunk });
+        const options = { fs: model.fs, fsPromises: model.fsPromises, productChannel: 'standalone', allowedTypes: ['docx'] };
+        if (operation === 'reasonSync') assert.strictEqual(sourceArtifactReason(source, options), null);
+        else if (operation === 'reasonAsync') assert.strictEqual(await sourceArtifactReasonAsync(source, options), null);
+        else if (operation === 'fileSync') assert.strictEqual(validateSelectedPath(source, options).sourcePath, source);
+        else if (operation === 'fileAsync') assert.strictEqual((await validateSelectedPathAsync(source, options)).sourcePath, source);
+        else {
+          const ignored = [];
+          const selection = operation === 'folderSync'
+            ? enumerateSourceFolder(root, { ...options, onIgnoredArtifact: reason => ignored.push(reason) })
+            : await enumerateSourceFolderAsync(root, { ...options, onIgnoredArtifact: reason => ignored.push(reason) });
+          assert.deepStrictEqual(selection.map(item => item.sourcePath).sort(), [source, sibling].sort());
+          assert.deepStrictEqual(ignored, [], 'a genuine OPC source is not an Office owner artifact');
+        }
+        const targetRecords = model.records.filter(record => record.target);
+        assert.ok(targetRecords.length > 0, 'the actual existing prefix reader was reached');
+        for (const record of targetRecords) {
+          assert.strictEqual(record.reads.length, Math.ceil(4 / chunk));
+          assert.deepStrictEqual(record.reads.map(request => request.position), chunk === 1 ? [0, 1, 2, 3] : [0, chunk]);
+          assert.deepStrictEqual(record.reads.map(request => request.offset), record.reads.map(request => request.position));
+        }
+        model.assertClosed();
+        assert.deepStrictEqual(fs.readFileSync(source), original);
+        assert.deepStrictEqual(fs.readFileSync(sibling), control);
+      }
+    }
+  });
+  await testAsync('true short non-OPC owner records reach EOF once and retain their existing classification', async () => {
+    const root = clean('short-owner-eof');
+    const source = path.join(root, '~$-report.docx'), sibling = path.join(root, '04-report.docx');
+    const original = Buffer.from('PK');
+    fs.writeFileSync(source, original); fs.writeFileSync(sibling, reviewDocx(paragraph('SIBLING_CONTROL')));
+    for (const asynchronous of [false, true]) {
+      const model = artifactIoModel(source, { chunk: 1 });
+      const options = { fs: model.fs, fsPromises: model.fsPromises };
+      assert.strictEqual(asynchronous ? await sourceArtifactReasonAsync(source, options)
+        : sourceArtifactReason(source, options), 'office_owner_file');
+      assert.deepStrictEqual(model.records.find(record => record.target).reads.map(request => request.position), [0, 1, 2]);
+      model.assertClosed(); assert.deepStrictEqual(fs.readFileSync(source), original);
+    }
+  });
+  await testAsync('invalid prefix read counts remain fail-closed and cannot spin or classify the file as harmless', async () => {
+    const root = clean('invalid-owner-read-count');
+    const source = path.join(root, '~$-report.docx');
+    const original = reviewDocx(paragraph('SOURCE_CONTROL')); fs.writeFileSync(source, original);
+    for (const invalidCount of [-1, 0.5, NaN, 5]) for (const asynchronous of [false, true]) {
+      const model = artifactIoModel(source, { invalidCount });
+      const options = { fs: model.fs, fsPromises: model.fsPromises };
+      await assert.rejects(async () => asynchronous ? sourceArtifactReasonAsync(source, options)
+        : sourceArtifactReason(source, options), /lokale Datei konnte nicht sicher gelesen werden/u);
+      assert.strictEqual(model.records.length, 1); assert.strictEqual(model.records[0].reads.length, 1);
+      model.assertClosed(); assert.deepStrictEqual(fs.readFileSync(source), original);
+    }
+  });
+  await testAsync('prefix and metadata readers preserve the first error and close each owned handle once', async () => {
+    const root = clean('artifact-primary-close');
+    const sources = {
+      prefix: path.join(root, '~$-report.docx'), metadata: path.join(root, 'desktop.ini')
+    };
+    const originals = {
+      prefix: reviewDocx(paragraph('SOURCE_CONTROL')),
+      metadata: Buffer.from('[.ShellClassInfo]\nIconResource=folder.ico,0\n')
+    };
+    for (const kind of Object.keys(sources)) fs.writeFileSync(sources[kind], originals[kind]);
+    const primaries = [Object.assign(new Error('synthetic primary IO failure'), { code: 'EIO' }), undefined, null, false, 0, ''];
+    for (const kind of ['metadata', 'prefix']) for (const asynchronous of [false, true]) {
+      for (const phase of kind === 'metadata' ? ['read', 'stat'] : ['read']) for (const primary of primaries) {
+        const closeError = Object.assign(new Error('synthetic post-close failure'), { code: 'EPERM' });
+        const model = artifactIoModel(sources[kind], { chunk: 1, failRead: phase === 'read',
+          afterReads: 1, readError: primary, failStat: phase === 'stat', statError: primary,
+          failClose: true, closeError });
+        const options = { fs: model.fs, fsPromises: model.fsPromises, productChannel: 'standalone' };
+        await expectExactArtifactFailure(() => asynchronous ? sourceArtifactReasonAsync(sources[kind], options)
+          : sourceArtifactReason(sources[kind], options), primary);
+        assert.strictEqual(model.records.length, 1); model.assertClosed();
+        if (phase === 'read') assert.strictEqual(model.records[0].reads.length, 2, 'one real nonempty read preceded the injected primary');
+        if (kind === 'metadata') model.assertZeroed();
+        assert.deepStrictEqual(fs.readFileSync(sources[kind]), originals[kind]);
+      }
+    }
+  });
+  await testAsync('close-only failures remain refusals after successful prefix or metadata reads including null classification', async () => {
+    const root = clean('artifact-close-only');
+    for (const [kind, name, original] of [
+      ['prefix', '~$-report.docx', reviewDocx(paragraph('SOURCE_CONTROL'))],
+      ['metadata', 'desktop.ini', Buffer.from('[.ShellClassInfo]\nIconResource=folder.ico,0\n')],
+      ['metadata', 'desktop.ini', Buffer.from('ordinary user text, not OS metadata')]
+    ]) {
+      const source = path.join(root, name); fs.writeFileSync(source, original);
+      for (const asynchronous of [false, true]) for (const closeError of [new Error('post-close only'), undefined, null, false, 0, '']) {
+        const model = artifactIoModel(source, { failClose: true, closeError });
+        const options = { fs: model.fs, fsPromises: model.fsPromises, productChannel: 'standalone' };
+        await expectExactArtifactFailure(() => asynchronous ? sourceArtifactReasonAsync(source, options)
+          : sourceArtifactReason(source, options), closeError);
+        assert.strictEqual(model.records.length, 1); model.assertClosed();
+        if (kind === 'metadata') model.assertZeroed();
+        assert.deepStrictEqual(fs.readFileSync(source), original);
+      }
+    }
+  });
+  await testAsync('metadata recognition and unknown-file refusal retain their scope after close handling changes', async () => {
+    const root = clean('artifact-recognition-control');
+    const source = path.join(root, 'desktop.ini');
+    for (const [original, expected] of [
+      [Buffer.from('[.ShellClassInfo]\nIconResource=folder.ico,0\n'), 'os_folder_metadata'],
+      [Buffer.from('ordinary user text, not OS metadata'), null]
+    ]) {
+      fs.writeFileSync(source, original);
+      for (const asynchronous of [false, true]) {
+        const model = artifactIoModel(source, { chunk: 3 });
+        const options = { fs: model.fs, fsPromises: model.fsPromises, productChannel: 'standalone' };
+        assert.strictEqual(asynchronous ? await sourceArtifactReasonAsync(source, options)
+          : sourceArtifactReason(source, options), expected);
+        assert.strictEqual(model.records.length, 1); model.assertClosed(); model.assertZeroed();
+        assert.deepStrictEqual(fs.readFileSync(source), original);
+        if (expected === null) await assert.rejects(() => enumerateSourceFolderAsync(root,
+          { productChannel: 'standalone', allowedTypes: ['docx'] }), error => error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES');
+        const outsideScope = artifactIoModel(source);
+        assert.strictEqual(asynchronous ? await sourceArtifactReasonAsync(source,
+          { fs: outsideScope.fs, fsPromises: outsideScope.fsPromises })
+          : sourceArtifactReason(source, { fs: outsideScope.fs }), null);
+        assert.strictEqual(outsideScope.records.length, 0, 'non-Standalone scope does not read or newly ignore metadata');
+      }
+    }
+  });
   await testAsync('async folder admission enumerates every rejected supported file without returning a partial queue', async () => {
     const root = clean('async-named-supported-failures');
     fs.mkdirSync(path.join(root, 'nested'));

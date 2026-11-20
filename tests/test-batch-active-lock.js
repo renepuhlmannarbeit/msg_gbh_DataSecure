@@ -8,6 +8,8 @@ const { createSuite } = require('./helpers');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-active-lock-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 
 const { batchRoot } = require('../plugins/data-secure/server/gateway/batch-private-store');
 const { createBatchActiveLock, ACTIVE_LOCK_BUSY } = require('../plugins/data-secure/server/gateway/batch-active-lock');
@@ -16,6 +18,7 @@ const { createBatchContinuation } = require('../plugins/data-secure/server/gatew
 const { createBatchRecovery } = require('../plugins/data-secure/server/gateway/batch-recovery');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { _test } = require('../plugins/data-secure/server/gateway/batch');
+const { loadIdentityPlatform } = require('./lib/process-identity-platform.cjs');
 const { test, done, assert } = createSuite('Active batch lock');
 
 const tokenA = 'a'.repeat(64);
@@ -840,6 +843,40 @@ test('native caller wiring cannot silently select the separated legacy test adap
   } finally {
     if (previous === undefined) delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
     else process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = previous;
+  }
+});
+
+test('actual Darwin live observer retains a mismatching unversioned birth without mutating its journal', () => {
+  const original = { token: tokenA, local_executor_pid: 4242, local_executor_birth_id: 'a'.repeat(64),
+    local_executor_started_at: '2026-10-28T10:00:00.000Z', local_executor_lease_id: '1'.repeat(32) };
+  for (const probe of ['b'.repeat(64), null]) for (const liveness of ['alive', 'denied']) {
+    let observations = 0;
+    const actual = loadIdentityPlatform('batch-active-lock.js', 'darwin', pid => {
+      assert.equal(pid, 4242); observations++; return probe;
+    });
+    const observer = actual.createBatchActiveLock({ process: { pid: 111, kill(pid, signal) {
+      assert.equal(pid, 4242); assert.equal(signal, 0);
+      if (liveness === 'denied') throw Object.assign(new Error('synthetic denied observation'), { code: 'EPERM' });
+    } } });
+    const state = JSON.parse(JSON.stringify(original));
+    assert.equal(observer.liveLocalExecutor(state), true, 'a live Mac mismatch or unavailable probe is blocking');
+    assert.deepEqual(state, original); assert.equal(observations, 1);
+  }
+});
+
+test('actual platform observers retain same/dead/unknown behavior and non-Mac PID reuse evidence', () => {
+  const expected = 'a'.repeat(64), different = 'b'.repeat(64);
+  for (const platform of ['win32', 'linux', 'darwin']) for (const dead of [false, true]) {
+    const actual = loadIdentityPlatform('batch-active-lock.js', platform, () => different);
+    const observer = actual.createBatchActiveLock({ process: { pid: 111, kill() {
+      if (dead) throw Object.assign(new Error('synthetic dead process'), { code: 'ESRCH' });
+    } } });
+    assert.equal(observer.liveLocalExecutor({ local_executor_pid: 4242, local_executor_birth_id: expected }),
+      !dead && platform === 'darwin');
+    const sameActual = loadIdentityPlatform('batch-active-lock.js', platform, () => expected);
+    const same = sameActual.createBatchActiveLock({ process: { pid: 111, kill() {} } });
+    assert.equal(same.liveLocalExecutor({ local_executor_pid: 4242, local_executor_birth_id: expected }), true);
+    assert.equal(same.liveLocalExecutor({ local_executor_pid: 4242 }), true);
   }
 });
 

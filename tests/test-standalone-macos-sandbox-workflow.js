@@ -67,7 +67,9 @@ assert.ok(workflow.includes('[[ "$CORE_PRODUCER_TARGET" =~ ^(both|macos-arm64|ma
 assert.match(workflow, /produce-static-core:[\s\S]*?needs: validate-producer-target[\s\S]*?uses: \.\/\.github\/workflows\/standalone-macos-static-core\.yml/u);
 assert.match(workflow, /default: macos-arm64/u, 'the default must allocate only one target');
 assert.match(workflow, /macos-15-intel/u);
-assert.match(workflow, /macos-14/u);
+assert.equal([...workflow.matchAll(/"os":"macos-15","target":"macos-arm64","rust_arch":"arm64"/gu)].length, 2,
+  'ARM-only and combined builds must use the supported Arm64 runner');
+assert.doesNotMatch(workflow, /"os":"macos-14"/u);
 assert.match(workflow, /macos-arm64-26/u);
 assert.match(workflow, /macos-26/u);
 assert.match(workflow, /standalone-macos-regular-start\.sh/u);
@@ -163,13 +165,19 @@ for (const expected of [
   'standalone-native-macos-launch.sh',
   'scripts/build-standalone-macos-package.mjs',
   'scripts/verify-standalone-macos-package.mjs',
-  'cmp "${archive}.first" "$archive"',
+  '--engineering-directory "$engineering_directory"',
+  'cmp "$archive" "$engineering_archive"',
+  '--target "${{ matrix.target }}" --archive "$engineering_archive"',
   'ditto -x -k "$archive" "$extraction"',
   'packaged_app="$extraction/DataSecure-Standalone-${version}-${{ matrix.target }}/DataSecure Standalone.app"',
   'retention-days: 1',
   'compression-level: 0',
   'Human Gatekeeper, Finder picker, VoiceOver and workflow UAT remain open.'
 ]) assert.ok(workflow.includes(expected), `workflow is missing required evidence step: ${expected}`);
+assert.equal((workflow.match(/node scripts\/build-standalone-macos-package\.mjs/gu) || []).length, 2,
+  'keep both independent package builds');
+assert.equal((workflow.match(/node scripts\/verify-standalone-macos-package\.mjs/gu) || []).length, 2,
+  'verify both complete archives and their named checksums');
 
 // The custom Core is finally sealed BEFORE Cargo. A later invocation may only
 // compare it; re-signing or accepting a newly computed digest would break the

@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const cp = require('node:child_process');
+const { firstFailure, within, ownChild, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
+const secondary = () => { try { process.stderr.write('OWNERSHIP_TEST_SECONDARY_CLEANUP_FAILURE\n'); } catch {} };
 if (process.version !== 'v22.23.2' || !['win32', 'darwin'].includes(process.platform)) throw Error('Use packaged Node 22.23.2 on Windows/macOS');
 if (process.argv.length !== 3) throw Error('Pass the explicit test build-manifest.json');
 const artifact = JSON.parse(fs.readFileSync(path.resolve(process.argv[2]), 'utf8')).verified_artifact;
@@ -18,32 +20,47 @@ if (process.platform === 'win32') {
 }
 let sequence = 0, checks = 0, rootSequence = 0;
 const children = [];
+const primary = firstFailure(secondary);
 const check = (actual, expected) => { assert.deepEqual(actual, expected); checks++; };
 function fixture() { const root = path.join(base, `root-${++rootSequence}`); fs.mkdirSync(root, { mode: 0o700 }); return root; }
 function child() {
   const process = cp.fork(helper, [], { execPath: global.process.execPath, execArgv: [], windowsHide: true,
     env: { SystemRoot: global.process.env.SystemRoot || '', NODE_OPTIONS: '' }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
-  const pending = new Map(); let ended = false, eventWaiter;
+  const owned = ownChild(process, error => primary.record(error));
+  const pending = new Map(); let ended = false, eventWaiter, stopping;
   const completed = new Promise(resolve => process.once('close', (code, signal) => {
     ended = true; for (const entry of pending.values()) { clearTimeout(entry.timer); entry.resolve({ exited: true, code, signal }); }
-    pending.clear(); resolve({ code, signal });
+    pending.clear();
+    if (eventWaiter) { const entry = eventWaiter; eventWaiter = undefined; clearTimeout(entry.timer); entry.resolve({ exited: true, code, signal }); }
+    resolve({ code, signal });
   }));
-  process.stderr.on('data', () => {});
+  process.stderr?.on('data', () => {});
   process.on('message', message => {
-    if (message.event && eventWaiter) { const resolve = eventWaiter; eventWaiter = undefined; resolve(message.event); }
+    if (message.event && eventWaiter) { const entry = eventWaiter; eventWaiter = undefined; clearTimeout(entry.timer); entry.resolve(message.event); }
     const entry = pending.get(message.id); if (entry) { clearTimeout(entry.timer); pending.delete(message.id); entry.resolve(message); }
   });
   process.on('error', error => { for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(error); } pending.clear(); });
-  const participant = { pid: process.pid,
+  const participant = { pid: process.pid, get closed() { return owned.closed; },
     event() { return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { eventWaiter = undefined; reject(Error('test event deadline')); }, 10000);
-      eventWaiter = value => { clearTimeout(timer); resolve(value); };
+      eventWaiter = { timer, resolve };
     }); },
     request(command, fields = {}) { return new Promise((resolve, reject) => {
       const id = ++sequence, timer = setTimeout(() => { pending.delete(id); reject(Error('child deadline')); }, 10000);
-      pending.set(id, { resolve, reject, timer }); process.send({ id, command, ...fields }, error => { if (error) { clearTimeout(timer); pending.delete(id); reject(error); } });
+      pending.set(id, { resolve, reject, timer });
+      if (process.connected && typeof process.send === 'function') process.send({ id, command, ...fields }, error => { if (error) { clearTimeout(timer); pending.delete(id); reject(error); } });
     }); },
-    async stop() { if (!ended) process.kill('SIGKILL'); return completed; }, completed };
+    stop() {
+      if (!stopping) stopping = (async () => {
+        const failure = firstFailure(secondary);
+        try { owned.terminate('SIGKILL'); } catch (error) { failure.record(error); }
+        try { await within(completed, 6000, 'OWNERSHIP_TEST_CLOSE_UNCONFIRMED'); }
+        catch (error) { failure.record(error); }
+        if (owned.failure.failed) failure.record(owned.failure.value);
+        failure.throwIfFailed();
+      })();
+      return stopping;
+    }, completed };
   children.push(participant); return participant;
 }
 async function initialize(participant, root, kind, fault, configured = true) {
@@ -202,11 +219,23 @@ function clean(directory) {
       check(JSON.parse(fs.readFileSync(configFile)).root, b);
       await p.stop(); await q.stop();
     }
-    console.log(`NATIVE OWNERSHIP INTEGRATION PASS ${checks} assertions; ${rootSequence} private fixtures; ${process.version}; ${process.platform}`);
-  } finally {
-    await Promise.all(children.map(participant => participant.stop()));
-    const current = fs.lstatSync(base, { bigint: true });
-    if (current.dev !== initial.dev || current.ino !== initial.ino) throw Error('fixture root identity changed');
-    clean(base);
+  } catch (error) { primary.record(error); }
+  finally {
+    const stopped = await Promise.allSettled(children.map(participant => participant.stop()));
+    for (const value of stopped) if (value.status === 'rejected') primary.record(value.reason);
+    if (!primary.failed) {
+      try {
+        const current = fs.lstatSync(base, { bigint: true });
+        if (current.dev !== initial.dev || current.ino !== initial.ino) throw Error('fixture root identity changed');
+        clean(base);
+      } catch (error) { primary.record(error); }
+    }
+    if (primary.failed) {
+      try { process.stderr.write(`OWNERSHIP_TEST_FIXTURE_KEPT:${base}\n`); } catch {}
+    }
   }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+  // No timeout is a process-exit or descendant-writer witness.
+  primary.throwIfFailed();
+  console.log(`NATIVE OWNERSHIP INTEGRATION PASS ${checks} assertions; ${rootSequence} private fixtures; ${process.version}; ${process.platform}`);
+})().catch(error => endTestCliFailure({ failed: true, error, retainedRoots: [base],
+  unconfirmedChildren: children.some(participant => !participant.closed) }));

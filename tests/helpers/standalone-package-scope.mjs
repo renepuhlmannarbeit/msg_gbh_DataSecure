@@ -50,9 +50,23 @@ export function isolatedSidecarEnvironment(parent, directory, inherited = proces
   return environment;
 }
 
-export function removePackageSmokeScope(parent, directory) {
+const ownedScopes = new WeakMap();
+const sameEntry = (left, right) => left.target === right.target && left.directory === right.directory &&
+  left.dev === right.dev && left.ino === right.ino && left.birthtimeNs === right.birthtimeNs;
+
+export function capturePackageSmokeScope(parent, directory) {
+  const token = Object.freeze({});
+  ownedScopes.set(token, checkedEntry(checkedScope(parent, directory)));
+  return token;
+}
+
+export function removePackageSmokeScope(parent, directory, ownedScope) {
   const scope = checkedScope(parent, directory);
   const entries = [checkedEntry(scope)];
+  if (ownedScope !== undefined) {
+    const original = ownedScopes.get(ownedScope);
+    if (!original || !sameEntry(entries[0], original)) throw failure();
+  }
   for (let position = 0; position < entries.length; position += 1) {
     const entry = entries[position];
     if (!entry.directory) continue;
@@ -73,4 +87,45 @@ export function removePackageSmokeScope(parent, directory) {
     if (entry.directory) fs.rmdirSync(entry.target);
     else fs.unlinkSync(entry.target);
   }
+}
+
+// Own test ChildProcess records only. A close event is not a process-tree claim.
+// No PID lookup, retry, detached timer cleanup, or deletion after a lost race.
+export async function finishPackageSmokeParent({ children, restoreSpawn, restoreEnvironment,
+  failed = false, error, waitMs = 6000 }) {
+  let cleanupFailed = false, cleanupError, closeConfirmed = false, timer;
+  const remember = cause => {
+    if (!cleanupFailed) { cleanupFailed = true; cleanupError = cause; }
+  };
+  try { restoreSpawn(); } catch (cause) { remember(cause); }
+  try {
+    if (!Number.isSafeInteger(waitMs) || waitMs < 1 || waitMs > 6000) throw failure();
+    const ownedChildren = children.slice();
+    for (const entry of ownedChildren) if (!entry.closed()) {
+      try { entry.terminate(); } catch { /* Only actual close can confirm completion. */ }
+    }
+    await Promise.race([
+      Promise.all(ownedChildren.map(entry => entry.done)),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(
+        new Error('STANDALONE_SMOKE_CLOSE_UNCONFIRMED'), { code: 'STANDALONE_SMOKE_CLOSE_UNCONFIRMED' })), waitMs); })
+    ]);
+    if (!ownedChildren.every(entry => entry.closed())) throw Object.assign(
+      new Error('STANDALONE_SMOKE_CLOSE_UNCONFIRMED'), { code: 'STANDALONE_SMOKE_CLOSE_UNCONFIRMED' });
+    closeConfirmed = true;
+  } catch (cause) { remember(cause); }
+  finally { clearTimeout(timer); }
+  if (closeConfirmed) {
+    for (const restore of restoreEnvironment) {
+      try { restore(); } catch (cause) { remember(cause); }
+    }
+  }
+  // Direct ChildProcess close does not prove every descendant writer ended.
+  // Always retain the runtime; unknown close additionally retains scoped roots.
+  if (failed) {
+    if (cleanupFailed) {
+      try { process.stderr.write('STANDALONE_SMOKE_SECONDARY_CLEANUP_FAILURE\n'); } catch { /* Preserve the primary throw. */ }
+    }
+    throw error; // A separate flag preserves null/undefined/false/0/empty-string throws.
+  }
+  if (cleanupFailed) throw cleanupError;
 }

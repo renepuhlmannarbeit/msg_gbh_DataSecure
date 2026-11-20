@@ -275,11 +275,13 @@ int wmain(int argc, wchar_t* argv[]) {
   const DWORD wait_result = WaitForSingleObject(process.hProcess, static_cast<DWORD>(wall_ms));
   if (wait_result == WAIT_TIMEOUT) {
     TerminateJobObject(job, kResourceLimit);
-    WaitForSingleObject(process.hProcess, 5000);
+    const DWORD termination_wait = WaitForSingleObject(process.hProcess, 5000);
     CloseHandle(process.hProcess);
     CloseHandle(completion);
     CloseHandle(job);
-    return kResourceLimit;
+    // A termination request (or closing the job) is not a process-end witness.
+    // An already ended process also confirms completion if termination failed.
+    return termination_wait == WAIT_OBJECT_0 ? kResourceLimit : kWaitError;
   }
   if (wait_result != WAIT_OBJECT_0) {
     TerminateJobObject(job, kWaitError);

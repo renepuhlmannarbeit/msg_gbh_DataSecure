@@ -48,7 +48,7 @@ function cleanup() {
 
 (async () => {
   const files = [1, 2].map(index => {
-    const full = path.join(scope, `contact-${index}.png`);
+    const full = path.join(scope, index === 2 ? 'con\u00adtact-2.png' : `contact-${index}.png`);
     const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9xkAAAAASUVORK5CYII=', 'base64');
     fs.writeFileSync(full, bytes); return { full, name: path.basename(full), sourceBytes: bytes.length, bytes };
   });
@@ -65,12 +65,17 @@ function cleanup() {
     assert.ok(batch._test.readState(token).items.some(item => item.status === 'deferred_review'), JSON.stringify(batch._test.readState(token).items));
   }
   assert.equal(batch._test.readState(token).items.filter(item => item.status === 'deferred_review').length, 2);
+  const sourceBinding = state => state.items.map(item => ({ id: item.id, name: item.name,
+    source_label: item.source_label, sha256: item.sha256, size: item.size, work_name: item.work_name }));
+  const originalBinding = sourceBinding(batch._test.readState(token));
+  assert.equal(originalBinding[1].source_label, 'con\u00adtact-2.png');
   let contacts = 0, entities = 0, deferred = false;
   const broker = createReviewBroker();
   async function reviewTextLocally(draft) {
     const reviewId = (++sequence).toString(16).padStart(32, '0');
     let response;
     const child = { send(message) { response = message.answer; } };
+    broker.begin(child, token);
     broker.receive(child, { type: 'standalone-review-draft', batch_token: token, review_id: reviewId, draft });
     assert.equal(broker.session().ready, true);
     const session = broker.session(), pieces = [];
@@ -81,13 +86,14 @@ function cleanup() {
     if (draft.ocr_contact_review) {
       contacts++;
       assert.equal(draft.contact_batch.documents.length, 2, 'one contact table spans both sources');
-      assert.deepEqual(draft.contact_batch.documents.map(document => document.source_label), ['contact-1.png', 'contact-2.png']);
+      assert.deepEqual(draft.contact_batch.documents.map(document => document.source_label), ['contact-1.png', 'Dokument 2']);
       if (!deferred) { deferred = true; answer = { action: 'deferred' }; }
       else answer = { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => ({
         ambiguity_id: item.ambiguity_id, decision: item.contact_kind === 'email' ? 'correct_contact' : 'confirm_contact',
         ...(item.contact_kind === 'email' ? { replacement: 'zora@other.invalid' } : {}) })) };
     } else {
       entities++;
+      assert.deepEqual(draft.batch_review.documents.map(row => row.source_label), ['contact-1.png', 'Dokument 2']);
       assert.ok(draft.original_text.includes('zora@other.invalid'));
       assert.ok(!draft.original_text.includes('wrong@new.invalid'));
       answer = { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => {
@@ -113,6 +119,7 @@ function cleanup() {
   assert.equal(contacts, 2, 'one contact submission handles both documents after reload');
   assert.equal(entities, 1);
   assert.equal(resumed.packages.length, 2);
+  assert.deepEqual(sourceBinding(batch._test.readState(token)), originalBinding, 'display projection never changes source-binding bytes/fields');
   for (const result of resumed.packages) {
     assert.equal(result.read_capability, undefined, 'Standalone does not mint a Cowork read grant');
     const { p, m } = safeResolvePackage(result.package_id);
@@ -146,6 +153,7 @@ function cleanup() {
     assert.equal(draft.processing_mode, 'markdown-only');
     assert.equal(draft.ocr_contact_review, true);
     assert.equal(draft.contact_batch.documents.length, 2);
+    assert.deepEqual(draft.contact_batch.documents.map(row => row.source_label), ['contact-1.png', 'Dokument 2']);
     return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => ({
       ambiguity_id: item.ambiguity_id, decision: item.contact_kind === 'email' ? 'correct_contact' : 'confirm_contact',
       ...(item.contact_kind === 'email' ? { replacement: 'zora@other.invalid' } : {}) })) };

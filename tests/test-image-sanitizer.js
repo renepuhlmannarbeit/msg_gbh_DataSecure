@@ -213,11 +213,22 @@ test('a non PNG buffer is refused', () => {
   assert.throws(() => decodePng(Buffer.alloc(40)), (e) => e instanceof ImageSafetyError);
 });
 
-test('an interlaced or high bit depth PNG is refused instead of half decoded', () => {
-  const good = encodePng(solidRgba(4, 4));
-  const interlaced = Buffer.from(good);
-  interlaced[8 + 8 + 12] = 1; // IHDR interlace byte
-  assert.throws(() => decodePng(interlaced), (e) => e instanceof ImageSafetyError);
+test('valid interlaced and high bit depth PNGs are refused by the narrow reader instead of half decoded', () => {
+  const variants = require('./lib/png-static-variants.cjs');
+  const preflight = require('../plugins/data-secure/server/standalone/png-raster-decoder');
+  for (const [depth, interlace] of [[8, 1], [16, 0]]) {
+    const bytes = variants.checker(depth, 6, interlace, 0), before = Buffer.from(bytes);
+    assert.equal(bytes[24], depth); assert.equal(bytes[28], interlace);
+    assert.equal(bytes.readUInt32BE(29), crc32(bytes.subarray(12, 29)), 'valid IHDR CRC, not a corrupted header');
+    const plan = preflight.inspectStaticPng(bytes);
+    try {
+      assert.deepEqual([plan.width, plan.height, plan.depth, plan.color, plan.interlace], [9, 7, depth, 6, interlace]);
+      assert.equal(plan.ownSubset, false, 'a complete supported preflight does not grant the old narrow decoder');
+      assert.throws(() => decodePng(bytes), error => error instanceof ImageSafetyError &&
+        error.message === 'PNG-Variante nicht sicher bearbeitbar (nur 8-bit, nicht interlaced).');
+      assert.deepEqual(bytes, before);
+    } finally { plan.nativeBytes.fill(0); }
+  }
 });
 
 // Standalone-only: the old synchronous sanitizer remains deliberately narrow.

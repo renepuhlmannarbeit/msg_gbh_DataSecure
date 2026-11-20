@@ -103,6 +103,9 @@ function macContract(arch, { imports, failStage } = {}) {
     output: '/isolated/build', include: '/isolated/headers', artifact, source: '/isolated/guard.c',
     NODE: '22.23.2', HEADERS_SHA: 'headers-oracle', LIB_SHA: 'windows-library-oracle',
     console: { log() {} },
+    // Only this historical sliced Mac body uses the scope seam. Full-source
+    // parent/leaf binding is exercised separately below with real filesystem IO.
+    assertBuildDirectories() { events.push(['directories']); },
     hash(bytes) { events.push(['hash', bytes.toString()]); return sha(bytes); },
     fs: {
       readFileSync(file) {
@@ -185,6 +188,18 @@ for (const [name, imports] of [
     assert.ok(!result.writes.has('/isolated/build/build-manifest.json'));
   });
 }
+
+test('actual native build source preserves errors and directory ownership without external tools', () => {
+  const result = cp.spawnSync(process.execPath, ['--experimental-vm-modules',
+    path.join(root, 'tests/lib/native-build-source-cases.mjs')], {
+    cwd: root, encoding: 'utf8', windowsHide: true, shell: false,
+    timeout: 30_000, maxBuffer: 512 * 1024
+  });
+  assert.equal(result.error, undefined, String(result.error || '') + '\n' + String(result.stdout || '') + String(result.stderr || ''));
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, String(result.stdout || '') + String(result.stderr || ''));
+});
+
 console.log(JSON.stringify({ schema: 'datasecure-ownership-guard-build-contract-test/1',
   node: process.version, platform: process.platform, checks, native_mac_build: false,
   compiler_started: false, network_requested: false }));

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { createSuite } = require('./helpers');
-const { contactQuality } = require('../plugins/data-secure/server/standalone/ocr-quality');
+const { contactQuality, isContactLine } = require('../plugins/data-secure/server/standalone/ocr-quality');
 const { contactSpans, buildContactDraft, validateContactAnswer, validateContactDraft, applyContactAnswer } = require('../plugins/data-secure/server/core/ocr-contact-review');
 const { createContactStore } = require('../plugins/data-secure/server/gateway/ocr-contact-store');
 const { createPrivateWorkStore } = require('../plugins/data-secure/server/gateway/private-work-store');
@@ -162,6 +162,7 @@ test('durable private corrections survive reopen but reject changed extraction, 
 test('the actual broker sends a contact answer only to its bound owned worker', () => {
   const sent = [], child = { send: value => sent.push(value) }, broker = createReviewBroker();
   const draft = buildContactDraft(input());
+  broker.begin(child, 'a'.repeat(64));
   broker.receive(child, { type: 'standalone-review-draft', batch_token: 'a'.repeat(64), review_id: 'b'.repeat(32), draft });
   assert.equal(broker.session().ready, true);
   assert.throws(() => broker.submit('c'.repeat(32), answer(draft)));
@@ -177,6 +178,7 @@ test('transport contact shapes never authorize a contact action against an entit
   const broker = createReviewBroker(), child = { send() {} };
   const draft = buildReviewDraft('Anna Linden', 'Anna Linden', 'general', [{ ambiguity_id: 'person:v1:000001',
     type: 'person_prose_ambiguous', replacement_kind: 'PERSON', original_start: 0, original_end: 11, anonymized_start: 0, anonymized_end: 11 }], { allowDefer: true });
+  broker.begin(child, 'a'.repeat(64));
   broker.receive(child, { type: 'standalone-review-draft', batch_token: 'a'.repeat(64), review_id: 'b'.repeat(32), draft });
   const message = { schema: 'datasecure-standalone-private-ipc/1', request_id: 'd'.repeat(16), action: 'submit_review', review_id: 'b'.repeat(32),
     answer: { action: 'reviewed', redactions: [], decisions: [{ ambiguity_id: 'ocr-contact:v1:000001', decision: 'correct_contact', replacement: 'a@b.invalid' }] } };
@@ -226,6 +228,53 @@ testAsync('run-wide raw skip at a split never opens another contact group or era
     assert.equal(saved, 1);
   }
 });
+test('display label helper rejects invalid ordinals and preserves the strict raw review-model gate', () => {
+  const { standaloneReviewSourceLabel } = require('../plugins/data-secure/server/gateway/standalone-review-budget');
+  const { MAX_BATCH_FILES } = require('../plugins/data-secure/server/resource-limits').RESOURCE_LIMITS;
+  const { buildBatchReviewDraft } = require('../plugins/data-secure/server/core/local-review-model');
+  for (const index of [undefined, null, 0, -1, 1.5, NaN, Infinity, MAX_BATCH_FILES + 1])
+    assert.throws(() => standaloneReviewSourceLabel('safe.txt', index), error => error.code === 'LOCAL_REVIEW_FAILED');
+  assert.equal(standaloneReviewSourceLabel('An\u00adna.txt', MAX_BATCH_FILES), `Dokument ${MAX_BATCH_FILES}`);
+  const document = { original_text: 'Acme', anonymized_text: 'Acme', profile: 'personnel_profile',
+    allowOrganizationReview: true, ambiguities: [{ ambiguity_id: 'credential:v2:000001',
+      type: 'credential_issuer_ambiguous', original_start: 0, original_end: 4, anonymized_start: 0, anonymized_end: 4 }] };
+  for (const raw of ['bad\nname', 'An\u00adna.txt', 'A\u200dB.txt', '\ud800.txt']) {
+    assert.throws(() => buildBatchReviewDraft([document], { privateSourceLabels: [raw] }));
+    const label = standaloneReviewSourceLabel(raw, 1);
+    assert.equal(label, 'Dokument 1');
+    assert.doesNotThrow(() => buildBatchReviewDraft([document], { privateSourceLabels: [label] }));
+  }
+});
+
+test('contact display labels adapt only their presentation while original entries and exact correction bindings stay unchanged', () => {
+  const { buildContactBatch, resolveContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
+  const entries = ['An\u00adna.png', 'ÄÖÜß.png'].map(source_label => ({ source_label,
+    input: input('A\u0308\u200b\r\nE-Mail: same@wrong.invalid') }));
+  const before = structuredClone(entries), bundle = buildContactBatch(entries);
+  assert.strictEqual(bundle.entries, entries);
+  assert.deepEqual(bundle.draft.contact_batch.documents.map(row => row.source_label), ['Dokument 1', 'ÄÖÜß.png']);
+  const outcome = resolveContactBatch(bundle, answer(bundle.draft, { 0: 'first@new.invalid', 1: 'second@new.invalid' }));
+  assert.deepEqual(outcome.answers.map((value, index) => applyContactAnswer(entries[index].input, value)),
+    ['A\u0308\u200b\r\nE-Mail: first@new.invalid', 'A\u0308\u200b\r\nE-Mail: second@new.invalid']);
+  assert.deepEqual(entries, before);
+  for (const raw of ['bad\nname', 'An\u00adna.png', 'A\u200dB.png', '\ud800.png']) {
+    const invalid = structuredClone(bundle.draft);
+    invalid.contact_batch.documents[0].source_label = raw;
+    assert.throws(() => validateContactDraft(invalid), 'raw invalid labels remain forbidden by the actual model');
+  }
+});
+test('contact label bounds and missing legacy display metadata never alter the input authority', () => {
+  const { buildContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
+  for (const [raw, expected] of [[undefined, 'Dokument 1'], ['', 'Dokument 1'],
+    ['x'.repeat(2048), 'x'.repeat(2048)], ['x'.repeat(2049), 'Dokument 1']]) {
+    const entry = { source_label: raw, input: input() }, before = structuredClone(entry);
+    const bundle = buildContactBatch([entry]);
+    assert.equal(bundle.draft.contact_batch.documents[0].source_label, expected);
+    assert.deepEqual(entry, before);
+    validateContactDraft(bundle.draft);
+  }
+});
+
 test('multi-document contact adapter preserves exact Unicode/CRLF offsets and splits DIFFERENT corrections of identical readings', () => {
   const { buildContactBatch, resolveContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
   const entries = ['one.png', 'sub/two.pdf'].map(source_label => ({ source_label,
@@ -266,6 +315,49 @@ testAsync('contact collection splits 400+1, never publishes, and resumes only co
   const noWrites = createBatchContactReview({ contactStore: { write() { throw Error('must not write invalid group'); } },
     captureDeferredReviewInput: async (_state, item) => ({ ocr_contact_input: item.input }) });
   await assert.rejects(() => noWrites({}, items.slice(2), { reviewTextLocally: async () => ({ action: 'reviewed', redactions: [], decisions: [] }) }));
+});
+
+test('linear contact scans retain the distinct previous quality and candidate grammars', () => {
+  // The two previous expressions are independent differential oracles. They
+  // intentionally disagree on multiple @ and candidate punctuation ownership.
+  const previousQuality = /[^\s@]+@[^\s@]+/u;
+  const previousCandidates = /[^\s<>()[\]{},;:]+@[^\s<>()[\]{},;:]+/gu;
+  function compare(value) {
+    assert.equal(isContactLine(value), previousQuality.test(value), value);
+    const matches = [...value.matchAll(previousCandidates)];
+    const expected = matches.map(match => ({ start: match.index, end: match.index + match[0].length,
+      page: 1, line: 1, kind: 'email' }));
+    if (!expected.length && value.trim()) expected.push({ start: value.indexOf(value.trim()),
+      end: value.indexOf(value.trim()) + value.trim().length, page: 1, line: 1, kind: 'contact' });
+    assert.deepEqual(contactSpans(value, { contact_lines: [1] }), expected, value);
+  }
+  function enumerate(value, depth) {
+    compare(value);
+    if (depth) for (const character of ['A', '@', ' ', ':', '(', ')', '😀']) enumerate(value + character, depth - 1);
+  }
+  enumerate('', 5);
+  for (const delimiter of ['\t', '\u00a0', '<', '>', '[', ']', '{', '}', ',', ';', ':', '(', ')'])
+    for (const value of ['@@a', 'a@@', '@@@', 'a@@b', '@a', 'a@', '@a@', 'Äß@é.invalid', "a'\\!@b/#+%"])
+      compare(`A${delimiter}${value}${delimiter}B`);
+});
+
+test('linear candidate discovery retains label fallback, mixed contacts and exact UTF16 offsets', () => {
+  for (const ending of ['\n', '\r', '\r\n']) {
+    const source = `😀 Einleitung${ending}E-Mail: @@a Telefon: +49 40 1234567${ending}Kontakt: defekt`;
+    const quality = contactQuality({}, source), offset = 13;
+    assert.deepEqual(contactSpans(source, quality, 7, offset), [
+      ['@@a', 2, 'email'], ['+49 40 1234567', 2, 'phone'], ['defekt', 3, 'contact']
+    ].map(([value, line, kind]) => ({ start: offset + source.indexOf(value), end: offset + source.indexOf(value) + value.length,
+      page: 7, line, kind })));
+  }
+});
+
+test('long absent-email words and many short noncontact tokens retain complete source corridors', () => {
+  const word = 'A'.repeat(40000), source = 'E-Mail: ' + word;
+  assert.equal(isContactLine(word), false);
+  assert.deepEqual(contactSpans(source, { contact_lines: [1] }), [{ start: 8, end: source.length, page: 1, line: 1, kind: 'email' }]);
+  const tokens = 'A '.repeat(20000) + 'a@b.invalid';
+  assert.deepEqual(contactSpans(tokens, { contact_lines: [1] }), [{ start: 40000, end: tokens.length, page: 1, line: 1, kind: 'email' }]);
 });
 
 done();

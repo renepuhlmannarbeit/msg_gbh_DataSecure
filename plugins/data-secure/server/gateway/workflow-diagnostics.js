@@ -40,6 +40,7 @@ const EVENTS = new Set([
   'automatic_review_release_failed',
   'content_operation_failed', 'batch_worker_failed',
   'conversion_worker_closed',
+  'standalone_publication_timing',
   'startup_refused', 'terminal_state_delegated_to_product_ui',
   'local_results_reuse_started', 'local_results_reuse_page', 'local_results_reuse_finished',
   'local_results_reuse_cancelled', 'local_results_reuse_failed', 'local_results_reuse_expired'
@@ -52,7 +53,8 @@ const PHASES = new Set([
   'content_prepare', 'content_extract', 'content_privacy', 'content_verify', 'content_publish', 'content_ack',
   'item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release',
   'mapping_publication', 'mapping_intent', 'mapping_recheck', 'mapping_csv',
-  'mapping_csv_root', 'mapping_csv_lock', 'mapping_csv_read', 'mapping_csv_write', 'mapping_intent_finish'
+  'mapping_csv_root', 'mapping_csv_lock', 'mapping_csv_read', 'mapping_csv_write', 'mapping_intent_finish',
+  ...require('./standalone-publication-timings').phases
 ]);
 const ERROR_CODES = new Set(require('./diagnostic-causes').WORKFLOW_ERROR_CODES);
 

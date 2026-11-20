@@ -28,6 +28,26 @@ if (process.argv[2] === '--child') {
     fs.writeFileSync(leaf, PRIVATE, { flag: 'wx', mode: 0o600 });
     const record = boundary.readBoundFileRecord(leaf, { maximum: 4096 });
     assert.equal(record.bytes.toString('utf8'), PRIVATE, 'the real successful bytes remain unchanged');
+    const replacement = () => { throw Error('stable real read must not request replacement'); };
+    assert.equal(boundary.readBoundFileSnapshotAttemptRecord(leaf, { maximum: 4096 }, replacement).bytes.toString(), PRIVATE);
+    assert.equal(migrationBoundary.readBoundFileSnapshotAttemptRecord(leaf, { maximum: 4096 }, replacement).bytes.toString(), PRIVATE);
+    const attempt = originalBoundary.readBoundFileSnapshotAttemptRecord, options = { maximum: 4096 }, own = {};
+    try {
+      originalBoundary.readBoundFileSnapshotAttemptRecord = function (...args) {
+        assert.equal(this, boundary); assert.deepEqual(args, [leaf, options, replacement]); return own;
+      };
+      assert.equal(boundary.readBoundFileSnapshotAttemptRecord(leaf, options, replacement), own);
+      // Wrapper-only identity seam; these injected throws are not native IO evidence.
+      for (const failure of [Object.assign(Error(PRIVATE), { code: 'EIO' }), Symbol(PRIVATE), null, undefined, false, 0, '']) {
+        originalBoundary.readBoundFileSnapshotAttemptRecord = function (...args) {
+          assert.equal(this, boundary); assert.deepEqual(args, [leaf, options, replacement]); throw failure;
+        };
+        let caught = false;
+        try { boundary.readBoundFileSnapshotAttemptRecord(leaf, options, replacement); }
+        catch (error) { caught = true; assert.equal(error, failure); }
+        assert.equal(caught, true);
+      }
+    } finally { originalBoundary.readBoundFileSnapshotAttemptRecord = attempt; }
     const syntheticFailure = Object.assign(Error(PRIVATE), { code: 'EACCES' });
     const bind = originalBoundary.bindDirectory;
     originalBoundary.bindDirectory = () => { throw syntheticFailure; };
@@ -42,8 +62,12 @@ if (process.argv[2] === '--child') {
     crypto.createHash = () => { throw Error(PRIVATE); };
     try {
       assert.equal(boundary.readBoundFileRecord(leaf, { maximum: 4096 }).bytes.toString('utf8'), PRIVATE);
+      assert.equal(boundary.readBoundFileSnapshotAttemptRecord(leaf, { maximum: 4096 }, replacement).bytes.toString(), PRIVATE);
       assert.equal(fs.readdirSync(summaries).length, 2, 'failed hashing cannot replace real I/O');
     } finally { crypto.createHash = hash; }
+    for (let index = 0; index < 150; index++)
+      assert.throws(() => boundary.readBoundFileSnapshotAttemptRecord(path.join(root, 'missing-attempt'),
+        { maximum: 4096 }, replacement), { code: 'ENOENT' });
     for (let index = 0; index < 150; index++)
       assert.throws(() => boundary.readBoundFileRecord(path.join(root, 'missing'), { maximum: 4096 }), { code: 'ENOENT' });
   } finally {
@@ -62,6 +86,8 @@ if (process.argv[2] === '--child') {
   crypto.createHash = function (...args) { observerCalls++; return Reflect.apply(hash, this, args); };
   try {
     assert.equal(freshBoundary.readBoundFileRecord(leaf, { maximum: 4096 }).bytes.toString('utf8'), PRIVATE);
+    assert.equal(freshBoundary.readBoundFileSnapshotAttemptRecord(leaf, { maximum: 4096 },
+      () => { throw Error('stable restored read must not request replacement'); }).bytes.toString(), PRIVATE);
     assert.equal(freshMembership(summaries).length, 2);
     assert.equal(observerCalls, 0);
   } finally { crypto.createHash = hash; }
@@ -73,6 +99,9 @@ if (process.argv[2] === '--child') {
   assert.ifError(child.error); assert.equal(child.status, 0, child.stderr);
   const lines = safeProbeLines(child.stderr);
   assert.equal(lines.length, 128, 'test diagnostics cannot grow without a bound');
+  assert.ok(lines.every(line => Buffer.byteLength(line + '\n', 'utf8') <= 512));
+  assert.ok(lines.filter(line => JSON.parse(line.slice('STANDALONE_HISTORY_PROBE:'.length)).kind !== 'error').length <= 64);
+  assert.ok(lines.some(line => line.includes('"phase":"readBoundFileSnapshotAttemptRecord"')));
   assert.doesNotMatch(child.stderr, new RegExp(PRIVATE, 'u'));
   assert.doesNotMatch(child.stderr, /datasecure-history-probe-/u, 'no fixture paths are emitted');
   assert.ok(lines.some(line => line.includes('"code":"EACCES"')));
@@ -83,6 +112,10 @@ if (process.argv[2] === '--child') {
     '{"kind":"membership","namespace":"summaries","count":-1,"sha256":"' + 'a'.repeat(64) + '"}',
     '{"kind":"record","bytes":4097,"sha256":"' + 'a'.repeat(64) + '"}', '{broken'];
   assert.deepEqual(safeProbeLines(hostile.map(value => 'STANDALONE_HISTORY_PROBE:' + value).join('\n')), []);
+  const attemptEvent = { kind: 'error', phase: 'readBoundFileSnapshotAttemptRecord', code: 'EIO' };
+  assert.equal(safeProbeLines('STANDALONE_HISTORY_PROBE:' + JSON.stringify(attemptEvent)).length, 1);
+  assert.deepEqual(safeProbeLines('STANDALONE_HISTORY_PROBE:' + JSON.stringify({ ...attemptEvent, path: PRIVATE })), []);
+  assert.deepEqual(safeProbeLines('STANDALONE_HISTORY_PROBE:' + JSON.stringify({ ...attemptEvent, phase: attemptEvent.phase + '-other' })), []);
   assert.deepEqual(safeProbeLines('STANDALONE_HISTORY_PROBE:' + 'x'.repeat(513)), []);
   console.log(child.stdout.trim());
   console.log('PASS closed diagnostics; synthetic fixture preserved; no native Mac/GUI claim');

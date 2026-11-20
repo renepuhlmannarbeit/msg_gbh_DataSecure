@@ -534,15 +534,13 @@ async function convertDocument(source, options = {}) {
     if (fd !== undefined) fs.closeSync(fd);
     throw safeError('Der isolierte Dokumentparser konnte nicht gestartet werden.', 'PARSER_ISOLATION_FAILED');
   }
-  if (fd !== undefined) fs.closeSync(fd);
-  if (inputBuffer) {
-    if (!child.stdin || typeof child.stdin.end !== 'function') {
-      try { child.kill(); } catch { /* startup will fail closed */ }
-      throw safeError('Der isolierte Dokumentparser konnte keine authentifizierten Eingabebytes übernehmen.', 'PARSER_ISOLATION_FAILED');
-    }
-  }
+  // A failed Node spawn can return before stdio creation (EMFILE/ENFILE).
+  // Install Child lifetime handlers before FD close, stream use or input send.
+  const outputAvailable = Boolean(child.stdout && typeof child.stdout.on === 'function');
+  const inputAvailable = !inputBuffer || Boolean(child.stdin && typeof child.stdin.once === 'function' && typeof child.stdin.end === 'function');
+  const streamsAvailable = outputAvailable && inputAvailable;
   return new Promise((resolve, reject) => {
-    let settled = false;
+    let settled = false, childStarted = false, killRequested = false;
     let terminationError = null;
     let terminationTimer = null;
     let inputFlushed = !inputBuffer;
@@ -557,15 +555,27 @@ async function convertDocument(source, options = {}) {
       if (options.signal) options.signal.removeEventListener('abort', abortHandler);
       if (error) reject(error); else resolve(value);
     };
-    const terminate = (error) => {
-      if (settled || terminationError) return;
-      terminationError = error;
+    const requestKill = () => {
+      if (!childStarted || killRequested || settled) return;
+      killRequested = true;
       try {
         if (child.kill() === false) throw new Error('termination_not_started');
       } catch {
         finish(safeError('Die Beendigung des isolierten Dokumentparsers konnte nicht bestätigt werden.', 'PARSER_ISOLATION_FAILED'));
         return;
       }
+    };
+    const terminate = (error) => {
+      if (settled) return;
+      if (terminationError) {
+        // A lost output stream is a hard fault, including during timeout reap.
+        // Preserve the original kill and grace; never restart the deadline.
+        if (terminationError.code === 'PARSER_TIMEOUT' && error.code === 'PARSER_ISOLATION_FAILED') terminationError = error;
+        return;
+      }
+      terminationError = error;
+      requestKill();
+      if (settled) return;
       terminationTimer = setTimeout(() => {
         finish(safeError('Die Beendigung des isolierten Dokumentparsers konnte nicht bestätigt werden.', 'PARSER_ISOLATION_FAILED'));
       }, options.terminationGraceMs ?? 10_000);
@@ -576,29 +586,39 @@ async function convertDocument(source, options = {}) {
     const abortHandler = () => terminate(
       safeError('Der isolierte Dokumentparser wurde auf Anforderung beendet.', 'REQUEST_CANCELLED')
     );
-    if (options.signal) options.signal.addEventListener('abort', abortHandler, { once: true });
-    if (options.signal?.aborted) abortHandler();
-    if (inputBuffer) {
-      child.stdin.once('error', () => {
-        inputFailed = true;
-        terminate(safeError(
-          'Der isolierte Dokumentparser hat die authentifizierten Eingabebytes nicht vollständig übernommen.',
-          'PARSER_INPUT_INCOMPLETE'
-        ));
-      });
-      child.stdin.end(inputBuffer, () => { inputFlushed = true; });
-    }
-    child.stdout.on('data', (chunk) => {
-      size += chunk.length;
-      if (size > MAX_PARSER_RESPONSE_BYTES) {
-        terminate(new SafeError('Der isolierte Dokumentparser lieferte zu viele Daten.'));
-        return;
-      }
-      chunks.push(chunk);
+    const inputFailure = () => {
+      inputFailed = true;
+      terminate(safeError(
+        'Der isolierte Dokumentparser hat die authentifizierten Eingabebytes nicht vollständig übernommen.',
+        'PARSER_INPUT_INCOMPLETE'
+      ));
+    };
+    child.once('spawn', () => {
+      childStarted = true;
+      if (terminationError) requestKill();
+      else if (!streamsAvailable) terminate(safeError(
+        'Der isolierte Dokumentparser besitzt keine vollständigen Datenkanäle.', 'PARSER_ISOLATION_FAILED'));
     });
     child.once('error', () => {
-      if (!terminationError) finish(safeError('Der isolierte Dokumentparser konnte nicht gestartet werden.', 'PARSER_ISOLATION_FAILED'));
+      const failure = safeError('Der isolierte Dokumentparser konnte nicht gestartet werden.', 'PARSER_ISOLATION_FAILED');
+      // No successful spawn event means no started worker to kill/reap.
+      if (!childStarted) finish(terminationError || failure);
+      else terminate(failure);
     });
+    if (outputAvailable) {
+      child.stdout.on('error', () => terminate(safeError(
+        'Die Ausgabe des isolierten Dokumentparsers konnte nicht vollständig gelesen werden.', 'PARSER_ISOLATION_FAILED'
+      )));
+      child.stdout.on('data', (chunk) => {
+        size += chunk.length;
+        if (size > MAX_PARSER_RESPONSE_BYTES) {
+          terminate(new SafeError('Der isolierte Dokumentparser lieferte zu viele Daten.'));
+          return;
+        }
+        chunks.push(chunk);
+      });
+    }
+    if (inputBuffer && inputAvailable) child.stdin.once('error', inputFailure);
     child.once('close', (code) => {
       if (settled) return;
       if (terminationError) {
@@ -622,6 +642,10 @@ async function convertDocument(source, options = {}) {
         finish(safeError('Die lokale Parserbegrenzung konnte nicht sicher angewendet werden.', 'PARSER_ISOLATION_FAILED'));
         return;
       }
+      if (!streamsAvailable) {
+        finish(safeError('Der isolierte Dokumentparser besitzt keine vollständigen Datenkanäle.', 'PARSER_ISOLATION_FAILED'));
+        return;
+      }
       let response;
       try { response = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* handled below */ }
       const responseKeys = response && typeof response === 'object' ? Object.keys(response).sort().join(',') : '';
@@ -641,6 +665,18 @@ async function convertDocument(source, options = {}) {
       try { finish(null, validateParserResult(response.result, ext)); }
       catch (error) { finish(error); }
     });
+    if (options.signal) options.signal.addEventListener('abort', abortHandler, { once: true });
+    if (options.signal?.aborted) abortHandler();
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); }
+      catch { terminate(safeError('Der lokale Eingabekanal konnte nicht sicher geschlossen werden.', 'PARSER_ISOLATION_FAILED')); }
+    }
+    if (inputBuffer && streamsAvailable && !terminationError && !settled) {
+      try { child.stdin.end(inputBuffer, failure => {
+        if (failure) inputFailure();
+        else inputFlushed = true;
+      }); } catch { inputFailure(); }
+    }
   });
 }
 

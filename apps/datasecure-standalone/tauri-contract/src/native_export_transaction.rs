@@ -425,6 +425,9 @@ impl<'a> Transaction<'a> {
         }
     }
     pub fn reconcile(&self) -> io::Result<Status> {
+        self.reconcile_with_parent_sync(Directory::sync)
+    }
+    fn reconcile_with_parent_sync(&self, mut sync: impl FnMut(&Directory) -> io::Result<()>) -> io::Result<Status> {
         let (identity, prepared, started, complete, ack, abandoned) = self.evidence()?;
         if abandoned { return Ok(Status::Abandoned); }
         if !started { return Ok(if prepared { Status::Prepared } else { Status::Unprepared }); }
@@ -433,6 +436,11 @@ impl<'a> Transaction<'a> {
             Ok(output) => {
                 #[cfg(test)] self.guard.test_event("reconcile_inventory");
                 self.verify_published_inventory(&output)?;
+                // A visible rename or an older receipt does not prove that
+                // both publication parents were successfully synchronized.
+                sync(self.staging)?;
+                sync(self.target)?;
+                self.target.inspect_child(&self.plan.target_name(), identity)?;
                 if !complete {
                     self.record("complete", Some(identity))?;
                     // A new durable receipt still requires verification on
@@ -583,6 +591,66 @@ mod tests {
         let stage = tx.staging.reopen_private_stage(&tx.plan.stage_name(), identity).unwrap();
         tx.record("started", Some(identity)).unwrap();
         export_directory::publish(tx.staging, &tx.plan.stage_name(), &stage, tx.target, &tx.plan.target_name(), tx.guard).unwrap();
+    }
+    #[test]
+    fn failed_reconciliation_parent_sync_never_creates_completion_or_acknowledgement() {
+        // Real private/staged/published fixtures; only the mandatory parent
+        // sync boundary is substituted. This is not a native EIO/powerloss test.
+        for failed_parent in [0, 1] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let guard = Lifecycle::default().begin_native().unwrap();
+            let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t), &guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+            let mut calls = 0;
+            let failure = tx.reconcile_with_parent_sync(|parent| {
+                assert_eq!(parent.identity(), if calls == 0 { s.identity() } else { t.identity() });
+                let current = calls; calls += 1;
+                if current == failed_parent { Err(io::Error::other("synthetic-parent-sync-failure")) }
+                else { parent.sync() }
+            }).unwrap_err();
+            assert_eq!(failure.to_string(), "synthetic-parent-sync-failure");
+            assert_eq!(calls, failed_parent + 1);
+            assert!(tx.existing("complete").unwrap().is_none()); assert!(tx.existing("ack").unwrap().is_none());
+            assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
+            assert_eq!(fs::read(f.path.join("target").join(tx.plan.target_name()).join("Dokument_01.md")).unwrap(), b"hello");
+            // Once both real sync calls succeed, the same generation completes.
+            assert_eq!(tx.reconcile().unwrap(), Status::Completed);
+            assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+            assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
+        }
+    }
+    #[test]
+    fn existing_completion_and_ack_do_not_bypass_mutating_parent_sync() {
+        for acknowledged in [false, true] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let guard = Lifecycle::default().begin_native().unwrap();
+            let plan = f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results));
+            let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); assert_eq!(tx.commit().unwrap(), Status::Completed);
+            if acknowledged { assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged); }
+            let before = tx.evidence().unwrap(); let mut calls = 0;
+            let failure = tx.reconcile_with_parent_sync(|parent| {
+                calls += 1; assert_eq!(parent.identity(), s.identity());
+                Err(io::Error::other("synthetic-parent-sync-failure"))
+            }).unwrap_err();
+            assert_eq!(calls, 1); assert_eq!(failure.to_string(), "synthetic-parent-sync-failure");
+            assert_eq!(tx.evidence().unwrap(), before);
+            assert_eq!(tx.inspect_completed_directory().unwrap(), if acknowledged { Status::Acknowledged } else { Status::Completed });
+        }
+    }
+    #[test]
+    fn both_known_parents_are_synchronized_in_order_before_a_new_completion() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let guard = Lifecycle::default().begin_native().unwrap();
+        let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t), &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+        let mut parents = Vec::new();
+        assert_eq!(tx.reconcile_with_parent_sync(|parent| {
+            assert!(tx.existing("complete").unwrap().is_none()); assert!(tx.existing("ack").unwrap().is_none());
+            parents.push(parent.identity()); parent.sync()
+        }).unwrap(), Status::Completed);
+        assert_eq!(parents, vec![s.identity(), t.identity()]); assert!(tx.existing("complete").unwrap().is_some());
+        assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
     }
     fn companions() -> ConfidentialFiles {
         ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },

@@ -10,6 +10,7 @@ import { verifyMacNativeContract } from './lib/macos-native-contract.mjs';
 import { verifyStandaloneInventory, verifyConversionInventory, verifyArchiveChecksum } from './lib/standalone-package-integrity.mjs';
 import layout from '../plugins/data-secure/server/standalone/macos-bundle-layout.js';
 import { loadMacStaticCore, verifyMacCorePackage } from './lib/macos-core-artifact.mjs';
+import { verifyMacosPackageBindings } from './lib/standalone-macos-package.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -79,6 +80,7 @@ assert.equal(manifest.requires_rust_install, false);
 assert.equal(manifest.requires_network, false);
 assert.equal(manifest.requires_webview2, false);
 verifyStandaloneInventory(relative, manifest);
+verifyMacosPackageBindings(relative, manifest);
 const coreBuild = loadMacStaticCore(root, productTarget);
 verifyMacCorePackage(relative, coreBuild, app);
 for (const file of manifest.files) {

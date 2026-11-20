@@ -5,6 +5,7 @@ const { createBatchReviewOrchestrator } = require('../plugins/data-secure/server
 const { createBatchContactReview } = require('../plugins/data-secure/server/gateway/batch-contact-review');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { reviewBatchTextLocally } = require('../plugins/data-secure/server/companion/text-review');
+const { reviewBatchTextLocally: appReviewBatchTextLocally } = require('../plugins/data-secure/server/gateway/local-review-adapter');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const { MAX_STANDALONE_REVIEW_FINDINGS } = require('../plugins/data-secure/server/gateway/standalone-review-budget');
 const { documentStabilizationBlocked } = require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
@@ -129,7 +130,7 @@ testAsync('review entry removes runtime option getters before contact reconstruc
     }
 });
 
-function findingFixture(counts, platform = 'darwin', standalone = false) {
+function findingFixture(counts, platform = 'darwin', standalone = false, observations = {}) {
   const items = counts.map((count, id) => ({ id: standalone ? id.toString(16).padStart(32, '0') : id,
     sha256: 'a'.repeat(64), count, source_label: `synthetic-${id}.txt`, status: 'deferred_review' }));
   const state = { schema: 'datasecure-batch/4', items, ...(standalone ? { token: 'd'.repeat(64), product_channel: 'standalone',
@@ -146,16 +147,20 @@ function findingFixture(counts, platform = 'darwin', standalone = false) {
     captureDeferredReviewInput: async (_state, item) => {
       captured.push(items.indexOf(item));
       const text = 'Acme\n'.repeat(item.count);
-      return { original_text: text, anonymized_text: text, ...(standalone ? { allowOrganizationReview: true } : {}), ambiguities: Array.from({ length: item.count }, (_, index) => ({
+      const draft = { original_text: text, anonymized_text: text, ...(standalone ? { allowOrganizationReview: true } : {}), ambiguities: Array.from({ length: item.count }, (_, index) => ({
         ambiguity_id: `credential:v2:${String(index + 1).padStart(6, '0')}`,
         type: 'credential_issuer_ambiguous', original_start: index * 5, original_end: index * 5 + 4,
         anonymized_start: index * 5, anonymized_end: index * 5 + 4
       })) };
+      observations.onCaptured?.(state, item, draft);
+      return draft;
     },
-    runBatchReviewLocally: reviewBatchTextLocally,
+    runBatchReviewLocally: observations.appAdapter === true ? appReviewBatchTextLocally : reviewBatchTextLocally,
     reviewTextLocally: (draft, options) => {
       assert.strictEqual(options.platform, platform);
       groups.push({ findings: draft.ambiguities.length, progress: draft.batch_review });
+      observations.onReview?.(draft, options);
+      if (observations.answerAction) return { action: observations.answerAction };
       return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map((item) => ({
         ambiguity_id: item.ambiguity_id, decision: 'keep'
       })) };
@@ -163,6 +168,7 @@ function findingFixture(counts, platform = 'darwin', standalone = false) {
     publishReviewedBatch: async (_state, selected, drafts, documents) => {
       assert.deepStrictEqual(documents.map((document) => document.decisions.length), selected.map((item) => item.count));
       assert.strictEqual(drafts.length, selected.length);
+      observations.onPublication?.(selected, drafts, documents);
       selected.forEach((item) => { item.status = 'released'; });
       return { packages: [], locallyReleased: selected.length, failed: 0 };
     },
@@ -171,7 +177,7 @@ function findingFixture(counts, platform = 'darwin', standalone = false) {
     },
     writeTerminalEvidence: () => true
   });
-  return { orchestrator, active, items, captured, groups };
+  return { orchestrator, active, items, captured, groups, state };
 }
 
 function standaloneChoiceFixture(options = {}) {
@@ -474,6 +480,104 @@ async function main() {
       assert.strictEqual(value.active.size, 0);
     });
   }
+
+  for (const target of [
+    { name: 'Windows x64', platform: 'win32' },
+    { name: 'macOS ARM64 source model', platform: 'darwin' },
+    { name: 'macOS Intel source model', platform: 'darwin' }
+  ]) {
+    await testAsync(`private source labels preserve exact safe spelling and adapt display-only format characters on ${target.name}`, async () => {
+      for (const [raw, displayed] of [
+        ['sub/plain.txt', 'sub/plain.txt'], ['ÄÖÜß.txt', 'ÄÖÜß.txt'], ['A\u0308.txt', 'A\u0308.txt'],
+        ['😀.txt', '😀.txt'], ['An\u00adna.txt', 'Dokument 2'], ['A\u200dB.txt', 'Dokument 2']
+      ]) {
+        const shown = [], captured = [];
+        const value = findingFixture([1, 1], target.platform, true, { appAdapter: true,
+          onCaptured(_state, item, draft) { captured.push({ item, draft, before: JSON.stringify(draft) }); },
+          onReview(draft) { shown.push(draft.batch_review.documents.map(row => row.source_label)); }
+        });
+        value.items[1].name = raw.split('/').at(-1);
+        value.items[1].source_label = raw;
+        const identity = value.items.map(item => ({ id: item.id, sha256: item.sha256,
+          name: item.name, source_label: item.source_label }));
+        const result = await value.orchestrator.reviewDeferredBatch(value.state.token, { localFinalize: true });
+        assert.equal(result.ok, true); assert.equal(result.locally_released, 2);
+        assert.deepEqual(shown, [['synthetic-0.txt', displayed]]);
+        assert.deepEqual(value.items.map(item => ({ id: item.id, sha256: item.sha256,
+          name: item.name, source_label: item.source_label })), identity);
+        for (const item of captured) assert.equal(JSON.stringify(item.draft), item.before);
+        assert.equal(value.active.size, 0);
+      }
+    });
+  }
+  await testAsync('missing legacy source_label falls back only in display without creating a new identity field', async () => {
+    const shown = [];
+    const value = findingFixture([1], 'darwin', true, { appAdapter: true,
+      onReview(draft) { shown.push(draft.batch_review.documents[0].source_label); } });
+    delete value.items[0].source_label;
+    value.items[0].name = 'Altprofil-Ä.txt';
+    const identity = { id: value.items[0].id, name: value.items[0].name, sha256: value.items[0].sha256 };
+    assert.equal((await value.orchestrator.reviewDeferredBatch(value.state.token, { localFinalize: true })).ok, true);
+    assert.deepEqual(shown, ['Altprofil-Ä.txt']);
+    assert.equal(Object.hasOwn(value.items[0], 'source_label'), false);
+    assert.deepEqual({ id: value.items[0].id, name: value.items[0].name, sha256: value.items[0].sha256 }, identity);
+  });
+
+  await testAsync('display fallback follows open UI indices while exact known choices and raw source bindings stay unchanged', async () => {
+    const { rememberStandaloneReviewChoices } = require('../plugins/data-secure/server/gateway/standalone-review-choices');
+    const shown = []; let remembered;
+    const value = findingFixture([1, 1], 'darwin', true, { appAdapter: true,
+      onCaptured(state, item, draft) {
+        if (item !== state.items[0]) return;
+        rememberStandaloneReviewChoices(state, [draft], [{ document_index: 1,
+          decisions: draft.ambiguities.map(candidate => ({ ambiguity_id: candidate.ambiguity_id, decision: 'keep' })) }], [item]);
+        remembered = JSON.stringify(state.standalone_review_choices);
+      },
+      onReview(draft) {
+        shown.push(draft.batch_review.documents.map(row => ({ index: row.document_index, label: row.source_label })));
+      },
+      onPublication(items, drafts, documents) {
+        assert.deepEqual(documents.map(row => row.document_index), [1, 2]);
+        assert.deepEqual(items.map(item => item.id), value.items.map(item => item.id));
+        documents.forEach((row, index) => assert.deepEqual(row.decisions.map(choice => choice.ambiguity_id),
+          drafts[index].ambiguities.map(candidate => candidate.ambiguity_id)));
+      }
+    });
+    value.items[1].source_label = 'An\u00adna.txt';
+    const rawBefore = value.items.map(item => item.source_label);
+    const result = await value.orchestrator.reviewDeferredBatch(value.state.token, { localFinalize: true });
+    assert.equal(result.ok, true); assert.equal(result.locally_released, 2);
+    assert.deepEqual(shown, [[{ index: 1, label: 'Dokument 1' }]]);
+    assert.equal(JSON.stringify(value.state.standalone_review_choices), remembered);
+    assert.deepEqual(value.items.map(item => item.source_label), rawBefore);
+  });
+  await testAsync('carried Standalone reconstruction adapts only the new UI label and never rewrites source metadata', async () => {
+    const shown = [];
+    const value = findingFixture([3000, 3000], 'darwin', true, { appAdapter: true,
+      onReview(draft) { shown.push(draft.batch_review.documents.map(row => row.source_label)); } });
+    value.items[1].source_label = 'An\u00adna.txt';
+    const sourceBefore = value.items.map(item => ({ id: item.id, sha256: item.sha256, source_label: item.source_label }));
+    const result = await value.orchestrator.reviewDeferredBatch(value.state.token, { localFinalize: true });
+    assert.equal(result.ok, true); assert.equal(result.locally_released, 2);
+    assert.deepEqual(value.captured, [0, 1, 1]);
+    assert.deepEqual(shown, [['synthetic-0.txt'], ['Dokument 1']]);
+    assert.deepEqual(value.items.map(item => ({ id: item.id, sha256: item.sha256, source_label: item.source_label })), sourceBefore);
+  });
+  await testAsync('safe label projection keeps explicit defer and cancel as nonpublication outcomes', async () => {
+    for (const [action, expected] of [['deferred', 'LOCAL_REVIEW_DEFERRED'], ['cancelled', 'LOCAL_REVIEW_CANCELLED']]) {
+      let uiCalls = 0, publications = 0;
+      const value = findingFixture([1], 'win32', true, { appAdapter: true, answerAction: action,
+        onReview(draft) { uiCalls++; assert.equal(draft.batch_review.documents[0].source_label, 'Dokument 1'); },
+        onPublication() { publications++; }
+      });
+      value.items[0].source_label = 'An\u00adna.txt';
+      const result = await value.orchestrator.reviewDeferredBatch(value.state.token, { localFinalize: true });
+      assert.equal(result.ok, false); assert.equal(result.error, expected); assert.equal(uiCalls, 1);
+      assert.equal(publications, 0); assert.equal(value.items[0].status, 'deferred_review');
+      assert.equal(value.items[0].source_label, 'An\u00adna.txt'); assert.equal(value.active.size, 0);
+    }
+  });
+
 
   await testAsync('Windows keeps its existing combined review above the macOS finding limit', async () => {
     const value = findingFixture([600, 600], 'win32');

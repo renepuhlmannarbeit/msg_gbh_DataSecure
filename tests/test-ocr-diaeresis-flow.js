@@ -85,6 +85,13 @@ async function test(name, fn) { await fn(); console.log(`PASS ${++count} ${name}
     assert.equal(result.text, 'A Test\nÄ Test\n');
     assert.equal(lines(result)[0], lines(data)[0]); assert.equal(lines(result)[1].words[0].text, 'Ä');
   });
+  await test('PDF candidate-only mode retains exact glyph-bound improvements', async () => {
+    const data = freeze(fixture(['Pflicht bleibt', 'U Test']));
+    const { result, boxes } = await run(data, ['Ü Test\n'], { options: { candidateOnly: true } });
+    assert.equal(result.text, 'Pflicht bleibt\nÜ Test\n');
+    assert.equal(lines(result)[0], lines(data)[0]);
+    assert.deepEqual(boxes, [{ x: 0, y: 40, width: 24, height: 30 }]);
+  });
   await test('two separate accepted line edits preserve exact positions in all aggregates', async () => {
     const data = freeze(fixture(['A Test', 'U Test'])), { result } = await run(data, ['Ä Test\n', 'Ü Test\n']);
     assert.equal(result.text, 'Ä Test\nÜ Test\n');

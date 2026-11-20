@@ -60,7 +60,11 @@ test('mapping and post-mapping cleanup failures remain retryable', () => {
 
   const cleanupFailed = fixture({ removeError: ids[0] });
   assert.strictEqual(cleanupFailed.maintenance.replayMappingOutbox().pending, 1);
-  assert.ok(cleanupFailed.events.indexOf(`append:Document-1.docx:${ids[0]}`) < cleanupFailed.events.indexOf('remove:intent-1'));
+  const appended = cleanupFailed.events.indexOf(`append:Dokument-1.docx:${ids[0]}`);
+  const removed = cleanupFailed.events.indexOf('remove:intent-1');
+  assert.ok(appended >= 0, 'the exact mapping append must have occurred');
+  assert.ok(removed >= 0, 'the exact intent removal must have been attempted');
+  assert.ok(appended < removed, 'the durable mapping must precede intent removal');
 });
 
 test('only a conclusively missing package removes an orphaned intent', () => {

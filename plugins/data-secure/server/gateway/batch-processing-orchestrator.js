@@ -3,6 +3,7 @@
 const { releaseOwnedLock, releaseOwnedEpochWithBusyRetry } = require('./batch-lock-release');
 const { recordBatchExecutionFailure, blockDocumentStabilization } = require('./batch-execution-diagnostic');
 const { isMarkdownBatch } = require('../core/processing-mode');
+const { contentOptionsForBatch } = require('../core/content-options');
 
 function createBatchProcessingOrchestrator(options = {}) {
   const SafeError = options.SafeError;
@@ -23,13 +24,13 @@ function createBatchProcessingOrchestrator(options = {}) {
   const withBatchPseudonymRegistry = options.withBatchPseudonymRegistry ||
     (async (_state, action) => action(undefined));
 
-  async function processBatchNext(token, deps = {}) {
+  async function processBatchNext(token, deps = {}, conversionWindow) {
     if (active.has(token)) {
       throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
     }
     // Reserve in-process exclusion before the first possible admission await.
     active.add(token);
-    let acquired = false, primaryError = false, ownedEpoch, primaryFailure;
+    let acquired = false, primaryError = false, ownedEpoch, primaryFailure, sourceBytes, conversionScope;
     try {
       if (typeof options.acquireProcessingOwner === 'function') {
         const admission = options.acquireProcessingOwner(token);
@@ -45,7 +46,7 @@ function createBatchProcessingOrchestrator(options = {}) {
       acquired = true;
       if (options.captureOwnedEpoch) ownedEpoch = options.captureOwnedEpoch(token);
       const state = readState(token);
-      if (require('../core/content-options').contentOptionsForBatch(state))
+      if (contentOptionsForBatch(state))
         deps = require('./content-consumer-dependencies').bindContentReviewDependencies(state, deps).dependencies;
       assertLocalExecutorAccess(state, deps.executorPid);
       if (state.invalidated === true) {
@@ -81,6 +82,7 @@ function createBatchProcessingOrchestrator(options = {}) {
       let entry;
       try {
         entry = exactPendingEntry(state, item);
+        sourceBytes = entry.private_bytes;
       } catch (error) {
         if (['PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED', 'LEGACY_ENCRYPTED_ARTIFACT_UNAVAILABLE'].includes(error?.code)) {
           // This is not tampering with a new snapshot. Preserve old envelopes
@@ -106,7 +108,13 @@ function createBatchProcessingOrchestrator(options = {}) {
 
       // Security boundary: keep in-process and filesystem locks until the
       // delegated asynchronous pipeline has resolved or rejected.
-      if (isMarkdownBatch(state)) {
+      conversionScope = conversionWindow?.enter(state, item, ownedEpoch);
+      if (conversionScope) deps = { ...deps, convertBuffer: conversionScope.convert, assertConversionHealth: conversionScope.check };
+      const converting = isMarkdownBatch(state);
+      // The content authority owns a fresh independent snapshot. Only its
+      // anonymizing path discards this successfully prevalidated first entry.
+      if (!converting && contentOptionsForBatch(state) && Buffer.isBuffer(sourceBytes)) sourceBytes.fill(0);
+      if (converting) {
         return await processSingleBatchItem(state, item, entry, deps);
       }
       return await withBatchPseudonymRegistry(state, (pseudonymRegistry) =>
@@ -125,19 +133,24 @@ function createBatchProcessingOrchestrator(options = {}) {
       throw error;
     } finally {
       try {
-        if (acquired && ownedEpoch) {
-          const releaseEpoch = options.releaseOwnedEpoch;
-          await releaseOwnedEpochWithBusyRetry(releaseEpoch, ownedEpoch, SafeError, primaryError, {
-            delay: options.releaseDelay,
-            onFailure: error => {
-              if (primaryError) blockDocumentStabilization(primaryFailure);
-              (options.recordBatchFailure || recordBatchExecutionFailure)('item_epoch_release', error);
-            }
-          });
-        } else if (acquired) releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+        conversionScope?.leave();
+        if (Buffer.isBuffer(sourceBytes)) sourceBytes.fill(0);
       } finally {
-        // Keep in-process exclusion through every backoff and release attempt.
-        active.delete(token);
+        try {
+          if (acquired && ownedEpoch) {
+            const releaseEpoch = options.releaseOwnedEpoch;
+            await releaseOwnedEpochWithBusyRetry(releaseEpoch, ownedEpoch, SafeError, primaryError, {
+              delay: options.releaseDelay,
+              onFailure: error => {
+                if (primaryError) blockDocumentStabilization(primaryFailure);
+                (options.recordBatchFailure || recordBatchExecutionFailure)('item_epoch_release', error);
+              }
+            });
+          } else if (acquired) releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+        } finally {
+          // Keep in-process exclusion through every backoff and release attempt.
+          active.delete(token);
+        }
       }
     }
   }

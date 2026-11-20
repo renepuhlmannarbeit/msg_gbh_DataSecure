@@ -146,7 +146,7 @@ test('property extensions and unmodelled border/phantom visibility never claim c
   const r=read(body);assert.equal(r.complete,false);assert.equal(r.rawText.split('SOURCE').length-1,1);
  }
 });
-for(const profile of ['general','personnel'])testAsync(`visible source text -> actual privacy/trace/Keep check ${profile}`,async()=>{
+for(const profile of ['general','personnel_profile'])testAsync(`visible source text -> actual privacy/trace/Keep check ${profile}`,async()=>{
  const r=read(frac('Name: Anna Berger','Kontakt: anna.berger@example.invalid')+run(' FHIR REST äöüß 😀'));
  const source=canonicalizeRenderedText(r.text,'content-person-fields/1');assert.match(source,/Anna Berger/u);assert.match(source,/anna\.berger@example\.invalid/u);
  const actual=anonymize(source,profile,options);assert.doesNotMatch(actual.text,/Anna Berger|anna\.berger@example\.invalid/u);assert.match(actual.text,/FHIR REST äöüß 😀/u);assert.equal(replayTransformTrace(actual.transform_trace),actual.text);assert.deepEqual(scanResidual(actual.text,profile,actual.dictionary,options),[]);

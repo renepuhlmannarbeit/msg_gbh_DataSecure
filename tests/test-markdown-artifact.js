@@ -200,6 +200,7 @@ const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-markdow
 process.env.EU_PRIVACY_ROOT = path.join(temporaryRoot, 'privacy');
 process.env.EU_PRIVACY_DATA_ROOT = path.join(temporaryRoot, 'state', 'data');
 process.env.LOCALAPPDATA = path.join(temporaryRoot, 'localapp');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(temporaryRoot, 'results');
 const packageStore = require('../plugins/data-secure/server/gateway/package-store');
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 

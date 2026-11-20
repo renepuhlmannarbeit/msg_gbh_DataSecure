@@ -113,9 +113,12 @@ test('a non-durable state write still lands correctly on disk but skips fsync, a
   const fs = require('fs');
   const os = require('os');
   const path2 = require('path');
+  const previousNamespace = new Map(['EU_PRIVACY_ROOT', 'EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'LOCALAPPDATA'].map(key => [key, process.env[key]]));
   const base = fs.mkdtempSync(path2.join(os.tmpdir(), 'datasecure-perf-durability-'));
   process.env.EU_PRIVACY_ROOT = path2.join(base, 'privacy');
   process.env.LOCALAPPDATA = path2.join(base, 'localapp');
+  process.env.EU_PRIVACY_DATA_ROOT = path2.join(base, 'product-data');
+  process.env.EU_PRIVACY_RESULT_ROOT = path2.join(base, 'results');
   // Fresh require after setting the env: gateway/common resolves the
   // private root from EU_PRIVACY_ROOT at call time, but batchRoot() below
   // must see this test's own isolated root, not one a prior test file left
@@ -190,6 +193,7 @@ test('a non-durable state write still lands correctly on disk but skips fsync, a
   } finally {
     fs.renameSync = originalRename;
     fs.fsyncSync = originalFsync;
+    for (const [key, value] of previousNamespace) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
     fs.rmSync(base, { recursive: true, force: true });
   }
 });

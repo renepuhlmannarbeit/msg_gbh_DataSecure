@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 // This is a DataSecure derivative of one precisely pinned PDF.js module, not
 // an upstream API. Keep its upstream licence and original source unchanged.
 export const PDFJS_TEXT_PAINT_HOOK = Object.freeze({
-  version: 3, upstreamVersion: '6.2.108',
+  version: 4, upstreamVersion: '6.2.108',
   upstreamSha256: '842284e0d1d439e60701e3355c2128cd3016ebebf14220e27f512467682aad66'
 });
 
@@ -19,13 +19,22 @@ export function derivePdfjsTextPaintModule(bytes) {
     source = source.replace(before, after);
   };
   replaceOnce('class CanvasGraphics {', [
-    '// DataSecure first-party text paint observer, derivative API v3.',
+    '// DataSecure first-party paint observers, derivative API v4.',
     'let dataSecureTextPaintObserver = null;',
+    'let dataSecureOperatorObserver = null;',
+    'export function setDataSecureOperatorObserver(observer) {',
+    '  if (observer !== null && typeof observer !== "function") throw new TypeError("PDF_OPERATOR_OBSERVER_INVALID");',
+    '  dataSecureOperatorObserver = observer;',
+    '}',
     'export function setDataSecureTextPaintObserver(observer) {',
     '  if (observer !== null && typeof observer !== "function") throw new TypeError("PDF_TEXT_OBSERVER_INVALID");',
     '  dataSecureTextPaintObserver = observer;',
     '}',
     'class CanvasGraphics {'
+  ].join('\n'));
+  replaceOnce('      if (!operationsFilter || operationsFilter(i)) {', [
+    '      dataSecureOperatorObserver?.(operatorList, i);',
+    '      if (!operationsFilter || operationsFilter(i)) {'
   ].join('\n'));
   replaceOnce('    let x = 0,\n      i;\n    for (i = 0; i < glyphsLength; ++i) {', [
     '    let dataSecureSuppressPaint = false;',

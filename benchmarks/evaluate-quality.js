@@ -120,6 +120,25 @@ function bindReference(sample, extracted) {
       presentation_normalized_cer: referenceBody.length ? editDistance(referenceBody, observedBody) / [...referenceBody].length : null } };
 }
 
+// A short numeric preserve anchor must not hide a sign/operator just outside
+// its first/last token. Inspect only the adjacent token-free gap, never cross
+// a line, and do not turn Markdown emphasis or table delimiters into numbers.
+// This is an engineering boundary witness, not a formula/layout parser.
+function numericBoundaryOperators(text, words, index, direction) {
+  const word = words[index];
+  if (direction < 0 ? !/^\p{N}/u.test(word.value) : !/\p{N}$/u.test(word.value)) return '';
+  const limit = direction < 0 ? words[index - 1]?.end ?? 0 : words[index + 1]?.start ?? text.length;
+  const operators = [];
+  for (let cursor = direction < 0 ? word.start - 1 : word.end;
+    direction < 0 ? cursor >= limit : cursor < limit; cursor += direction) {
+    const character = text[cursor];
+    if (character === ' ' || character === '\t') continue;
+    if (!/[+\-−±=<>≤≥≠≈~\/%‰^.,]/u.test(character)) break;
+    operators.push(character);
+  }
+  return (direction < 0 ? operators.reverse() : operators).join('');
+}
+
 function outputStage(bound, output, status = 'not_evaluated') {
   if (typeof output !== 'string') return { status, evaluated: false, leaks: [], lost_content: [],
     sensitive_occurrences: null, leaking_occurrences: null };
@@ -177,7 +196,23 @@ function outputStage(bound, output, status = 'not_evaluated') {
     const positions = control.observed_positions.map(index => changes.mapping[index]);
     if (positions.some(index => index === null) || control.observed_positions.some(index => !changes.equal[index])) return true;
     // Insertions inside an intact factual anchor still change its assertion.
-    return positions.at(-1) - positions[0] + 1 !== positions.length;
+    if (positions.at(-1) - positions[0] + 1 !== positions.length) return true;
+    const inputFirstIndex = control.observed_positions[0], inputLastIndex = control.observed_positions.at(-1);
+    const outputFirstIndex = positions[0], outputLastIndex = positions.at(-1);
+    const inputFirst = before.words[inputFirstIndex], inputLast = before.words[inputLastIndex];
+    const outputFirst = after.words[outputFirstIndex], outputLast = after.words[outputLastIndex];
+    // Both texts are already in the existing renderedText comparison view.
+    // Include the control's actual prefix/suffix rather than losing a sign,
+    // closing punctuation or percentage at the aligned token boundaries.
+    const start = outputFirst.start - (inputFirst.start - control.actual_start);
+    const end = outputLast.end + (control.actual_end - inputLast.end);
+    if (start < 0 || end > after.text.length) return true;
+    if (after.text.slice(start, end).replace(/\s+/gu, ' ') !==
+        before.text.slice(control.actual_start, control.actual_end).replace(/\s+/gu, ' ')) return true;
+    return numericBoundaryOperators(before.text, before.words, inputFirstIndex, -1) !==
+      numericBoundaryOperators(after.text, after.words, outputFirstIndex, -1) ||
+      numericBoundaryOperators(before.text, before.words, inputLastIndex, 1) !==
+      numericBoundaryOperators(after.text, after.words, outputLastIndex, 1);
   })()).map(control => ({ expected: control.value,
     start: control.actual_start, end: control.actual_end, category: control.category }));
   // Check all surviving source-reference words, not just a short anchor list.

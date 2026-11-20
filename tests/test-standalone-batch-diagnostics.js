@@ -84,8 +84,33 @@ function sidecarFixture(options = {}) {
     }
   });
   vm.runInContext(fs.readFileSync(sidecarFile, 'utf8'), context, { filename: sidecarFile, timeout: 1000 });
-  return { sink, rows: () => lines.map(line => JSON.parse(line)).filter(row => row.event === 'batch_worker_failed') };
+  return { sink, publicError: (id, error) => plain(context.publicError(id, error)),
+    rows: () => lines.map(line => JSON.parse(line)).filter(row => row.event === 'batch_worker_failed') };
 }
+
+test('actual sidecar omits optional labels outside Rust UTF-8 and Unicode-control bounds without changing the refusal', () => {
+  const sidecar = sidecarFixture(), id = 'a'.repeat(16);
+  const families = [
+    { code: 'SOURCE_ARTIFACT_IGNORED', fields: names => ({ localSelectionFiles: names.map(name => ({ name, reason_code: 'SOURCE_ARTIFACT_IGNORED' })), localSelectionCount: names.length }) },
+    { code: 'SOURCE_FOLDER_UNSUPPORTED_FILES', fields: names => ({ localUnsupportedFiles: names, localUnsupportedCount: names.length }) },
+    { code: 'DOCUMENT_EXPORT_NAME_INVALID', fields: names => ({ failed_files: names.map(name => ({ name, reason_code: 'DOCUMENT_EXPORT_NAME_INVALID' })) }) }
+  ];
+  const valid = ['normal.csv', 'Unterordner/ÄÖÜäöüß.csv', 'Emoji-😀.txt', 'x'.repeat(1024), 'ä'.repeat(512), '😀'.repeat(256)];
+  const controls = [...Array.from({ length: 32 }, (_, index) => index), ...Array.from({ length: 33 }, (_, index) => index + 127)];
+  const invalid = ['', '/file.txt', 'C:/file.txt', 'C:\\file.txt', '../file.txt', 'a/./b', 'a/../b', 'a//b', 'a\\b',
+    'x'.repeat(1025), 'ä'.repeat(513), '😀'.repeat(257), 'a\ud800b', 'a\udc00b', ...controls.map(code => `a${String.fromCodePoint(code)}b.docx`)];
+  for (const family of families) {
+    for (const name of valid) {
+      const result = sidecar.publicError(id, { code: family.code, ...family.fields([name]) });
+      assert.equal(result.ok, false); assert.equal(result.error_code, family.code);
+      assert.ok(result.error_details, `${family.code}: valid ${Buffer.byteLength(name)}-byte label retained`);
+    }
+    for (const name of invalid) for (const names of [[name], ['valid.csv', name]]) {
+      const result = sidecar.publicError(id, { code: family.code, ...family.fields(names) });
+      assert.deepEqual(result, { schema: 'datasecure-standalone-private-response/1', request_id: id, ok: false, error_code: family.code });
+    }
+  }
+});
 function launch(fixture, kind, options = {}) {
   const queue = [{ name: 'PRIVATE-source.txt' }], signal = {};
   const supplied = { requireIpcAcknowledgement: true, signal, ...options };

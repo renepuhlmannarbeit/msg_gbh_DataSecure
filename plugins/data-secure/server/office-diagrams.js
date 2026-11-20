@@ -3,6 +3,7 @@
 // Native SmartArt text, never a layout renderer or XML-text scrape. The caller
 // supplies already admitted package bytes; no paths, URLs, DTDs or external IO.
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { readXml } = require('./xml-reader');
 const D = new Set(['http://schemas.openxmlformats.org/drawingml/2006/diagram',
   'http://purl.oclc.org/ooxml/drawingml/diagram']);
@@ -11,7 +12,37 @@ const A = new Set(['http://schemas.openxmlformats.org/drawingml/2006/main',
 const R = ['http://schemas.openxmlformats.org/officeDocument/2006/relationships',
   'http://purl.oclc.org/ooxml/officeDocument/relationships'];
 const PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
-const fail = () => Object.assign(new Error('Office diagram structure is unsupported'), { code:'PPTX_STRUCTURE_UNSAFE' });
+const diagramFailures=new WeakSet(),diagramBudgets=new WeakMap(),diagramSessions=new WeakMap();
+const OFFICE_DIAGRAM_WORK_LIMITS=Object.freeze({xmlBytes:64*1024*1024,sourceChars:8000000,
+ renderedChars:8000000,nodes:1000000,references:10000,bindingBytes:256*1024*1024});
+const fail=()=>{
+ const error=Object.assign(new Error('Office diagram structure is unsupported'),{code:'PPTX_STRUCTURE_UNSAFE'});
+ diagramFailures.add(error);return error;
+};
+function workLimit(){
+ const error=Object.assign(new Error('Office diagram work limit'),{code:'PPTX_STRUCTURE_LIMIT'});
+ diagramFailures.add(error);return error;
+}
+const policyFailure=()=>Object.assign(new Error('CONVERSION_POLICY_FAILED'),{code:'CONVERSION_POLICY_FAILED'});
+const isOfficeDiagramFailure=error=>Boolean(error&&typeof error==='object'&&diagramFailures.has(error));
+function createOfficeDiagramBudget(){
+ const token=Object.freeze({}),state={exhausted:false};
+ for(const key of Object.keys(OFFICE_DIAGRAM_WORK_LIMITS))state[key]=0;
+ diagramBudgets.set(token,state);return token;
+}
+function diagramBudgetState(token){
+ const state=diagramBudgets.get(token);if(!state)throw policyFailure();return state;
+}
+function chargeDiagramWork(state,key,amount,existingBinding=false){
+ const maximum=OFFICE_DIAGRAM_WORK_LIMITS[key];
+ if(!Number.isSafeInteger(maximum)||!Number.isSafeInteger(state[key])||state[key]<0||state[key]>maximum)throw policyFailure();
+ if((state.exhausted&&!existingBinding)||!Number.isSafeInteger(amount)||amount<0||amount>maximum-state[key]){
+  state[key]=maximum;state.exhausted=true;throw workLimit();
+ }
+ state[key]+=amount;
+}
+const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
+const EMPTY_DIAGRAM_READ=Object.freeze({models:Object.freeze([]),notices:Object.freeze([])});
 const own = (node,name) => node.attributes.get(`{}${name}`);
 const POINT_TYPES = new Set(['node','doc','asst','parTrans','sibTrans','pres']);
 const DATA_POINTS = new Set(['node','doc','asst']);
@@ -27,8 +58,10 @@ function relationshipAttribute(node,name) {
   const values=R.map(ns=>node.attributes.get(`{${ns}}${name}`)).filter(x=>x!==undefined);
   return values.length===1 ? values[0] : null;
 }
-function diagramModel(bytes, decode) {
+function parseDiagramModel(bytes, decode, work, capture) {
   if (!Buffer.isBuffer(bytes) || bytes.length>2*1024*1024) throw fail();
+  if(work)chargeDiagramWork(work,'xmlBytes',bytes.length);
+  capture?.();
   let source;
   try {source=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw fail();}
   const points=new Map(), edges=[], connectionIds=new Set();
@@ -36,9 +69,14 @@ function diagramModel(bytes, decode) {
   const textNamespace=()=>model.namespaceURI==='http://purl.oclc.org/ooxml/drawingml/diagram'
     ? 'http://purl.oclc.org/ooxml/drawingml/main' : 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const paragraph=node=>node?.namespaceURI===textNamespace()&&node.localName==='p'&&node.parent===textBody;
-  function append(value){point.text+=value;chars+=value.length;if(chars>1_000_000)throw fail();}
+  function append(value){
+    if(value.length>1_000_000-chars)throw fail();
+    if(work)chargeDiagramWork(work,'sourceChars',value.length);
+    point.text+=value;chars+=value.length;
+  }
   const root=readXml(source, {decode,error:fail,
     start(node) {
+      if(work)chargeDiagramWork(work,'nodes',1);
       if(!node.parent){
         if(!D.has(node.namespaceURI)||node.localName!=='dataModel')throw fail();
         model=node;
@@ -148,8 +186,14 @@ function diagramModel(bytes, decode) {
   }
   return rows;
 }
-function ownerDiagrams(entries,owner,decode) {
-  const bytes=entries.get(owner);if (!bytes) return [];
+function diagramModel(bytes,decode,token=createOfficeDiagramBudget()){
+ return parseDiagramModel(bytes,decode,diagramBudgetState(token));
+}
+function ownerDiagramTargets(entries,owner,decode,work,capture) {
+  const bytes=entries.get(owner);if (!bytes) return {targets:[]};
+  if(!Buffer.isBuffer(bytes))throw fail();
+  if(work)chargeDiagramWork(work,'xmlBytes',bytes.length);
+  capture?.(owner,bytes);
   const ids=[],selected=new WeakMap(),ignored=new WeakSet();
   const mc='http://schemas.openxmlformats.org/markup-compatibility/2006';
   const understood=new Set([...D,...A,...R,
@@ -158,6 +202,7 @@ function ownerDiagrams(entries,owner,decode) {
     'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
     'http://purl.oclc.org/ooxml/wordprocessingml/main']);
   readXml(bytes.toString('utf8'),{decode,error:fail,start(node){
+    if(work)chargeDiagramWork(work,'nodes',1);
     if(node.namespaceURI===mc&&node.localName==='AlternateContent')selected.set(node,false);
     if(node.namespaceURI===mc&&['Choice','Fallback'].includes(node.localName)){
       if(node.parent?.namespaceURI!==mc||node.parent.localName!=='AlternateContent')throw fail();
@@ -169,13 +214,18 @@ function ownerDiagrams(entries,owner,decode) {
     if (D.has(node.namespaceURI)&&node.localName==='relIds') {
       const id=relationshipAttribute(node,'dm');if (!id) throw fail();ids.push(id);
       if (ids.length>150) throw fail();
+      if(work)chargeDiagramWork(work,'references',1);
     }
   }});
-  if (!ids.length) return [];
+  if (!ids.length) return {targets:[]};
   const relPath=path.posix.join(path.posix.dirname(owner),'_rels',path.posix.basename(owner)+'.rels');
   const rel=entries.get(relPath);if (!rel) throw fail();
+  if(!Buffer.isBuffer(rel))throw fail();
+  if(work)chargeDiagramWork(work,'xmlBytes',rel.length);
+  capture?.(relPath,rel);
   const relations=new Map();
   const root=readXml(rel.toString('utf8'),{decode,error:fail,start(node){
+    if(work)chargeDiagramWork(work,'nodes',1);
     if (node.namespaceURI!==PR||node.localName!=='Relationship'||node.parent?.namespaceURI!==PR||node.parent.localName!=='Relationships') return;
     const id=own(node,'Id');if (!id||relations.has(id)) throw fail();
     relations.set(id,{type:own(node,'Type'),target:own(node,'Target'),mode:own(node,'TargetMode')});
@@ -188,9 +238,99 @@ function ownerDiagrams(entries,owner,decode) {
         !raw||/[\\?#%\0]/u.test(raw)||/^(?:\/|[a-z][a-z0-9+.-]*:)/iu.test(raw)) throw fail();
     const target=path.posix.normalize(path.posix.join(path.posix.dirname(owner),raw));
     if (!new RegExp(`^${family}/diagrams/data[0-9]+\\.xml$`,'u').test(target)||!entries.has(target)) throw fail();
-    // Do not also read drawingN.xml: it is another presentation of this model.
-    out.push({target,rows:diagramModel(entries.get(target),decode)});
+    // Prove the entire owner relation vector before optional model parsing.
+    // Never read drawingN.xml as a duplicate presentation of this model.
+    out.push({target,bytes:entries.get(target)});
   }
-  return out;
+  return {targets:out};
 }
-module.exports=Object.freeze({diagramModel,ownerDiagrams});
+function ownerDiagrams(entries,owner,decode){
+ // Historical strict row API: same refusals, no per-model success fallback.
+ const work=diagramBudgetState(createOfficeDiagramBudget());
+ return ownerDiagramTargets(entries,owner,decode,work).targets.map(item=>
+  ({target:item.target,rows:parseDiagramModel(item.bytes,decode,work)}));
+}
+function createOfficeDiagramSession(entries,decode,render,token=createOfficeDiagramBudget()){
+ const work=diagramBudgetState(token);
+ if(!(entries instanceof Map)||typeof decode!=='function'||typeof render?.measureText!=='function'||
+    typeof render?.renderText!=='function')throw policyFailure();
+ const session=Object.freeze({});
+ diagramSessions.set(session,{entries,decode,render,work,owners:new Map()});return session;
+}
+function readOfficeDiagrams(token,owner){
+ const session=diagramSessions.get(token);if(!session||typeof owner!=='string')throw policyFailure();
+ const {entries,decode,render,work,owners}=session;
+ // No cache may resurrect an owner removed by an existing quarantine.
+ if(!entries.has(owner))return EMPTY_DIAGRAM_READ;
+ const cached=owners.get(owner);
+ function validateBindings(record){
+  for(const item of record.targets)if(entries.get(item.target)!==item.bytes)throw policyFailure();
+  for(const [part,binding]of record.bindings){
+   const bytes=entries.get(part);
+   if(bytes!==binding.bytes||!Buffer.isBuffer(bytes))throw policyFailure();
+   // Already admitted output survives a later work-budget refusal. This
+   // independent hash allowance grants no fresh decode or formatting work.
+   chargeDiagramWork(work,'bindingBytes',bytes.length,true);
+   if(digest(bytes)!==binding.digest)throw policyFailure();
+  }
+ }
+ if(cached){validateBindings(cached);return cached.result;}
+ const bindings=new Map();
+ function remember(part,bytes){
+  if(!Buffer.isBuffer(bytes))throw fail();
+  chargeDiagramWork(work,'bindingBytes',bytes.length);
+  const actual=digest(bytes),before=bindings.get(part);
+  if(before){
+   if(before.bytes!==bytes||before.digest!==actual)throw policyFailure();
+   return;
+  }
+  bindings.set(part,{bytes,digest:actual});
+ }
+ let graph;
+ try{graph=ownerDiagramTargets(entries,owner,decode,work,remember);}
+ catch(error){
+  if(isOfficeDiagramFailure(error)&&error.code==='PPTX_STRUCTURE_LIMIT')
+   return Object.freeze({models:Object.freeze([]),notices:Object.freeze(['TEXT_LIMIT_PARTIAL'])});
+  throw error;
+ }
+ const models=[],notices=new Set(),heading='## SmartArt\n\n';
+ for(const item of graph.targets){
+  if(work.exhausted){notices.add('TEXT_LIMIT_PARTIAL');break;}
+  try{
+   const rows=parseDiagramModel(item.bytes,decode,work,()=>remember(item.target,item.bytes));
+   if(!rows.length)continue;
+   let size=heading.length+2; // shared section-separator allowance included
+   const lengths=[];
+   for(const [index,row]of rows.entries()){
+    if(!Number.isSafeInteger(row.depth)||row.depth<0||row.depth>128||typeof row.text!=='string')throw policyFailure();
+    const length=render.measureText(row.text);
+    if(!Number.isSafeInteger(length)||length<0)throw policyFailure();
+    const added=row.depth*2+2+length+(index?1:0);
+    if(added>OFFICE_DIAGRAM_WORK_LIMITS.renderedChars-work.renderedChars-size){
+     chargeDiagramWork(work,'renderedChars',size+added);
+    }
+    size+=added;lengths.push(length);
+   }
+   chargeDiagramWork(work,'renderedChars',size);
+   const lines=rows.map((row,index)=>{
+    const text=render.renderText(row.text);
+    if(typeof text!=='string'||text.length!==lengths[index])throw policyFailure();
+    return '  '.repeat(row.depth)+'- '+text;
+   });
+   const markdown=heading+lines.join('\n');
+   if(markdown.length+2!==size)throw policyFailure();
+   models.push(Object.freeze({target:item.target,markdown}));
+  }catch(error){
+   if(!isOfficeDiagramFailure(error))throw error;
+   if(error.code==='PPTX_STRUCTURE_LIMIT'){notices.add('TEXT_LIMIT_PARTIAL');break;}
+   if(error.code!=='PPTX_STRUCTURE_UNSAFE')throw error;
+   // Only this internally proven model's own atomic payload is omitted.
+   notices.add('PPTX_STRUCTURE_UNSAFE');
+  }
+ }
+ const result=Object.freeze({models:Object.freeze(models),notices:Object.freeze([...notices])});
+ const record={targets:graph.targets,bindings,result};
+ validateBindings(record);owners.set(owner,record);return result;
+}
+module.exports=Object.freeze({diagramModel,ownerDiagrams,createOfficeDiagramBudget,createOfficeDiagramSession,
+ readOfficeDiagrams,isOfficeDiagramFailure,OFFICE_DIAGRAM_WORK_LIMITS});

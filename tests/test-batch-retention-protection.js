@@ -4,12 +4,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
-const { createBatchRetentionProtection } = require('../plugins/data-secure/server/gateway/batch-retention-protection');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-batch-retention-'));
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 
+const { createBatchRetentionProtection } = require('../plugins/data-secure/server/gateway/batch-retention-protection');
 const { _test } = require('../plugins/data-secure/server/gateway/batch');
 const { test, done, assert } = createSuite('Batch journal durability and retention protection');
 
@@ -182,6 +184,18 @@ test('the extracted reader propagates root configuration errors and ignores non-
   });
   assert.deepStrictEqual(result, { ids: new Set(), complete: true });
   assert.strictEqual(reads, 0);
+});
+
+test('a reserved token journal with an unknown type makes protection incomplete without reading or deleting it', () => {
+  const token = 'a'.repeat(64), reader = createBatchRetentionProtection({ batchRoot: () => 'root' });
+  for (const kind of ['directory', 'symlink', 'missing-method']) {
+    let calls = 0, reads = 0;
+    const entry = { name: `${token}.json` };
+    if (kind !== 'missing-method') entry.isFile = function() { assert.strictEqual(this, entry); calls++; return false; };
+    const result = reader.openBatchPackageProtection({ readdirSync: () => [entry], readFileSync() { reads++; throw Error('must not follow unknown journal'); } });
+    assert.equal(result.complete, false); assert.equal(result.ids.size, 0); assert.equal(reads, 0);
+    assert.equal(calls, kind === 'missing-method' ? 0 : 1);
+  }
 });
 
 try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* best effort */ }

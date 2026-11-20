@@ -49,12 +49,16 @@ function fixture(model = {}) {
     child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.killed = false;
     child.stdin.on('data', chunk => received.push(Buffer.from(chunk)));
     child.kill = () => {
+      events.push('kill');
       child.killed = true;
       if (!model.unconfirmedClose) setImmediate(() => child.emit('close', null));
       return true;
     };
     if (model.incompleteInput) child.stdin.end = () => setImmediate(() => child.stdin.emit('error', new Error('PRIVATE-EPIPE')));
     children.push(child);
+    // Successful ChildProcess creation emits spawn asynchronously before
+    // stdout/close. The model must expose that actual lifecycle milestone.
+    process.nextTick(() => { events.push('child-spawn'); child.emit('spawn'); });
     setImmediate(() => {
       if (model.hang || child.killed) return;
       const extension = spawns.at(-1).args.find(arg => /^\.(?:txt|md|markdown|csv|docx)$/u.test(arg)) || '.txt';
@@ -256,16 +260,21 @@ test('legacy negative schema, exact exit, format graph and partial stdin gates r
   }
 });
 
-test('running abort/deadline wait for child close; unconfirmed termination stays a closed failure', async () => {
-  for (const mode of ['abort', 'timeout', 'unconfirmed']) {
+test('pre-start and running abort/deadline wait for child close; unconfirmed termination stays a closed failure', async () => {
+  for (const mode of ['abort-before-spawn', 'abort-running', 'timeout', 'unconfirmed']) {
     const value = fixture({ hang: true, shortTimers: true, unconfirmedClose: mode === 'unconfirmed' });
     try {
       const controller = new AbortController();
       const pending = value.convert('PRIVATE', { ...input(), signal: controller.signal });
-      if (mode === 'abort') controller.abort();
-      await assert.rejects(pending, { code: mode === 'abort' ? 'REQUEST_CANCELLED'
+      if (mode === 'abort-running') await new Promise(resolve => value.children[0].once('spawn', resolve));
+      if (mode.startsWith('abort')) controller.abort();
+      if (mode === 'abort-before-spawn') assert.equal(value.children[0].killed, false);
+      await assert.rejects(pending, { code: mode.startsWith('abort') ? 'REQUEST_CANCELLED'
         : mode === 'timeout' ? 'PARSER_TIMEOUT' : 'PARSER_ISOLATION_FAILED' });
       assert.equal(value.children[0].killed, true);
+      assert.equal(value.events.filter(event => event === 'child-spawn').length, 1);
+      assert.equal(value.events.filter(event => event === 'kill').length, 1);
+      assert.ok(value.events.indexOf('child-spawn') < value.events.indexOf('kill'));
     } finally { value.cleanup(); }
   }
 });

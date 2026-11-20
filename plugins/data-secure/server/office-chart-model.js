@@ -31,6 +31,9 @@ function selectedTree(xml, decode, error, understoodNamespaces, visitor) {
   const understood = understoodNamespaces || new Set([...C, ...A, ...P, ...XDR]); let result, nodes = 0, chars = 0;
   const active = node => { for (let owner = node; owner; owner = owner.parent) if (ignored.has(owner)) return false; return true; };
   readXml(xml, { decode, error, start(node) {
+    // Non-authorizing raw presence may suppress an inventory fallback, but
+    // selected model events below remain the only source of relationship IDs.
+    visitor?.rawStart?.(node);
     if(!node.parent&&node.namespaceURI===MC)throw error();
     if (node.parent && !active(node.parent)) { ignored.add(node); return; }
     if (node.parent && leaves.has(node.parent)) throw error();
@@ -313,12 +316,22 @@ function wordScope(root,node,storyIds) {
   return false;
 }
 function wordChartStoryReferences(xml,decode,error,understoodNamespaces){
-  const result={headers:[],footers:[],comments:new Set(),footnotes:new Set(),endnotes:new Set()};
-  const root=selectedTree(xml,decode,error,understoodNamespaces,{start(node,root){
+  const result={headers:[],footers:[],comments:new Set(),footnotes:new Set(),endnotes:new Set(),
+    orderedHeaderFooterReferences:[],headerFooterReferencePresent:false};
+  let sourceRoot;
+  const root=selectedTree(xml,decode,error,understoodNamespaces,{rawStart(node){
+    if(!node.parent)sourceRoot=node;
+    // This conservative bit can only DENY legacy inventory adoption. It never
+    // conveys an ID, target or selected-owner capability from an ignored arm.
+    if(is(sourceRoot,W,'document')&&W.has(node.namespaceURI)&&['headerReference','footerReference'].includes(node.localName))
+      result.headerFooterReferencePresent=true;
+  },start(node,root){
     if(!W.has(node.namespaceURI)||!wordScope(root,node.parent))return;
     if(['headerReference','footerReference'].includes(node.localName)&&is(node.parent,W,'sectPr')&&
         (is(node.parent.parent,W,'body')||is(node.parent.parent,W,'pPr'))){
-      const id=relationId(node);if(id)result[node.localName==='headerReference'?'headers':'footers'].push(id);
+      const id=relationId(node),type=node.localName==='headerReference'?'header':'footer';
+      result.orderedHeaderFooterReferences.push({type,id});
+      if(id)result[type==='header'?'headers':'footers'].push(id);
     }
     const kind={commentReference:'comments',footnoteReference:'footnotes',endnoteReference:'endnotes'}[node.localName];
     if(kind&&is(node.parent,W,'r')){const id=node.attributes.get(`{${node.namespaceURI}}id`);if(id!==undefined)result[kind].add(id);}

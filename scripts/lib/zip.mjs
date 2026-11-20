@@ -56,6 +56,7 @@ export function collectFiles(dir, base = dir) {
 }
 
 export function writeZip(outFile, files, options = {}) {
+  if (options.createOnly !== undefined && typeof options.createOnly !== 'boolean') throw new Error('ZIP_CREATE_ONLY_INVALID');
   const maximum = options.maximumFileBytes ?? 256 * 1024 * 1024;
   if (!Number.isSafeInteger(maximum) || maximum < 0 || maximum > 512 * 1024 * 1024) {
     throw new Error('ZIP_FILE_LIMIT_INVALID');
@@ -116,7 +117,7 @@ export function writeZip(outFile, files, options = {}) {
   end.writeUInt32LE(local.length, 16);
 
   fs.mkdirSync(path.dirname(outFile), { recursive: true });
-  fs.writeFileSync(outFile, Buffer.concat([local, central, end]));
+  fs.writeFileSync(outFile, Buffer.concat([local, central, end]), { flag: options.createOnly === true ? 'wx' : 'w' });
   return { entries: files.length, bytes: fs.statSync(outFile).size };
 }
 

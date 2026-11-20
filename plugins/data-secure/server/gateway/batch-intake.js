@@ -7,6 +7,7 @@ const { MODES, validateProcessingMode } = require('../core/processing-mode');
 const { contentStartOptions } = require('./content-start-boundary');
 const { validateReviewPolicy } = require('../core/standalone-review-policy');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
+const { BATCH_SCHEMA, MAX_HEADER_BYTES, PREFIX_BYTES, validateStorageItem } = require('../core/source-snapshot-storage');
 
 function createBatchIntake(options = {}) {
   const SafeError = options.SafeError;
@@ -185,7 +186,8 @@ function createBatchIntake(options = {}) {
       throw stopped;
     }
     const candidates = admissionPlan.filter((planned) => planned.admission === 'candidate');
-    assertStagingCapacity(candidates.map((planned) => planned.entry), beginOptions.statfs || io.statfsSync);
+    assertStagingCapacity(candidates.map((planned) => planned.entry), beginOptions.statfs || io.statfsSync,
+      contentOptions ? candidates.length * (MAX_HEADER_BYTES + PREFIX_BYTES) : 0);
     const token = requestedToken || crypto.randomBytes(32).toString('hex');
     if (io.existsSync(batchPath(token)) || io.existsSync(workPath(token)) || io.existsSync(intakeIntent.intentPath(token))) {
       throw new SafeError('Die lokale Batch-Sitzung ist bereits belegt.');
@@ -231,10 +233,18 @@ function createBatchIntake(options = {}) {
           };
         }
         const workName = `${String(index + 1).padStart(3, '0')}_${crypto.randomBytes(12).toString('hex')}.workcopy`;
+        const sourceSnapshot = contentOptions ? {
+          state: { schema: BATCH_SCHEMA, token, product_channel: productChannel, processing_mode: processingMode,
+            standalone_document_review: true, content_options: contentOptions },
+          item: { id, work_name: workName, size: entry.stat.size, sha256: planned.source_sha256, private_artifact_plain: true }
+        } : undefined;
         const copied = copySnapshotFile(entry.full, path.join(work, workName), entry.stat, {
           expectedSha256: planned.source_sha256,
-          privateWorkStore
+          privateWorkStore,
+          ...(sourceSnapshot ? { sourceSnapshot } : {})
         });
+        if (sourceSnapshot) validateStorageItem(sourceSnapshot.state,
+          { ...sourceSnapshot.item, source_snapshot_storage: copied.source_snapshot_storage });
         return {
           id,
           name: entry.name,
@@ -243,12 +253,13 @@ function createBatchIntake(options = {}) {
           sha256: copied.sha256,
           work_name: workName,
           private_artifact_plain: true,
+          ...(sourceSnapshot ? { source_snapshot_storage: copied.source_snapshot_storage } : {}),
           status: 'pending',
           checkpoint: 'sealed'
         };
       });
       state = {
-        schema: contentOptions ? 'datasecure-batch/7' : processingMode === MODES.MARKDOWN ? 'datasecure-batch/5'
+        schema: contentOptions ? BATCH_SCHEMA : processingMode === MODES.MARKDOWN ? 'datasecure-batch/5'
           : productChannel === 'standalone' ? 'datasecure-batch/6' : 'datasecure-batch/4',
         product_channel: productChannel,
         ...(processingMode === MODES.MARKDOWN || contentOptions ? { processing_mode: processingMode } : {}),

@@ -211,7 +211,7 @@ test('independent inline qualifier reader retains exact repeated raw cell owners
   const start = source.indexOf('    const proseValues = '), end = source.indexOf('    for (const value of proseValues(rendered', start);
   assert.ok(start >= 0 && end > start);
   const context = vm.createContext({module: {exports: {}}, require: createRequire(file)});
-  vm.runInContext("const personFieldPolicy='content-person-fields/1'; const {personFieldPattern}=require('../core/person-field-policy'); const {markdownTableCells}=require('./entities'); const {isProtectedFieldHeader}=require('./field-value-coverage');\n" +
+  vm.runInContext("const personFieldPolicy='content-person-fields/1'; const {personFieldPattern}=require('../core/person-field-policy'); const {markdownTableCells}=require('./entities'); const {isProtectedFieldHeader}=require('./field-value-coverage'); const {scanTableCells,unescapeMarkdownPunctuation}=require('./markdown-table-cells');\n" +
     source.slice(start, end) + '\nmodule.exports.read=proseValues;', context, {timeout: 1000});
   const read = value => { const scopes = []; context.value = value; context.scopes = scopes;
     const values = vm.runInContext('module.exports.read(value,null,scopes)', context, {timeout: 300}); return {scopes, values}; };

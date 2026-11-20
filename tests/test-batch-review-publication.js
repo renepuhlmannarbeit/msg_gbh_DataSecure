@@ -54,7 +54,7 @@ function fixture(options = {}) {
       }
       return { text: `${input.anonymized_text}:${decisions.map((entry) => entry.ambiguity_id).join(',')}` };
     },
-    exactPendingEntry(_state, item) { events.push(`entry:${item.name}`); return { item: item.name }; },
+    exactPendingEntry(_state, item) { events.push(`entry:${item.name}`); return options.entryFor ? options.entryFor(item) : { item: item.name }; },
     packageIdForItem(item) { return `ds_${item.id}`; },
     writeState(value, writeOptions) {
       writes.push({ snapshot: structuredClone(value), writeOptions });
@@ -98,6 +98,7 @@ function fixture(options = {}) {
     async anonymizeNext(_profile, callOptions) {
       const item = items[current++];
       events.push(`anonymize:${item.name}`);
+      options.onAnonymize?.(item, callOptions);
       if (options.pipelineFailure === item.name) {
         const error = new Error('pipeline failed');
         if (options.uncodedPipelineFailure !== true) {
@@ -126,6 +127,63 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('deferred content mapping refuses original ownership failures and closes only the acquired source buffer', async () => {
+    const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
+    const source = require.resolve('../plugins/data-secure/server/gateway/batch-review-publication'), local = createRequire(source);
+    const policy = local('./prepublication-error');
+    for (const boundary of ['intent', 'commit']) for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY',
+      'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_BUSY', 'EIO']) {
+      const primary = reviewError(code), binding = { fixed: 'actual-hook-model' }, loaded = { exports: {} };
+      const first = Buffer.from('first private source'), second = Buffer.from('second private source'), untouched = Buffer.from(second);
+      let value, failedWrites, failedCleanups, operations = 0;
+      const refuse = () => {
+        failedWrites = value.writes.length;
+        failedCleanups = value.events.filter(event => event.startsWith('cleanup:')).length;
+        throw primary;
+      };
+      const overrides = {
+        './standalone-anonymized-batch': { expectedPublication: () => binding, confirmPublication: () => ({ publication_binding: binding }) },
+        './standalone-document-review-store': { createDocumentReviewStore: () => ({ recordPublication() {} }) },
+        './standalone-anonymized-mapping': { async ensurePrivateMappingIntentAsync() { if (boundary === 'intent') refuse(); } }
+      };
+      vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(source, 'utf8')}\n})`, { filename: source })(
+        request => Object.hasOwn(overrides, request) ? overrides[request] : local(request), loaded, loaded.exports, source, path.dirname(source));
+      value = fixture({ createPublication: loaded.exports.createBatchReviewPublication,
+        entryFor: item => ({ name: item.name, private_bytes: item.name === 'first' ? first : second }),
+        awaitMappingBoundary(stage, _item, apply) { if (stage === 'commit') refuse(); return apply(); },
+        publishStandaloneReviewedItem: async (_token, id, hooks) => {
+          operations++; assert.equal(Object.hasOwn(hooks, 'inputQueue'), false);
+          assert.ok(first.every(byte => byte === 0), 'unused content input is disposed before independent authority');
+          const result = { package_id: `ds_${id}`, document_result: COMPLETE_DOCUMENT_RESULT, publication_binding: binding };
+          await hooks.beforePublish(result); await hooks.afterPublish(result); return result;
+        } });
+      Object.assign(value.state, { schema: 'datasecure-batch/7', token: 'a'.repeat(64), product_channel: 'standalone',
+        processing_mode: 'markdown-and-anonymize', standalone_document_review: true,
+        content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } });
+      const action = () => value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+        { document_index: 1, decisions: [decision('a-1')] }, { document_index: 2, decisions: [decision('a-2')] }
+      ]);
+      if (policy.isOwnershipControlFailure(primary)) await assert.rejects(action, error => error === primary);
+      else assert.equal((await action()).recoveryBlocked, true, 'ordinary mapping debt retains its existing recovery');
+      assert.equal(value.writes.length, failedWrites);
+      assert.equal(value.events.filter(event => event.startsWith('cleanup:')).length, failedCleanups);
+      assert.equal(operations, 1); assert.equal(value.items[0].status, 'mapping_pending');
+      assert.ok(first.every(byte => byte === 0)); assert.deepEqual(second, untouched);
+      assert.equal(value.events.includes('entry:second'), false);
+    }
+  });
+  await testAsync('legacy deferred publication consumes intact bytes and disposes them after success or refusal', async () => {
+    for (const fail of [false, true]) {
+      const buffers = new Map(['first', 'second'].map(name => [name, Buffer.from(name)]));
+      const value = fixture({ entryFor: item => ({ private_bytes: buffers.get(item.name) }),
+        onAnonymize(item, hooks) { assert.equal(hooks.inputQueue[0].private_bytes.toString(), item.name); },
+        ...(fail ? { pipelineFailure: 'first', pipelineFailureCode: 'PARSER_TIMEOUT' } : {}) });
+      await value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+        { document_index: 1, decisions: [decision('a-1')] }, { document_index: 2, decisions: [decision('a-2')] }
+      ]);
+      assert.ok([...buffers.values()].every(bytes => bytes.every(byte => byte === 0)));
+    }
+  });
   await testAsync('review worker awaits mark and mapping commit before releasing or starting the next item', async () => {
     const releases = new Map();
     const value = fixture({ awaitMappingBoundary(stage, item, apply) {

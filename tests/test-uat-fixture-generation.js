@@ -10,7 +10,10 @@ const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standal
 
 const { test, done, assert } = createSuite('Current UAT fixture generation');
 const kit = path.resolve(__dirname, '..', 'docs', 'acceptance', 'UAT_TEST_KIT');
-const output = path.join(kit, '.tmp-uat-contract');
+// The generator intentionally replaces its output. Reserve an exclusive own
+// namespace first; never adopt the historical fixed .tmp-uat-contract tree.
+const output = path.join(kit, '.tmp-uat-contract-' + crypto.randomUUID());
+fs.mkdirSync(output, { recursive: false });
 
 function digestTree(root) {
   const result = new Map();

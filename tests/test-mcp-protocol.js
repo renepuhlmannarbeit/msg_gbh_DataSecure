@@ -11,17 +11,32 @@ const { spawn } = require('child_process');
 const { createSuite } = require('./helpers');
 const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
 const { VERSION } = require('../plugins/data-secure/server/version');
+const { ownChild, within, firstFailure, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
 
-const { testAsync, done, assert } = createSuite('MCP protocol');
+const suite = createSuite('MCP protocol');
+const { done, assert } = suite;
+const protocolFailure = firstFailure(), protocolChildren = new Set();
+async function testAsync(name, action) {
+  protocolFailure.throwIfFailed();
+  await suite.testAsync(name, async () => {
+    try { await action(); } catch (error) { protocolFailure.record(error); throw error; }
+  });
+  const failure = suite.failure(); if (failure.failed) protocolFailure.record(failure.error);
+  protocolFailure.throwIfFailed();
+}
 
 const serverEntry = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'index.js');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
+const rootScope = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-mcp-'));
+const root = path.join(rootScope, 'privacy');
+fs.mkdirSync(root, { mode: 0o700 });
 
 // Sends a batch of messages, collects every line the server writes back and
 // exits. Each case gets a fresh process so state cannot leak between them.
 function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = root, localStartFixture = false, invalidStartFixture = false, waitingPickerFixture = false, handoffFixture = false, resultOpenFixture = null, statusAppPilot = false, inputGuardFixture = false, continuationFixture = null, continuationStartFixture = 'accepted', continuationCoreRace = false, ackErrorFixture = null, folderNoticeFixture = false, configureResultFixture = false } = {}) {
-  return new Promise((resolve, reject) => {
-    const resultRoot = path.join(privacyRoot, '..', 'cowork-results');
+  return (async () => {
+    protocolFailure.throwIfFailed();
+    const talkScope = fs.mkdtempSync(path.join(rootScope, 'talk-'));
+    const resultRoot = path.join(talkScope, 'cowork-results');
     const syntheticSource = path.join(privacyRoot, 'synthetic-private-source.txt');
     fs.mkdirSync(resultRoot, { recursive: true });
     fs.mkdirSync(path.dirname(syntheticSource), { recursive: true });
@@ -32,7 +47,7 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
     const entryArgs = (localStartFixture || invalidStartFixture || handoffFixture || resultOpenFixture || inputGuardFixture || continuationFixture || continuationCoreRace || folderNoticeFixture || configureResultFixture) ? ['--eval', `
       const gateway = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'gateway'))});
       if (${configureResultFixture}) {
-        const selected = ${JSON.stringify(path.join(root, '..', 'OneDrive - Synthetic'))};
+        const selected = ${JSON.stringify(path.join(talkScope, 'OneDrive - Synthetic'))};
         require('fs').mkdirSync(selected, {recursive:true});
         const folderPicker = require(${JSON.stringify(path.join(path.dirname(serverEntry), 'companion', 'folder-picker'))});
         folderPicker.pickFolderAsync = async () => selected;
@@ -184,41 +199,68 @@ function talk(messages, { timeoutMs = 15000, supportMode = true, privacyRoot = r
       }
     });
 
-    let out = '';
-    let err = '';
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error(`server did not exit within ${timeoutMs}ms; stderr: ${err}`));
-    }, timeoutMs);
-
-    child.stdout.on('data', (b) => (out += b));
-    child.stderr.on('data', (b) => (err += b));
-    child.once('error', reject);
-    child.once('close', () => {
-      clearTimeout(timer);
-      const lines = out.split('\n').filter((l) => l.trim());
-      try {
-        resolve({ responses: lines.map((l) => JSON.parse(l)), stderr: err, raw: lines });
-      } catch (e) {
-        reject(new Error(`server emitted non JSON output: ${JSON.stringify(out.slice(0, 400))}`));
+    const failure = firstFailure();
+    let reportFault;
+    const fault = new Promise(resolve => { reportFault = resolve; });
+    const record = error => {
+      failure.record(error); protocolFailure.record(error); reportFault({ error });
+    };
+    const owned = ownChild(child, record); protocolChildren.add(owned);
+    let out = '', err = '', answer, ended = false;
+    try {
+      for (const stream of [child.stdin, child.stdout, child.stderr]) {
+        assert.ok(stream && typeof stream.on === 'function', 'MCP probe stdio unavailable');
+        stream.on('error', record);
       }
-    });
-
-    let received = 0;
-    const expected = messages.reduce((sum, msg) => sum + (typeof msg === 'string'
-      ? msg.split('\n').filter((line) => line.trim()).length
-      : (Object.hasOwn(msg, 'id') ? 1 : 0)), 0);
-    child.stdout.on('data', () => {
-      received = out.split('\n').filter((line) => line.trim()).length;
-      // EOF is a host shutdown/cancellation, not a normal tool completion.
-      // Keep stdio open until the asynchronous calls have returned.
-      if (received >= expected) child.stdin.end();
-    });
-    for (const msg of messages) {
-      child.stdin.write(typeof msg === 'string' ? `${msg}\n` : `${JSON.stringify(msg)}\n`);
+      const endInput = () => {
+        if (ended) return;
+        ended = true;
+        try { child.stdin.end(); } catch (error) { record(error); }
+      };
+      const expected = messages.reduce((sum, msg) => sum + (typeof msg === 'string'
+        ? msg.split('\n').filter(line => line.trim()).length : Object.hasOwn(msg, 'id') ? 1 : 0), 0);
+      child.stdout.on('data', bytes => {
+        try {
+          if (failure.failed) return;
+          assert.ok(out.length + bytes.length <= 4 * 1024 * 1024, 'MCP test output limit');
+          out += bytes;
+          if (out.split('\n').filter(line => line.trim()).length >= expected) endInput();
+        } catch (error) { record(error); }
+      });
+      child.stderr.on('data', bytes => {
+        try {
+          if (failure.failed) return;
+          assert.ok(err.length + bytes.length <= 1024 * 1024, 'MCP test stderr limit'); err += bytes;
+        }
+        catch (error) { record(error); }
+      });
+      for (const msg of messages) {
+        failure.throwIfFailed();
+        child.stdin.write(typeof msg === 'string' ? `${msg}\n` : `${JSON.stringify(msg)}\n`, error => {
+          if (error !== null && error !== undefined) record(error);
+        });
+      }
+      if (!expected) endInput();
+      const closed = await within(Promise.race([
+        owned.done, fault.then(({ error }) => { throw error; })
+      ]), timeoutMs, 'MCP_TEST_PROCESS_DEADLINE');
+      failure.throwIfFailed();
+      assert.strictEqual(closed.code, 0, 'MCP probe must exit successfully');
+      assert.strictEqual(closed.signal, null, 'MCP probe must close without a signal');
+      const lines = out.split('\n').filter(line => line.trim());
+      answer = { responses: lines.map(line => JSON.parse(line)), stderr: err, raw: lines };
+    } catch (error) { record(error); }
+    finally {
+      if (!owned.closed) {
+        try { owned.terminate('SIGKILL'); } catch (error) { record(error); }
+        try { await within(owned.done, 5000, 'MCP_TEST_CLOSE_UNCONFIRMED'); }
+        catch (error) { record(error); }
+      }
+      if (owned.closed) protocolChildren.delete(owned);
     }
-    if (!expected) child.stdin.end();
-  });
+    failure.throwIfFailed();
+    return answer;
+  })();
 }
 
 const rpc = (id, method, params) => ({ jsonrpc: '2.0', id, method, ...(params ? { params } : {}) });
@@ -989,6 +1031,39 @@ async function main() {
     assert.strictEqual(result.structuredContent.error, 'invalid_tool_arguments');
   });
 
+  await testAsync('the confirmed MCP diagnostic API still writes its local receipt after exporter separation', async () => {
+    const privacyRoot = path.join(root, 'diagnostic-export-separated');
+    const target = path.join(privacyRoot, 'DataSecure-Export', 'DataSecure-Diagnose.json');
+    assert.strictEqual(fs.existsSync(target), false);
+    const { responses } = await talk([rpc(1, 'initialize', {}), rpc(2, 'tools/call', {
+      name: 'export_diagnostic_package', arguments: { confirmed: true }
+    })], { privacyRoot });
+    const result = responses.find(response => response.id === 2).result;
+    assert.notStrictEqual(result.isError, true);
+    assert.deepStrictEqual(result.structuredContent, { ok: true, exported: true,
+      schema: 'data-secure-diagnostic-export/1', raw_content_sent_to_claude: false,
+      cowork_status: {
+        schema: 'datasecure-cowork-status/1', gateway_version: VERSION,
+        surface: 'support', operation: 'export_diagnostic_package', outcome: 'completed',
+        phase: 'support', local_work_state: 'not_applicable', retry_class: 'not_applicable',
+        next_action: 'no_action', original_content_sent_to_claude: false,
+        content_boundary: 'metadata_only', content_trust: 'none',
+        embedded_instructions_authorized: false, human_gate_assurance: 'runtime_argument',
+        interaction_schema: 'datasecure-cowork-interactions/1', interaction_terminal: true
+      } });
+    const receipt = JSON.parse(fs.readFileSync(target, 'utf8'));
+    assert.strictEqual(receipt.schema, 'data-secure-diagnostic-export/1');
+    assert.strictEqual(receipt.gateway_version, VERSION);
+    assert.deepStrictEqual(receipt.artifacts.slice(0, 3).map(item => item.role),
+      ['mcp_bootstrap', 'mcp_server', 'native_launcher']);
+    assert.ok(receipt.artifacts.every(item => /^[a-f0-9]{64}$/u.test(item.sha256) &&
+      Number.isSafeInteger(item.bytes) && item.bytes >= 0));
+    for (const flag of ['raw_content_logged', 'filenames_logged', 'paths_logged',
+      'document_hashes_logged', 'automatic_transmission']) assert.strictEqual(receipt[flag], false);
+    assert.strictEqual(receipt.diagnostics.schema, 'data-secure-diagnostic/1');
+    assert.strictEqual(receipt.diagnostics.raw_content_logged, false);
+  });
+
   await testAsync('purge_local_data protects historical sources and deletes only disposable scopes', async () => {
     const processed = path.join(root, 'Processed');
     const output = path.join(root, 'Output');
@@ -1272,12 +1347,23 @@ async function main() {
     assert.strictEqual(stderr.trim(), '', `unexpected stderr output: ${stderr}`);
   });
 
-  try {
-    fs.rmSync(root, { recursive: true, force: true });
-  } catch {
-    /* best effort */
-  }
-  done();
+  await done();
 }
 
-main();
+async function finishProtocol(error, failed = false) {
+  if (failed) protocolFailure.record(error);
+  for (const owned of protocolChildren) {
+    try { owned.terminate('SIGKILL'); } catch (secondary) { protocolFailure.record(secondary); }
+  }
+  try { await within(Promise.all([...protocolChildren].map(owned => owned.done)), 5000, 'MCP_TEST_CLOSE_UNCONFIRMED'); }
+  catch (secondary) { protocolFailure.record(secondary); }
+  const failure = suite.failure(); if (failure.failed) protocolFailure.record(failure.error);
+  const unconfirmedChildren = [...protocolChildren].some(owned => !owned.closed);
+  if (!protocolFailure.failed && !unconfirmedChildren) {
+    try { fs.rmSync(rootScope, { recursive: true, force: true }); }
+    catch (secondary) { protocolFailure.record(secondary); }
+  }
+  endTestCliFailure({ failed: protocolFailure.failed, error: protocolFailure.value,
+    retainedRoots: [rootScope], unconfirmedChildren });
+}
+main().then(() => finishProtocol(), error => finishProtocol(error, true));

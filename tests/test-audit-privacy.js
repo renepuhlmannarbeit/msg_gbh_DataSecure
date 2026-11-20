@@ -9,6 +9,8 @@ const { createSuite } = require('./helpers');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-audit-'));
 process.env.EU_PRIVACY_ROOT = path.join(root, 'privacy');
 process.env.LOCALAPPDATA = path.join(root, 'localapp');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(root, 'product-data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(root, 'results');
 
 const {
   AUDIT_SCHEMA,
@@ -308,7 +310,7 @@ test('a persistent write marker is recovered from the released package receipt',
   fs.mkdirSync(packageDir, { recursive: true });
   fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify({ operation_id: operationId }));
   fs.writeFileSync(path.join(packageDir, 'audit.json'), JSON.stringify(receipt, null, 2));
-  const marker = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit-write-blocked.json');
+  const marker = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'audit-write-blocked.json');
   fs.writeFileSync(
     marker,
     JSON.stringify({
@@ -358,7 +360,7 @@ test('a crash-window package without a marker is reconciled on restart', () => {
 });
 
 test('an unrecoverable persistent write marker blocks readiness', () => {
-  const marker = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit-write-blocked.json');
+  const marker = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'audit-write-blocked.json');
   fs.writeFileSync(
     marker,
     JSON.stringify({
@@ -416,12 +418,216 @@ test('a retained-audit ENOSPC leaves a local marker without retracting a package
     return fs.writeFileSync(candidate, ...args);
   };
   assert.strictEqual(retainAudit(receipt, { preparedAuditRun: createPreparedAuditRun(), fs: io, assertWritableCapacity: () => {} }), false);
-  const marker = path.join(process.env.LOCALAPPDATA, 'SecureDataMsg', 'audit-write-blocked.json');
+  const marker = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'audit-write-blocked.json');
   const markerValue = json(marker);
   assert.strictEqual(markerValue.schema, 'data-secure-audit-write-block/1');
   assert.strictEqual(markerValue.operation_id, receipt.operation_id);
   assert.doesNotMatch(JSON.stringify(markerValue), /Mustermann|\.txt|[A-Fa-f0-9]{64}/i);
   fs.unlinkSync(marker);
+});
+
+function audit81Fixture(name) {
+  const directory = path.join(root, 'audit81-' + name);
+  fs.mkdirSync(directory, { mode: 0o700 });
+  return { directory, receipt: sanitizeReceipt({
+    operation_id: crypto.randomUUID(), timestamp: '2026-10-28T14:00:00.000Z',
+    profile: 'general', source_extension: '.txt', result: 'released',
+    residual_pii_verification: 'passed'
+  }) };
+}
+function audit81Thrown(action) {
+  let threw = false, received;
+  try { action(); } catch (error) { threw = true; received = error; }
+  assert.strictEqual(threw, true, 'the original failure must remain a throw, including falsy causes');
+  return received;
+}
+function audit81Temp(candidate, directory) {
+  assert.strictEqual(path.dirname(candidate), directory);
+  assert.match(path.basename(candidate), /^\.audit_[0-9a-f-]{36}\.tmp$/i);
+  return candidate;
+}
+const audit81PrimaryCauses = [
+  undefined, null, false, 0, '',
+  Object.freeze(Object.assign(new Error('synthetic audit81 I/O failure'), { code: 'EIO' }))
+];
+
+test('audit81 capacity refusal never addresses an unowned temporary pathname', () => {
+  const causes = [
+    ...audit81PrimaryCauses,
+    Object.freeze(Object.assign(new Error('capacity unavailable'), { code: 'LOCAL_CAPACITY_UNAVAILABLE' })),
+    Object.freeze(Object.assign(new Error('capacity insufficient'), { code: 'LOCAL_CAPACITY_INSUFFICIENT' }))
+  ];
+  for (const [index, primary] of causes.entries()) {
+    const { directory, receipt } = audit81Fixture('preflight-' + index);
+    const io = Object.create(fs);
+    let writes = 0, renames = 0, unlinks = 0, checks = 0;
+    io.writeFileSync = () => { writes++; throw Error('unexpected write before admitted capacity'); };
+    io.renameSync = () => { renames++; throw Error('unexpected rename before admitted capacity'); };
+    io.unlinkSync = candidate => { unlinks++; return fs.unlinkSync(candidate); };
+    const received = audit81Thrown(() => writePackageAudit(receipt, directory, {
+      fs: io, assertWritableCapacity: () => { checks++; throw primary; }
+    }));
+    assert.strictEqual(received, primary);
+    assert.strictEqual(checks, 1);
+    assert.strictEqual(writes, 0); assert.strictEqual(renames, 0); assert.strictEqual(unlinks, 0);
+    assert.deepStrictEqual(fs.readdirSync(directory), []);
+  }
+});
+
+test('audit81 actual wx EEXIST preserves the separately created foreign leaf', () => {
+  const { directory, receipt } = audit81Fixture('actual-eexist');
+  const foreign = Buffer.from('FOREIGN-AUDIT81-EXCLUSIVE-LEAF');
+  const io = Object.create(fs);
+  let temporary, exclusiveError, writes = 0, renames = 0, unlinks = 0;
+  io.writeFileSync = (candidate, serialized, options) => {
+    writes++; temporary = audit81Temp(candidate, directory);
+    assert.strictEqual(options.flag, 'wx'); assert.strictEqual(options.mode, 0o600);
+    // Create the competing object using the real filesystem, then obtain the
+    // real exclusive-open refusal. No UUID monkeypatch or fake EEXIST success.
+    fs.writeFileSync(temporary, foreign, { flag: 'wx', mode: 0o600 });
+    try { fs.writeFileSync(candidate, serialized, options); }
+    catch (error) { exclusiveError = error; throw error; }
+    throw Error('the actual second exclusive create unexpectedly succeeded');
+  };
+  io.renameSync = () => { renames++; throw Error('EEXIST cannot authorize rename'); };
+  io.unlinkSync = candidate => { unlinks++; return fs.unlinkSync(candidate); };
+  const received = audit81Thrown(() => writePackageAudit(receipt, directory, {
+    fs: io, assertWritableCapacity: () => {}
+  }));
+  assert.strictEqual(received, exclusiveError); assert.strictEqual(received.code, 'EEXIST');
+  assert.strictEqual(writes, 1); assert.strictEqual(renames, 0); assert.strictEqual(unlinks, 0);
+  assert.deepStrictEqual(fs.readFileSync(temporary), foreign);
+  assert.strictEqual(fs.existsSync(path.join(directory, 'audit.json')), false);
+  assert.deepStrictEqual(fs.readdirSync(directory), [path.basename(temporary)]);
+});
+
+test('audit81 partial own writes preserve their bytes and the exact primary even when falsy', () => {
+  for (const [index, primary] of audit81PrimaryCauses.entries()) {
+    const { directory, receipt } = audit81Fixture('partial-' + index);
+    const target = path.join(directory, 'audit.json'), previous = Buffer.from('OLD-AUDIT81-RECEIPT');
+    fs.writeFileSync(target, previous, { flag: 'wx', mode: 0o600 });
+    const io = Object.create(fs);
+    let temporary, partial, writes = 0, renames = 0, unlinks = 0;
+    io.writeFileSync = (candidate, serialized, options) => {
+      writes++; temporary = audit81Temp(candidate, directory);
+      partial = Buffer.from(serialized, 'utf8').subarray(0, 23);
+      fs.writeFileSync(candidate, partial, options); // Real exclusive creation and real partial bytes.
+      throw primary;
+    };
+    io.renameSync = () => { renames++; throw Error('a failed write must not publish'); };
+    io.unlinkSync = candidate => { unlinks++; return fs.unlinkSync(candidate); };
+    const received = audit81Thrown(() => writePackageAudit(receipt, directory, {
+      fs: io, assertWritableCapacity: () => {}
+    }));
+    assert.strictEqual(received, primary);
+    assert.strictEqual(writes, 1); assert.strictEqual(renames, 0); assert.strictEqual(unlinks, 0);
+    assert.deepStrictEqual(fs.readFileSync(temporary), partial);
+    assert.deepStrictEqual(fs.readFileSync(target), previous);
+    assert.strictEqual(fs.readdirSync(directory).length, 2);
+  }
+});
+
+test('audit81 a post-write name replacement never becomes cleanup authority over foreign bytes', () => {
+  const { directory, receipt } = audit81Fixture('replacement');
+  const target = path.join(directory, 'audit.json'), previous = Buffer.from('OLD-AUDIT81-RECEIPT');
+  const preserved = path.join(directory, 'preserved-own-audit.json');
+  const foreign = Buffer.from('FOREIGN-AUDIT81-REPLACEMENT');
+  fs.writeFileSync(target, previous, { flag: 'wx', mode: 0o600 });
+  const primary = Object.freeze(Object.assign(new Error('synthetic publication refusal'), { code: 'EIO' }));
+  const io = Object.create(fs);
+  let temporary, ownBytes, writes = 0, renames = 0, unlinks = 0;
+  io.writeFileSync = (candidate, serialized, options) => {
+    writes++; temporary = audit81Temp(candidate, directory); ownBytes = Buffer.from(serialized, 'utf8');
+    return fs.writeFileSync(candidate, serialized, options);
+  };
+  io.renameSync = (from, to) => {
+    renames++; assert.strictEqual(from, temporary); assert.strictEqual(to, target);
+    fs.renameSync(from, preserved);
+    fs.writeFileSync(from, foreign, { flag: 'wx', mode: 0o600 });
+    throw primary; // Modeled rename refusal after a real, separately witnessed object replacement.
+  };
+  io.unlinkSync = candidate => { unlinks++; return fs.unlinkSync(candidate); };
+  const received = audit81Thrown(() => writePackageAudit(receipt, directory, {
+    fs: io, assertWritableCapacity: () => {}
+  }));
+  assert.strictEqual(received, primary);
+  assert.strictEqual(writes, 1); assert.strictEqual(renames, 1); assert.strictEqual(unlinks, 0);
+  assert.deepStrictEqual(fs.readFileSync(temporary), foreign);
+  assert.deepStrictEqual(fs.readFileSync(preserved), ownBytes);
+  assert.deepStrictEqual(JSON.parse(ownBytes), receipt);
+  assert.deepStrictEqual(fs.readFileSync(target), previous);
+  assert.strictEqual(fs.readdirSync(directory).length, 3);
+});
+
+test('audit81 successful real rename leaves exactly the canonical audit without rollback deletion', () => {
+  const { directory, receipt } = audit81Fixture('successful-rename');
+  const io = Object.create(fs);
+  let temporary, writes = 0, renames = 0, unlinks = 0;
+  io.writeFileSync = (candidate, serialized, options) => {
+    writes++; temporary = audit81Temp(candidate, directory);
+    return fs.writeFileSync(candidate, serialized, options);
+  };
+  io.renameSync = (from, to) => {
+    renames++; assert.strictEqual(from, temporary); assert.strictEqual(to, path.join(directory, 'audit.json'));
+    return fs.renameSync(from, to);
+  };
+  io.unlinkSync = candidate => { unlinks++; return fs.unlinkSync(candidate); };
+  const returned = writePackageAudit(receipt, directory, { fs: io, assertWritableCapacity: () => {} });
+  assert.deepStrictEqual(returned, receipt);
+  assert.deepStrictEqual(json(path.join(directory, 'audit.json')), receipt);
+  assert.strictEqual(writes, 1); assert.strictEqual(renames, 1); assert.strictEqual(unlinks, 0);
+  assert.strictEqual(fs.existsSync(temporary), false, 'the real rename, not cleanup, consumed the source name');
+  assert.deepStrictEqual(fs.readdirSync(directory), ['audit.json']);
+});
+
+test('audit81 a modeled lost rename reply preserves the actually committed receipt', () => {
+  const { directory, receipt } = audit81Fixture('lost-rename-reply');
+  const io = Object.create(fs);
+  const primary = Object.freeze(Object.assign(new Error('synthetic lost reply'), { code: 'EIO' }));
+  let temporary, writes = 0, renames = 0, unlinks = 0;
+  io.writeFileSync = (candidate, serialized, options) => {
+    writes++; temporary = audit81Temp(candidate, directory);
+    return fs.writeFileSync(candidate, serialized, options);
+  };
+  io.renameSync = (from, to) => {
+    renames++; assert.strictEqual(from, temporary); assert.strictEqual(to, path.join(directory, 'audit.json'));
+    fs.renameSync(from, to); // Actual namespace commit before the injected reply error.
+    throw primary;
+  };
+  io.unlinkSync = candidate => { unlinks++; return fs.unlinkSync(candidate); };
+  const received = audit81Thrown(() => writePackageAudit(receipt, directory, {
+    fs: io, assertWritableCapacity: () => {}
+  }));
+  assert.strictEqual(received, primary);
+  assert.strictEqual(writes, 1); assert.strictEqual(renames, 1); assert.strictEqual(unlinks, 0);
+  assert.strictEqual(fs.existsSync(temporary), false);
+  assert.deepStrictEqual(json(path.join(directory, 'audit.json')), receipt);
+  assert.deepStrictEqual(fs.readdirSync(directory), ['audit.json']);
+});
+
+test('audit81 partial ENOSPC still normalizes capacity without deleting either retained object', () => {
+  const { directory, receipt } = audit81Fixture('partial-enospc');
+  const target = path.join(directory, 'audit.json'), previous = Buffer.from('OLD-AUDIT81-RECEIPT');
+  fs.writeFileSync(target, previous, { flag: 'wx', mode: 0o600 });
+  const primary = Object.freeze(Object.assign(new Error('synthetic disk full'), { code: 'ENOSPC' }));
+  const io = Object.create(fs);
+  let temporary, partial, writes = 0, renames = 0, unlinks = 0;
+  io.writeFileSync = (candidate, serialized, options) => {
+    writes++; temporary = audit81Temp(candidate, directory); partial = Buffer.from(serialized, 'utf8').subarray(0, 19);
+    fs.writeFileSync(candidate, partial, options); // The fault is injected after an actual small exclusive write.
+    throw primary;
+  };
+  io.renameSync = () => { renames++; throw Error('partial ENOSPC cannot publish'); };
+  io.unlinkSync = candidate => { unlinks++; return fs.unlinkSync(candidate); };
+  const received = audit81Thrown(() => writePackageAudit(receipt, directory, {
+    fs: io, assertWritableCapacity: () => {}
+  }));
+  assert.notStrictEqual(received, primary); assert.strictEqual(received.code, 'LOCAL_CAPACITY_RACE');
+  assert.strictEqual(primary.code, 'ENOSPC');
+  assert.strictEqual(writes, 1); assert.strictEqual(renames, 0); assert.strictEqual(unlinks, 0);
+  assert.deepStrictEqual(fs.readFileSync(temporary), partial);
+  assert.deepStrictEqual(fs.readFileSync(target), previous);
+  assert.strictEqual(fs.readdirSync(directory).length, 2);
 });
 
 try {

@@ -2932,6 +2932,12 @@ fn begin_native_exit(state: DesktopState) {
 
 fn main() {
     source_fingerprint::retain();
+    let profile = match native_smoke::from_environment() {
+        Ok(profile) => profile,
+        Err(_) => std::process::exit(65),
+    };
+    let isolated_smoke = profile.is_some();
+    if NATIVE_SMOKE_PROFILE.set(profile).is_err() { std::process::exit(65); }
     if std::env::args_os().nth(1).is_some_and(|value| value == "--startup-diagnostics") {
         let directory = diagnostic_directory();
         if std::fs::create_dir_all(&directory).is_err() { std::process::exit(70); }
@@ -2942,18 +2948,11 @@ fn main() {
         } else { std::process::exit(70); }
         return;
     }
-    let profile = match native_smoke::from_environment() {
-        Ok(profile) => profile,
-        Err(_) => std::process::exit(65),
-    };
-    let isolated_smoke = profile.is_some();
-    if profile
-        .as_ref()
+    if NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref)
         .is_some_and(|value| native_smoke::prepare_webview_directory(value).is_err())
     {
         std::process::exit(65);
     }
-    let _ = NATIVE_SMOKE_PROFILE.set(profile);
     let context = tauri::generate_context!();
     diagnostic_event("application_started", None, "ready", None, None);
     if isolated_smoke {
@@ -3929,6 +3928,29 @@ mod tests {
         let mut invalid = response;
         invalid["error_details"]["selection_files"][0]["reason_code"] = json!("raw error with content");
         assert!(validate_private_response(&invalid, id).is_err());
+    }
+
+    #[test]
+    fn local_error_labels_match_utf8_controls_and_omit_only_optional_details() {
+        let id = "0123456789abcdef";
+        let response = |label: &str| json!({"schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+            "error_code": "SOURCE_ARTIFACT_IGNORED", "error_details": {"selection_files": [
+                {"name": label, "reason_code": "SOURCE_ARTIFACT_IGNORED"}], "selection_count": 1}});
+        for label in ["Unterordner/ÄÖÜäöüß.csv".to_string(), "Emoji-😀.txt".to_string(),
+            "x".repeat(1024), "ä".repeat(512), "😀".repeat(256)] {
+            assert!(validate_private_response(&response(&label), id).is_ok());
+        }
+        for code in (0..=31).chain(127..=159) {
+            let label = format!("a{}b.docx", char::from_u32(code).unwrap());
+            assert!(validate_private_response(&response(&label), id).is_err());
+        }
+        for label in ["x".repeat(1025), "ä".repeat(513), "😀".repeat(257)] {
+            assert!(validate_private_response(&response(&label), id).is_err());
+        }
+        for code in ["SOURCE_ARTIFACT_IGNORED", "SOURCE_FOLDER_UNSUPPORTED_FILES", "DOCUMENT_EXPORT_NAME_INVALID"] {
+            let omitted = json!({"schema": RESPONSE_SCHEMA, "request_id": id, "ok": false, "error_code": code});
+            assert!(validate_private_response(&omitted, id).is_ok(), "{code}");
+        }
     }
 
     #[test]

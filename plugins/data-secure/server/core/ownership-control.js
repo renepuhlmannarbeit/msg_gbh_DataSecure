@@ -4,12 +4,14 @@
 // their separate legacy protocol; missing native configuration is NEVER a
 // reason to silently select that protocol in a real native desktop process.
 const path = require('node:path');
-const { createOwnershipGuard } = require('./native-ownership-guard');
+const { createOwnershipGuard, hasUnconfirmedCleanup } = require('./native-ownership-guard');
 const { bundleContext } = require('../standalone/macos-bundle-layout');
 let verifiedArtifact = null;
 let releaseUnconfirmed = false;
 const active = new Map();
+const confirmedBusyErrors = new WeakSet();
 const failure = code => Object.assign(new Error(code), { code });
+const isConfirmedOwnershipBusy = error => confirmedBusyErrors.has(error);
 
 function configureOwnershipControl(artifact) {
   if (verifiedArtifact || active.size) throw failure('OWNERSHIP_GUARD_ALREADY_CONFIGURED');
@@ -67,16 +69,27 @@ function withOwnershipControl(root, callback) {
     if (value && typeof value.then === 'function') throw failure('OWNERSHIP_GUARD_ASYNC_FORBIDDEN');
     reentrant.assertHeld(); return value;
   }
-  const factory = createOwnershipGuard({ root, verifiedArtifact: nativeArtifact() });
-  let guard, result, thrown, failed = false;
+  let factory;
+  try { factory = createOwnershipGuard({ root, verifiedArtifact: nativeArtifact() }); }
+  catch (error) {
+    if (hasUnconfirmedCleanup(error)) releaseUnconfirmed = true;
+    throw error;
+  }
+  let guard, result, thrown, busyError, failed = false;
   try {
     guard = factory.tryAcquire();
-    if (!guard) throw failure('OWNERSHIP_GUARD_BUSY');
+    if (!guard) {
+      busyError = failure('OWNERSHIP_GUARD_BUSY');
+      throw busyError;
+    }
     active.set(key, guard); guard.assertHeld();
     result = callback(guard);
     if (result && typeof result.then === 'function') throw failure('OWNERSHIP_GUARD_ASYNC_FORBIDDEN');
     guard.assertHeld();
-  } catch (error) { thrown = error; failed = true; }
+  } catch (error) {
+    if (hasUnconfirmedCleanup(error)) releaseUnconfirmed = true;
+    thrown = error; failed = true;
+  }
   finally {
     active.delete(key);
     try { if (guard && guard.release() !== true) throw failure('OWNERSHIP_GUARD_CLOSE_UNCONFIRMED'); }
@@ -84,7 +97,12 @@ function withOwnershipControl(root, callback) {
     try { if (factory.close() !== true) throw failure('OWNERSHIP_GUARD_CLOSE_UNCONFIRMED'); }
     catch (error) { releaseUnconfirmed = true; if (!failed) { thrown = error; failed = true; } }
   }
-  if (failed) throw thrown;
+  if (failed) {
+    // Only a refused acquisition with a confirmed closed root can authorize
+    // another attempt. Preserve the original Busy if root cleanup failed.
+    if (busyError && thrown === busyError && !releaseUnconfirmed) confirmedBusyErrors.add(busyError);
+    throw thrown;
+  }
   return result;
 }
 
@@ -99,4 +117,4 @@ function assertNativeOwnershipRuntime() {
   catch { throw failure('OWNERSHIP_GUARD_INTEGRITY_FAILED'); }
 }
 
-module.exports = Object.freeze({ withOwnershipControl, configureOwnershipControl, assertNativeOwnershipRuntime });
+module.exports = Object.freeze({ withOwnershipControl, configureOwnershipControl, assertNativeOwnershipRuntime, isConfirmedOwnershipBusy });

@@ -4,6 +4,7 @@
 // by spelling, or pass these private source labels to the main renderer.
 const { buildContactDraft, validateContactDraft, validateContactAnswer } = require('../core/ocr-contact-review');
 const { MAX_REVIEW_CHARS } = require('../core/local-review-model');
+const { standaloneReviewSourceLabel } = require('./standalone-review-budget');
 const invalid = () => Object.assign(new Error('Die OCR-Prüfgruppe konnte nicht sicher zugeordnet werden.'), { code: 'OCR_CONTACT_REVIEW_INVALID' });
 
 function buildContactBatch(entries) {
@@ -27,7 +28,8 @@ function buildContactBatch(entries) {
         page: candidate.page, line: candidate.line, kind: candidate.contact_kind,
         ...(candidate.image ? { image: candidate.image } : {}) });
     }
-    documents.push({ document_index: index + 1, source_label: entry.source_label, candidate_ids: ids });
+    documents.push({ document_index: index + 1,
+      source_label: standaloneReviewSourceLabel(entry.source_label, index + 1), candidate_ids: ids });
   }
   const draft = buildContactDraft({ original_text: text, contacts, source_type: 'pdf',
     ...(mode ? { processing_mode: mode } : {}) });

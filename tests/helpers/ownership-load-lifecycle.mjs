@@ -107,12 +107,17 @@ function waitForProcess(child, { encodeFrame, safeCodes = new Set(), deadlineMs 
       if (settled) return;
       closed = true; exitCode = code; exitSignal = signal; finish();
     });
-    for (const stream of [child.stdin, child.stdout, child.stderr])
-      stream?.on('error', () => stop('OWNERSHIP_LOAD_STREAM_FAILED'));
-    child.stdout.on('data', onData);
-    child.stderr.on('data', () => {}); // Drain, but never disclose dyld/vendor text.
     deadlineTimer = schedule(() => { deadlineExceeded = true; stop('OWNERSHIP_LOAD_DEADLINE_EXCEEDED'); }, deadlineMs);
     if (deadlineTimer === null) stop('OWNERSHIP_LOAD_TIMER_FAILED');
+    // Failed spawn can leave a pipe absent. Install the deadline before any
+    // stream setup, so even a synchronous setup failure takes the bounded reap
+    // path instead of rejecting the executor and abandoning its owned child.
+    try {
+      for (const stream of [child.stdin, child.stdout, child.stderr])
+        stream?.on('error', () => stop('OWNERSHIP_LOAD_STREAM_FAILED'));
+      child.stdout.on('data', onData);
+      child.stderr.on('data', () => {}); // Drain, never disclose vendor text.
+    } catch { stop('OWNERSHIP_LOAD_STREAM_FAILED'); }
   });
 }
 

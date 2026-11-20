@@ -80,8 +80,11 @@ function applySpans(text, spans, applied) {
 }
 
 function lineBoundsAt(text, index) {
-  const from = text.lastIndexOf('\n', Math.max(0, index - 1)) + 1;
+  const before = Math.max(0, index - 1);
+  const from = Math.max(text.lastIndexOf('\n', before), text.lastIndexOf('\r', before)) + 1;
   let to = text.indexOf('\n', index);
+  const carriage = text.indexOf('\r', index);
+  if (to < 0 || carriage >= 0 && carriage < to) to = carriage;
   if (to < 0) to = text.length;
   return { from, to };
 }

@@ -1266,7 +1266,7 @@ try {
         assert_eq!(handoff.origin, Origin::ExistingCandidate);
         assert_eq!(handoff.identity, original);
         // Rust must not silently grant this candidate the new-root ACL proof.
-        // The unchanged native C guard must refuse it before workspace mkdir.
+        // Existing-root admission is decided separately by the native C guard.
         assert!(prepared.root.verify_controlled().is_err());
         assert_eq!(security_bytes(&fixture.root()), before);
         assert_eq!(

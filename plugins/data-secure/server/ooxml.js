@@ -5,7 +5,7 @@ const { readZip, readZipPartial, ZipError } = require('./zip-reader');
 const { createXlsxReader } = require('./xlsx-structure');
 const { readXml, assertXmlCharacters } = require('./xml-reader');
 const { validateOpcControls } = require('./gateway/opc-source-validator');
-const { ownerDiagrams } = require('./office-diagrams');
+const {createOfficeDiagramBudget,createOfficeDiagramSession,readOfficeDiagrams,isOfficeDiagramFailure}=require('./office-diagrams');
 const { wordGridNumber, bindWordTableGrids, MAX_WORD_TABLE_COLUMNS } = require('./word-table-grid');
 const { renderTableCells, tableFieldPlan } = require('./office-table-projection');
 const { createDrawingTableCollector } = require('./drawing-table-grid');
@@ -14,7 +14,7 @@ const { mathMarkdown, mathParagraphMarkdown } = require('./office-math-projectio
 const {readWordNumbering,createWordNumberingSession,readWordCommentMetadata,createWordStoryContext}=require('./word-content-context');
 const {isProtectedFieldHeader}=require('./privacy/field-value-coverage');
 const {CONTENT_PERSON_FIELD_POLICY}=require('./core/person-field-policy');
-const { readPresentationComments } = require('./presentation-comments');
+const { readPresentationComments, createPresentationCommentBudget } = require('./presentation-comments');
 const { createOfficeImageGeometry } = require('./office-image-geometry');
 const { createXlsxContextSession } = require('./xlsx-content-context');
 const { xlsxContextSections,xlsxSourceColumnFields } = require('./xlsx-context-projection');
@@ -44,6 +44,11 @@ const MAX_EMBEDDED_BYTES = 50 * 1024 * 1024;
 const MAX_EMBEDDED_EXPANDED_BYTES = 100 * 1024 * 1024;
 const SUPPORTED_EMBEDDED = /^(?:word|xl|ppt)\/embeddings\/[^/]+\.(docx|xlsx|pptx)$/i;
 const PARTIAL_ENTRY_STATE = new WeakMap();
+// Root and embedded presentations share the actual parser-owned graph budget.
+const PRESENTATION_COMMENT_BUDGETS = new WeakMap();
+// Root and admitted embedded Office packages share only resource debt.
+// Their owner/model caches remain separately bound to each actual entries Map.
+const OFFICE_DIAGRAM_BUDGETS = new WeakMap();
 // Only successful, actually read worksheet models can authorize in-cell images.
 // This private cache never turns consumed metadata into a coverage waiver.
 const XLSX_CONTEXT_MODELS = new WeakMap();
@@ -504,6 +509,40 @@ function extractionText(value, inCell = false, literalGfm = false) {
   text = text.replace(/^ +| +$/gm, (spaces) => '&#32;'.repeat(spaces.length))
     .replace(/ {2,}/g, (spaces) => ' ' + '&#32;'.repeat(spaces.length - 1));
   return text.replace(/\n/g, inCell ? '<br>' : '  \n');
+}
+function diagramTextLength(value,literalGfm){
+ // Exact UTF16 length of extractionText(value,false,literalGfm), without
+ // allocating escaped strings. A paired render check refuses future drift.
+ let length=0;
+ for(let index=0;index<value.length;index++){
+  const char=value[index];
+  if(char===' '){
+   let end=index+1;while(value[end]===' ')end++;
+   const count=end-index,boundary=index===0||/[\n\u2028\u2029]/u.test(value[index-1])||
+    end===value.length||/[\n\u2028\u2029]/u.test(value[end]);
+   length+=boundary?5*count:count>1?1+5*(count-1):1;index=end-1;
+  }else if(char==='&')length+=5;
+  else if(char==='<'||char==='>')length+=4;
+  else if(char==='\t')length+=4;
+  else if(char==='\r')length+=5;
+  else if(char==='\n')length+=3;
+  else if(/[\\`*_[\]{}()#+.!|]/u.test(char)||literalGfm&&char==='~')length+=2;
+  else length++;
+ }
+ return length;
+}
+function createOoxmlDiagramSession(entries,options,budget){
+ const literalGfm=Boolean(options.literalMarkup);
+ return createOfficeDiagramSession(entries,xmlDecode,{
+  measureText:value=>diagramTextLength(value,literalGfm),
+  renderText:value=>extractionText(value,false,literalGfm)
+ },budget);
+}
+function noteDiagramRead(entries,owner,notices,warnings){
+ if(!notices.length)return;
+ const message='SmartArt konnte nicht eindeutig intern und strukturiert gelesen werden; Inhaltsabdeckung bleibt unvollständig.';
+ if(!warnings.includes(message))warnings.push(message);
+ if(notices.includes('TEXT_LIMIT_PARTIAL'))notePartialPart(entries,'TEXT_LIMIT_PARTIAL','smartart:'+owner);
 }
 function metadataSection(entries, sourcePart, fields, options = {}) {
   const data=entries.get(sourcePart); if(!data)return null; const xml=data.toString('utf8'), lines=[];
@@ -1596,43 +1635,35 @@ function hasCompleteXmlRoot(xml, rootTag) {
   if (/\/\s*>$/u.test(opening[0])) return true;
   return new RegExp(`</(?:(?:[A-Za-z_][\\w.-]*):)?${escaped}\\s*>`, 'i').test(xml.slice(opening.index + opening[0].length));
 }
-function docxReferencedHeaderFooter(entries) {
+function docxReferencedHeaderFooter(entries, options = {}) {
   const main = entries.get('word/document.xml');
-  if (!main) return { present: false, orderedParts: [], issues: 1 };
-  let body;
-  try { body = wordPartScope(main.toString('utf8'), 'body').body; }
-  catch (error) { if (XML_NON_TEXT_FAILURES.has(error)) throw error; return { present: false, orderedParts: [], issues: 1 }; }
-  const references = [];
-  for (const match of body.matchAll(/<w:(headerReference|footerReference)\b([^>]*)>/giu)) {
-    const id = /\br:id=["']([^"']+)["']/iu.exec(match[2])?.[1];
-    references.push({ type: match[1] === 'headerReference' ? 'header' : 'footer', id });
+  if (!main) return { present: true, orderedParts: [], issues: 1 };
+  let selected;
+  try {
+    const understoodNamespaces=new Set([...SUPPORTED_WORD_MARKUP_CHOICE_NAMESPACES,
+      ...(options.contentMode===true?OFFICE_MATH_NAMESPACES:[])]);
+    selected=wordChartStoryReferences(main.toString('utf8'),xmlDecode,wordStructureError,understoodNamespaces);
+  } catch (error) {
+    if (XML_NON_TEXT_FAILURES.has(error)) throw error;
+    return { present: true, orderedParts: [], issues: 1 };
   }
-  if (!references.length) return { present: false, orderedParts: [], issues: 0 };
-  const rels = entries.get('word/_rels/document.xml.rels');
-  if (!rels) return { present: true, orderedParts: [], issues: references.length };
-  const byId = new Map();
-  let issues = 0;
-  for (const match of rels.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/giu)) {
-    const attrs = match[1];
-    const id = /\bId=["']([^"']+)["']/iu.exec(attrs)?.[1];
-    const type = relationshipKind(/\bType=["']([^"']+)["']/iu.exec(attrs)?.[1]);
-    if (!['header', 'footer'].includes(type)) continue;
-    if (!id || byId.has(id)) { issues++; continue; }
-    byId.set(id, { type, attrs });
-  }
-  const orderedParts = [];
+  if(!selected)return { present: true, orderedParts: [], issues: 1 };
+  const references=selected.orderedHeaderFooterReferences;
+  // A chosen empty/invalid arm never adopts unchosen stories via inventory.
+  // Preserve the old no-declaration fallback only when raw absence is proven.
+  if(!selected.headerFooterReferencePresent&&!references.length)return { present: false, orderedParts: [], issues: 0 };
+  if (!entries.has('word/_rels/document.xml.rels')) return { present: true, orderedParts: [], issues: references.length };
+  // Reuse the existing expanded-name OPC reader, including duplicate-ID
+  // refusal. Relationship namespace prefixes never choose a different reader.
+  const relationships = rawOfficeRelationships(entries, 'word/document.xml', '.docx');
+  const orderedParts = []; let issues = 0;
   for (const reference of references) {
-    const relation = reference.id ? byId.get(reference.id) : null;
-    if (!relation || relation.type !== reference.type) { issues++; continue; }
-    const target = xmlDecode(/\bTarget=["']([^"']+)["']/iu.exec(relation.attrs)?.[1] || '');
-    const external = /\bTargetMode\s*=\s*["']External["']/iu.test(relation.attrs);
-    if (external || !target || /[\\?#\0]/u.test(target) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(target) ||
-        /(?:^|\/)\.\.(?:\/|$)/u.test(target)) { issues++; continue; }
-    const resolved = path.posix.normalize(path.posix.join('word', target));
+    const edge = reference.id ? relationships.get(reference.id) : null;
+    if (!edge || edge.kind !== reference.type || /(?:^|\/)\.\.(?:\/|$)/u.test(edge.target || '')) { issues++; continue; }
     const expected = reference.type === 'header' ? /^word\/header\d+\.xml$/iu : /^word\/footer\d+\.xml$/iu;
+    const resolved = rawOfficeTarget(entries, 'word/document.xml', relationships, reference.id, reference.type, expected);
     const root = reference.type === 'header' ? 'hdr' : 'ftr';
-    if (!expected.test(resolved) || !entries.has(resolved) ||
-        !hasCompleteWordRoot(entries.get(resolved).toString('utf8'), root)) { issues++; continue; }
+    if (!resolved || !hasCompleteWordRoot(entries.get(resolved).toString('utf8'), root)) { issues++; continue; }
     if (!orderedParts.includes(resolved)) orderedParts.push(resolved);
   }
   return { present: true, orderedParts, issues };
@@ -1659,13 +1690,13 @@ function packageMainRelationshipIssueCount(entries, expectedMainPart) {
   }
   return issues + (valid === 1 ? 0 : 1);
 }
-function docxStoryRelationshipIssueCount(entries) {
+function docxStoryRelationshipIssueCount(entries, options = {}) {
   // Word's secondary stories are distinct package parts. Merely finding a
   // plausible filename is not a coverage proof: the part must be reachable
   // from the main document through its declared internal relationship.
   const relPath = 'word/_rels/document.xml.rels';
   const rels = entries.get(relPath);
-  const headerFooter = docxReferencedHeaderFooter(entries);
+  const headerFooter = docxReferencedHeaderFooter(entries, options);
   const stories = [...entries.keys()].filter((name) =>
     /^word\/(?:header\d+|footer\d+|comments|footnotes|endnotes)\.xml$/i.test(name)
   );
@@ -2036,7 +2067,7 @@ function docxCoverageWarnings(entries, options = {}) {
   }
   unsupported += docxMainRelationshipIssueCount(entries);
   unsupported += docxMainWordRootIssueCount(entries);
-  unsupported += docxStoryRelationshipIssueCount(entries);
+  unsupported += docxStoryRelationshipIssueCount(entries, options);
   for (const binding of commentBindings.values()) {
     // A point comment needs no range. A ranged reference needs exactly one
     // ordered pair; any reference needs one actual, uniquely identified body.
@@ -2054,7 +2085,7 @@ function parseDocx(entries, options = {}) {
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
   const sections=sectionList(entries, options); const body=renderWordBody(main.toString('utf8'), {...options,wordStoryPart:'word/document.xml'});
   if(body)sections.push({kind:'text',source_part:'word/document.xml',markdown:body});
-  const headerFooter = docxReferencedHeaderFooter(entries);
+  const headerFooter = docxReferencedHeaderFooter(entries, options);
   const orderedStories = headerFooter.present ? headerFooter.orderedParts : [
     ...[...entries.keys()].filter((name) => /^word\/header\d+\.xml$/iu.test(name)).sort((left, right) => left.localeCompare(right, 'en')),
     ...[...entries.keys()].filter((name) => /^word\/footer\d+\.xml$/iu.test(name)).sort((left, right) => left.localeCompare(right, 'en'))
@@ -2648,6 +2679,9 @@ function pptChartRelationshipCoverage(entries, slides, options = {}) {
   if (options.preserveText) {
     const overrides = xlsxContentOverrides(entries); let occurrences = 0;
     for (const slide of slides) {
+      // Repeated presentation references may revisit an already quarantined
+      // owner. Only our actual earlier quarantine authorizes this skip.
+      if (!entries.has(slide) && PARTIAL_ENTRY_STATE.get(entries)?.noted.has(`DOCUMENT_PARTS_DAMAGED:${slide}`)) continue;
       try {
         const linked = boundOwnerCharts(entries,slide,'ppt',pptxStructureError,overrides);
         issues += linked.issues; byOwner.set(slide,linked.targets);
@@ -3028,7 +3062,7 @@ function inheritedContentValues(xml,options={}) {
   const result=retained.length?[retained.join('\n\n')]:[];
   result.rendered=rendered;return result;
 }
-function augmentDiagramText(result,entries,options) {
+function augmentDiagramText(result,entries,options,diagramSession) {
   if (options.contentMode!==true) return result;
   const original=[...result.sections], byOwner=new Map();
   for (const section of original) {
@@ -3045,14 +3079,12 @@ function augmentDiagramText(result,entries,options) {
   }
   for (const owner of byOwner.keys()) {
     try {
-      for (const model of ownerDiagrams(entries,owner,xmlDecode)) {
-        if (!model.rows.length) continue;
-        byOwner.get(owner).push({kind:'text',source_part:owner,markdown:'## SmartArt\n\n'+model.rows.map(row=>
-          `${'  '.repeat(row.depth)}- ${extractionText(row.text,false,options.literalMarkup)}`).join('\n')});
-      }
+      const diagrams=readOfficeDiagrams(diagramSession,owner);
+      noteDiagramRead(entries,owner,diagrams.notices,result.warnings);
+      for(const model of diagrams.models)byOwner.get(owner).push({kind:'text',source_part:owner,markdown:model.markdown});
     } catch (error) {
-      if (error?.code!=='PPTX_STRUCTURE_UNSAFE') throw error;
-      result.warnings.push('SmartArt konnte nicht eindeutig intern und strukturiert gelesen werden; Inhaltsabdeckung bleibt unvollständig.');
+      if(!isOfficeDiagramFailure(error))throw error;
+      noteDiagramRead(entries,owner,[error.code==='PPTX_STRUCTURE_LIMIT'?'TEXT_LIMIT_PARTIAL':'PPTX_STRUCTURE_UNSAFE'],result.warnings);
     }
   }
   const sections=sectionList(entries,options), emitted=new Set();
@@ -3111,8 +3143,9 @@ function augmentWordChartText(result,entries,options) {
   for(const [owner,extra]of byOwner)if(!emitted.has(owner))sections.push(...extra);
   result.sections=sections;result.markdown=sections.map(section=>section.markdown).join('\n\n');return result;
 }
-function parsePptx(entries, options = {}) {
+function parsePptx(entries, options = {}, commentBudget = createPresentationCommentBudget(), diagramSession) {
   options={...options,officeTableContext:{unverified:false},officeMathContext:{unverified:false}};
+  if(options.contentMode===true&&diagramSession===undefined)diagramSession=createOoxmlDiagramSession(entries,options);
   const optionalCommentFailure=(slidePart,error)=>{
     const state=PARTIAL_ENTRY_STATE.get(entries);
     if(options.partialExtraction!==true||!state||!['PPTX_STRUCTURE_UNSAFE','PPTX_STRUCTURE_LIMIT'].includes(error?.code))return false;
@@ -3131,11 +3164,15 @@ function parsePptx(entries, options = {}) {
   else { slideIds = []; while ((m = sr.exec(presentation))) slideIds.push(/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1]); }
   for (const id of slideIds) { const target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target); }
   if(!presentation||!slides.length)issues++;
-  const notesCoverage = pptNotesRelationshipCoverage(entries, slides);
-  const masterCoverage = pptMasterLayoutCoverage(entries, slides);
   const chartCoverage = pptChartRelationshipCoverage(entries, slides, options), chartCache=new Map(),chartWarnings=[];
+  // Chart-reference admission can quarantine a complete owner. Derive every
+  // downstream authority from the retained owners, keeping original ordinals.
+  const retainedSlides = slides.filter(slide => entries.has(slide));
+  const notesCoverage = pptNotesRelationshipCoverage(entries, retainedSlides);
+  const masterCoverage = pptMasterLayoutCoverage(entries, retainedSlides);
   const sections=sectionList(entries, options);
   for(const [slideIndex,s] of slides.entries()){
+    if (!entries.has(s)) continue;
     const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),rawTexts=tableCoverage.proseText!==undefined?[tableCoverage.proseText]:options.preserveText?[options.contentMode?contentDrawingText(tableCoverage.prose):drawingText(tableCoverage.prose)]:textTags(tableCoverage.prose,'a:t'),texts=tableCoverage.proseMarkdown!==undefined?tableCoverage.proseMarkdown:options.preserveText?rawTexts.map(value=>extractionText(value,false,options.literalMarkup)):rawTexts,slide=[`# Folie ${n}`];
     const chartSections=options.preserveText?boundChartSections(entries,chartCoverage.byOwner.get(s)||[],`Folie ${n}`,options,chartCache,chartWarnings,pptxStructureError):[];
     tableIssues+=tableCoverage.issues;
@@ -3143,7 +3180,13 @@ function parsePptx(entries, options = {}) {
     // Keep an actual reached slide anchor if its native SmartArt is its only
     // authored text. Pure picture-only slides still cannot invent native text.
     let diagramText=false;
-    if(options.contentMode===true)try{diagramText=ownerDiagrams(entries,s,xmlDecode).some(model=>model.rows.length);}catch(error){if(error?.code!=='PPTX_STRUCTURE_UNSAFE')throw error;}
+    if(options.contentMode===true)try{
+      const diagrams=readOfficeDiagrams(diagramSession,s);diagramText=diagrams.models.length>0;
+      noteDiagramRead(entries,s,diagrams.notices,chartWarnings);
+    }catch(error){
+      if(!isOfficeDiagramFailure(error))throw error;
+      noteDiagramRead(entries,s,[error.code==='PPTX_STRUCTURE_LIMIT'?'TEXT_LIMIT_PARTIAL':'PPTX_STRUCTURE_UNSAFE'],chartWarnings);
+    }
     if(!omitEmptyPptxSection(entries,options,s,diagramText||chartSections.length?['Gebundener Diagramminhalt']:rawTexts))sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
     sections.push(...tableCoverage.tables);
     sections.push(...chartSections);
@@ -3155,7 +3198,7 @@ function parsePptx(entries, options = {}) {
       if(nt.length&&!omitEmptyPptxSection(entries,options,notes,rawNotes))sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});
     }
     if(options.contentMode)try{
-      const comments=readPresentationComments(entries,{slidePart:s});
+      const comments=readPresentationComments(entries,{slidePart:s},commentBudget);
       for(const [index,comment]of comments.comments.entries()){
         const pieces=[`## Folie ${n} · Bearbeitungskommentar ${index+1}${comment.parentId?' (Antwort)':''}`];
         pieces.push('Kommentarautor: Name, Initialen und Benutzerkennung in dieser Reihenfolge, soweit gespeichert (vertrauliche Quellmetadaten).');
@@ -3186,9 +3229,9 @@ function parsePptx(entries, options = {}) {
   for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name))appendInherited(name,data,'Folienlayout');
   for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name))appendInherited(name,data,'Folienmaster');
   sections.push(...metadataSections(entries,options));
-  const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
+  const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(retainedSlides));
   chartWarnings.push(...chartCoverage.warnings);chartCoverage.warnings=chartWarnings;
-  const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, slides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, retainedSlides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(options.officeTableContext.unverified)warnings.push('OFFICE_TABLE_CONTEXT_UNVERIFIED');
   if(options.officeTableContext.normalized)warnings.push('OFFICE_TABLE_LAYOUT_NORMALIZED');
   if(options.officeMathContext.unverified)warnings.push('MARKDOWN_SOURCE_COVERAGE_UNVERIFIED');
@@ -3398,13 +3441,23 @@ function parseOoxml(buffer, ext, context, options = {}) {
     if(expanded>MAX_EMBEDDED_EXPANDED_BYTES-state.budget.expandedBytes)throw new Error('EMBEDDED_EXPANDED_BUDGET_EXCEEDED');
     state.budget.expandedBytes+=expanded;
   }
+  let diagramSession;
+  if(options.contentMode===true){
+    let budget=OFFICE_DIAGRAM_BUDGETS.get(state.budget);
+    if(!budget){budget=createOfficeDiagramBudget();OFFICE_DIAGRAM_BUDGETS.set(state.budget,budget);}
+    diagramSession=createOoxmlDiagramSession(entries,options,budget);
+  }
   let result;
   if(ext==='.docx')result=parseDocx(entries,options);
   else if(ext==='.xlsx')result=parseXlsx(entries,options);
-  else if(ext==='.pptx')result=parsePptx(entries,options);
+  else if(ext==='.pptx'){
+    let commentBudget=PRESENTATION_COMMENT_BUDGETS.get(state.budget);
+    if(!commentBudget){commentBudget=createPresentationCommentBudget();PRESENTATION_COMMENT_BUDGETS.set(state.budget,commentBudget);}
+    result=parsePptx(entries,options,commentBudget,diagramSession);
+  }
   else throw new Error('OOXML-Format nicht unterstützt.');
   if(ext==='.docx')result=augmentWordChartText(result,entries,options);
-  result=augmentDiagramText(result,entries,options);
+  result=augmentDiagramText(result,entries,options,diagramSession);
   if(ext!=='.docx')result.warnings.push(...genericSecurityWarnings(entries));
   if(options.preserveText){
     // This entry is an engineering extractor, not a format-release switch.

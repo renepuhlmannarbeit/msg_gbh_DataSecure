@@ -13,14 +13,18 @@ const caseRoot = path.join(fixtureRoot, 'content-format-workflow'), server = pat
 const leaf = path.join(caseRoot, sentinel, 'result-export-state', 're_' + 'a'.repeat(32) + '.json');
 const parent = filename => ({ filename: path.join(server, filename) });
 let passed = 0;
-function host({ failHash = false, failWrite = false } = {}) {
-  let mode = 'success', read = false, rawBound, primary, output = '', callLog = [], held = false;
+function host(options = {}) {
+  const { failHash = false, failWrite = false, attempt = false } = options;
+  const operation = attempt ? 'readBoundFileSnapshotAttemptRecord' : 'readBoundFileSnapshot';
+  const replacementValue = Object.hasOwn(options, 'replacementValue') ? options.replacementValue : Symbol(sentinel);
+  const replacement = () => { throw replacementValue; };
+  let mode = 'success', read = false, opened = false, rawBound, primary, output = '', callLog = [], held = false;
   const realpathError = Object.assign(Error(sentinel), { code: 'EACCES' });
   const closeError = Object.assign(Error(sentinel), { code: 'EIO' });
   let fds = 0;
   function stat(file) {
     const isLeaf = file === leaf;
-    return { dev: 1n, ino: isLeaf ? 44n : 22n, birthtimeNs: 111n,
+    return { dev: 1n, ino: isLeaf ? (mode === 'replacement' && opened ? 45n : 44n) : 22n, birthtimeNs: 111n,
       size: isLeaf ? 4n : 0n, nlink: 1n, mode: isLeaf ? 0o100600n : 0o40700n,
       mtimeNs: isLeaf && read && mode === 'changed' ? 223n : 222n, ctimeNs: 333n,
       isFile() { return isLeaf; }, isDirectory() { return !isLeaf; }, isSymbolicLink() { return false; } };
@@ -28,7 +32,7 @@ function host({ failHash = false, failWrite = false } = {}) {
   const ramFs = { constants: fs.constants,
     lstatSync(file) { callLog.push(['lstatSync', file]); return stat(file); },
     realpathSync(file) { callLog.push(['realpathSync', file]); if (mode === 'realpath') throw realpathError; return file; },
-    openSync(file) { callLog.push(['openSync', file]); held = true; return ++fds; },
+    openSync(file) { callLog.push(['openSync', file]); held = true; opened = true; return ++fds; },
     fstatSync(fd) { callLog.push(['fstatSync', fd]); return stat(leaf); },
     readSync(fd, buffer, offset, length, position) {
       callLog.push(['readSync', fd, offset, length, position]);
@@ -40,7 +44,8 @@ function host({ failHash = false, failWrite = false } = {}) {
     readBoundFile: () => Buffer.from('same-frozen-source-model') };
   const rawExport = { readStandaloneExportHistoryEntry() {
     const api = fakeModule._load('../core/bound-file-io', parent('gateway/result-export.js'));
-    return api.readBoundFileSnapshot(leaf, { minimum: 1, maximum: 1024 });
+    const result = Reflect.apply(api[operation], api, [leaf, { minimum: 1, maximum: 1024 }, ...(attempt ? [replacement] : [])]);
+    return attempt ? result.bytes : result;
   } };
   const rawHistory = { readHistoryLocator() { return null; }, readStandaloneSummary() { return null; } };
   function loadBoundary() {
@@ -49,8 +54,8 @@ function host({ failHash = false, failWrite = false } = {}) {
       require(request) { return fakeModule._load(request, parent('core/bound-file-io.js')); } };
     vm.runInNewContext(boundSource, sandbox, { filename: 'ACTUAL_BOUND_SOURCE_RAM_FS' });
     rawBound = sandbox.module.exports;
-    const actual = rawBound.readBoundFileSnapshot;
-    rawBound.readBoundFileSnapshot = function (...args) {
+    const actual = rawBound[operation];
+    rawBound[operation] = function (...args) {
       try { return Reflect.apply(actual, this, args); } catch (error) { primary = error; throw error; }
     };
     return rawBound;
@@ -83,8 +88,10 @@ function host({ failHash = false, failWrite = false } = {}) {
     write(line) { if (failWrite) throw Error(sentinel); output += line; } });
   const reader = fakeModule._load('../gateway/result-export', parent('standalone/application-service.js'));
   const history = fakeModule._load('../gateway/standalone-history-store', parent('standalone/run-history.js'));
-  return { observer, restore, read(next) { mode = next; read = false; primary = undefined; return reader.readStandaloneExportHistoryEntry(); },
-    raw(next) { mode = next; read = false; primary = undefined; return loadBoundary().readBoundFileSnapshot(leaf, { minimum: 1, maximum: 1024 }); },
+  return { observer, restore, read(next) { mode = next; read = false; opened = false; primary = undefined; return reader.readStandaloneExportHistoryEntry(); },
+    raw(next) { mode = next; read = false; opened = false; primary = undefined;
+      const result = Reflect.apply(loadBoundary()[operation], rawBound, [leaf, { minimum: 1, maximum: 1024 }, ...(attempt ? [replacement] : [])]);
+      return attempt ? result.bytes : result; },
     exhaust() { for (let index = 0; index < 100; index++) assert.equal(history.readHistoryLocator(), null); },
     primary: () => primary, output: () => output,
     log() { const value = callLog; callLog = []; return value; }, held: () => held };
@@ -158,6 +165,73 @@ test('global 128 limit and collector closed schema/512-byte transport remain enf
 test('retained observation becomes inert after restoration', () => {
   const h = host(); h.exhaust(); h.restore(); const previous = h.output();
   assert.throws(() => h.read('changed'), error => error === h.primary()); assert.equal(h.output(), previous);
+});
+test('actual single-attempt source delegates the same IO/order and never returns a replacement signal as bytes', () => {
+  const observed = host({ attempt: true }); let log;
+  try {
+    assert.equal(observed.read('success').toString(), 'DATA'); log = observed.log();
+    assert.equal(rows(observed).filter(row => row.kind === 'io').length, 0);
+    assert.equal(observed.held(), false);
+  } finally { observed.restore(); }
+  const baseline = host({ attempt: true });
+  try { baseline.restore(); assert.equal(baseline.raw('success').toString(), 'DATA'); assert.deepEqual(baseline.log(), log); }
+  finally { baseline.restore(); }
+  for (const next of ['changed', 'realpath', 'close']) {
+    const h = host({ attempt: true });
+    try {
+      h.exhaust();
+      assert.throws(() => h.read(next), error => error === h.primary() && error.code ===
+        ({ changed: 'BOUND_FILE_CHANGED', realpath: 'EACCES', close: 'BOUND_FILE_CLOSE_FAILED' })[next]);
+      const events = rows(h), points = events.filter(row => row.kind === 'io');
+      assert.ok(points.length > 0 && points.length <= 8); assert.equal(h.held(), false);
+      assert.ok(events.some(row => row.operation === 'readBoundFileSnapshotAttemptRecord' && row.kind === 'error'));
+      if (next === 'changed') { assert.equal(points.length, 8); assert.ok(points.some(row => row.operation === 'closeSync')); }
+      if (next === 'realpath') assert.ok(points.some(row => row.operation === 'realpathSync' && row.code === 'EACCES'));
+      if (next === 'close') assert.ok(points.some(row => row.operation === 'closeSync' && row.code === 'EIO'));
+      assert.ok(!h.output().includes(sentinel) && !h.output().includes(caseRoot));
+    } finally { h.restore(); }
+  }
+});
+test('one-attempt replacement callback values including falsy throws survive observation after exactly one close', () => {
+  for (const value of [Symbol(sentinel), null, undefined, false, 0, '']) {
+    const h = host({ attempt: true, replacementValue: value });
+    try {
+      let caught = false;
+      try { h.read('replacement'); }
+      catch (error) { caught = true; assert.equal(error, value); assert.equal(error, h.primary()); }
+      assert.equal(caught, true); assert.equal(h.held(), false);
+      const calls = h.log();
+      assert.equal(calls.filter(row => row[0] === 'openSync').length, 1);
+      assert.equal(calls.filter(row => row[0] === 'closeSync').length, 1);
+      assert.equal(calls.filter(row => row[0] === 'readSync').length, 0);
+      assert.ok(rows(h).some(row => row.operation === 'readBoundFileSnapshotAttemptRecord' && row.kind === 'error' && row.code === 'OTHER'));
+      assert.ok(!h.output().includes(sentinel) && !h.output().includes(caseRoot));
+    } finally { h.restore(); }
+  }
+});
+test('one-attempt adapter retains 64/128 budgets, closed collector transport, nonfatal sink/hash and fresh restore', () => {
+  const h = host({ attempt: true });
+  try {
+    h.exhaust(); assert.equal(rows(h).length, 64);
+    for (let i = 0; i < 100; i++) assert.throws(() => h.read('changed'));
+    assert.equal(rows(h).length, 128); assert.equal(rows(h).at(-1).seq, 128);
+    let text = ''; const collector = h.observer.createCollector({ write(line) { text += line; } });
+    collector.append(Buffer.from(h.output())); collector.promote(0); assert.equal(text, h.output());
+    const event = rows(h).find(row => row.operation === 'readBoundFileSnapshotAttemptRecord'); assert.ok(event);
+    assert.equal(h.observer.safeEvent({ ...event, raw_path: sentinel }), null);
+    assert.equal(h.observer.safeEvent({ ...event, operation: event.operation + '-other' }), null);
+  } finally { h.restore(); }
+  for (const options of [{ failHash: true }, { failWrite: true }]) {
+    const current = host({ ...options, attempt: true });
+    try { assert.equal(current.read('success').toString(), 'DATA');
+      assert.throws(() => current.read('changed'), error => error === current.primary() && error.code === 'BOUND_FILE_CHANGED');
+      assert.equal(current.held(), false);
+    } finally { current.restore(); }
+  }
+  const fresh = host({ attempt: true });
+  try { fresh.restore(); const before = fresh.output();
+    assert.equal(fresh.read('success').toString(), 'DATA'); assert.equal(fresh.output(), before);
+  } finally { fresh.restore(); }
 });
 assert.equal(digest(fs.readFileSync(path.join(directory, 'standalone-history-read-observer.cjs'))), pins.observer);
 assert.equal(digest(fs.readFileSync(path.join(repository, 'plugins/data-secure/server/core/bound-file-io.js'))), pins.boundary);

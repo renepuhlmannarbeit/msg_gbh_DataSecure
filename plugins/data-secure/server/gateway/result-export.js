@@ -10,11 +10,14 @@ const { safeResolvePackage, readVerifiedFile } = require('./package-files');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
 const initialOutput = require('./initial-output-binding');
 const { writeFully, syncParentDirectory, renameWithTransientRetry, linkWithTransientRetry } = require('./batch-journal-io');
+const { writeFileAtomically } = require('./review-meta-io');
+const { MAX_RESULT_EXPORT_RECORD_BYTES, serializeResultExportRecord } = require('../core/result-export-record');
 const { processAlive } = require('./process-liveness');
 const { csvField } = require('./mapping');
 const { readMarkdownArtifact, verifyMarkdownItem } = require('../standalone/markdown-store');
 const { readAnonymizedArtifact } = require('../standalone/anonymized-store');
 const { confirmPublication, confirmPublicationAsync } = require('./standalone-anonymized-batch');
+const { begin: beginPublicationTiming, measure: measurePublication } = require('./standalone-publication-timings');
 const { admitSynchronousOwnership } = require('./synchronous-ownership-admission');
 const identityLedger = require('../standalone/identity-ledger');
 const { validateCoverage, MAX_MARKDOWN_CHARS } = require('../standalone/markdown-contract');
@@ -56,7 +59,7 @@ const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
 // An interrupted atomic record write leaves exactly this temporary name behind.
 // It carries no export state and must neither count as a damaged record nor be
 // removed while a concurrent worker may still be writing it.
-const TEMPORARY_RECORD_RE = /^re_[a-f0-9]{32}\.json\.\d+\.[a-f0-9]{8}\.tmp$/u;
+const TEMPORARY_RECORD_RE = /^re_[a-f0-9]{32}\.json(?:\.\d+\.[a-f0-9]{8}\.tmp|\.tmp_[a-f0-9]{16})$/u;
 const CLAIM_RE = /^re_[a-f0-9]{32}\.json\.claim$/u;
 const PREPARED_CLAIM_RE = /^re_[a-f0-9]{32}\.json\.claim\.prepared-[a-f0-9]{32}\.tmp$/u;
 const WAIVER_RE = /^re_[a-f0-9]{32}\.json\.waived$/u;
@@ -416,26 +419,14 @@ function planItem(item) {
   return plain;
 }
 function writeRecord(target, value) {
-  const temporary = `${target}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  let descriptor;
-  try {
-    descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
-    writeFully(descriptor, Buffer.from(JSON.stringify(value), 'utf8'), fs);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    renameWithTransientRetry(temporary, target);
-    syncParentDirectory(target, fs, process.platform);
-  } finally {
-    try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
-  }
+  // Serialize and reserve all remaining fixed progress before opening a temp.
+  writeFileAtomically(target, serializeResultExportRecord(value));
 }
 function readRecord(target, options) {
   // Up to 200 relative source labels (1024 characters each), JSON escaping,
   // fixed error codes and hashes must fit without relaxing item/string bounds.
   let value;
-  try { value = JSON.parse(readBoundFile(target, { maximum: 1024 * 1024, minimum: 1 })); }
+  try { value = JSON.parse(readBoundFile(target, { maximum: MAX_RESULT_EXPORT_RECORD_BYTES, minimum: 1 })); }
   catch { throw new Error('RESULT_EXPORT_STATE_UNSAFE'); }
   if (!validRecord(value)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   assertRecordContentAnchor(target, value, options);
@@ -452,7 +443,7 @@ function readPublicationRecordSnapshot(target, expectedBatchId) {
     throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   const directory = bindDirectory(path.dirname(target));
   let value;
-  try { value = JSON.parse(readBoundFileSnapshot(target, { directory, maximum: 1024 * 1024, minimum: 1 })); }
+  try { value = JSON.parse(readBoundFileSnapshot(target, { directory, maximum: MAX_RESULT_EXPORT_RECORD_BYTES, minimum: 1 })); }
   catch { throw new Error('RESULT_EXPORT_STATE_UNSAFE'); }
   if (!validRecord(value)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   assertRecordContentAnchor(target, value, { expectedBatchId });
@@ -648,6 +639,9 @@ function migrateLegacyRecord(target, record, sourceLabels, productChannel) {
   return migrated;
 }
 function activeDestination(record, options = {}) {
+  // Existing pending plans must also fit their future progress before any
+  // visible output directory or file can be created.
+  if (record.complete !== true && options.create !== false) serializeResultExportRecord(record);
   const root = readConfiguredResultRoot();
   if (!root) return null;
   const checked = inspectRoot(root);
@@ -984,11 +978,19 @@ function inspectInitialLeaf(progress, run, item, expected = progress.read(initia
     throw resultExportFailure('RESULT_EXPORT_CONFLICT');
   return actual;
 }
-function recordInitialLeaf(progress, run, item, originalIdentity) {
+function recordInitialLeaf(progress, run, item, originalIdentity, length, validateParents) {
   const parent = initialLeafParent(progress, run, item.file);
-  const actual = readBoundFileRecord(path.join(run.path, item.file), { directory: parent.directory,
-    maximum: 32 * 1024 * 1024, checkCtime: true,
-    validateParents: () => { progress.assert(); assertDirectoryBinding(run); assertDirectoryBinding(parent); } });
+  let actual;
+  try {
+    actual = readBoundFileRecord(path.join(run.path, item.file), { directory: parent.directory,
+      minimum: length, maximum: Math.min(length, 32 * 1024 * 1024), checkCtime: true,
+      validateParents: () => {
+        validateParents();
+        progress.assert();
+        assertDirectoryBinding(run);
+        assertDirectoryBinding(parent);
+      } });
+  } catch { throw resultExportFailure('RESULT_EXPORT_VERIFY_FAILED'); }
   if (['dev', 'ino', 'birth'].some(key => actual.identity[key] !== originalIdentity[key]) ||
       crypto.createHash('sha256').update(actual.bytes).digest('hex') !== item.sha256)
     throw resultExportFailure('RESULT_EXPORT_VERIFY_FAILED');
@@ -1072,8 +1074,9 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord, 
     m = resolved.m;
     bytes = readVerifiedFile(resolved.p, m.document, 32 * 1024 * 1024);
   }
-  const expected = crypto.createHash('sha256').update(bytes).digest('hex');
-  if (expected !== m.document_sha256 || expected !== item.sha256) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
+  if (m.document_sha256 !== item.sha256) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
+  // The exclusive writer verifies these same source bytes before admitting
+  // an attempt. Reading the published object remains an independent check.
   return publishInitialBytes(destination, run, item, bytes, resolvedTarget, validateParents, progress);
 }
 // Both Markdown and the two fixed confidential leaves use the same exclusive
@@ -1133,11 +1136,14 @@ function publishInitialBytes(destination, run, item, bytes, resolvedTarget, vali
     assertDirectoryBinding(destination.output, destination.root);
     assertDirectoryBinding(run, destination.output);
     assertDirectoryBinding(resolvedTarget.parent);
-    try {
-      const written = readBoundFile(target, { maximum: bytes.length, minimum: bytes.length, maxLinks: 2, validateParents });
-      if (crypto.createHash('sha256').update(written).digest('hex') !== expected) throw new Error('verify');
-    } catch { throw new Error('RESULT_EXPORT_VERIFY_FAILED'); }
-    if (progress) recordInitialLeaf(progress, run, item, originalIdentity);
+    if (progress) {
+      recordInitialLeaf(progress, run, item, originalIdentity, bytes.length, validateParents);
+    } else {
+      try {
+        const written = readBoundFile(target, { maximum: bytes.length, minimum: bytes.length, maxLinks: 2, validateParents });
+        if (crypto.createHash('sha256').update(written).digest('hex') !== expected) throw new Error('verify');
+      } catch { throw new Error('RESULT_EXPORT_VERIFY_FAILED'); }
+    }
     return true;
   } finally {
     try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
@@ -1351,10 +1357,11 @@ function* exportOpenItemsSteps(target, record, destination) {
   for (let index = 0; index < current.items.length; index++) {
     const item = current.items[index];
     if (item.exported === true) continue;
-    yield { destination, run, item, contentOptions: current.schema === CONTENT_MARKDOWN_SCHEMA ? current.content_options : undefined, record: current, progress };
+    yield* timedExportStep('result_public_file', { destination, run, item,
+      contentOptions: current.schema === CONTENT_MARKDOWN_SCHEMA ? current.content_options : undefined, record: current, progress });
     const items = current.items.map((entry, position) => position === index ? { ...planItem(entry), exported: true } : entry);
     current = { ...current, items };
-    writeRecord(target, current);
+    measurePublication('result_public_file_ack', () => writeRecord(target, current));
   }
   if (current.items.every((item) => item.exported === true)) {
     // Pure conversion keeps the original basename and therefore needs no
@@ -1365,16 +1372,21 @@ function* exportOpenItemsSteps(target, record, destination) {
       exportVisibleMapping(destination, run, current);
     }
     if (hasConfidentialLayout(current)) {
-      const prepared = yield { kind: 'companion-read', record: current };
-      publishInitialCompanions(current, destination, run, progress, prepared);
+      const endCompanions = beginPublicationTiming('result_public_companions');
+      try {
+        const prepared = yield { kind: 'companion-read', record: current };
+        publishInitialCompanions(current, destination, run, progress, prepared);
+      } finally { endCompanions(); }
     }
-    if (hasBoundResultLayout(current)) captureInitialResultBinding(current, run, progress);
+    if (hasBoundResultLayout(current))
+      measurePublication('result_public_inventory', () => captureInitialResultBinding(current, run, progress));
     current = { ...current, complete: true };
-    writeRecord(target, current);
-    try {
-      if (current.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneExport(target, current, run.path);
-    }
-    catch { /* private history cannot change a committed user export */ }
+    measurePublication('result_public_complete', () => {
+      writeRecord(target, current);
+      try {
+        if (current.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneExport(target, current, run.path);
+      } catch { /* private history cannot change a committed user export */ }
+    });
   }
   return current;
 }
@@ -1616,6 +1628,12 @@ function publishStandaloneIdentityIfPossible(state) {
 // record – is a fail-closed "pending" result and never an exception: the
 // terminal batch outcome must not be presented as a processing stop, and no
 // internal result is touched.
+function* timedExportStep(phase, operation) {
+  const end = beginPublicationTiming(phase);
+  try { return yield operation; }
+  finally { end(); }
+}
+
 function* exportCompletedStateSteps(state) {
   try {
     if (state.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneState(state);
@@ -1623,7 +1641,7 @@ function* exportCompletedStateSteps(state) {
   catch { /* the durable batch/export records remain authoritative */ }
   const target = recordPath(state.token);
   let claim;
-  try { claim = yield { kind: 'claim', target }; }
+  try { claim = yield* timedExportStep('result_public_claim', { kind: 'claim', target }); }
   catch (error) { recordResultExportFailure('result_export_claim', error); return guardDiagnostic({ exported: 0, pending: releasedCount(state), available: false }, error); }
   if (!claim) {
     // No capability was minted: null also covers unsafe/unreadable claims and
@@ -1646,7 +1664,7 @@ function* exportCompletedStateSteps(state) {
         recordResultExportFailure('result_export_plan', error);
         return { exported: 0, pending: releasedCount(state), available: false };
       }
-      try { plan = yield { kind: 'plan', state }; }
+      try { plan = yield* timedExportStep('result_public_plan', { kind: 'plan', state }); }
       catch (error) {
         recordResultExportFailure('result_export_plan', error);
         return { exported: 0, pending: releasedCount(state), available: false };
@@ -1851,7 +1869,7 @@ function readStandaloneExportHistoryEntry(batchId, { legacyExportId = null } = {
     // Only this read-only projection may tolerate a proven atomic leaf
     // replacement. Keep the original parent binding and validate the entire
     // newly adopted record/owner/purpose, not an old successful DTO.
-    const record = JSON.parse(readBoundFileSnapshot(target, { directory: binding, maximum: 1024 * 1024, minimum: 1 }));
+    const record = JSON.parse(readBoundFileSnapshot(target, { directory: binding, maximum: MAX_RESULT_EXPORT_RECORD_BYTES, minimum: 1 }));
     if (!validRecord(record)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
     assertRecordContentAnchor(target, record, { expectedBatchId });
     const row = standaloneExportHistoryRow(target, record);

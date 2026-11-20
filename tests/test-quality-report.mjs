@@ -2,15 +2,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { writeQualityReport, reviewChoice, boundReviewChoice, contactReviewChoice, boundContactReviewChoice, selectQualityEntries, qualityPolicyFingerprint } from '../scripts/benchmark-quality.mjs';
 import { qualityGateFailures } from '../scripts/check-quality-gate.mjs';
 const require = createRequire(import.meta.url);
 const { createSuite } = require('./helpers');
+const { createQualityReference } = require('../benchmarks/quality-reference');
 const { evaluateQuality, summarizeQuality, assessQuality, qualityHasFindings } = require('../benchmarks/evaluate-quality');
 const { test, done, assert } = createSuite('Quality reports and reference-bound synthetic review');
 test('Standalone quality identity binds the actual Standalone policy', () => {
   const { STANDALONE_POLICY_FINGERPRINT } = require('../plugins/data-secure/server/core/standalone-policy-fingerprint');
   assert.equal(qualityPolicyFingerprint(), STANDALONE_POLICY_FINGERPRINT);
+});
+test('actual complete quality driver binds its reader and retains evidence on every exit', () => {
+  execFileSync(process.execPath, ['--experimental-vm-modules',
+    path.join(import.meta.dirname, 'lib/quality-driver-source-cases.mjs')], {
+    cwd: path.resolve(import.meta.dirname, '..'), windowsHide: true,
+    timeout: 30000, maxBuffer: 1024 * 1024, encoding: 'utf8'
+  });
 });
 const reference = 'Name: Anna Linden. Anna ist ein Produktname. Java bleibt.';
 const sample = { id: 'one', reference, entities: [{ start: 6, end: 17, value: 'Anna Linden', type: 'PERSON', severity: 3 }],
@@ -117,6 +126,39 @@ test('quality regression gate rejects partial, stale, stopped and content-damagi
     final: reference.replace('Anna Linden', '[PERSON_001]').replace('Java', '[PERSON_002]') });
   assert.ok(qualityGateFailures({ ...report, results: [damaged], summary: summarizeQuality([damaged]) }, expected).includes('QUALITY_FINDINGS_OPEN'));
 });
+test('quality regression gate blocks a numerical-sign change in the actual frozen-reference anchor', () => {
+  const source = createQualityReference()[0];
+  const anchor = 'Die Messung beträgt 42 Prozent.';
+  assert.ok(source.preserve.some(control => control.value === anchor));
+  let clean = source.reference;
+  for (const entity of [...source.entities].sort((a, b) => b.start - a.start)) {
+    clean = clean.slice(0, entity.start) + '[REDACTED]' + clean.slice(entity.end);
+  }
+  const expected = { version: 'test', target: 'windows-x64', variants: 1, files: ['source.txt'],
+    core_policy_fingerprint: 'core', runtime_sha256: 'runtime', conversion_runtime_sha256: 'conversion-runtime',
+    evaluation_sha256: { evaluator: 'hash' }, reference_sha256: 'reference' };
+  const reportFor = output => {
+    const result = evaluateQuality(source, { file: 'source.txt', extracted: source.reference, format: 'txt',
+      automatic: output, automatic_status: 'probe', final: output, final_status: 'published' });
+    return { schema: 'datasecure-quality-report/1', ...expected, synthetic_only: true,
+      review_decisions: 'synthetic-reference-bound', runtime_cleanup: 'confirmed', full_corpus_executed: true,
+      corpus_selection: 'all-formats', summary: summarizeQuality([result]), results: [result] };
+  };
+  const baseline = reportFor(clean);
+  assert.deepEqual(qualityGateFailures(baseline, expected), []);
+  assert.equal(assessQuality(baseline).status, 'pass');
+  const damaged = clean.replace(anchor, 'Die Messung beträgt -42 Prozent.');
+  assert.notEqual(damaged, clean);
+  const report = reportFor(damaged);
+  assert.equal(report.results[0].extraction.changed_preservation_controls, 0);
+  assert.equal(report.results[0].final.status, 'published');
+  assert.equal(report.results[0].final.leaking_occurrences, 0);
+  // Exact failure code: no stale identity, missing API or invalid fixture is
+  // allowed to impersonate the intended content-preservation counterexample.
+  assert.deepEqual(qualityGateFailures(report, expected), ['QUALITY_FINDINGS_OPEN']);
+  assert.equal(assessQuality(report).dimensions.content_preservation, 'blocked');
+});
+
 test('company decisions are typed, while an unchanged title is kept', () => {
   const reference = 'WIESENLABOR CONSULT\nSYNTHETISCHER HÄRTETEST\nName: Anna Linden';
   const titleStart = reference.indexOf('SYNTHETISCHER HÄRTETEST');

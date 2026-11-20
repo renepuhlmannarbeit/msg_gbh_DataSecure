@@ -341,6 +341,20 @@ testAsync('direct and converted sources share readable person and company identi
   }
 });
 
+testAsync('actual anonymization SafeError wrapper preserves only a closed unconfirmed-end cause', async () => {
+  const entry = privateEntry('source.pdf', 'own source bytes');
+  const failure = Object.assign(new Error('private implementation detail'), {
+    code: 'CONVERSION_TERMINATION_UNCONFIRMED', cause: { code: 'CONVERSION_OUTPUT_LIMIT', path: '/private/never-forward' }
+  });
+  await assert.rejects(anonymizeNext('general', { productChannel: 'standalone', inputQueue: [entry],
+    async convertBuffer() { throw failure; } }), error => {
+    assert.equal(error.code, 'CONVERSION_TERMINATION_UNCONFIRMED');
+    assert.deepEqual(error.cause, { code: 'CONVERSION_OUTPUT_LIMIT' });
+    assert.notStrictEqual(error.cause, failure.cause); assert.ok(Object.isFrozen(error.cause));
+    assert.doesNotMatch(error.message, /private/u); return true;
+  });
+});
+
 done(() => {
   fs.rmSync(scope, { recursive: true, force: true });
   for (const [key, value] of Object.entries(previous)) {

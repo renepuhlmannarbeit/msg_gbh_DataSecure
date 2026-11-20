@@ -62,6 +62,28 @@ test('safe wrapping preserves only an opaque syntactically valid code', () => {
   }
 });
 
+test('unconfirmed converter wrapping retains only its closed fixed cause code', () => {
+  const source = Object.assign(new Error('private source content'), { code: 'CONVERSION_TERMINATION_UNCONFIRMED',
+    cause: { code: 'CONVERSION_OUTPUT_LIMIT', message: 'private', path: '/private/file' } });
+  const wrapped = preserveOpaqueErrorCode(source, new Error('safe'));
+  assert.equal(wrapped.code, source.code); assert.deepEqual(wrapped.cause, { code: 'CONVERSION_OUTPUT_LIMIT' });
+  assert.ok(Object.isFrozen(wrapped.cause)); assert.notStrictEqual(wrapped.cause, source.cause);
+  assert.equal(Object.hasOwn(wrapped.cause, 'message'), false);
+  assert.equal(Object.hasOwn(wrapped.cause, 'path'), false);
+  assert.equal(classifyPrepublicationError(wrapped, retryable).retryable, false);
+  let getters = 0;
+  const accessor = Object.defineProperty({}, 'code', { get() { getters++; throw Error('not read'); } });
+  for (const cause of [accessor, new Proxy({}, { getOwnPropertyDescriptor() { throw Error('not inspected'); } }),
+    { code: 'PRIVATE_PATH' }, { code: 'CONVERSION_TERMINATION_UNCONFIRMED' }, source]) {
+    const result = preserveOpaqueErrorCode({ code: source.code, cause }, new Error('safe'));
+    assert.equal(result.cause, undefined);
+  }
+  const causeGetter = Object.defineProperty({ code: source.code }, 'cause', { get() { getters++; throw Error('not read'); } });
+  assert.equal(preserveOpaqueErrorCode(causeGetter, new Error('safe')).cause, undefined);
+  assert.equal(getters, 0);
+  assert.equal(preserveOpaqueErrorCode({ code: 'REQUEST_CANCELLED', cause: source.cause }, new Error('safe')).cause, undefined);
+});
+
 test('the same transient error is bounded and success clears its durable budget', () => {
   const item = {};
   const transient = classifyPrepublicationError(Object.assign(new Error('opaque'), { code: 'PARSER_TIMEOUT' }), retryable);

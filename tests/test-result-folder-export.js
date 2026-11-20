@@ -431,9 +431,12 @@ try {
   const outbox = path.dirname(recordPath(damagedState.token));
   const staleTemporary = path.join(outbox, `re_${'e'.repeat(32)}.json.4242.0123abcd.tmp`);
   fs.writeFileSync(staleTemporary, 'interrupted');
+    const currentTemporary = path.join(outbox, `re_${'e'.repeat(32)}.json.tmp_${'a'.repeat(16)}`);
+    fs.writeFileSync(currentTemporary, 'interrupted-current-writer');
   const replayed = replayPendingResultExports();
   assert.strictEqual(replayed.failures, 2, 'exactly the tampered and the damaged record fail; the temporary is ignored');
   assert.ok(fs.existsSync(staleTemporary), 'replay never removes a possibly live temporary record');
+    assert.strictEqual(fs.readFileSync(currentTemporary, 'utf8'), 'interrupted-current-writer');
   fs.writeFileSync(path.join(outbox, 'foreign.txt'), 'x');
   assert.strictEqual(replayPendingResultExports().failures, 3, 'a foreign entry still counts as a failure');
 
@@ -557,7 +560,7 @@ try {
   fs.mkdirSync(boundRoot);
   fs.mkdirSync(outside);
   process.env.EU_PRIVACY_RESULT_ROOT = boundRoot;
-  const destination = _test.activeDestination({ schema: LEGACY_SCHEMA, complete: false });
+  const destination = _test.activeDestination({ schema: LEGACY_SCHEMA, complete: false, destination_id: '', items: [] });
   fs.rmSync(destination.output.path, { recursive: true });
   fs.symlinkSync(outside, destination.output.path, process.platform === 'win32' ? 'junction' : 'dir');
   assert.throws(() => _test.ensurePlainDirectory(destination, 'Lauf-20260903-120000-abcdef12'), /RESULT_EXPORT_PATH_UNSAFE/u);
@@ -671,7 +674,7 @@ try {
   const legacyToken = '7'.repeat(64);
   const legacyRunName = 'Lauf-20260904-090000-1234abcd';
   const legacyBytes = Buffer.from('# Unverändertes Konvertat', 'utf8');
-  const legacyDestination = _test.activeDestination({ schema: LEGACY_MARKDOWN_SCHEMA });
+  const legacyDestination = _test.activeDestination({ schema: LEGACY_MARKDOWN_SCHEMA, complete: false, destination_id: '', items: [] });
   const legacyRun = _test.ensurePlainDirectory(legacyDestination, legacyRunName);
   fs.writeFileSync(path.join(legacyRun.path, 'Dokument-001-konvertiert.md'), legacyBytes);
   const legacyPlan = {

@@ -3,9 +3,12 @@
 // actual OCR and framed IPC; no renderer, native picker or target-Mac claim.
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
+const { performance } = require('node:perf_hooks');
+const { firstFailure, within, ownChild, reviewFrames, endTestCliFailure } = require('./helpers/qa-parent-lifecycle.cjs');
 const { encodeFrame } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-fast-ipc-'));
 const stamp = fs.lstatSync(root), children = [];
+const primary = firstFailure();
 let active, sequence = 0;
 async function main() {
   const { writeStandaloneRuntime } = await import('../scripts/lib/standalone-runtime-projection.mjs');
@@ -25,46 +28,111 @@ async function main() {
   env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
   const launch = () => {
     const child = spawn(process.execPath, [path.join(server, 'standalone/desktop-sidecar.js')], { env, windowsHide:true, stdio:['pipe','pipe','pipe'] });
-    children.push(child);
-    const exited = new Promise(resolve => child.once('close', resolve));
-    let buffer = Buffer.alloc(0), stderr = ''; const pending = new Map();
-    child.stdin.on('error', () => {}); child.stderr.on('data', bytes => { stderr = (stderr + bytes.toString('utf8')).slice(-8192); });
-    child.once('exit', code => { for (const value of pending.values()) { clearTimeout(value.timer); value.reject(Error(`FAST_IPC_EXIT:${code}:${stderr}`)); } pending.clear(); });
-    child.stdout.on('data', chunk => {
-      buffer = Buffer.concat([buffer, chunk]);
-      while (buffer.length >= 4) {
-        const count = buffer.readUInt32BE(0); assert.ok(count > 1 && count <= 1024 * 1024);
-        if (buffer.length < count + 4) return;
-        const value = JSON.parse(buffer.subarray(4, count + 4).toString('utf8')); buffer = buffer.subarray(count + 4);
-        const receiver = pending.get(value.request_id); assert.ok(receiver, 'unrequested frame'); pending.delete(value.request_id);
-        clearTimeout(receiver.timer); receiver.resolve(value);
-      }
+    const transport = firstFailure(), pending = new Map();
+    let ended = false, stderr = '';
+    function failTransport(error) {
+      transport.record(error); primary.record(transport.value); process.exitCode = 1;
+      for (const waiter of pending.values()) { clearTimeout(waiter.timer); waiter.reject(transport.value); }
+      pending.clear();
+    }
+    // Register every returned handle before assuming spawn supplied any pipes.
+    const owned = ownChild(child, failTransport);
+    const record = { child, owned, stopping: false, stopped: null, request: null, stop: null };
+    children.push(record);
+    const started = Promise.race([
+      new Promise(resolve => child.once('spawn', resolve)),
+      owned.error.then(error => { throw error; }),
+      owned.done.then(() => { owned.failure.throwIfFailed(); throw Error('FAST_IPC_CLOSED_BEFORE_SPAWN'); })
+    ]);
+    started.catch(() => {}); // The original startup Promise remains rejecting for its caller.
+    child.stdin?.on('error', failTransport);
+    child.stdout?.on('error', failTransport);
+    child.stderr?.on('error', failTransport);
+    child.stderr?.on('data', bytes => { stderr = (stderr + bytes.toString('utf8')).slice(-8192); });
+    child.once('exit', (code, signal) => {
+      ended = true;
+      if (!record.stopping || code !== 0 || signal || pending.size)
+        failTransport(Error('FAST_IPC_EXIT:' + code + ':' + stderr));
     });
-    const request = value => new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { pending.delete(value.request_id); reject(Error('FAST_IPC_TIMEOUT:' + value.action)); }, 120000);
-      pending.set(value.request_id, { resolve, reject, timer }); child.stdin.write(encodeFrame(value));
+    child.once('close', (code, signal) => {
+      ended = true;
+      if (!record.stopping || code !== 0 || signal || pending.size)
+        failTransport(Error('FAST_IPC_CLOSE:' + code + ':' + stderr));
     });
-    active = { child, exited, request }; return request;
+    child.stdout?.on('data', reviewFrames(pending, failTransport));
+    record.request = async (value, milliseconds = 120000) => {
+      const deadlineAt = performance.now() + milliseconds;
+      try {
+        transport.throwIfFailed();
+        await within(started, Math.min(5000, milliseconds), 'FAST_IPC_STARTUP_TIMEOUT');
+        transport.throwIfFailed();
+        assert.ok(child.stdin && child.stdout && child.stderr, 'FAST_IPC_STDIO_REQUIRED');
+        assert.ok(!ended && !owned.closed, 'FAST_IPC_ALREADY_ENDED');
+        assert.ok(!pending.has(value.request_id), 'FAST_IPC_DUPLICATE_REQUEST');
+        const remaining = deadlineAt - performance.now();
+        assert.ok(remaining > 0, 'FAST_IPC_REQUEST_DEADLINE');
+        return await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => failTransport(Error('FAST_IPC_TIMEOUT:' + value.action)), remaining);
+          pending.set(value.request_id, { resolve, reject, timer });
+          try { child.stdin.write(encodeFrame(value), error => { if (error) failTransport(error); }); }
+          catch (error) { failTransport(error); }
+        });
+      } catch (error) { failTransport(error); throw transport.value; }
+    };
+    record.stop = () => {
+      if (!record.stopped) record.stopped = (async () => {
+        const failure = firstFailure(); record.stopping = true;
+        if (!owned.closed) {
+          try {
+            const answer = await record.request({ schema:'datasecure-standalone-private-ipc/1',
+              request_id:(++sequence).toString(16).padStart(32,'0'), action:'shutdown' }, 5000);
+            assert.equal(answer.ok, true);
+          } catch (error) { failure.record(error); primary.record(error); }
+        }
+        try {
+          const result = await within(owned.done, 5000, 'FAST_IPC_CLOSE_TIMEOUT');
+          assert.equal(result.code, 0); assert.equal(result.signal, null);
+        } catch (error) { failure.record(error); primary.record(error); }
+        if (owned.failure.failed) failure.record(owned.failure.value);
+        if (transport.failed) failure.record(transport.value);
+        failure.throwIfFailed();
+      })();
+      return record.stopped;
+    };
+    active = record; return record.request;
   };
-  const stop = async () => {
-    if (!active || active.child.exitCode !== null || active.child.signalCode !== null) return;
-    const answer = await active.request({ schema:'datasecure-standalone-private-ipc/1', request_id:(++sequence).toString(16).padStart(32,'0'), action:'shutdown' });
-    assert.equal(answer.ok, true); assert.equal(await active.exited, 0);
+  const stop = async () => { if (active) await active.stop(); };
+  const finish = async () => {
+    for (const record of children) {
+      try { await record.stop(); } catch (error) { primary.record(error); }
+      try { if (!record.owned.closed) record.owned.terminate(); }
+      catch (error) { primary.record(error); }
+      try { await within(record.owned.done, 5000, 'FAST_IPC_FINISH_TIMEOUT'); }
+      catch (error) { primary.record(error); }
+      if (record.owned.failure.failed) primary.record(record.owned.failure.value);
+    }
   };
   const sources = path.join(root, 'sources'); fs.mkdirSync(sources);
   try {
     await runPackagedFastReviewScenario({ request:launch(), sourceDirectory:sources, restart:async () => { await stop(); return launch(); } });
     await stop();
+  } catch (error) { primary.record(error);
   } finally {
-    // Only own ChildProcess objects; never PID discovery or a system-wide kill.
-    for (const child of children) if (child.exitCode === null && child.signalCode === null) { child.kill(); await new Promise(resolve => child.once('close', resolve)); }
+    await finish();
   }
-  // Preserve a failed fixture for diagnosis. Remove only the completed, exact
-  // temporary root, after every owned sidecar and its completed worker exits.
-  assert.equal(path.dirname(root), fs.realpathSync.native(os.tmpdir()));
-  assert.match(path.basename(root), /^datasecure-fast-ipc-/u);
-  const current = fs.lstatSync(root); assert.ok(current.isDirectory() && !current.isSymbolicLink());
-  assert.equal(current.dev, stamp.dev); assert.equal(current.ino, stamp.ino);
-  require('../plugins/data-secure/server/gateway/common').safeRemovePrivateTree(path.dirname(root), path.basename(root));
+  // Preserve this invocation's runtime: host close is not a writer-tree join.
+  if (!primary.failed) {
+    try {
+      assert.ok(children.every(record => record.owned.closed), 'FAST_IPC_CHILD_END_UNCONFIRMED');
+      assert.equal(path.dirname(root), fs.realpathSync.native(os.tmpdir()));
+      assert.match(path.basename(root), /^datasecure-fast-ipc-/u);
+      const current = fs.lstatSync(root); assert.ok(current.isDirectory() && !current.isSymbolicLink());
+      assert.equal(current.dev, stamp.dev); assert.equal(current.ino, stamp.ino);
+    } catch (error) { primary.record(error); }
+  }
+  try { process.stderr.write('FAST_IPC_SCOPE_RETAINED; writer_join=NOT_CLAIMED; deletion=NOT_ATTEMPTED\n'); }
+  catch (error) { primary.record(error); }
+  primary.throwIfFailed();
 }
-main().catch(error => { console.error(error); process.exitCode = 1; });
+main().catch(error => endTestCliFailure({ failed: true, error, retainedRoots: [root],
+  unconfirmedChildren: children.some(record => !record.owned.closed) }));

@@ -1,4 +1,5 @@
 'use strict';
+const { scanTableCells } = require('./markdown-table-cells');
 
 const { normalizeSpaces, normalizeText, ORG_SUFFIX, TECH_TERMS, escapeRegExp, NB, NA } = require('./base');
 const { matchers: credentialCatalogMatchers } = require('./credential-catalog');
@@ -58,27 +59,12 @@ function markdownTableCellRanges(line, offset) {
   const ranges = [];
   const source = String(line || '');
   if (!source.includes('|')) return ranges;
-  const leading = source.match(/^\s*/u)[0].length;
-  const trailing = source.match(/\s*$/u)[0].length;
-  const startsWithPipe = source[leading] === '|';
-  const visibleEnd = source.length - trailing;
-  const endsWithPipe = source[visibleEnd - 1] === '|';
-  let start = startsWithPipe ? leading + 1 : leading;
-  const bodyEnd = endsWithPipe ? visibleEnd - 1 : visibleEnd;
-  let escaped = false;
-  for (let index = start; index <= bodyEnd; index++) {
-    const atEnd = index === bodyEnd;
-    const char = source[index];
-    if (!atEnd && escaped) { escaped = false; continue; }
-    if (!atEnd && char === '\\') { escaped = true; continue; }
-    if (atEnd || char === '|') {
-      const raw = source.slice(start, index);
-      const leading = raw.match(/^\s*/u)[0].length;
-      const trailing = raw.match(/\s*$/u)[0].length;
-      ranges.push({ start: offset + start + leading, end: offset + index - trailing });
-      start = index + 1;
-    }
-  }
+  scanTableCells(source, (start, end) => {
+    const raw = source.slice(start, end);
+    const leading = raw.match(/^\s*/u)[0].length;
+    const trailing = raw.match(/\s*$/u)[0].length;
+    ranges.push({ start: offset + start + leading, end: offset + end - trailing });
+  });
   return ranges;
 }
 
@@ -154,13 +140,13 @@ function credentialContextSpans(text) {
 }
 
 function literalMatches(text, value) {
-  const result=[]; const haystack=String(text).toLocaleLowerCase('de-DE');
-  const needle=String(value).toLocaleLowerCase('de-DE');
-  if(!needle) return result;
-  let offset=0;
-  while((offset=haystack.indexOf(needle,offset))>=0) {
-    result.push({start:offset,end:offset+value.length}); offset+=Math.max(1,value.length);
-  }
+  const result = [], needle = String(value);
+  if (!needle) return result;
+  // Matching on the actual source keeps UTF-16 offsets intact. Locale case
+  // conversion may expand characters and cannot supply raw source positions.
+  const matcher = new RegExp(escapeRegExp(needle), 'giu'), source = String(text);
+  for (let match; (match = matcher.exec(source)); )
+    result.push({ start: match.index, end: match.index + match[0].length });
   return result;
 }
 

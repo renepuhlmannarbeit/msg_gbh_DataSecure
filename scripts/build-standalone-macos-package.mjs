@@ -9,6 +9,7 @@ import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 import { standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged, assertStandaloneRuntimeSource } from './lib/standalone-build-fingerprint.mjs';
 import layout from '../plugins/data-secure/server/standalone/macos-bundle-layout.js';
 import { loadMacStaticCore, assertMacCoreMarkers, assertMacCoreBundle, verifyMacBundleSeal, macRuntimeEvidence, canonicalBytes, verifyMacCorePackage } from './lib/macos-core-artifact.mjs';
+import { createMacosPackageStage, writeMacosPackageChecksum } from './lib/standalone-macos-package.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const font = standaloneFontLicense(root);
@@ -23,6 +24,9 @@ function argument(name) {
 
 const productTarget = argument('--target');
 const appArgument = argument('--app');
+const engineeringDirectory = argument('--engineering-directory');
+if (process.argv.filter(value => value === '--engineering-directory').length > 1 ||
+    (engineeringDirectory !== null && typeof engineeringDirectory !== 'string')) throw Error('STANDALONE_MACOS_STAGE_UNSAFE');
 const target = targets.targets.find((candidate) => candidate.product_target === productTarget);
 if (!target || !['macos-x64', 'macos-arm64'].includes(productTarget)) {
   throw new Error('STANDALONE_MACOS_TARGET_INVALID');
@@ -41,25 +45,15 @@ const desktopSource = path.join(appSource, 'Contents', 'MacOS', 'datasecure-stan
 let desktopVerified = false;
 
 const folderName = `DataSecure-Standalone-${version}-${productTarget}`;
-const stageParent = path.join(root, 'dist', `standalone-macos-package-stage-${productTarget}`);
-const stage = path.join(stageParent, folderName);
+// Fresh physically bound stage; neither old output nor failed stage is adopted.
+const { stageParent, stage, output, assertCurrent } = createMacosPackageStage(root, target.package_filename,
+  folderName, engineeringDirectory);
 const appRelative = 'DataSecure Standalone.app';
-const output = path.join(root, 'dist', target.package_filename);
 const executablePaths = new Set([
   `${appRelative}/Contents/MacOS/datasecure-standalone`,
   `${appRelative}/Contents/MacOS/datasecure-core`,
   ...['conversion_node', 'sandbox'].map(role => `${appRelative}/Contents/${layout.nativeRoles(productTarget)[role].destination}`)
 ]);
-
-function safeResetStage() {
-  const resolved = path.resolve(stageParent);
-  const dist = path.resolve(root, 'dist');
-  if (path.dirname(resolved) !== dist || path.basename(resolved) !== `standalone-macos-package-stage-${productTarget}`) {
-    throw new Error('STANDALONE_MACOS_STAGE_UNSAFE');
-  }
-  fs.rmSync(resolved, { recursive: true, force: true });
-  fs.mkdirSync(stage, { recursive: true });
-}
 
 function copyRegular(source, destination, mode = null) {
   let checked;
@@ -72,6 +66,7 @@ function copyRegular(source, destination, mode = null) {
     desktopVerified = true;
   }
   fs.mkdirSync(path.dirname(destination), { recursive: true });
+  assertCurrent();
   fs.writeFileSync(destination, bytes, { flag: 'wx', mode: mode ?? Number(before.mode & 0o777n) });
   if (!bytes.equals(boundFileIo.readBoundFile(destination, { maximum: bytes.length, minimum: bytes.length, checkCtime: true }))) {
     throw new Error('STANDALONE_MACOS_SOURCE_CHANGED');
@@ -106,7 +101,7 @@ function inventory(directory, ignored = new Set()) {
     .sort((left, right) => left.path.localeCompare(right.path));
 }
 
-safeResetStage();
+assertCurrent();
 copyTree(appSource, path.join(stage, appRelative));
 if (!desktopVerified) throw new Error('STANDALONE_DESKTOP_SOURCE_MARKER_MISSING');
 assertMacCoreBundle(path.join(stage, appRelative), coreBuild);
@@ -203,9 +198,9 @@ const archiveFiles = collectFiles(stageParent).map((file) => {
   return { ...file, mode: executablePaths.has(relative) ? 0o100755 : 0o100644 };
 });
 assertStandaloneSourceUnchanged(root, sourceFingerprint);
-fs.rmSync(output, { force: true });
-fs.rmSync(`${output}.sha256`, { force: true });
-const archive = writeZip(output, archiveFiles);
+assertCurrent();
+const archive = writeZip(output, archiveFiles, { createOnly: true });
 const archiveDigest = hashRegular(output, 768 * 1024 * 1024);
-fs.writeFileSync(`${output}.sha256`, `${archiveDigest}  ${path.basename(output)}\n`, { flag: 'wx' });
+assertCurrent();
+writeMacosPackageChecksum(output, archiveDigest);
 process.stdout.write(`${JSON.stringify({ ok: true, output, sha256: archiveDigest, ...archive })}\n`);

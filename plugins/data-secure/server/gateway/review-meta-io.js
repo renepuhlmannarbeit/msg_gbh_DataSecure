@@ -12,13 +12,15 @@ function writeFileAtomically(target, input, io = fs, platform = process.platform
     fd = io.openSync(temporary, io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL, 0o600);
     writeFully(fd, payload, io);
     io.fsyncSync(fd);
-    io.closeSync(fd); fd = undefined;
+    const closing = fd; fd = undefined;
+    io.closeSync(closing);
     renameWithTransientRetry(temporary, target, io);
     syncParentDirectory(target, io, platform);
   } finally {
     payload.fill(0);
     if (fd !== undefined) try { io.closeSync(fd); } catch { /* preserve caller failure */ }
-    try { io.unlinkSync(temporary); } catch { /* absent after rename */ }
+    // A failed create or a completed rename grants no ownership of this name.
+    // Preserve failed private writes for the existing bound retention policy.
   }
 }
 

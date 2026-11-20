@@ -23,6 +23,16 @@ assert.match(workflow, /runs-on: ubuntu-22\.04/u);
 assert.match(workflow, /^permissions:\n  contents: read$/mu);
 assert.match(workflow, /timeout-minutes: 45/u);
 assert.doesNotMatch(workflow, /secrets\.|cache:/u);
+const dependencyStep = workflow.match(/      - name: Install pinned build and offline-conversion dependencies\n([\s\S]*?)(?=\n      - name:)/u)?.[1];
+assert.ok(dependencyStep, 'Linux retains its set-euo-pipefail dependency preparation');
+assert.match(dependencyStep, /set -euo pipefail/u);
+for (const prefix of ['ocr', 'pdfjs', 'markdown', 'graphics']) {
+  const command = 'npm ci --prefix native/' + prefix + '/pilot --ignore-scripts' +
+    (prefix === 'graphics' ? ' --legacy-peer-deps' : '') + ' --no-audit --no-fund';
+  assert.ok(dependencyStep.includes(command),
+    'CI-F1: the fresh Linux job must install mandatory ' + prefix + ' runtime inputs');
+  assert.ok(dependencyStep.indexOf(command) < dependencyStep.indexOf('node native/ocr/pilot/fetch-models.mjs'));
+}
 for (const required of [
   'libwebkit2gtk-4.1-dev', 'openbox', 'x11-utils', 'node-v22.23.2-linux-x64.tar.gz',
   'b294a556e639d64338823920e5866c21c02741742d2e1529ee1a225c1ec9252a',

@@ -41,11 +41,14 @@ test('parser and fixed background roles launch the packaged guard before private
   // A new direct spawn/fork here would bypass the single guarded role starter.
   assert.doesNotMatch(batchExecutor, /\bforkProcess\s*\(|\bfork\s*\(|\bspawn\s*\(/u);
   const bootstrap = fs.readFileSync(path.join(root, 'native', 'sea', 'bootstrap.cjs'), 'utf8');
-  assert.ok(bootstrap.indexOf("localRequire('./network-deny.cjs')") < bootstrap.indexOf('localRequire(selected)'));
+  const guardStart = bootstrap.indexOf("localRequire('./network-deny.cjs')");
+  const privateStart = bootstrap.indexOf('localRequire(selected)');
+  assert.ok(guardStart >= 0 && privateStart >= 0, 'both guarded and private entry points must exist');
+  assert.ok(guardStart < privateStart);
   assert.match(bootstrap, /__DATASECURE_NETWORK_DENY_ACTIVE__/u);
 });
 
-test('the MCP entry point is metadata-only and both plugin configs launch that exact boundary', () => {
+test('the MCP entry is metadata-only; source and any present generated plugin config launch that boundary', () => {
   const entryPath = path.join(root, 'plugins', 'data-secure', 'server', 'index.js');
   const entry = fs.readFileSync(entryPath, 'utf8');
   assert.match(entry, /require\('\.\/mcp-server'\)/u);
@@ -56,7 +59,9 @@ test('the MCP entry point is metadata-only and both plugin configs launch that e
     path.join(root, 'plugins', 'data-secure', '.mcp.json'),
     path.join(root, 'dist', 'marketplace-repo', 'plugins', 'data-secure', '.mcp.json')
   ];
+  assert.ok(fs.existsSync(configPaths[0]), 'the source plugin configuration is required');
   for (const [index, configPath] of configPaths.entries()) {
+    // Generated marketplace output is optional; the source config is mandatory.
     if (!fs.existsSync(configPath)) continue;
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     const server = config.mcpServers && config.mcpServers['data-secure-local'];

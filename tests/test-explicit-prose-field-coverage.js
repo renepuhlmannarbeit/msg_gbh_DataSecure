@@ -228,7 +228,7 @@ for (const role of ['range', 'independent-final']) test(`actual ${role} reader b
   else {
     const start = source.indexOf('    const proseValues = '), end = source.indexOf('    for (const value of proseValues(rendered', start);
     assert.ok(start >= 0 && end > start);
-    vm.runInContext("const personFieldPolicy='content-person-fields/1'; const {personFieldPattern}=require('../core/person-field-policy'); const {markdownTableCells}=require('./entities'); const {isProtectedFieldHeader}=require('./field-value-coverage');\n" +
+    vm.runInContext("const personFieldPolicy='content-person-fields/1'; const {personFieldPattern}=require('../core/person-field-policy'); const {markdownTableCells}=require('./entities'); const {isProtectedFieldHeader}=require('./field-value-coverage'); const {scanTableCells,unescapeMarkdownPunctuation}=require('./markdown-table-cells');\n" +
       source.slice(start, end) + '\nmodule.exports.__read=proseValues;', context, {timeout: 1000});
   }
   for (const whitespace of [' '.repeat(128), ' '.repeat(512), ' '.repeat(1024), ' '.repeat(2048),

@@ -1,7 +1,7 @@
 'use strict';
 const { createSuite } = require('./helpers');
 const { createQualityReference } = require('../benchmarks/quality-reference');
-const { evaluateQuality, summarizeQuality, bindReference, editDistance, qualityHasFindings } = require('../benchmarks/evaluate-quality');
+const { evaluateQuality, summarizeQuality, bindReference, editDistance, qualityHasFindings, assessQuality } = require('../benchmarks/evaluate-quality');
 const { test, done, assert } = createSuite('Independent anonymization quality evaluator');
 function sample(reference = 'Name: Anna Linden. Java bleibt. Java bleibt.') {
   return { id: 'example', split: 'holdout', reference, location: 'Seite 1',
@@ -105,6 +105,107 @@ test('inserting a negation into an intact assertion is not perfect preservation'
     reference.replace('Anna Linden', '[PERSON_001]').replace('beträgt 42', 'beträgt nicht 42')));
   assert.equal(result.final.added_factual_words, 1); assert.equal(result.final.lost_content.length, 1);
   assert.ok(qualityHasFindings({ summary: summarizeQuality([result]), full_corpus_executed: true }));
+});
+
+test('the existing quality reference cannot preserve a changed numerical sign', () => {
+  const source = createQualityReference()[0];
+  assert.equal(source.family, 'labelled');
+  assert.deepEqual(source.privacy_redactions, []);
+  const anchor = 'Die Messung beträgt 42 Prozent.';
+  assert.ok(source.preserve.some(control => control.value === anchor));
+  let clean = source.reference;
+  // Expected synthetic redactions use the existing occurrence annotations,
+  // not a copy of the product detector or an unbound text substitution.
+  for (const entity of [...source.entities].sort((a, b) => b.start - a.start)) {
+    assert.equal(source.reference.slice(entity.start, entity.end), entity.value);
+    clean = clean.slice(0, entity.start) + '[REDACTED]' + clean.slice(entity.end);
+  }
+  const evaluate = output => evaluateQuality(source, record(source.reference, output));
+  const reportFor = result => ({ results: [result], summary: summarizeQuality([result]),
+    full_corpus_executed: true, runtime_cleanup: 'confirmed' });
+  const baseline = evaluate(clean);
+  assert.equal(assessQuality(reportFor(baseline)).status, 'pass');
+  assert.equal(baseline.final.status, 'published');
+  assert.equal(baseline.final.reference_alignment, 'within_limit');
+  assert.equal(baseline.final.leaking_occurrences, 0);
+  assert.equal(baseline.final.lost_content.length, 0);
+  const damaged = clean.replace(anchor, 'Die Messung beträgt -42 Prozent.');
+  assert.notEqual(damaged, clean);
+  const result = evaluate(damaged);
+  assert.equal(result.extraction.changed_preservation_controls, 0);
+  assert.equal(result.privacy_extraction.changed_preservation_controls, 0);
+  assert.equal(result.final.leaking_occurrences, 0);
+  assert.equal(result.final.lost_factual_words, 0);
+  assert.equal(result.final.added_factual_words, 0);
+  for (const stage of ['final', 'raw_final']) {
+    assert.equal(result[stage].lost_content.filter(control => control.expected === anchor).length, 1);
+    assert.ok(result.findings.some(finding => finding.stage === stage &&
+      finding.code === 'UNNECESSARY_REDACTION' && finding.expected === anchor));
+  }
+  assert.equal(assessQuality(reportFor(result)).status, 'blocked');
+  assert.equal(assessQuality(reportFor(result)).dimensions.content_preservation, 'blocked');
+});
+
+test('preserved numerical surfaces retain signs, decimal separators, percentages and operators at both boundaries', () => {
+  const cases = [
+    ['Die Messung beträgt 42 Prozent.', 'Die Messung beträgt -42 Prozent.'],
+    ['Die Messung beträgt -42 Prozent.', 'Die Messung beträgt 42 Prozent.'],
+    ['42', '-42'], ['42', '+42'], ['-42', '42'], ['-42', '--42'],
+    ['42', '42%'], ['42%', '42'], ['42%', '42‰'],
+    ['Messwert: 42,5 Prozent.', 'Messwert: 42.5 Prozent.'],
+    ['x < 42.', 'x > 42.'], ['<42', '>42'], ['42', '<=42'],
+    ['Ergebnis: 2 * 3 = 6.', 'Ergebnis: 2 + 3 = 6.'],
+    ['Änderung: 2 ≤ 3.', 'Änderung: 2 ≥ 3.']
+  ];
+  for (const [anchor, changed] of cases) {
+    const reference = `Name: Anna Linden.\n${anchor}`;
+    const source = sample(reference), start = reference.indexOf(anchor);
+    source.preserve = [{ value: anchor, start, end: start + anchor.length, category: 'factual' }];
+    const clean = reference.replace('Anna Linden', '[PERSON_001]');
+    const evaluate = output => evaluateQuality(source, record(reference, output));
+    const reportFor = result => ({ results: [result], summary: summarizeQuality([result]),
+      full_corpus_executed: true, runtime_cleanup: 'confirmed' });
+    assert.equal(reference.slice(start, start + anchor.length), anchor);
+    assert.equal(assessQuality(reportFor(evaluate(clean))).status, 'pass', `baseline: ${anchor}`);
+    const output = clean.replace(anchor, changed);
+    assert.notEqual(output, clean);
+    const result = evaluate(output);
+    assert.equal(result.extraction.changed_preservation_controls, 0, anchor);
+    assert.equal(result.final.leaking_occurrences, 0, anchor);
+    assert.equal(result.final.lost_factual_words, 0, anchor);
+    assert.equal(result.final.added_factual_words, 0, anchor);
+    assert.equal(result.final.lost_content.length, 1, `${anchor} -> ${changed}`);
+    assert.equal(result.raw_final.lost_content.length, 1, `${anchor} -> ${changed}`);
+    assert.equal(assessQuality(reportFor(result)).status, 'blocked', `${anchor} -> ${changed}`);
+  }
+});
+
+test('preserved surfaces allow the existing rendering equivalences without erasing German characters', () => {
+  const cases = [
+    ['Die Messung beträgt 42 Prozent.', '**Die Messung beträgt 42 Prozent.**'],
+    ['-42', '**-42**'], ['42%', '**42%**'],
+    ['Ergebnis: 2 + 3 = 5.', 'Ergebnis: 2 \\+ 3 = 5\\.'],
+    ['Messung: 42,5%.', 'Messung: &#52;2,5&#37;\\.'],
+    ['x < 42 & y > 0.', 'x &lt; 42 &amp; y &gt; 0\\.'],
+    ['ÄÖÜ äöüß: 42,5%.', 'ÄÖÜ äöüß: 42,5%\\.'],
+    ['Maßstab: größer ≤ 42.', 'Ma&#223;stab: gr&#246;&#223;er &#x2264; 42\\.'],
+    ['Änderung 42 Prozent.', 'Änderung   42   Prozent\\.']
+  ];
+  for (const [anchor, rendered] of cases) {
+    const reference = `Name: Anna Linden.\n${anchor}`;
+    const source = sample(reference), start = reference.indexOf(anchor);
+    source.preserve = [{ value: anchor, start, end: start + anchor.length, category: 'factual' }];
+    const output = reference.replace('Anna Linden', '[PERSON_001]').replace(anchor, rendered);
+    const result = evaluateQuality(source, record(reference, output));
+    assert.equal(result.extraction.changed_preservation_controls, 0, anchor);
+    assert.equal(result.final.lost_content.length, 0, anchor);
+    assert.equal(result.raw_final.lost_content.length, 0, anchor);
+    assert.equal(result.final.lost_factual_words, 0, anchor);
+    assert.equal(result.final.added_factual_words, 0, anchor);
+    assert.equal(result.final.leaking_occurrences, 0, anchor);
+    assert.equal(assessQuality({ results: [result], full_corpus_executed: true,
+      runtime_cleanup: 'confirmed' }).status, 'pass', anchor);
+  }
 });
 
 test('same-line leading/trailing additions are not free presentation metadata', () => {
