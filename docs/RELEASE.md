@@ -1,8 +1,39 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc177 · Veröffentlichungsnachtrag: 25.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc177 · Veröffentlichungsnachtrag: 20.11.2026
 
-Der aktuelle Quellstand ist RC177-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+Der aktuelle Quellstand ist 3.2.0-rc177. Die aktuellen
+Windows- und Mac-Downloads gehören zum separat veröffentlichten Parallelbuild.
+Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC177 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `93deac4e8ba18ec1479ddfbae18ef95b024f7673` bindet den
+[RC177-Parallelbuild](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1).
+Release-Tag `v3.2.0-rc177-parallel.1`.
+Produktfingerprint `18d01465aa7542d034a35e254ee5bac58adb58695256e39163a97cf95d613e80`.
+Die Anwendungs- und Dateiversion bleibt 3.2.0-rc177. Die Release-Seite unterscheidet
+den Parallelbuild vom veröffentlichten Oktober-Stand.
+
+Windows x64 wurde beim gleichen Produktfingerprint im Release-Modus kompiliert.
+Der Windows-Buildcheckout `8b7a0aab8d80034decf679f85dfb4bdafc650ff5` liegt
+eine Anpassung des Testcodes vor dem Release-Tag. Die 357 Headless-Testdateien
+wurden in Abschnitten abgeschlossen.
+Clippy, 321 Rust-Tests, die native Ergebnisübergabe und der isolierte Core-Test
+aus dem Windows-ZIP waren erfolgreich. Drei Rust-Tests waren ignoriert.
+Der [native Mac-Build](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/44724128200)
+bestand die Prüfungen auf macOS 15 für Apple Silicon und Intel, einschließlich
+nativem Appstart, Konvertierung aus dem ZIP und Prüfung des eingehängten DMG.
+Die Mac-Pakete werden lokal ad hoc versiegelt, ohne Developer-ID und ohne
+Apple-Notarisierung. Die sichtbare Abnahme auf den Zielrechnern bleibt offen.
+
+Bei ausreichenden Ressourcen können zwei getrennte Konverter vorbereitend
+parallel arbeiten. Datenschutzprüfung, Zuordnungen und Ausgabe folgen der
+gleichen dokumentgebundenen Reihenfolge. Geführte Prüfungen bleiben seriell.
+Linux RC159 und das Cowork-Plugin RC151 behalten ihre bisherigen Releases.
+
+
+Die folgenden Abschnitte dokumentieren frühere Veröffentlichungen.
 Nachfolgende reine Abschlussdokumentation ändert dessen App-/Paket-/Tagbindung
 nicht. Menschliche Desktop-/Office-/Zielhostabnahmen und menschliche N3/N4-
 Produktionsfreigaben bleiben offen.

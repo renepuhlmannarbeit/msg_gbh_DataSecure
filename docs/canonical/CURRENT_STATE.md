@@ -1,5 +1,18 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+## Öffentliche Standalone-Testpakete vom 20.11.2026
+
+Der [RC177-Parallelbuild](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)
+enthält Windows x64 und macOS für Apple Silicon und Intel. Der Release-Tag
+verweist auf `93deac4e8ba18ec1479ddfbae18ef95b024f7673`. Der gemeinsame
+Produktfingerprint lautet
+`18d01465aa7542d034a35e254ee5bac58adb58695256e39163a97cf95d613e80`.
+Die automatisierten Paketprüfungen und die nativen Mac-Runner-Prüfungen
+sind abgeschlossen. Die interaktive Zielgeräteabnahme dieser Pakete bleibt offen.
+[Pakete, Testumfang und Buildzuordnung](../RELEASE.md).
+
+## Frühere Test- und Entwicklungsstände
+
 **29.10., echter Nutzer-Startblocker nach13:41UTC:** Das lokal übergebene
 Methodenreview-ZIP2b227eab… ist für Bestandsprofile noch nicht geeignet.
 Die tatsächlich gestartete EXE fefad9e8… und alle1198 entpackten Dateien
