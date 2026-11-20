@@ -1,12 +1,12 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 20.11.2026 · Standalone Windows/macOS RC177 Parallelkonvertierung · Linux RC159 · Cowork RC151
+Stand: 20.11.2026 · Standalone Windows/macOS RC178 · Linux RC159 · Cowork RC151
 
 **Aktueller Windows-/Mac-Standalone-Kandidat:** Das
-[RC177-Test-Pre-Release zur Parallelkonvertierung](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)
+[RC178-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc178)
 bindet Windows x64, macOS Apple Silicon und macOS Intel an denselben
 Produktfingerprint. Der Release-Tag verweist auf Quellcommit
-`93deac4e8ba18ec1479ddfbae18ef95b024f7673`. Beide Mac-ZIPs und beide DMGs sind
+`13ed39ff979a5f5d9bb076d35021164de380b9dd`. Beide Mac-ZIPs und beide DMGs sind
 Teil derselben Testfreigabe. Der Prüfnachweis im Release dokumentiert die
 automatisierten Paket- und Laufzeittests und ihre jeweiligen Grenzen.
 Für die finale Abnahme auf realen Zielrechnern gilt `USER_PENDING`. Eine neue

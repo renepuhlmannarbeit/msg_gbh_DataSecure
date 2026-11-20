@@ -3,7 +3,7 @@
 Arbeitsversion auf `main`: **3.2.0-rc165**.
 
 Die aktuellen Windows- und Mac-Testpakete stehen unter
-[RC177-Parallelbuild](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)
+[RC178](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc178)
 zur Verfügung. Quellstand, Testumfang und Downloadbindungen sind im
 [Release- und Distributionsvertrag](../RELEASE.md) dokumentiert.
 

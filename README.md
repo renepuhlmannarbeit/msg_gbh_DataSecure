@@ -1,9 +1,9 @@
-# GBH DataSecure – Standalone Windows/macOS RC177 · Linux RC159 · Cowork RC151
+# GBH DataSecure – Standalone Windows/macOS RC178 · Linux RC159 · Cowork RC151
 
 Quellstand: 3.2.0-rc165 (Codezweig `main`; Produktcode unverändert)
 
 Die Windows- und Mac-Downloads gehören zum separat veröffentlichten
-RC177-Parallelbuild.
+RC178-Test-Pre-Release.
 
 **Dokumente lokal in Markdown umwandeln – auf Wunsch anonymisiert.**
 DataSecure arbeitet offline. Originaldateien bleiben unverändert; die Anwendung
@@ -11,7 +11,7 @@ lädt keine Dokumente hoch. Die Standalone-App benötigt weder Claude noch eine
 KI-Anbindung. Fertige Markdown-Dateien lassen sich mit Menschen oder anderen
 Werkzeugen verwenden.
 
-**[RC177 mit Parallelkonvertierung herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)**
+**[RC178 für Windows und Mac herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc178)**
 
 | Aufgabe | Was die Standalone-App macht |
 | --- | --- |
@@ -43,11 +43,11 @@ Fertige MD-/CSV-/TXT-/XLSX-Arbeitskopien dürfen manuell bearbeitet werden. Eine
 spätere Appkorrektur erstellt einen neuen Ordner aus der privaten Basis und
 überschreibt keine von Hand geänderten Ergebnisse.
 
-RC177 mit Parallelkonvertierung ist für Windows x64, Apple Silicon und Intel
+RC178 ist für Windows x64, Apple Silicon und Intel
 verfügbar. Der Release-Tag verweist auf Quellcommit
-`93deac4e8ba18ec1479ddfbae18ef95b024f7673`.
+`13ed39ff979a5f5d9bb076d35021164de380b9dd`.
 Alle drei Pakete verwenden den Quellfingerprint
-`18d01465aa7542d034a35e254ee5bac58adb58695256e39163a97cf95d613e80`.
+`b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655`.
 Das Paket ist ein Test-Pre-Release. Für den eigenen Einsatz bleiben Desktop-
 und Organisationsrichtlinien zu prüfen.
 
@@ -79,7 +79,7 @@ Linux bleibt beim getrennten [RC159-Paket](https://github.com/renepuhlmannarbeit
 (Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`). Deren Downloads und
 Abnahmen werden durch einen neuen Windows-/Mac-Standalone-Release nicht ersetzt.
 
-Frühere Windows- und Mac-Testpakete sind auf [RC177 vom Oktober](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177) und
+Frühere Windows- und Mac-Testpakete sind auf [RC177 vom November](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1), [RC177 vom Oktober](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177) und
 [RC176](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc176) verfügbar.
 
 ## Standalone-App installieren (Windows, macOS und Linux)
@@ -88,15 +88,15 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[RC177 Parallelkonvertierung: Pakete, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)** ·
+**[RC178: Pakete, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc178)** ·
 [Linux RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 
-Für eigene Prüfungen gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-3.2.0-rc164-Abnahmetests.zip),
-einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/WINDOWS-TESTPLAN.txt)
-und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/MAC-TEST-HINWEISE.txt).
+Für eigene Prüfungen gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-3.2.0-rc164-Abnahmetests.zip),
+einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/WINDOWS-TESTPLAN.txt)
+und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/MAC-TEST-HINWEISE.txt).
 Pro Fall nur dessen EINGABEN wählen. Zusätzlich steht das unveränderte
-[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
-und die separate [36-Dateien-Large-Beilage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-3.2.0-rc166-Large-Testdaten.zip)
+[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
+und die separate [36-Dateien-Large-Beilage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-3.2.0-rc166-Large-Testdaten.zip)
 bereit. Die historischen Anleitungen in diesen unveränderten Archiven gelten
 nicht für den neuen Direktablauf; die zwei aktuellen Testpläne sind maßgeblich.
 In der App für den 100-Dateien-Bestand nur den enthaltenen Eingabeordner
@@ -108,21 +108,21 @@ Mindestversion. Der automatische native Test läuft auf macOS 15 je Architektur.
 Eine manuelle Probe des ersten Starts auf dem Zielrechner bleibt offen.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc177-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-Standalone-3.2.0-rc177-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc178-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-Standalone-3.2.0-rc178-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
-  Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc177-parallel.1/apps/datasecure-standalone/START-WINDOWS.md)
+  Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc178/apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-Standalone-3.2.0-rc177-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-Standalone-3.2.0-rc177-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-Standalone-3.2.0-rc178-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-Standalone-3.2.0-rc178-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-Standalone-3.2.0-rc177-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc177-parallel.1/DataSecure-Standalone-3.2.0-rc177-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-Standalone-3.2.0-rc178-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc178/DataSecure-Standalone-3.2.0-rc178-macos-arm64.dmg)
   herunterladen und genauso installieren.
   Die Architektur zeigt **Apple-Menü → Über diesen Mac**.
-  [Ausführliche macOS-Anleitung](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc177-parallel.1/apps/datasecure-standalone/MACOS-START.md)
+  [Ausführliche macOS-Anleitung](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc178/apps/datasecure-standalone/MACOS-START.md)
 - **Linux x64 mit glibc:**
   [DataSecure-Standalone-3.2.0-rc159-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-linux-x64-glibc.zip)
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
@@ -268,7 +268,7 @@ und verwendet dieselbe Engine mit ihrem getrennten Inhalts-/Ablaufvertrag.
 Das Mapping gilt nur für Anonymisierung; reine Markdown-Konvertierung behält
 die Quellbasisnamen und benötigt keine Zuordnungsdatei.
 
-## Standalone ohne Claude – RC177 testen
+## Standalone ohne Claude – RC178 testen
 
 1. Unter **Neue Verarbeitung** den Zweck wählen: **Nur umwandeln** oder
    **Umwandeln und anonymisieren**. Beim Anonymisieren zwischen **Selbst
@@ -308,10 +308,10 @@ gebundene Quellen können weiterhin ohne Ergebnis ausfallen. Ein Abbruch oder
 Schutzfehler ist keine erfolgreiche Verarbeitung.
 
 Windows ARM64 und Linux ARM64 sind keine aktuellen Pakete. Linux bleibt auf
-RC159 mit eigenem Funktions-/Teststand. Die Desktoptests der drei RC177-Zielpakete
+RC159 mit eigenem Funktions-/Teststand. Die Desktoptests der drei RC178-Zielpakete
 für Windows, Mac Intel und Apple Silicon bleiben Sache der Testenden; insbesondere sind
 Finder, TCC, verwaltete Geräte, VoiceOver und das deklarierte MindestmacOS nicht
-durch CI vollständig abgenommen. Die aktuellen RC177-Downloads sind oben verlinkt;
+durch CI vollständig abgenommen. Die aktuellen RC178-Downloads sind oben verlinkt;
 die menschliche Desktopabnahme bleibt offen.
 
 Keine sensiblen Originale als Chat-Anhang hochladen. Eine in Web oder Mobil
