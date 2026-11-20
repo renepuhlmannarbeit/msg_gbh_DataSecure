@@ -1,14 +1,20 @@
 # DataSecure Standalone Desktop
 
-Aktuelle unveröffentlichte Entwicklung **RC165**: Die normale Exportbestätigung
-**Freigeben und exportieren** schließt die technische Dokumentfreigabe ein;
-keine zweite Pflichtbestätigung. Vorschau ist lesend, Schutzprüfungen bleiben.
-Gespeicherte Ziele werden nur mit unveränderter Identität und erlaubtem Zugriff
-übernommen. Kein neues veröffentlichtes Paket-/Mac-/Desktop-PASS aus diesem
-Quellstand. Die folgenden RC159-Abschnitte sind historische Releasebelege.
-Aktueller Vertrag: [Exportvereinfachung](../../docs/acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+[RC177 mit Parallelkonvertierung herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)
+für Windows x64, Apple Silicon und Intel. Die Pakete enthalten die passenden
+[Windows-](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc177-parallel.1/apps/datasecure-standalone/START-WINDOWS.md) und
+[Mac-Startanleitungen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc177-parallel.1/apps/datasecure-standalone/MACOS-START.md).
+Das separat veröffentlichte [Linux-Paket bleibt RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159).
 
-### Veröffentlichtes Test-Prerelease RC159 (11.10.2026)
+DataSecure kann bei ausreichenden Ressourcen mit zwei isolierten Konvertern
+arbeiten. Schutzprüfungen, Zuordnung und Ausgabe bleiben geordnet. Nach den
+erforderlichen Entscheidungen liegen die Dateien direkt im Ergebnisordner.
+
+Die Mac-Pakete sind lokal ad hoc versiegelt, ohne Developer-ID oder
+Apple-Notarisierung. Die sichtbare Zielhost-Abnahme bleibt offen.
+[Release- und Prüfnachweise](../../docs/RELEASE.md).
+
+### Historisches Test-Pre-Release RC159 (11.10.2026)
 
 [RC159 für Windows x64, beide Macs und Linux x64 glibc](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 bindet Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`. Die neue
@@ -32,8 +38,7 @@ bleiben. Cowork bleibt unabhängig veröffentlicht RC151. Die beigelegten
 ### Prototyp v2: historische lokale Entwicklung (08.10.2026)
 
 Die folgenden datierten Arbeitsstände beschreiben damalige Engineeringbauten
-und Sperren. Aktueller veröffentlichter Stand ist der oben gebundene RC159;
-keine alte GUI-/Archivprobe wird rückwirkend dessen Bedienabnahme.
+und Sperren. Die Berichte gehören zum damaligen Paket und seinen Prüfungen.
 
 `frontend/workspace.html` übernimmt Gestaltung und Interaktion des klickbaren
 Anwenderprototyps: lokale Inter-Schrift, ruhige Karten, unterstrichene Navigation,

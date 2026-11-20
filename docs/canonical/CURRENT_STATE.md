@@ -1,8 +1,13 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc165**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; RC164 bleibt unverändert erhalten.
+Arbeitsversion auf `main`: **3.2.0-rc165**.
 
-### Neuester verbindlicher Stand – RC165 veröffentlicht,19.10.2026
+Die aktuellen Windows- und Mac-Testpakete stehen unter
+[RC177-Parallelbuild](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)
+zur Verfügung. Quellstand, Testumfang und Downloadbindungen sind im
+[Release- und Distributionsvertrag](../RELEASE.md) dokumentiert.
+
+### Früherer Stand – RC165 veröffentlicht, 19.10.2026
 
 [RC165](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165),
 App-/Tagcommit `973274f17cda46bb66621d956af2cbc96e2272e3`, Build `973274f1`,

@@ -17,6 +17,19 @@ const ALL_PRODUCTS = /### RC(\d+) – Standalone und Cowork auf allen Zielplattf
 const ALL_STANDALONE = /### RC(\d+) – Standalone auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u;
 const WINDOWS_MAC = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u;
 
+// A follow-up build can have a distinct tag while retaining the app version
+// in its archive filenames. Bind that tag to the selected publication entry.
+function standaloneDownloadTag(release, publication, version) {
+  const base = `v${version}`;
+  if (!publication) return base;
+  const entry = release.slice(publication.index).split(/\r?\n### /u, 1)[0];
+  const explicitTag = /^Release-Tag `([^`]+)`/mu.exec(entry)?.[1];
+  if (!explicitTag) return base;
+  const parsed = /^(v\d+\.\d+\.\d+-rc\d+)(?:-parallel\.[1-9]\d*)?$/u.exec(explicitTag);
+  assert.strictEqual(parsed?.[1], base, 'Standalone release tag must bind the archive application version');
+  return explicitTag;
+}
+
 test('publication chronology preserves older Linux and Cowork when Windows/macOS advance', () => {
   const published = `### RC151 – Standalone und Cowork auf allen Zielplattformen\nQuellcommit \`${'a'.repeat(40)}\`\n` +
     `### RC157 – Standalone auf allen Zielplattformen\nQuellcommit \`${'b'.repeat(40)}\`\n` +
@@ -25,6 +38,11 @@ test('publication chronology preserves older Linux and Cowork when Windows/macOS
   assert.strictEqual(latestPublished(published, ALL_PRODUCTS, ALL_STANDALONE)[1], '157');
   assert.strictEqual(latestPublished(published, ALL_PRODUCTS, ALL_STANDALONE, WINDOWS_MAC)[1], '158');
   assert.strictEqual(latestPublished(published, WINDOWS_MAC)[2], 'c'.repeat(40));
+  const parallel = published + '\nRelease-Tag `v3.2.0-rc158-parallel.1`.\n';
+  assert.strictEqual(standaloneDownloadTag(parallel, latestPublished(parallel, WINDOWS_MAC), '3.2.0-rc158'),
+    'v3.2.0-rc158-parallel.1');
+  assert.throws(() => standaloneDownloadTag(parallel, latestPublished(parallel, WINDOWS_MAC), '3.2.0-rc159'),
+    /archive application version/u);
 });
 
 const userDocs = [
@@ -121,6 +139,8 @@ test('release truth binds the published candidate while keeping human approval s
   const windowsVersion = version.replace(/rc\d+$/iu, `rc${windowsRc.slice(2)}`);
   const macRc = standaloneRc || (macPublished ? `RC${macPublished[1]}` : publishedRc);
   const macVersion = version.replace(/rc\d+$/iu, `rc${macRc.slice(2)}`);
+  const windowsTag = standaloneDownloadTag(release, windowsPublished, windowsVersion);
+  const macTag = standaloneDownloadTag(release, standalonePublished, macVersion);
   const linuxRc = standaloneAll ? `RC${standaloneAll[1]}` : publishedRc;
   const linuxVersion = version.replace(/rc\d+$/iu, `rc${linuxRc.slice(2)}`);
   const readme = read('README.md');
@@ -144,27 +164,27 @@ test('release truth binds the published candidate while keeping human approval s
     'published release link must match the explicitly bound candidate');
   const downloadRoot = 'https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download';
   const publishedArchives = [
-    [windowsVersion, `DataSecure-Standalone-${windowsVersion}-windows-x64.zip`],
-    [linuxVersion, `DataSecure-Standalone-${linuxVersion}-linux-x64-glibc.zip`],
-    [publishedVersion, `DataSecure-Privacy-Preflight-windows-x64-v${publishedVersion}.zip`],
-    ...['macos-x64', 'macos-arm64'].map(target => [macVersion, `DataSecure-Standalone-${macVersion}-${target}.zip`])
+    [windowsTag, `DataSecure-Standalone-${windowsVersion}-windows-x64.zip`],
+    [`v${linuxVersion}`, `DataSecure-Standalone-${linuxVersion}-linux-x64-glibc.zip`],
+    [`v${publishedVersion}`, `DataSecure-Privacy-Preflight-windows-x64-v${publishedVersion}.zip`],
+    ...['macos-x64', 'macos-arm64'].map(target => [macTag, `DataSecure-Standalone-${macVersion}-${target}.zip`])
   ];
-  for (const [archiveVersion, name] of publishedArchives) {
-    assert.ok(readme.includes(`${downloadRoot}/v${archiveVersion}/${name}`),
+  for (const [archiveTag, name] of publishedArchives) {
+    assert.ok(readme.includes(`${downloadRoot}/${archiveTag}/${name}`),
       `README download must bind ${name} to its published release`);
   }
-  assert.ok(release.includes(`releases/tag/v${macVersion}`));
+  assert.ok(release.includes(`releases/tag/${macTag}`));
   if (windowsPublished) {
     assert.ok(readme.includes(windowsPublished[2]), 'Windows source commit must remain explicit');
-    assert.ok(release.includes(`releases/tag/v${windowsVersion}`));
+    assert.ok(release.includes(`releases/tag/${windowsTag}`));
     if (!currentAll || standaloneAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
       'Windows-only publication must not invent a Cowork package');
   }
   if (standalonePublished) {
     assert.ok(readme.includes(standalonePublished[2]), 'Standalone source commit must remain explicit');
-    assert.ok(release.includes(`releases/tag/v${windowsVersion}`));
+    assert.ok(release.includes(`releases/tag/${windowsTag}`));
     for (const target of ['macos-x64', 'macos-arm64']) {
-      assert.ok(readme.includes(`${downloadRoot}/v${macVersion}/DataSecure-Standalone-${macVersion}-${target}.dmg`),
+      assert.ok(readme.includes(`${downloadRoot}/${macTag}/DataSecure-Standalone-${macVersion}-${target}.dmg`),
         'additional DMG must link to the same current Mac release as the retained ZIP');
     }
     if (!currentAll || standaloneAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
@@ -423,10 +443,10 @@ test('main README gives direct Windows and macOS Standalone installation paths',
   const readme = read('README.md');
   for (const target of ['windows-x64', 'macos-x64', 'macos-arm64']) {
     const links = [...readme.matchAll(new RegExp(
-      `/releases/download/v(\\d+\\.\\d+\\.\\d+-rc\\d+)/DataSecure-Standalone-(\\d+\\.\\d+\\.\\d+-rc\\d+)-${target}\\.zip\\)`, 'gu'))];
+      `/releases/download/(v(\\d+\\.\\d+\\.\\d+-rc\\d+)(?:-parallel\\.[1-9]\\d*)?)/DataSecure-Standalone-(\\d+\\.\\d+\\.\\d+-rc\\d+)-${target}\\.zip\\)`, 'gu'))];
     assert.strictEqual(links.length, 1, `${target} must have one unambiguous direct ZIP download`);
-    assert.strictEqual(links[0][1], links[0][2], `${target} tag and filename versions must agree`);
-    assert.ok(readme.includes(`/releases/tag/v${links[0][1]}`), `${target} needs a release page for checksums`);
+    assert.strictEqual(links[0][2], links[0][3], `${target} tag and filename versions must agree`);
+    assert.ok(readme.includes(`/releases/tag/${links[0][1]}`), `${target} needs a release page for checksums`);
   }
   for (const value of ['DataSecure Standalone.exe', 'DataSecure Standalone.app']) {
     assert.ok(readme.includes(value), value);
