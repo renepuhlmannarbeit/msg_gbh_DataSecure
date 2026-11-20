@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 26.10.2026 · 3.2.0-rc177 · Ist-Zustand RC177 in Vorbereitung · Windows/macOS RC176 veröffentlicht · Linux RC159 · Cowork RC151
+Stand: 26.10.2026 · 3.2.0-rc178 · Ist-Zustand RC178 in Vorbereitung · Windows/macOS RC176 veröffentlicht · Linux RC159 · Cowork RC151
 
 RC177 erweitert begrenzt Excel-Zelltexte, SmartArt-Strukturen, statische SVG-
 Stile und PDF-/Medien-OCR. Gemeinsame Endgates und neue Pakete stehen noch aus;

@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc177 · Veröffentlichungsnachtrag: 20.11.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc178 · Veröffentlichungsnachtrag: 20.11.2026
 
-Der aktuelle Quellstand ist 3.2.0-rc177. Die aktuellen
+Der aktuelle Quellstand ist RC178-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Die aktuellen
 Windows- und Mac-Downloads gehören zum separat veröffentlichten Parallelbuild.
 Menschliche N3/N4-Produktionsfreigaben bleiben offen.
 

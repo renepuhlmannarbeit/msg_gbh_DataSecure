@@ -1,6 +1,6 @@
 # GBH DataSecure – Standalone Windows/macOS RC177 · Linux RC159 · Cowork RC151
 
-Quellstand: 3.2.0-rc177
+Quellstand: 3.2.0-rc178
 
 Die Windows- und Mac-Downloads gehören zum separat veröffentlichten
 RC177-Parallelbuild.

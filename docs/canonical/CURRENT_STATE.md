@@ -1,4 +1,6 @@
-# Aktueller Iststand · 3.2.0-rc177
+# Aktueller Iststand
+
+Stand: 20.11.2026 · 3.2.0-rc178 · Paketprüfung läuft
 
 ## Öffentliche Standalone-Testpakete vom 20.11.2026
 

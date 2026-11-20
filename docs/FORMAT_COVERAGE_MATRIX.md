@@ -1,6 +1,8 @@
 # Aktuelle Format-Coverage
 
-Arbeitsquelle: 3.2.0-rc177 Entwicklung · 26.10.2026; RC176 veröffentlicht/unverändert.
+Stand: 20.11.2026 · 3.2.0-rc178
+
+RC178 übernimmt das Formatverhalten des veröffentlichten RC177 vom 20.11.2026.
 
 RC177 ergänzt typisierte Excel-ST_Xstring-Zellprojektion mit konservativem
 Quellfeldschutz, geordnete SmartArt-Datenbäume mit getrennten Zusatztexten,
