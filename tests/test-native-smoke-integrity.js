@@ -1623,12 +1623,21 @@ testAsync('detached join accepts dead or reused PID only with original matching 
     assert.deepEqual(m.calls, [{ pid: 4242, identity: 'a'.repeat(64) }]); assert.deepEqual(m.sleeps, []);
   }
 });
-testAsync('detached join uses the actual process-instance classifier for same PID with different birth', async () => {
+testAsync('detached join accepts a live birth mismatch only on comparable platforms', async () => {
   const { processInstanceState } = require('../plugins/data-secure/server/gateway/process-identity');
-  const m = workerEndModel([]);
-  assert.equal(await m.run({ state: (pid, identity) => processInstanceState(pid, identity, {
-    processAlive: () => true, processInstanceIdentity: () => 'b'.repeat(64)
-  }) }), m.exited);
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const m = workerEndModel([]);
+    const join = m.run({ state: (pid, identity) => processInstanceState(pid, identity, {
+      platform, processAlive: () => true, processInstanceIdentity: () => 'b'.repeat(64)
+    }) });
+    if (platform === 'darwin') {
+      await assert.rejects(join, /own fixture worker did not end/u);
+      assert.equal(m.time(), 5000);
+    } else {
+      assert.equal(await join, m.exited);
+      assert.deepEqual(m.sleeps, []);
+    }
+  }
 });
 testAsync('detached join does not accept live original or unknown identity before unchanged five-second deadline', async () => {
   for (const current of ['same', 'unknown']) {
