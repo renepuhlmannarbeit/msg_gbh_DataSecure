@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 20.11.2026 · Produktstand 3.2.0-rc178 · Paketprüfung läuft
+Stand: 20.11.2026 · Produktstand 3.2.0-rc178 · Testpakete veröffentlicht
 
 **BL-050.6 · echter Startup-Befund29.10.nach13:41UTC:** Nutzer startet exakt
 Methodenreview-ZIP2b227eab…/EXEfefad9e8…; alle1198 entpackten Dateien passen.

@@ -1,9 +1,9 @@
 # DataSecure Standalone Desktop
 
-[RC177 mit Parallelkonvertierung herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)
+[RC178 für Windows und Mac herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc178)
 für Windows x64, Apple Silicon und Intel. Die Pakete enthalten die passenden
-[Windows-](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc177-parallel.1/apps/datasecure-standalone/START-WINDOWS.md) und
-[Mac-Startanleitungen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc177-parallel.1/apps/datasecure-standalone/MACOS-START.md).
+[Windows-](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc178/apps/datasecure-standalone/START-WINDOWS.md) und
+[Mac-Startanleitungen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc178/apps/datasecure-standalone/MACOS-START.md).
 Das separat veröffentlichte [Linux-Paket bleibt RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159).
 
 DataSecure kann bei ausreichenden Ressourcen mit zwei isolierten Konvertern

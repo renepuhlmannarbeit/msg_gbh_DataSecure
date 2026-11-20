@@ -2,9 +2,25 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc178 · Veröffentlichungsnachtrag: 20.11.2026
 
-Der aktuelle Quellstand ist RC178-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Die aktuellen
-Windows- und Mac-Downloads gehören zum separat veröffentlichten Parallelbuild.
+Der aktuelle Quellstand ist 3.2.0-rc178. Die aktuellen Windows- und Mac-Downloads
+gehören zum veröffentlichten RC178. Die interaktive Abnahme bleibt offen.
 Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC178 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `13ed39ff979a5f5d9bb076d35021164de380b9dd` bindet den
+[RC178-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc178).
+Release-Tag `v3.2.0-rc178`.
+Produktfingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655`.
+
+RC178 übernimmt die App-Logik des RC177 vom November. Windows x64, Apple
+Silicon und Intel wurden aus demselben Quellstand neu gebaut. Die lokale
+Windows-Paketprüfung und die nativen Start-, Konvertierungs- und Paketprüfungen
+auf beiden Mac-Architekturen sind bestanden. Die Mac-Pakete verwenden lokale
+Ad-hoc-Versiegelung ohne Apple Developer-ID oder Notarisierung.
+[Mac-Prüflauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/44744144419).
+Die interaktive Desktopabnahme dieser Pakete bleibt offen.
+Linux RC159 und Cowork RC151 behalten ihre jeweiligen Testpakete.
 
 ### RC177 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

@@ -1,8 +1,15 @@
 # Aktueller Iststand
 
-Stand: 20.11.2026 · 3.2.0-rc178 · Paketprüfung läuft
+Stand: 20.11.2026 · 3.2.0-rc178 · Testpakete veröffentlicht
 
-## Öffentliche Standalone-Testpakete vom 20.11.2026
+## RC178-Testpakete vom 20.11.2026
+
+[Windows x64, Apple Silicon und Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc178)
+verwenden den Quellcommit `13ed39ff979a5f5d9bb076d35021164de380b9dd` und den Produktfingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655`.
+Automatisierte Paketprüfungen sind bestanden. Die interaktive Desktopabnahme
+steht aus. [Prüfumfang und Downloadbindungen](../RELEASE.md).
+
+## RC177-Testpakete vom 20.11.2026
 
 Der [RC177-Parallelbuild](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177-parallel.1)
 enthält Windows x64 und macOS für Apple Silicon und Intel. Der Release-Tag
