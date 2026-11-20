@@ -279,19 +279,21 @@ function stoppedCaptureFixture() {
 }
 
 test('native ownership refusal precedes every creating capture access', () => {
-  const data = path.join(root, 'denied-native-capture');
   const script = `const fs=require('node:fs'),path=require('node:path');
+    Object.defineProperty(process,'platform',{value:process.argv[3]});
     for(const key of Object.keys(process.env))if(/^(EU_PRIVACY_|DATASECURE_)/u.test(key))delete process.env[key];
     Object.assign(process.env,{EU_PRIVACY_DATA_ROOT:process.argv[1],DATASECURE_PRODUCT_CHANNEL:'standalone',DATASECURE_NATIVE_EXPORT_CHANNEL:'1'});
     const {createDocumentReviewStore}=require(process.argv[2]);
     let code;try{createDocumentReviewStore({dataRoot:process.argv[1]}).captureRun({token:'a'.repeat(64),standalone_document_review:true});}
     catch(error){code=error.code;}
     console.log(JSON.stringify({code,created:fs.existsSync(path.join(process.argv[1],'document-reviews'))}));`;
-  const result = JSON.parse(execFileSync(process.execPath, ['-e', script, data,
-    require.resolve('../plugins/data-secure/server/gateway/standalone-document-review-store')],
-    { encoding: 'utf8', windowsHide: true, timeout: 10000 }));
-  assert.equal(result.created, false, 'an unavailable native guard must not create private review storage');
-  assert.match(result.code, /^OWNERSHIP_GUARD_/u);
+  const storePath = require.resolve('../plugins/data-secure/server/gateway/standalone-document-review-store');
+  for (const platform of ['win32', 'darwin']) {
+    const data = path.join(root, `denied-native-capture-${platform}`);
+    const result = JSON.parse(execFileSync(process.execPath, ['-e', script, data, storePath, platform],
+      { encoding: 'utf8', windowsHide: true, timeout: 10000 }));
+    assert.deepEqual(result, { code: 'OWNERSHIP_GUARD_UNAVAILABLE', created: false }, platform);
+  }
 });
 
 test('repeated terminal capture reads actual immutable metadata without temporary publication or fsync', () => {
