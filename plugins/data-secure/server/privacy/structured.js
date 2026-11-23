@@ -226,7 +226,10 @@ const DETECTORS = [
     priority: 80,
     accept: (value, text, index) =>
       !plausibleCalendarDate(value.trim()) &&
-      (value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW))
+      (value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW)),
+    // Without its own label a number is only taken when the same document
+    // already established the same digits as a telephone number.
+    repeatOf: (value) => !plausibleCalendarDate(value.trim())
   },
   {
     type: 'PHONE',
@@ -236,7 +239,10 @@ const DETECTORS = [
     priority: 80,
     accept: (value, text, index) =>
       !plausibleCalendarDate(value.trim()) &&
-      (value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW))
+      (value.trim().startsWith('+') || hasLabelBefore(text, index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW)),
+    // Without its own label a number is only taken when the same document
+    // already established the same digits as a telephone number.
+    repeatOf: (value) => !plausibleCalendarDate(value.trim())
   },
   {
     type: 'IP',
@@ -405,11 +411,51 @@ function trimReferenceValue(value) {
   return trimmed;
 }
 
+// A labelled or international number proves that these digits are a telephone
+// number in this document. Further unlabelled occurrences of the same digits,
+// also in national versus international spelling, are the same identifier.
+// Unrelated unlabelled numbers keep requiring their own label.
+function phoneIdentity(value) {
+  const text = String(value).trim();
+  const digits = text.replace(/\D/gu, '');
+  if (text.startsWith('+')) return { international: digits };
+  if (digits.startsWith('00')) return { international: digits.slice(2) };
+  return { national: digits };
+}
+function samePhone(left, right) {
+  if (left.national !== undefined && right.national !== undefined) {
+    return left.national === right.national && left.national.length >= 6;
+  }
+  if (left.international !== undefined && right.international !== undefined) {
+    return left.international === right.international && left.international.length >= 6;
+  }
+  // "+49 30 1234567" and "030 1234567": the national trunk zero replaces a
+  // country code of one to three digits. A bare subscriber number without
+  // that zero is not treated as the same identifier.
+  const international = left.international ?? right.international;
+  const national = left.national ?? right.national;
+  if (!national.startsWith('0') || national.length < 8) return false;
+  const prefix = international.length - (national.length - 1);
+  return prefix >= 1 && prefix <= 3 && international.endsWith(national.slice(1));
+}
+function acceptRepeatedPhones(spans, candidates) {
+  if (!candidates.length) return;
+  const known = spans.filter((span) => span.type === 'PHONE').map((span) => phoneIdentity(span.text));
+  if (!known.length) return;
+  for (const candidate of candidates) {
+    const identity = phoneIdentity(candidate.text);
+    if (!known.some((value) => samePhone(value, identity))) continue;
+    if (spans.some((span) => candidate.start < span.end && span.start < candidate.end)) continue;
+    spans.push(candidate);
+  }
+}
+
 function findStructuredSpans(text) {
   const src = String(text || '');
   const identifierView = identifierDetectionText(src);
   const reserved = placeholderSpans(src);
   const spans = findCredentialTableSpans(src);
+  const repeatCandidates = [];
 
   for (const det of DETECTORS) {
     const view = det.identifierView ? identifierView : src;
@@ -457,7 +503,13 @@ function findStructuredSpans(text) {
       if (reserved.some((r) => start < r.end && r.start < end &&
           !(det.type === 'CREDENTIAL' && start <= r.start && end >= r.end &&
             !/^\[(?:CREDENTIAL_REDACTED|MANUAL_REDACTION)\]$/u.test(value.trim())))) continue;
-      if (det.accept && !det.accept(value, view, start)) continue;
+      if (det.accept && !det.accept(value, view, start)) {
+        if (det.repeatOf && det.repeatOf(value)) {
+          repeatCandidates.push({ type: det.type, start, end, text: src.slice(start, end),
+            replacement: det.placeholder, priority: det.priority });
+        }
+        continue;
+      }
 
       spans.push({
         type: det.type,
@@ -469,6 +521,8 @@ function findStructuredSpans(text) {
       });
     }
   }
+
+  acceptRepeatedPhones(spans, repeatCandidates);
 
   reconcileIbanEmailOverlaps(spans, identifierView, src);
 
