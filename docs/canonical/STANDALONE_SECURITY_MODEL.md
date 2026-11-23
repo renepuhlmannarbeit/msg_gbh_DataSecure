@@ -327,6 +327,45 @@ ersetzt (`nach Kochs Rezept` bei bekannter `Anna Koch`), und `Fr.` vor dem
 vollen Namen gilt als Anrede, außer nach einer Wochentagsspanne
 (`Mo. bis Fr.`).
 
+### Zugangsdaten
+
+Zugangsdaten werden nur hinter einem ausdrücklichen Label erkannt, dem `:`
+oder `=` folgt (`Passwort`, `Kennwort`, `Passphrase`, `Secret`, `Token`,
+`API-Key`, `Zugangsdaten`, `Zugangscode`, `PIN`, `Benutzername`, `Login`
+und Verwandte). Steht das Label am Zeilenanfang, gilt der Rest der Zeile als
+Wert.
+
+Das Label gilt auch mitten in der Zeile, wenn sein Wort am Zeilenanfang oder
+nach Leerraum beginnt, auch hinter einer öffnenden Klammer oder einem
+Anführungszeichen und als Ende eines zusammengesetzten Worts
+(`WLAN-Passwort: …`, `Admin PIN: …`, `Zugang: Benutzer x, Passwort: …`).
+Dort wird nur das erste Wort hinter dem Label ersetzt, und zwar als letzter
+Schritt: Alle anderen Regeln und die Entscheidung über offene
+Personenhinweise lesen die Zeile zuerst unverändert. Was sie in diesem Wort
+finden oder noch entscheiden müssen (ein Name, eine E-Mail-Adresse, eine
+Telefonnummer), behält ihr eigenes Ergebnis.
+
+Nicht erkannt werden: ein Wert ohne `:` oder `=` (`Das Passwort ist …`),
+ein Wert in der Folgezeile, ein Label in einer Überschrift (`# Token: Aufbau
+und Validierung` gilt als Titel), Abkürzungen wie `PW` oder `Pwd`, ein Label
+direkt nach einem Komma oder Gedankenstrich ohne Leerraum, ein Label in
+Anführungszeichen wie in JSON (`"password": "…"`) sowie ein Label innerhalb
+eines Links oder einer Abfragezeichenfolge (`…?token=…`); ein solcher Link
+wird behandelt, wie es das Profil für Links vorsieht. In Tabellenzeilen
+gelten die Zellregeln. Von einem Geheimnis aus mehreren Wörtern hinter einem
+Label mitten in der Zeile wird nur das erste Wort ersetzt
+(`…, Passwort: Sommer 2024` lässt `2024` stehen). Die Ersetzung unterbleibt
+für ein ganzes Dokument, wenn sich mit ihr ein offener Personenhinweis nicht
+mehr eindeutig zuordnen ließe; das kommt bei wiederholten gleichlautenden
+Zeilen mit noch unbekannten Namen vor. Das Dokument wird dann verarbeitet wie
+ohne diese Regel. Die Restprüfung kennt die Regel nicht; sie prüft
+Zugangsdaten weiterhin nur am Zeilenanfang und in Tabellen. Diese Fälle sind
+ein verbleibendes Unterredaktionsrisiko.
+
+Umgekehrt ersetzt die Regel das erste Wort auch dann, wenn dem Label
+Fließtext folgt (`Bitte ändern Sie Ihr Passwort: Es muss zwölf Zeichen
+haben.` verliert `Es`).
+
 ## Nichtziele
 
 - keine rechtssichere Anonymitäts- oder Zertifizierungszusage;

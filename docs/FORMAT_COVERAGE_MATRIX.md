@@ -187,7 +187,13 @@ Passphrase, Secret/Token/API-Key, Zugangscode/PIN) werden immer durch
 Vorkommen erscheinen weder als Werte noch als Hashes in Findings oder Diagnosen.
 Ein fachlich eigenständiges Vorkommen desselben Texts als Person oder Organisation
 wird weiterhin regulär pseudonymisiert. Ohne explizites Label wird
-kein Geheimnis anhand seiner Zeichenform geraten.
+kein Geheimnis anhand seiner Zeichenform geraten. Das Label gilt als Feld,
+wenn ihm `:` oder `=` folgt. Am Zeilenanfang ist der Rest der Zeile der
+Wert. Mitten in der Zeile nach Leerraum oder als Ende eines
+zusammengesetzten Worts (`WLAN-Passwort: …`, `…, Passwort: …`) ist es das
+erste Wort hinter dem Label.
+Grenzen stehen im
+[Sicherheitsmodell](canonical/STANDALONE_SECURITY_MODEL.md).
 
 IBANs werden kompakt sowie mit einfachem oder mehrfachem Leerraum, Punkt,
 Schrägstrich und ASCII-/Unicode-Bindestrichen erkannt; Leerraum um genau ein

@@ -10,6 +10,7 @@ const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { personProseCandidateSpans, personProseAmbiguities } = require('../privacy/person-ambiguities');
 const { residualPersonAmbiguities, createPersonReviewBinding, reviewedPersonRanges } = require('../privacy/residual-person-review');
 const { collectContextualNameCandidates } = require('../privacy/entities');
+const { findInlineCredentialSpans } = require('../privacy/structured');
 const { canonicalizeRenderedText, escapeRegExp } = require('../privacy/base');
 const { canonicalValue: registryComparisonValue } = require('../batch-pseudonym-registry');
 const { createTransformTrace, applyEdits } = require('../privacy/transform-plan');
@@ -104,27 +105,75 @@ function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptio
   if (transform) transform.appendTrace('anonymization', anon.transform_trace);
   anon.text = personReview.restore(anon.text, transform ?
     (before, after, edits) => transform.append('restore-reservation', before, after, edits) : undefined);
-  const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(profile)
-    ? credentialIssuerAmbiguities(personReview.original, anon.text) : [];
-  const proseAmbiguities = personProseAmbiguities(personReview.original, anon.text, { ...fieldOptions, productChannel, profile, ocrLineReview });
-  const residual = pii.scanResidual(anon.text, profile, anon.dictionary, { ...fieldOptions,
-    strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
-    includeKnownValueSpans: productChannel === 'standalone', originalSourceText: personReview.original });
-  const personAmbiguities = [...proseAmbiguities, ...residualPersonAmbiguities(personReview.original, anon.text,
-    residual.filter(finding => finding.type === 'PERSON_CANDIDATE' && (productChannel === 'standalone' ||
-      !proseAmbiguities.some(candidate => finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end))),
-    { productChannel, ...(productChannel === 'standalone' ? { proseAmbiguities } : {}) })];
-  // A known surname alias may survive only inside an already source-bound
-  // open choice. This is a private pending draft, NOT an allowlist: Keep still
-  // fails the unchanged final dictionary gate unless the alias is really gone.
-  const hardResidual = residual.filter(finding => finding.type !== 'PERSON_CANDIDATE');
-  if (hardResidual.some(finding => productChannel !== 'standalone' || finding.type !== 'RESIDUAL_ENTITY' ||
-      finding.dictionary_type !== 'PERSON_ALIAS' || !Number.isSafeInteger(finding.start) ||
-      !Number.isSafeInteger(finding.end) || finding.start < 0 || finding.end <= finding.start ||
-      finding.end > anon.text.length || anon.text.slice(finding.start, finding.end) !== finding.text ||
-      !personAmbiguities.some(candidate => finding.start >= candidate.anonymized_start &&
-        finding.end <= candidate.anonymized_end)))
-    throw Object.assign(new SafeError('Die private Textfassung enthält nicht sicher prüfbare direkte Identifikatoren.'), { code: 'RESIDUAL_PII' });
+  // Everything that is still open or refused for one private text version.
+  const reviewOf = (privateText) => {
+    const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(profile)
+      ? credentialIssuerAmbiguities(personReview.original, privateText) : [];
+    const proseAmbiguities = personProseAmbiguities(personReview.original, privateText, { ...fieldOptions, productChannel, profile, ocrLineReview });
+    const residual = pii.scanResidual(privateText, profile, anon.dictionary, { ...fieldOptions,
+      strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
+      includeKnownValueSpans: productChannel === 'standalone', originalSourceText: personReview.original });
+    const personAmbiguities = [...proseAmbiguities, ...residualPersonAmbiguities(personReview.original, privateText,
+      residual.filter(finding => finding.type === 'PERSON_CANDIDATE' && (productChannel === 'standalone' ||
+        !proseAmbiguities.some(candidate => finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end))),
+      { productChannel, ...(productChannel === 'standalone' ? { proseAmbiguities } : {}) })];
+    // A known surname alias may survive only inside an already source-bound
+    // open choice. This is a private pending draft, NOT an allowlist: Keep still
+    // fails the unchanged final dictionary gate unless the alias is really gone.
+    const hardResidual = residual.filter(finding => finding.type !== 'PERSON_CANDIDATE');
+    if (hardResidual.some(finding => productChannel !== 'standalone' || finding.type !== 'RESIDUAL_ENTITY' ||
+        finding.dictionary_type !== 'PERSON_ALIAS' || !Number.isSafeInteger(finding.start) ||
+        !Number.isSafeInteger(finding.end) || finding.start < 0 || finding.end <= finding.start ||
+        finding.end > privateText.length || privateText.slice(finding.start, finding.end) !== finding.text ||
+        !personAmbiguities.some(candidate => finding.start >= candidate.anonymized_start &&
+          finding.end <= candidate.anonymized_end)))
+      throw Object.assign(new SafeError('Die private Textfassung enthält nicht sicher prüfbare direkte Identifikatoren.'), { code: 'RESIDUAL_PII' });
+    return { organizationAmbiguities, personAmbiguities, residual };
+  };
+  let review = reviewOf(anon.text);
+  // RC178 review R-027. A credential label that is not the first word of its
+  // line ("WLAN-Passwort: …", "…, Passwort: …") binds the token behind it.
+  // The token is replaced here and not in the engine: by now every other rule
+  // has read the line as before, and the open person hints are back in the
+  // text. The review above is exactly what was computed before this rule
+  // existed. A token that belongs to something still open or reported there
+  // keeps its text ("Passwort: Hans Müller" with an open hint for that name).
+  // And the replacement is kept only if the same review of the new text ends
+  // with the same open choices: a marker more can make a person hint on a
+  // repeated line impossible to locate, which used to stop the document. In
+  // that case the text stays as it was, with the credential as visible as
+  // before this rule.
+  const inlineCredentials = findInlineCredentialSpans(anon.text);
+  if (inlineCredentials.length) {
+    const pending = review.personAmbiguities.map(candidate => ({ start: candidate.anonymized_start, end: candidate.anonymized_end }));
+    for (const finding of review.residual) {
+      if (Number.isSafeInteger(finding.start) && Number.isSafeInteger(finding.end)) pending.push({ start: finding.start, end: finding.end });
+      else if (typeof finding.text === 'string' && finding.text) {
+        for (let at = anon.text.indexOf(finding.text); at >= 0; at = anon.text.indexOf(finding.text, at + 1))
+          pending.push({ start: at, end: at + finding.text.length });
+      }
+    }
+    const edits = inlineCredentials.filter(span => !pending.some(range => range.start < span.end && span.start < range.end))
+      .map(span => ({ start: span.start, end: span.end, original: anon.text.slice(span.start, span.end),
+        replacement: span.replacement, kind: 'CREDENTIAL' }));
+    if (edits.length) {
+      const replaced = applyEdits(anon.text, edits);
+      const sameChoices = (left, right) => left.length === right.length && left.every((candidate, index) =>
+        candidate.type === right[index].type && candidate.original_start === right[index].original_start &&
+        candidate.original_end === right[index].original_end);
+      let withCredentials = null;
+      try { withCredentials = reviewOf(replaced); } catch (error) {
+        if (!['AMBIGUITY_REVIEW_REQUIRED', 'RESIDUAL_PII'].includes(error?.code)) throw error;
+      }
+      if (withCredentials && sameChoices(review.personAmbiguities, withCredentials.personAmbiguities) &&
+          review.organizationAmbiguities.length === withCredentials.organizationAmbiguities.length) {
+        if (transform) transform.append('inline-credentials', anon.text, replaced, edits);
+        anon.text = replaced;
+        review = withCredentials;
+      }
+    }
+  }
+  const { organizationAmbiguities, personAmbiguities } = review;
   const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
   const binding = createPersonReviewBinding(anon.text, ambiguities, { productChannel, allowOrganizationReview: productChannel === 'standalone' });
   function confirmReview(decisions, redactions, resultText, phase) {

@@ -29,6 +29,7 @@ const {
   ID_LABEL_HEADER_RE,
   TABLE_ID_CELL_RE,
   CREDENTIAL_FIELD_RE,
+  CREDENTIAL_INLINE_FIELD_RE,
   CREDENTIAL_LABEL_HEADER_RE,
   tableHeadersAt,
   identifierDetectionText,
@@ -132,6 +133,26 @@ const DETECTORS = [
     priority: 96,
     valueGroup: 2,
     accept: (_value, text, start) => !isSetextHeadingLine(text, start)
+  },
+  {
+    // The label somewhere inside its line. A line whose first word is the
+    // label belongs to the detector above and is not reported twice; a table
+    // row belongs to the cell rules. A heading is a title, as it already is
+    // for the detector above ("# Token: Aufbau und Validierung"). See
+    // credentialLineAt.
+    type: 'CREDENTIAL',
+    re: CREDENTIAL_INLINE_FIELD_RE,
+    identifierView: true,
+    placeholder: '[CREDENTIAL_REDACTED]',
+    priority: 96,
+    // The value is the first token behind the label. A token that begins
+    // with a marker was replaced before, or is an open person hint, and is
+    // left alone; so is one without any letter or digit. This detector is
+    // not part of the ordinary scan: see findStructuredSpans.
+    valueGroup: 2,
+    inlineField: true,
+    accept: (value, text, start) => !/^\[[A-Z][A-Z0-9_]*\]/u.test(value) && /[\p{L}\p{N}]/u.test(value) &&
+      !credentialLineAt(text, start).otherRule
   },
   {
     type: 'CONTACT_URI',
@@ -364,6 +385,27 @@ function findCredentialTableSpans(text) {
   return spans;
 }
 
+// One line of the text for the label-inside-a-line detector: its bounds and
+// whether the line belongs to another rule. A line whose first word is the
+// label belongs to the line-start detector, a table row to the cell rules,
+// and a heading is a title. The last line is remembered, so a long line with
+// many labels is measured once; findInlineCredentialSpans drops it when it is
+// done, also when the scan throws.
+const CREDENTIAL_LINE_START_RE = new RegExp(CREDENTIAL_FIELD_RE.source, 'iu');
+let inlineCredentialLine = null;
+function credentialLineAt(text, index) {
+  const src = String(text || '');
+  const known = inlineCredentialLine;
+  if (known && known.src === src && index >= known.start && index <= known.end) return known;
+  const start = src.lastIndexOf('\n', index - 1) + 1;
+  const newline = src.indexOf('\n', index);
+  const end = newline < 0 ? src.length : newline;
+  const line = src.slice(start, end).replace(/\r$/u, '');
+  inlineCredentialLine = { src, start, end,
+    otherRule: /^[ \t]*(?:\||#{1,6}[ \t])/u.test(line) || CREDENTIAL_LINE_START_RE.test(line) || isSetextHeadingLine(src, index) };
+  return inlineCredentialLine;
+}
+
 function isSetextHeadingLine(text, index) {
   const src = String(text || '');
   const lineEnd = src.indexOf('\n', index);
@@ -459,14 +501,29 @@ function acceptRepeatedPhones(spans, candidates) {
   }
 }
 
+// The ordinary scan does not contain the label-inside-a-line detector. The
+// redactor, the residual gate and every other caller therefore see a line
+// with such a label as RC178 did. The shared privacy operation asks for those
+// tokens separately, after all other rules (prepareTextPrivacyReview in
+// gateway/privacy-text-operation.js).
 function findStructuredSpans(text) {
+  return collectStructuredSpans(text, false);
+}
+
+// Only the tokens behind a credential label inside a line.
+function findInlineCredentialSpans(text) {
+  try { return collectStructuredSpans(text, true); } finally { inlineCredentialLine = null; }
+}
+
+function collectStructuredSpans(text, inlineCredentials) {
   const src = String(text || '');
   const identifierView = identifierDetectionText(src);
   const reserved = placeholderSpans(src);
-  const spans = findCredentialTableSpans(src);
+  const spans = inlineCredentials ? [] : findCredentialTableSpans(src);
   const repeatCandidates = [];
 
   for (const det of DETECTORS) {
+    if ((det.inlineField === true) !== inlineCredentials) continue;
     const view = det.identifierView ? identifierView : src;
     det.re.lastIndex = 0;
     let m;
@@ -526,7 +583,8 @@ function findStructuredSpans(text) {
         end,
         text: src.slice(start, end),
         replacement: det.placeholder,
-        priority: det.priority
+        priority: det.priority,
+        ...(det.inlineField === true ? { inlineField: true } : {})
       });
     }
   }
@@ -579,4 +637,4 @@ function replaceStructured(text, findings) {
   return applySpans(src, spans);
 }
 
-module.exports = { DETECTORS, findStructuredSpans, scanStructured, replaceStructured, trimReferenceValue };
+module.exports = { DETECTORS, findStructuredSpans, findInlineCredentialSpans, scanStructured, replaceStructured, trimReferenceValue };

@@ -383,6 +383,36 @@ const CREDENTIAL_FIELD_RE = new RegExp(
   'gimu'
 );
 const CREDENTIAL_LABEL_HEADER_RE = new RegExp(`^${CREDENTIAL_LABELS}[ \\t]*[:：]?$`, 'iu');
+// The same explicit label when it is not the first word of its line: after
+// other words, behind an opening bracket or quote, or as the last part of a
+// compound ("WLAN-Passwort: …", "Admin PIN: …", "Zugang: Benutzer x,
+// Passwort: …"). The label still needs ":" or "=" behind it; nothing is
+// guessed from the shape of a token.
+// Here the value is only the first token behind the label, and the rule is
+// applied last: every other rule, including the decision about open person
+// hints, first reads the line exactly as it did before this label was known
+// there (prepareTextPrivacyReview in gateway/privacy-text-operation.js).
+// Wider and earlier versions of this rule hid the cue of a name from
+// discovery, took in open person hints or cut a name in two; they released
+// names or stopped documents that RC178 processed. A secret of several
+// words behind such a label is therefore replaced only in its first word;
+// the field at the line start still takes its whole line.
+// Limits that keep other rules intact: a table row and a heading are left
+// to their own rules (see the detector). The word that carries the label
+// starts at the line start or after white space, at most behind one opening
+// bracket or quote, so a label inside a link or a query string
+// ("…?token=…", "…/a;Token=…") is none. And the token ends in front of a
+// marker, so nothing that was replaced before is taken in.
+const CREDENTIAL_ATTACHABLE_LABELS =
+  '(?:Pass[ \\t]*wort|Kenn[ \\t]*wort|Pass[ \\t]*word|Pass[ \\t]*phrase|Secret|Token|API(?:[ \\t-]+)?Key' +
+  '|Zugangs[ \\t]*daten|Zugangs[ \\t]*code|Benutzer[ \\t]*name|Nutzer[ \\t]*name|User[ \\t]*name' +
+  '|Login[ \\t]*name|Anmelde[ \\t]*name|Konto[ \\t]*kennung)';
+const CREDENTIAL_INLINE_FIELD_RE = new RegExp(
+  '(?<=(?:^|[ \\t])[(\\[«"\']?)((?:[\\p{L}\\p{N}]+[-‐‑])*' +
+  `(?:[\\p{L}]{0,30}${CREDENTIAL_ATTACHABLE_LABELS}|PIN|Login)[ \\t]*(?::|=|：|＝)[ \\t]*)` +
+  '(\\S+?)(?=\\s|$|\\[[A-Z][A-Z0-9_]*\\])',
+  'gimu'
+);
 
 // Honorifics and job/section vocabulary must never end up inside a person
 // pseudonym. "Herr Müller" used to be registered as the full name, so the same
@@ -1182,6 +1212,7 @@ module.exports = {
   ID_LABEL_HEADER_RE,
   TABLE_ID_CELL_RE,
   CREDENTIAL_FIELD_RE,
+  CREDENTIAL_INLINE_FIELD_RE,
   CREDENTIAL_LABEL_HEADER_RE,
   tableHeadersAt,
   sameLineHasIban
