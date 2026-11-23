@@ -29,6 +29,7 @@ async function main() {
     assert.equal(await release('Wohnhaft Am Hang 12 und Im Winkel 3-5.'), 'Wohnhaft [LOCATION_REDACTED] und [LOCATION_REDACTED].');
     assert.equal(await release('Anschrift: Am Sommerberg 2019.'), 'Anschrift: [LOCATION_REDACTED].');
     assert.equal(await release('Im Zeitraum 12 wohnt niemand.'), '[LOCATION_REDACTED] wohnt niemand.');
+    assert.equal(await release('Wohnhaft Zeitraumstraße 12.'), 'Wohnhaft [LOCATION_REDACTED].');
   });
 
   done();

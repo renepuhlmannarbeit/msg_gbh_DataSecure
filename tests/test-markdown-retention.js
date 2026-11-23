@@ -156,7 +156,24 @@ async function run() {
     const purge = cleanupMarkdownArtifacts({ cutoff: NOW - 7 * DAY, force: true, getProtection: () => ({ ids: new Set(), complete: false }) });
     assert.strictEqual(purge.errors, 0);
     for (const kept of [fresh, irregular, partlyFresh, wrongName]) assert.strictEqual(fs.existsSync(kept), true, kept);
-    for (const kept of [fresh, irregular, partlyFresh, wrongName]) fs.rmSync(kept, { recursive: true });
+    // Retention of zero days puts the cutoff at "now": a publication of this
+    // moment is still not stale.
+    cleanupMarkdownArtifacts({ cutoff: Date.now() + DAY, getProtection: () => ({ ids: new Set(), complete: false }) });
+    for (const kept of [fresh, irregular, partlyFresh, wrongName]) assert.strictEqual(fs.existsSync(kept), true, kept);
+    // A pending directory that another worker renames between the listing and
+    // its inspection is no candidate and does not abort the pass.
+    const gone = make('e'.repeat(24), [[`${id}.md`, 'wird gerade veröffentlicht']], expired);
+    const lstat = fs.lstatSync;
+    let vanished;
+    fs.lstatSync = (target, ...rest) => {
+      if (String(target) === gone) throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+      return lstat(target, ...rest);
+    };
+    try { vanished = cleanupMarkdownArtifacts({ cutoff: NOW - 7 * DAY, getProtection: () => ({ ids: new Set(), complete: false }) }); }
+    finally { fs.lstatSync = lstat; }
+    assert.deepStrictEqual(vanished, { removed: 0, errors: 0, skipped: false });
+    assert.strictEqual(fs.existsSync(gone), true);
+    for (const kept of [fresh, irregular, partlyFresh, wrongName, gone]) fs.rmSync(kept, { recursive: true });
   });
   await testAsync('an expired candidate requests protection once and preserves it on an unknown or failed proof', async () => {
     const item = await fixture('unknown-protection.txt'); old(item);
