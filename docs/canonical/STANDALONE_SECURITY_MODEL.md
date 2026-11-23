@@ -297,20 +297,35 @@ Schreiben. Gegenproben und genaue Plattformnachweise stehen im
 Die Erkennung ersetzt eine bereits bekannte Person auch in diesen
 Schreibweisen: Genitiv (`Müllers`, `Müller's`), umgestellt
 (`Österreicher, Marlene`), als Dateinamenteil mit Unterstrich oder Punkt,
-nach `Hr.`/`Fr.` sowie als voller Name im Ziel eines Links, auch
-prozentkodiert oder in ASCII-Umschrift. Eine im Dokument erkannte
-Telefonnummer wird an jeder weiteren Stelle ersetzt.
+nach `Hr.`/`Fr.` sowie als voller Name im Ziel eines Links, dort auch
+zusammengeschrieben, in umgekehrter Reihenfolge oder prozentkodiert. Im
+Linkziel wird nur der Namensteil ersetzt, ebenso eine prozentkodierte
+E-Mail-Adresse; der übrige Link bleibt, wie es das Profil vorsieht. Der volle
+Name wird außerdem ohne Umlaute erkannt (`Marlene Oesterreicher`,
+`marlene_osterreicher`), solange diese Schreibweise im Lauf keine eigene
+Person ist. Steht sie allein in einer Zeile, entscheidet zuerst die
+Personenprüfung und vergibt ein eigenes Pseudonym. Eine Aufzählung voller
+Namen (`Anna Müller, Hans Müller`) gilt nie als umgestellter Name. Profile,
+die jeden Link ersetzen, ersetzen ihn als Ganzes, auch wenn er den Namen
+enthält.
+Eine im Dokument erkannte Telefonnummer wird an jeder weiteren Stelle ersetzt.
 
 Bewusst nicht ersetzt wird ein einzelner Nachname ohne Personenkontext in
 einem späteren Dokument desselben Laufs (`Gestern rief Wüstenhagen an`).
 Derselbe Laut kann ein gewöhnliches Wort sein (`Sommer`, `Einkauf`,
 `Koch`); der Kern entscheidet deshalb an der Fundstelle und ersetzt dort nur
 mit Anrede, Namensfeld, Genitiv ohne Artikel, Umstellung mit Vornamen oder
-`z. Hd.`. Ein alleinstehender Vorname, eine ASCII-Umschrift außerhalb von
-Links (`Oesterreicher`) und eine verschleierte E-Mail-Adresse
-(`name (at) example.org`) werden ebenfalls nicht erkannt. Diese Fälle sind
-ein verbleibendes Unterredaktionsrisiko; geführte Prüfung und Nachbearbeitung
-bleiben dafür die vorgesehene Kontrolle.
+`z. Hd.`. Ein alleinstehender Vorname, ein einzelner Nachname ohne Umlaute
+(`Oesterreicher`), ein zusammengeschriebenes Kürzel (`moesterreicher`) und
+eine verschleierte E-Mail-Adresse (`name (at) example.org`) werden ebenfalls
+nicht erkannt. Diese Fälle sind ein verbleibendes Unterredaktionsrisiko;
+geführte Prüfung und Nachbearbeitung bleiben dafür die vorgesehene Kontrolle.
+
+Umgekehrt nimmt die Erkennung eine Überredaktion in Kauf: Ist ein Nachname
+zugleich ein gewöhnliches Wort, wird im selben Dokument auch dessen Genitiv
+ersetzt (`nach Kochs Rezept` bei bekannter `Anna Koch`), und `Fr.` vor dem
+vollen Namen gilt als Anrede, außer nach einer Wochentagsspanne
+(`Mo. bis Fr.`).
 
 ## Nichtziele
 

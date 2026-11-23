@@ -71,12 +71,7 @@ const PRIORITY = {
   ORGANIZATION: 70,
   PROJECT: 68,
   LOCATION: 60,
-  URL: 58,
-  // A link target that carries a known identity is replaced as a whole and
-  // therefore has to win against every detector that matches a part of it
-  // (e-mail, telephone, IBAN: up to 96). A partial replacement would leave
-  // the name in the target, which the residual gate then rightly refuses.
-  IDENTITY_LINK: 200
+  URL: 58
 };
 
 function uppercasePresentationHypothesis(seed) {
@@ -400,49 +395,72 @@ const SLUG_NB = '(?<![\\p{L}\\p{N}])';
 const SLUG_NA = '(?![\\p{L}\\p{N}])';
 const INVERTED_NAME_RE = /(?<![\p{L}\p{N}_])(\p{Lu}[\p{L}'’-]{1,40}),[ \t]+(\p{Lu}[\p{L}'’-]{1,40})(?![\p{L}\p{N}_])/gu;
 
-// Comparison view for names inside link targets: percent-decoded, lower case,
-// without diacritics. A name is tried in both common ASCII spellings
-// ("österreicher" as "osterreicher" and "oesterreicher").
-function foldIdentityText(value, transliterate = false) {
-  let text = String(value).toLowerCase().replace(/ß/gu, 'ss');
-  if (transliterate) text = text.replace(/ä/gu, 'ae').replace(/ö/gu, 'oe').replace(/ü/gu, 'ue');
-  return text.normalize('NFKD').replace(/\p{M}+/gu, '');
+// Where umlauts are unavailable (file names, logins, correspondence in
+// English) "Hans Müller" is written "Hans Mueller" or "Hans Muller". Only
+// Latin-script names have such a spelling; a name without diacritics has none.
+function asciiNameSpellings(name) {
+  if (!/^[\p{Script=Latin}'’ \t-]+$/u.test(name)) return [];
+  const strip = (value) => value.replace(/ß/gu, 'ss').normalize('NFKD').replace(/\p{M}+/gu, '');
+  const german = name.replace(/Ä/gu, 'Ae').replace(/Ö/gu, 'Oe').replace(/Ü/gu, 'Ue')
+    .replace(/ä/gu, 'ae').replace(/ö/gu, 'oe').replace(/ü/gu, 'ue');
+  return [...new Set([strip(german), strip(name)])].filter((spelling) => key(spelling) !== key(name));
 }
-function decodeLinkTarget(value) {
-  return String(value).replace(/(?:%[0-9a-f]{2})+/giu, (run) => {
-    try { return decodeURIComponent(run); } catch { return run; }
-  }).replace(/\++/gu, ' ');
+
+// Inside a link target a known full name is written joined, with a separator,
+// percent-encoded or without umlauts, in either order
+// ("…/in/marlene-oesterreicher", "…/u/stein.laura", "?name=Laura%20Stein").
+// Only that name part is replaced, in place, exactly as the dictionary has
+// always replaced "…/in/laura-stein". The link as a whole keeps the treatment
+// its profile gives it, so no other detector is displaced. A single surname
+// is not used here: one path word equal to a common word proves nothing.
+const LINK_TOKEN_START = '(?:(?<![\\p{L}\\p{N}])|(?<=%[0-9A-Fa-f]{2}))';
+const LINK_TOKEN_END = '(?![\\p{L}\\p{N}])';
+const LINK_NAME_SEPARATOR = '(?:[-_.+,]|%20)?';
+const LINK_ENCODED_EMAIL_RE = /(?<![A-Za-z0-9._+-])[A-Za-z0-9._+-]{1,64}%40[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}(?![A-Za-z0-9-])/gu;
+function linkNamePattern(name) {
+  const parts = normalizeSpaces(name).split(/[ \t]+/u);
+  if (parts.length !== 2 || parts.some((part) => part.length < 2 || !/^[\p{L}'’-]+$/u.test(part)) || parts[1].length < 3) return null;
+  const forms = (part) => {
+    const cased = [part, part[0].toLocaleUpperCase('de-DE') + part.slice(1)];
+    const spellings = cased.flatMap((form) => [form, ...asciiNameSpellings(form)]);
+    return [...new Set(spellings.flatMap((form) => [form, encodeURIComponent(form)]))]
+      .sort((left, right) => right.length - left.length).map(escapeRegExp).join('|');
+  };
+  const [given, surname] = parts.map(forms);
+  return new RegExp(LINK_TOKEN_START + `(?:(?:${given})${LINK_NAME_SEPARATOR}(?:${surname})|(?:${surname})${LINK_NAME_SEPARATOR}(?:${given}))` +
+    LINK_TOKEN_END, 'giu');
 }
-// True when a link target spells a known full person name (given name and
-// surname next to each other, in either order, or joined) or, only visible
-// after percent-decoding, an e-mail address. Single surnames are not used:
-// a path segment equal to one common word proves nothing.
-function linkTargetCarriesIdentity(target, personNames) {
-  const decoded = decodeLinkTarget(target);
-  if (decoded !== String(target) && findStructuredSpans(decoded).some((span) => span.type === 'EMAIL')) return true;
-  const tokens = foldIdentityText(decoded).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  if (!tokens.length) return false;
-  for (const name of personNames) {
-    const parts = normalizeSpaces(name).split(/[ \t,]+/u).filter(Boolean);
-    if (parts.length !== 2 || parts.some((part) => part.length < 2) || parts[1].length < 3) continue;
-    for (const transliterate of [false, true]) {
-      const [given, surname] = parts.map((part) => foldIdentityText(part, transliterate));
-      if (!given || !surname) continue;
-      if (tokens.includes(given + surname) || tokens.includes(surname + given)) return true;
-      for (let index = 0; index + 1 < tokens.length; index++) {
-        if ((tokens[index] === given && tokens[index + 1] === surname) ||
-            (tokens[index] === surname && tokens[index + 1] === given)) return true;
+// Occurrences of the given full names, and of an e-mail address hidden behind
+// percent-encoding, inside the links of a text. Each hit is {start, end,
+// text, name}; name is null for the e-mail address. Redaction and the
+// residual gate both use this one function.
+function linkIdentityHits(text, names) {
+  const patterns = [...new Set(names)].map((name) => [name, linkNamePattern(name)]).filter(([, pattern]) => pattern);
+  const hits = [];
+  URL_RE.lastIndex = 0;
+  for (let link; (link = URL_RE.exec(text));) {
+    for (const [name, pattern] of patterns) {
+      pattern.lastIndex = 0;
+      for (let hit; (hit = pattern.exec(link[0]));) {
+        hits.push({ start: link.index + hit.index, end: link.index + hit.index + hit[0].length, text: hit[0], name });
       }
     }
+    LINK_ENCODED_EMAIL_RE.lastIndex = 0;
+    for (let hit; (hit = LINK_ENCODED_EMAIL_RE.exec(link[0]));) {
+      hits.push({ start: link.index + hit.index, end: link.index + hit.index + hit[0].length, text: hit[0], name: null });
+    }
   }
-  return false;
+  return hits;
 }
 
 function findLiteralSpans(text, needle, replacement, type, priority, options = {}) {
   if (!needle) return [];
-  const literal = String(needle).split(/\s+/u).map(escapeRegExp).join('[ \\t\\r\\n]+');
+  // identifierJoin: the tokens of one full name may also be joined the way a
+  // file name or login joins them ("hans_mueller", "Hans-Mueller").
+  const joiner = options.identifierJoin === true ? '(?:[ \\t\\r\\n]+|[-_.])' : '[ \\t\\r\\n]+';
+  const literal = String(needle).split(/\s+/u).map(escapeRegExp).join(joiner);
   const suffix = options.personGenitive === true ? personGenitiveSuffix(String(needle)) : '';
-  const [before, after] = options.slugBoundary === true ? [SLUG_NB, SLUG_NA] : [NB, NA];
+  const [before, after] = options.slugBoundary === true || options.identifierJoin === true ? [SLUG_NB, SLUG_NA] : [NB, NA];
   const re = new RegExp(`${before}${literal}${suffix}${after}`, 'giu');
   const spans = [];
   let m;
@@ -480,6 +498,7 @@ function buildPersonDictionary(seeds, reg) {
 
   const multi = seeds.filter((s) => normalizeSpaces(s.value).split(/\s+/).length >= 2);
   const single = seeds.filter((s) => normalizeSpaces(s.value).split(/\s+/).length === 1);
+  const seedKeys = new Set(multi.map((s) => key(titleCase(s.value))));
 
   for (const seed of multi) {
     const canonical = titleCase(seed.value);
@@ -492,8 +511,16 @@ function buildPersonDictionary(seeds, reg) {
       entries.push({ value: canonical.replace(/[ \t]+/u, '-'), placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
       for (const separator of ['_', '.']) {
         entries.push({ value: canonical.replace(/[ \t]+/u, separator), placeholder: ph, type: 'PERSON',
-          priority: PRIORITY.PERSON, slugBoundary: true });
+          priority: PRIORITY.PERSON, slugBoundary: true, matchOnly: true });
       }
+    }
+    // The same full name without umlauts. Never the surname alone, and not
+    // when that spelling is a person of its own in this document or batch.
+    for (const spelling of asciiNameSpellings(canonical)) {
+      if (seedKeys.has(key(spelling))) continue;
+      const other = typeof reg.lookup === 'function' ? reg.lookup('PERSON', spelling) : null;
+      if (other && other !== ph) continue;
+      entries.push({ value: spelling, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON, identifierJoin: true, matchOnly: true });
     }
     if (seed.matchValue && seed.matchValue !== seed.value) {
       entries.push({ value: seed.matchValue, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
@@ -856,17 +883,18 @@ function anonymize(text, profile = 'general', options = {}) {
       );
     }
   }
-  // In every profile a link target that spells a known full name, or hides
-  // an e-mail address behind percent-encoding, is replaced as a whole. The
-  // visible label is handled by the dictionary; its target must not keep the
-  // same identity ("[Profil](https://example.org/in/marlene-oesterreicher)").
-  const knownFullNames = [...fullNamePlaceholders.keys()];
   if (profile !== 'personnel_profile' && profile !== 'applicant' && profile !== 'customer') {
-    URL_RE.lastIndex = 0;
-    for (let link; (link = URL_RE.exec(out));) {
-      if (!linkTargetCarriesIdentity(link[0], knownFullNames)) continue;
-      spans.push({ type: 'URL', start: link.index, end: link.index + link[0].length, text: link[0],
-        replacement: '[URL_REDACTED]', priority: PRIORITY.IDENTITY_LINK });
+    // These profiles keep links. The name part inside a link is replaced in
+    // place; a hit that an existing span already covers needs nothing.
+    for (const hit of linkIdentityHits(out, [...fullNamePlaceholders.keys()])) {
+      if (spans.some((span) => span.start <= hit.start && span.end >= hit.end)) continue;
+      const placeholder = hit.name === null ? '[EMAIL_REDACTED]' : fullNamePlaceholders.get(hit.name);
+      spans.push(hit.name === null
+        // Same rank as the e-mail detector.
+        ? { type: 'EMAIL', start: hit.start, end: hit.end, text: hit.text, replacement: placeholder, priority: 90 }
+        : { type: 'PERSON', start: hit.start, end: hit.end, text: hit.text, identity_value: hit.name,
+          ...(placeholder.startsWith('[PERSON_') ? { identity_key: `registry:PERSON:${placeholder}` } : {}),
+          replacement: placeholder, priority: PRIORITY.PERSON });
     }
   }
   if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {
@@ -936,7 +964,11 @@ function anonymize(text, profile = 'general', options = {}) {
     // Typed entries travel through the existing gateway gate unchanged. They
     // let the verifier distinguish a private person alias from a vendor with
     // a separate, position-bound professional role. No registry is persisted.
-    dictionary: dictionary.map(({value,type}) => ({value,type})),
+    // Spellings added only to widen the replacement (file-name forms, the
+    // inverted form, the form without umlauts) are not part of this list: the
+    // gate keeps judging exactly the literals it judged before, so a spelling
+    // that an open review choice still holds cannot become a hard stop.
+    dictionary: dictionary.filter((entry) => entry.matchOnly !== true).map(({value,type}) => ({value,type})),
     strongPersonAnchor: strongPersonAnchors.length > 0 || knownPersonAnchor,
     reidentification_risk: profile === 'personnel_profile' ? 'high' : 'context_dependent'
   };
@@ -1432,15 +1464,14 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     }
   }
 
-  const knownPersonNames = (knownValues || []).filter((value) => value && typeof value === 'object' && value.type === 'PERSON')
+  // Any iterable is accepted here, exactly as by the loop below.
+  const knownPersonNames = [...(knownValues || [])].filter((value) => value && typeof value === 'object' && value.type === 'PERSON')
     .map((value) => normalizeSpaces(value.value));
   if (knownPersonNames.length) {
-    URL_RE.lastIndex = 0;
-    for (let link; (link = URL_RE.exec(clean));) {
-      const range = { start: link.index, end: link.index + link[0].length };
-      if (insideCredentialValue(range.start, range.end) ||
-          reviewedLiterals.some((reviewed) => range.start >= reviewed.start && range.end <= reviewed.end)) continue;
-      if (linkTargetCarriesIdentity(link[0], knownPersonNames)) out.push({ type: 'URL', text: link[0] });
+    for (const hit of linkIdentityHits(clean, knownPersonNames)) {
+      if (insideCredentialValue(hit.start, hit.end) ||
+          reviewedLiterals.some((reviewed) => hit.start >= reviewed.start && hit.end <= reviewed.end)) continue;
+      out.push({ type: 'URL', text: hit.text });
     }
   }
 

@@ -45,6 +45,22 @@ async function main() {
     assert.equal(body(await release(`${two}Müller, Hans; Müller, Anna`)), '[PERSON_001]; [PERSON_002]');
   });
 
+  await testAsync('the full name without umlauts is the same person, the surname alone is not', async () => {
+    assert.equal(await known('Kennung marlene_oesterreicher, Marlene Oesterreicher und Marlene-Osterreicher.'),
+      'Kennung [PERSON_001], [PERSON_001] und [PERSON_001].');
+    assert.equal(await known('Oesterreicher, Marlene steht in der Liste. Marlene Oesterreichers Akte.'),
+      '[PERSON_001] steht in der Liste. [PERSON_001] Akte.');
+    const alone = 'Die Oesterreicher Straße bleibt, oesterreicher allein auch.';
+    assert.equal(await known(alone), alone);
+    // A person who really carries the plain spelling keeps an identity of their own.
+    assert.equal(body(await release('Name: Hans Müller\nAnsprechpartner: Hans Muller\n\nHans Muller und Hans Müller sowie Hans Mueller.')),
+      '[PERSON_002] und [PERSON_001] sowie [PERSON_001].');
+    assert.equal(body(await release('Name: Hans Peter Müller\n\nhans_peter_mueller und Hans Peter Mueller.')), '[PERSON_001] und [PERSON_001].');
+    // On a line of its own the spelling is an open person hint that the
+    // automatic policy turns into a pseudonym. It must release, not stop.
+    assert.equal(body(await release('Name: Hans Müller\n\nMit freundlichen Grüßen\nHans Mueller')), 'Mit freundlichen Grüßen\n[PERSON_002]');
+  });
+
   await testAsync('abbreviated salutations are consumed only in front of the known person', async () => {
     assert.equal(await known('Hr. Österreicher und Fr. Österreicher kamen.'), '[PERSON_001] und [PERSON_001] kamen.');
     assert.equal(await known('Mo.-Fr. Sprechzeiten bleiben.'), 'Mo.-Fr. Sprechzeiten bleiben.');
@@ -68,23 +84,27 @@ async function main() {
     }
   });
 
-  await testAsync('a link target carrying the known name or a hidden e-mail address is replaced', async () => {
-    for (const target of [
-      'https://example.org/in/marlene-oesterreicher',
-      'https://example.org/u/osterreicher.marlene',
-      'https://example.org/profil?name=Marlene%20%C3%96sterreicher&x=1',
-      'https://example.org/profil?mail=muster%40example.org'
-    ]) {
-      const markdown = await known(`[Profil](${target})`);
-      assert.equal(markdown, '[Profil]([URL_REDACTED])', target);
+  await testAsync('the name part or a hidden e-mail address inside a link target is replaced in place', async () => {
+    for (const [target, released] of [
+      ['https://example.org/in/marlene-oesterreicher', 'https://example.org/in/[PERSON_001]'],
+      ['https://example.org/in/marleneoesterreicher', 'https://example.org/in/[PERSON_001]'],
+      ['https://example.org/u/osterreicher.marlene', 'https://example.org/u/[PERSON_001]'],
+      ['https://example.org/profil?name=Marlene%20%C3%96sterreicher&x=1', 'https://example.org/profil?name=[PERSON_001]&x=1'],
+      ['https://example.org/profil?mail=muster%40example.org', 'https://example.org/profil?mail=[EMAIL_REDACTED]']
+    ]) assert.equal(await known(`[Profil](${target})`), `[Profil](${released})`, target);
+    // The link is never replaced as a whole here, so every other detector
+    // keeps its own part. A first version did replace the whole link and
+    // thereby exposed the local part of an e-mail address whose domain spells
+    // the name, and stopped a document with the link in angle brackets.
+    for (const [tail, released] of [['?tel=+49301234567', '?tel=[PHONE_REDACTED]'],
+      ['?iban=DE89370400440532013000', '?iban=[BANK_DATA_REDACTED]'], [',jan.mustermann@example.org', ',[EMAIL_REDACTED]']]) {
+      assert.equal(await known(`Siehe https://example.org/in/marlene-oesterreicher${tail} ende`),
+        `Siehe https://example.org/in/[PERSON_001]${released} ende`, tail);
     }
-    // Counter-review: a detector matching a part of the link (telephone,
-    // IBAN, e-mail) must not displace the whole-link replacement. Otherwise
-    // the name stays in the target and the residual gate stops the document.
-    for (const tail of ['?tel=+49301234567', '?iban=DE89370400440532013000', ',jan.mustermann@example.org']) {
-      assert.equal(await known(`Siehe https://example.org/in/marlene-oesterreicher${tail} ende`), 'Siehe [URL_REDACTED] ende', tail);
-    }
-    const unrelated = 'Siehe https://example.org/produkte/sommer-2024 und https://example.org/team.';
+    assert.equal(await known('Mail an l.meier@marlene-oesterreicher.example bitte, siehe <https://example.org/in/marlene-oesterreicher>.'),
+      'Mail an [EMAIL_REDACTED] bitte, siehe &lt;https://example.org/in/[PERSON_001]>.');
+    const unrelated = 'Siehe https://example.org/produkte/sommer-2024 und https://example.org/team sowie ' +
+      'https://example.org/oesterreicher und https://example.org/marleneoesterreicherin dort.';
     assert.equal(await known(unrelated), unrelated);
   });
 
