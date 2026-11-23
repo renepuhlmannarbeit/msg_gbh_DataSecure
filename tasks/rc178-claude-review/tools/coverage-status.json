@@ -61,14 +61,15 @@
         "R-001",
         "R-017"
       ],
-      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 318-460, 534-810, 1270-1340; Hauptsession zusätzlich 340-400, 655-810, 1275-1345); Einheiten außerhalb sind faktisch offen"
+      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 318-460, 534-810, 1270-1340; Hauptsession zusätzlich 340-400, 655-810, 1275-1345 und in der zweiten Runde die Personen-, Alias- und Linkzweige); Einheiten außerhalb sind faktisch offen"
     },
     "plugins/data-secure/server/privacy/structured.js": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
-        "R-002"
+        "R-002",
+        "R-024"
       ],
-      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 108-125, 195-250, 408-490); Einheiten außerhalb sind faktisch offen"
+      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 108-125, 195-250, 408-490; zweite Runde zusätzlich die Annahmeregel der Straßenadresse); Einheiten außerhalb sind faktisch offen"
     },
     "plugins/data-secure/server/privacy/base.js": {
       "symbolStatus": "TEILGEPRÜFT",
@@ -329,7 +330,8 @@
       "findings": [
         "R-008",
         "R-009",
-        "R-020"
+        "R-020",
+        "R-025"
       ],
       "remark": "Datei im Oberflächen-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
@@ -338,7 +340,8 @@
       "findings": [
         "R-008",
         "R-009",
-        "R-020"
+        "R-020",
+        "R-025"
       ],
       "remark": "Datei im Oberflächen-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
@@ -347,7 +350,8 @@
       "findings": [
         "R-008",
         "R-009",
-        "R-020"
+        "R-020",
+        "R-025"
       ],
       "remark": "Datei im Oberflächen-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
@@ -356,13 +360,15 @@
       "findings": [
         "R-008",
         "R-009",
-        "R-020"
+        "R-020",
+        "R-025"
       ],
       "remark": "Datei im Oberflächen-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
     "apps/datasecure-standalone/frontend/document-review.js": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
+        "R-012",
         "R-020"
       ],
       "remark": "im Oberflächen-Review nur teilweise gelesen (Z. 1-32, 184-691, 1278-1537); Einheiten außerhalb sind faktisch offen"
@@ -374,15 +380,17 @@
     "apps/datasecure-standalone/tauri-contract/src/main.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
+        "R-012",
+        "R-013",
         "R-014",
         "R-022"
       ],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/ipc_transport.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/export_directory.rs": {
       "symbolStatus": "TEILGEPRÜFT",
@@ -391,24 +399,24 @@
         "R-013",
         "R-022"
       ],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/export_directory/relative_results.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/native_export_transaction.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/native_export_channel.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
         "R-012"
       ],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/native_export_broker.rs": {
       "symbolStatus": "TEILGEPRÜFT",
@@ -416,66 +424,66 @@
         "R-011",
         "R-012"
       ],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/native_export_workspace.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/private_namespace.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/diagnostic_bundle.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
         "R-013"
       ],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/diagnostic_log.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
         "R-013"
       ],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/diagnostic_probe.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/ipc_activity.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/native_smoke.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/content_start.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/macos_core.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/native_open.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/src/startup_diagnostics.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
-      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; nur Quelltext, kein cargo-Lauf im Review; Testmodule nicht gelesen"
+      "remark": "Datei im Rust-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten; im Review nur Quelltext; cargo test und clippy der zweiten Runde nur für das Windows-Ziel; Testmodule nur an den geänderten Stellen gelesen"
     },
     "apps/datasecure-standalone/tauri-contract/build.rs": {
       "symbolStatus": "TEILGEPRÜFT",
@@ -609,6 +617,95 @@
           "R-001"
         ],
         "remark": "neu in 8cf00fa7"
+      },
+      "linkNamePattern": {
+        "status": "GEPRÜFT",
+        "purpose": "Namensteil einer bekannten Person und prozentkodierte E-Mail-Adresse im Ziel eines Links finden; Aufrufer anonymize (Profile, die Links behalten) und scanResidual",
+        "trust": "Linkziel aus dem Dokument; reiner Mustervergleich ohne Dekodierung",
+        "invariant": "Redaktion und Restprüfung nutzen dieselbe Funktion; ersetzt wird nur der Treffer mit dem Rang eines Namenstreffers, nie der ganze Link",
+        "evidence": "tests/test-privacy-name-variants.js; Differenzlauf gegen den RC178-Kern (15 400 Fälle); dritte Gegenprüfung",
+        "findings": [
+          "R-017"
+        ],
+        "remark": "neu in e07ca2e6; ersetzt die Ganzersetzung aus cfee417a und ac74cf71, die ein Leck und Stopps verursachte"
+      },
+      "linkIdentityHits": {
+        "status": "GEPRÜFT",
+        "purpose": "Namensteil einer bekannten Person und prozentkodierte E-Mail-Adresse im Ziel eines Links finden; Aufrufer anonymize (Profile, die Links behalten) und scanResidual",
+        "trust": "Linkziel aus dem Dokument; reiner Mustervergleich ohne Dekodierung",
+        "invariant": "Redaktion und Restprüfung nutzen dieselbe Funktion; ersetzt wird nur der Treffer mit dem Rang eines Namenstreffers, nie der ganze Link",
+        "evidence": "tests/test-privacy-name-variants.js; Differenzlauf gegen den RC178-Kern (15 400 Fälle); dritte Gegenprüfung",
+        "findings": [
+          "R-017"
+        ],
+        "remark": "neu in e07ca2e6; ersetzt die Ganzersetzung aus cfee417a und ac74cf71, die ein Leck und Stopps verursachte"
+      },
+      "asciiNameSpellings": {
+        "status": "GEPRÜFT",
+        "purpose": "Schreibweisen eines Namens ohne Umlaute; Aufrufer buildPersonDictionary und linkNamePattern",
+        "invariant": "nur lateinische Schrift; nur der volle Name wird damit gesucht, und nicht, wenn die Schreibweise eine eigene Person ist",
+        "evidence": "tests/test-privacy-name-variants.js; Differenzlauf; zweite Gegenprüfung",
+        "findings": [
+          "R-017"
+        ],
+        "remark": "neu in e07ca2e6"
+      },
+      "buildPersonDictionary": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Wörterbuch der Personenliterale; Aufrufer anonymize",
+        "evidence": "tests/test-privacy-name-variants.js; Differenzlauf",
+        "findings": [
+          "R-017"
+        ],
+        "remark": "geändert in cfee417a und e07ca2e6 (Dateinamenformen, Schreibweise ohne Umlaute, Kennzeichen matchOnly); übrige Zweige nicht einzeln beurteilt"
+      },
+      "anonymize": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Redaktion eines Textes; Aufrufer gateway/privacy-text-operation.js",
+        "evidence": "tests/test-privacy-name-variants.js; tests/test-pii-regression.js; Differenzlauf",
+        "findings": [
+          "R-001",
+          "R-017",
+          "R-026"
+        ],
+        "remark": "geändert in 3e4a1be1 (Aufzählung), d91462b9 (Link in strengen Profilen), e07ca2e6 (Namensteil im Link, Wörterbuch für die Restprüfung); nur diese Zweige beurteilt"
+      },
+      "scanResidual": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Restprüfung des freigegebenen Textes; Aufrufer gateway/privacy-text-operation.js und Prüfspeicher",
+        "evidence": "tests/test-privacy-name-variants.js; tests/test-pii-regression.js (Map als Eingabe)",
+        "findings": [
+          "R-001",
+          "R-017"
+        ],
+        "remark": "geändert in 8cf00fa7, cfee417a und e07ca2e6; nur die Zweige bekannte Werte und Linkziel beurteilt"
+      },
+      "isExplicitPersonOccurrence": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Personenkontext einer Fundstelle; Aufrufer Wörterbuchschleife",
+        "evidence": "tests/test-privacy-name-variants.js",
+        "findings": [
+          "R-017"
+        ],
+        "remark": "geändert in cfee417a (abgekürzte Anrede); übrige Zweige nicht einzeln beurteilt"
+      },
+      "growOverHonorific": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Fundstelle über eine vorangestellte Anrede ausdehnen",
+        "evidence": "tests/test-privacy-name-variants.js",
+        "findings": [
+          "R-017"
+        ],
+        "remark": "geändert in cfee417a"
+      },
+      "isPersistedPersonAliasOccurrence": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Alias einer Person aus einem früheren Dokument an der Fundstelle bestätigen",
+        "evidence": "tests/test-privacy-name-variants.js (Genitiv im Folgedokument, Gegenfall mit gebeugtem Adjektiv)",
+        "findings": [
+          "R-017"
+        ],
+        "remark": "geändert in cfee417a; Überredaktion bei Nachnamen, die gewöhnliche Wörter sind, hingenommen und dokumentiert"
       }
     },
     "plugins/data-secure/server/privacy/structured.js": {
@@ -660,7 +757,18 @@
           "R-003",
           "R-005"
         ],
-        "remark": "geändert in 14c12ee1 und c79f3aa4; nur die Zweige Lauftext und w:pStyle beurteilt, übrige Zweige nicht einzeln"
+        "remark": "geändert in 14c12ee1, c79f3aa4, 0d9e115c und a0d3e340; nur die Zweige Lauftext, w:sym und w:pStyle beurteilt, übrige Zweige nicht einzeln"
+      },
+      "wordSymbolText": {
+        "status": "GEPRÜFT",
+        "purpose": "eingefügtes Symbol (w:sym) als sicheres Zeichen oder neutralen Marker ausgeben; Aufrufer parseWordStructure",
+        "trust": "Schriftname und Zeichencode aus dem Dokument",
+        "invariant": "nur die Symbol-Schrift wird übersetzt; alles andere ergibt den Marker",
+        "evidence": "tests/test-docx-inline-run-content.js; Zuordnung aller 52 Buchstaben von der Gegenprüfung gegen die Adobe-Symbol-Kodierung verglichen",
+        "findings": [
+          "R-003"
+        ],
+        "remark": "neu in 0d9e115c"
       }
     },
     "plugins/data-secure/server/word-content-context.js": {
@@ -719,33 +827,179 @@
     },
     "apps/datasecure-standalone/tauri-contract/src/export_directory.rs": {
       "write_record_bounded": {
-        "status": "TEILGEPRÜFT",
+        "status": "GEPRÜFT",
         "purpose": "Datensatz in die private Exportwurzel schreiben; Aufrufer native_export_workspace.rs put",
-        "evidence": "nur Quelltext; kein Test für die Grenze 2048",
+        "invariant": "nur verwaiste pending-Namen zählen gegen die Grenze; die Gesamtzahl kontrollierter Namen bleibt begrenzt (65 536)",
+        "evidence": "Rust-Test completed_records_do_not_exhaust_the_abandoned_preparation_bound; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
         "findings": [
           "R-011"
-        ]
+        ],
+        "remark": "geändert in 5f8bf47b"
+      },
+      "parse_names_seen": {
+        "status": "GEPRÜFT",
+        "purpose": "Namen eines Windows-Verzeichnislistings sammeln und Duplikate über alle Seiten erkennen; Aufrufer list_controlled_names",
+        "invariant": "eine Menge je Listing, linearer Aufwand",
+        "evidence": "bestehende Listing-Tests über den Test-Wrapper parse_names; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-011"
+        ],
+        "remark": "neu in 3b8fbba9 (Einwand der Gegenprüfung)"
       }
     },
     "apps/datasecure-standalone/tauri-contract/src/native_export_broker.rs": {
+      "capture@205": {
+        "status": "GEPRÜFT",
+        "purpose": "Betriebssystemursache eines Exportfehlers auf ein geschlossenes Vokabular abbilden; Aufrufer native_export_channel.rs",
+        "trust": "io::Error; es wird nur die Fehlerklasse übernommen, kein Pfad und kein Text",
+        "evidence": "Rust-Test im selben Modul; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-012"
+        ],
+        "remark": "neu in 8c0dd30b"
+      },
       "public_code": {
         "status": "TEILGEPRÜFT",
         "purpose": "interne Exportfehler auf öffentliche Codes abbilden",
-        "evidence": "nur Quelltext",
+        "evidence": "Quelltext; unverändert",
         "findings": [
           "R-012"
-        ]
+        ],
+        "remark": "öffentlicher Code bewusst nicht geändert"
       }
     },
     "apps/datasecure-standalone/tauri-contract/src/main.rs": {
+      "diagnostic_native_export_failure": {
+        "status": "GEPRÜFT",
+        "purpose": "inhaltsfreies Diagnoseereignis native_export_failed schreiben; Aufrufer native_export_channel.rs",
+        "evidence": "diagnostic_bundle.rs: Test der Bereinigung für das neue Ereignis; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-012"
+        ],
+        "remark": "neu in 8c0dd30b"
+      },
+      "display_poll_record": {
+        "status": "GEPRÜFT",
+        "purpose": "je Anfrage entscheiden, ob eine erfolgreiche Anzeigeabfrage protokolliert wird; Aufrufer diagnostic_ipc_event",
+        "invariant": "Fehler werden immer geschrieben, bei unterdrückter Startzeile mit nachgeholtem Start",
+        "evidence": "Rust-Test successful_display_polls_stop_filling_the_session_log_after_their_budget; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-013"
+        ],
+        "remark": "neu in b30a6dbc, je Anfrage seit 1fb7eaee (Einwand der Gegenprüfung)"
+      },
+      "validate_document_review_request": {
+        "status": "GEPRÜFT",
+        "purpose": "Argumente der Nachbearbeitungs-Commands nativ prüfen, bevor ein privater Frame entsteht; Aufrufer document_review_rpc",
+        "trust": "Argumente aus der WebView",
+        "invariant": "spiegelt validatePrivateMessage in standalone/desktop-ipc.js; nicht strenger als der Core",
+        "evidence": "Rust-Test document_review_arguments_are_refused_natively_before_they_become_a_private_frame; Abgleich aller Aufrufe der geladenen Oberfläche durch die Gegenprüfung; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-014"
+        ],
+        "remark": "neu in aef66f19, angeglichen in 22688d75"
+      },
+      "valid_document_decision": {
+        "status": "GEPRÜFT",
+        "purpose": "Teilprüfung der nativen Argumentprüfung; Aufrufer validate_document_review_request",
+        "evidence": "Rust-Test document_review_arguments_are_refused_natively_before_they_become_a_private_frame; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-014"
+        ],
+        "remark": "neu in aef66f19"
+      },
+      "valid_export_selection": {
+        "status": "GEPRÜFT",
+        "purpose": "Teilprüfung der nativen Argumentprüfung; Aufrufer validate_document_review_request",
+        "evidence": "Rust-Test document_review_arguments_are_refused_natively_before_they_become_a_private_frame; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-014"
+        ],
+        "remark": "neu in aef66f19"
+      },
+      "exact_keys": {
+        "status": "GEPRÜFT",
+        "purpose": "Teilprüfung der nativen Argumentprüfung; Aufrufer validate_document_review_request",
+        "evidence": "Rust-Test document_review_arguments_are_refused_natively_before_they_become_a_private_frame; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-014"
+        ],
+        "remark": "neu in aef66f19"
+      },
+      "bounded_integer": {
+        "status": "GEPRÜFT",
+        "purpose": "Teilprüfung der nativen Argumentprüfung; Aufrufer validate_document_review_request",
+        "evidence": "Rust-Test document_review_arguments_are_refused_natively_before_they_become_a_private_frame; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-014"
+        ],
+        "remark": "neu in aef66f19"
+      },
+      "lower_hex": {
+        "status": "GEPRÜFT",
+        "purpose": "Teilprüfung der nativen Argumentprüfung; Aufrufer validate_document_review_request",
+        "evidence": "Rust-Test document_review_arguments_are_refused_natively_before_they_become_a_private_frame; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-014"
+        ],
+        "remark": "neu in aef66f19"
+      },
       "document_review_rpc": {
         "status": "TEILGEPRÜFT",
         "purpose": "Nachbearbeitungs-Commands an den Sidecar reichen",
-        "trust": "Argumente aus der WebView, nativ nicht vollständig vorgeprüft",
-        "evidence": "nur Quelltext",
+        "trust": "Argumente aus der WebView, jetzt nativ vorgeprüft",
+        "evidence": "Rust-Test wie validate_document_review_request; cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
         "findings": [
           "R-014"
-        ]
+        ],
+        "remark": "geändert in aef66f19; nur der Prüfaufruf beurteilt"
+      }
+    },
+    "plugins/data-secure/server/standalone/markdown-retention.js": {
+      "stalePendingPublication": {
+        "status": "GEPRÜFT",
+        "purpose": "verwaiste Veröffentlichungsvorbereitung erkennen; Aufrufer Bereinigungslauf",
+        "invariant": "nur das eigene Namensmuster; nie jünger als die Schonfrist, auch bei Aufbewahrung 0 Tage; ein verschwindender Eintrag bricht den Lauf nicht ab",
+        "evidence": "tests/test-standalone-markdown-retention.js (15 Fälle)",
+        "findings": [
+          "R-010"
+        ],
+        "remark": "neu in 97a70cd0, Schonfrist und Fehlertoleranz in f8c69fe3 (Einwand der Gegenprüfung)"
+      }
+    },
+    "plugins/data-secure/server/document-parser.js": {
+      "parseCsvDialect": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Trennzeichen und Tabellenform einer CSV bestimmen; Aufrufer markdown-extractor.js und der CSV-Quellpfad",
+        "evidence": "tests/test-markdown-extractor.js, tests/test-csv-source.js",
+        "findings": [
+          "R-018"
+        ],
+        "remark": "geändert in 803acbb9: Leerzeile aus Leerzeichen, Kennzeichen unstructured; übrige Zweige nicht einzeln beurteilt"
+      }
+    },
+    "plugins/data-secure/server/standalone/markdown-extractor.js": {
+      "extractCsv": {
+        "status": "GEPRÜFT",
+        "purpose": "CSV als Tabelle oder wörtlichen Block ausgeben; Aufrufer extractMarkdownBuffer",
+        "invariant": "eine nicht sicher erkannte Tabellenform meldet SOURCE_COVERAGE_UNVERIFIED statt „vollständig“",
+        "evidence": "tests/test-markdown-extractor.js",
+        "findings": [
+          "R-018"
+        ],
+        "remark": "geändert in 803acbb9"
+      }
+    },
+    "apps/datasecure-standalone/frontend/workflow-presentation.js": {
+      "failureAdvice": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Handlungshinweis zu einem Stoppgrund; Aufrufer Ergebnisdarstellung",
+        "evidence": "tests/test-workflow-presentation.js",
+        "findings": [
+          "R-018",
+          "R-025"
+        ],
+        "remark": "geändert in 2726675a"
       }
     }
   },
@@ -787,12 +1041,13 @@
       "findings": [
         "R-019"
       ],
-      "remark": "Stichprobe von 63 Standalone-Testdateien im Lieferketten-Review; Suite und fünf Frontend-Tests ausgeführt; übrige Testdateien nicht gelesen"
+      "remark": "Stichprobe von 63 Standalone-Testdateien im Lieferketten-Review; Suite ausgeführt; in der zweiten Runde neun neue oder erweiterte Testdateien geschrieben; übrige Testdateien nicht gelesen"
     },
     "G-DOCS": {
       "status": "TEILGEPRÜFT",
       "findings": [
         "R-007",
+        "R-015",
         "R-016",
         "R-021"
       ],

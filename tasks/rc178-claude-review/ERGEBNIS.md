@@ -1,8 +1,16 @@
 # RC178-Review · Ergebnis und Übergabe an Codex
 
 Gehört zum [Arbeitsauftrag](../AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md).
-Stand 23.11.2026. Befunde und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das
-Einzelregister in [ABDECKUNG.tsv](ABDECKUNG.tsv).
+Stand 23.11.2026, nach der zweiten Runde und einer dritten Prüfung. Befunde
+und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das Einzelregister in
+[ABDECKUNG.tsv](ABDECKUNG.tsv).
+
+Der Bericht hat zwei Runden. Die erste endete mit dem Remote-Stand
+`d07bfced` (geprüfter Code `e1afef0f`). Danach hat der Anwender beauftragt,
+die offenen Befunde zu beheben und erneut zu prüfen. Die zweite Runde umfasst
+20 Codecommits bis `a0d3e340`. Eine dritte Prüfung vor der Übergabe hat in
+diesem Stand eigene Fehler gefunden; sechs weitere Commits bis `d5992265`
+beheben sie. Dieser Bericht beschreibt den Endstand `d5992265`.
 
 ## Identität und Umfang
 
@@ -12,26 +20,25 @@ Einzelregister in [ABDECKUNG.tsv](ABDECKUNG.tsv).
 | GitHub-Arbeitsbranch | [`claude/rc178-standalone-review`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review) |
 | Eingefrorener Einstieg | `e88f1b8d100421017fb3909d77e338fd25c1b421` (`origin/codex/rc178-claude-review-handoff`) |
 | RC178-Produktbaseline | `v3.2.0-rc178` → `13ed39ff979a5f5d9bb076d35021164de380b9dd`, Fingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655` (nachgerechnet, 400 Quellinputs) |
-| Geprüfter Produktstand | `e1afef0f9637803d600715bf9014185c34bc37ac`, Fingerprint `5496fabe58c2116a570e6d16806879bc9160ca28d35bee7ce852f4d6d89b763e`. Spätere Commits ändern nur `tasks/rc178-claude-review/`. |
+| Geprüfter Produktstand | `d59922651508be0285034ce8b56dedc353cd6d14`, Fingerprint `0dac7e1877875c4b09e3b51c0815f44ef08e3d39c55a85c533cb7dca4223362d`. Spätere Commits ändern nur `tasks/rc178-claude-review/`. Stand der ersten Übergabe: `e1afef0f`, Fingerprint `5496fabe…`. |
 | Prüfumgebung | Claude Fable 5.2 (`claude-fable-5-2`) in Claude Code; Windows 11 Pro 10.0.26300 x64; Node 22.23.2 für alle Tests (Host-Node 24.18.0), npm 11.16.0, cargo/rustc 1.98.1, MSVC mit SDK 10.0.26100.0, WebView2 158.0.4370.33, Claude CLI 2.1.280 |
 | Verfügbare Zielplattformen | Nur Windows x64. Kein Mac, kein Xcode, kein iOS-Simulator. |
-| Abdeckung | 5 091 erfasste Einheiten in 346 Dateien: 9 `GEPRÜFT`, 1 474 `TEILGEPRÜFT`, 3 608 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
+| Abdeckung | 5 118 erfasste Einheiten in 346 Dateien: 26 `GEPRÜFT`, 1 941 `TEILGEPRÜFT`, 3 151 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
 
 Die Versionskennung `3.2.0-rc178` wurde nicht geändert. Der Stand ist kein
 Release; ein daraus gebautes Paket trägt dieselbe Versionsnummer wie RC178,
-aber den Build-Fingerprint `5496fabe…`.
+aber den Build-Fingerprint `0dac7e18…`.
 
 ## Ergebnis auf einen Blick
 
-1. **Belegt und behoben**
+1. **Belegt und behoben in der ersten Runde**
    - Genitivformen bekannter Personen („Hans Müllers Auto“) blieben im
      freigegebenen Markdown; Redaktion und Restprüfung hatten dieselbe Lücke
      (R-001).
    - Eine im Dokument erkannte Telefonnummer blieb an weiteren Stellen ohne
      Label stehen (R-002).
    - Word verlor geschützte Bindestriche und positionierte Tabulatoren:
-     „Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“ (R-003,
-     Teil).
+     „Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“ (R-003).
    - Überschriften aus lokalisierten Word-Vorlagen wurden nicht erkannt
      (R-005).
    - Das Excel-Standarddatum erschien in US-Schreibweise (R-004, Teil).
@@ -41,30 +48,93 @@ aber den Build-Fingerprint `5496fabe…`.
    - CLAUDE.md, Vertrag und Backlog beschrieben den Batchrunner als seriell
      (R-007); die paketierten Drittanbieterhinweise waren unvollständig
      (R-016).
-2. **Widerlegte oder eingegrenzte Annahmen**
+2. **Behoben in der zweiten Runde und der dritten Prüfung**
+   - Weitere Schreibweisen einer schon bekannten Person blieben stehen:
+     „Hr. Müller“, „Müller, Hans“, der Name als Kennung („Hans_Müller“,
+     „hans_mueller“), ohne Umlaute („Hans Mueller“) und im Ziel eines Links
+     (R-017, Teil).
+   - Ein Lebenslauf mit einem Link, der den Namen enthält, stoppte in den
+     Profilen Personalprofil, Bewerbung und Kunde mit `RESIDUAL_PII` (R-026,
+     im Differenzlauf gefunden).
+   - „im Zeitraum 2019‑2024“ wurde als Straßenadresse maskiert (R-024).
+   - Verwaiste Vorbereitungsordner einer abgebrochenen Veröffentlichung
+     blieben dauerhaft im privaten Bereich (R-010).
+   - Nach rund 512 Exporten in denselben Zielordner scheiterte jeder weitere;
+     die Grenze liegt jetzt bei rund 16 000 (R-011, Teil).
+   - Ein fehlgeschlagener Export meldete „Konflikt“ ohne erkennbare Ursache
+     (R-012, Teil); erfolgreiche Anzeigeabfragen füllten das
+     Sitzungsprotokoll (R-013, Teil).
+   - Argumente der Nachbearbeitung wurden nativ nicht geprüft (R-014).
+   - Eine CSV mit abweichendem Vorspann fiel ohne Hinweis in eine Spalte,
+     mit Abdeckung „vollständig“ (R-018).
+   - Eingefügte Word-Symbole verschwanden ohne Hinweis (R-003; der Zustand
+     alter Formular-Kontrollkästchen bleibt offen).
+   - Zähltexte ohne Einzahl, fehlende Handlungshinweise bei Stoppgründen,
+     schwache Feldränder und Rollen in der Oberfläche (R-020 Teil, R-025).
+   - Der Quelltextvertrag der Oberfläche prüfte die nicht geladene alte
+     Oberfläche (R-019, Teil).
+3. **Eigene Fehler, gefunden und behoben vor der Übergabe**
+   - Der vorgesehene Endstand der zweiten Runde (`a0d3e340`, nie gepusht)
+     enthielt zwei Lecks aus meinen eigenen Änderungen: In „Anna Müller,
+     Hans Müller“ blieb „Anna“ stehen, und bei „l.meier@laura-stein.de“ der
+     Teil vor dem @. Dazu kamen neue Stopps und ein fehlschlagender Fall der
+     Golden-Regression.
+   - Gefunden haben das eine eigene Probe, ein unabhängiger Faktencheck
+     dieses Berichts, ein Differenzlauf des RC178-Kerns gegen den geänderten
+     Kern und zwei weitere Gegenprüfungen. Keiner meiner Tests und nicht die
+     erste Gegenprüfung hatten es gezeigt.
+   - Die Korrektur ist ein Umbau, kein Flicken: Ein Link wird in den
+     Profilen, die Links behalten, nicht mehr als Ganzes ersetzt, sondern nur
+     der Namensteil darin. Einzelheiten in BEFUNDE.md, „Dritte Prüfung“.
+   - In der ersten Gegenprüfung der zweiten Runde hatten sechs weitere
+     Änderungen nicht standgehalten (BEFUNDE.md, „Einwände der
+     Gegenprüfung“). Eine davon betraf schon den Stand der ersten Übergabe:
+     ein geschützter Bindestrich oder Tabulator außerhalb eines Absatzes
+     stoppte ein vorher konvertierbares, ungültig aufgebautes Dokument.
+4. **Widerlegte oder eingegrenzte Annahmen**
    - „Die Restprüfung fängt Unterredaktion ab“ gilt nicht, wenn sie dieselbe
      Wortgrenze nutzt wie die Redaktion (A-001).
    - „Der Batchrunner ist seriell“ gilt nur für Entscheidung, Prüfung,
      Veröffentlichung und Ausgabe; die Konvertervorbereitung ist zweispurig
      (A-004).
    - Der Checkout bringt die Voraussetzungen von
-     `npm run test:product:headless` nicht mit (siehe Tests).
-3. **Verbleibende Grenzen**
-   - 14 Befunde sind offen und 5 nur teilweise behoben. Offen sind unter
-     anderem vier in der Rust-Shell (R-011 bis R-014) und drei weitere
-     Unterredaktionsmuster (R-017).
+     `npm run test:product:headless` nicht mit (jetzt in `docs/TESTING.md`).
+   - „Ein neuer Test je Änderung reicht als Nachweis“ gilt für den
+     Datenschutzkern nicht: Die Regeln überlagern sich, und erst der
+     Vergleich mit dem alten Kern über viele Satzformen hat die Fehler
+     gezeigt (A-015 bis A-017).
+5. **Verbleibende Grenzen**
+   - Offen bleiben R-006 (Listen), R-015, R-022 (Hypothesen für macOS) und
+     der neu gefundene R-027: Zugangsdaten hinter einem Label mitten in der
+     Zeile bleiben stehen, in RC178 wie im Endstand.
+   - Nur teilweise behoben sind R-004, R-011, R-012, R-013, R-017, R-019,
+     R-020 und R-023. Die Gründe stehen unten und in BEFUNDE.md.
+   - Die zweite Runde ändert fünf Rust-Dateien. Übersetzt und getestet ist
+     nur das Windows-Ziel; die macOS-Zweige derselben Dateien sind nicht
+     übersetzt worden.
    - Kein Mac- und kein iOS-Lauf. Alle macOS-Aussagen sind Quelltext- oder
      Runner-Belege.
-   - Die Einzelprüfung jeder Funktion ist nicht erreicht: 71 % der Einheiten
-     sind offen.
-   - Zwei Reviews (Datenschutz, Laufzeit) endeten am Schrittlimit mit
-     ausdrücklich unvollständigem Bericht.
-   - Abweichung vom Auftrag: Das Rust-Review hat vorhandene lokale
-     Diagnoseprotokolle der installierten App gelesen (nur Ereignisnamen und
-     Zähler, laut Bericht ohne Inhalte). Der Auftrag schließt
-     Diagnoserohdaten aus. Nichts davon steht im Repository; die
+   - Die Einzelprüfung jeder Funktion ist nicht erreicht: 62 % der
+     Einheiten sind offen.
+   - Der Differenzlauf ist kein Beweis. Sein Korpus ist von mir geschrieben
+     und hat die Fehler erst gezeigt, nachdem die passenden Satzformen darin
+     standen.
+   - Zwei Reviews der ersten Runde (Datenschutz, Laufzeit) und eine
+     Gegenprüfung der dritten Prüfung endeten am Schrittlimit; die letzte
+     hat ihren Bericht auf Nachfrage aus dem bis dahin Geprüften geliefert.
+   - Zwei Zwischencommits (`8c0dd30b`, `b30a6dbc`) lassen sich nicht
+     übersetzen: `main.rs` ist dort syntaktisch fehlerhaft, weil beim
+     Aufteilen der Änderungen Code an die falsche Stelle geriet. Ab
+     `aef66f19` ist die Datei wieder korrekt. Die Commits `cfee417a` bis
+     `a0d3e340` enthalten außerdem die in Punkt 3 genannten Fehler des
+     Datenschutzkerns; erst ab `e07ca2e6` sind sie behoben. Wegen der
+     Projektregel gegen History-Rewrites nicht umgeschrieben.
+   - Abweichung vom Auftrag in der ersten Runde: Das Rust-Review hat
+     vorhandene lokale Diagnoseprotokolle der installierten App gelesen (nur
+     Ereignisnamen und Zähler, laut Bericht ohne Inhalte). Der Auftrag
+     schließt Diagnoserohdaten aus. Nichts davon steht im Repository; die
      Befundtexte stützen sich auf den Quelltext.
-4. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
+6. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
 
 ## Änderungen je Thema
 
@@ -80,18 +150,63 @@ aber den Build-Fingerprint `5496fabe…`.
 | `03c621a4` | R-016 | `apps/datasecure-standalone/THIRD_PARTY_NOTICES.md` | `npm run test:docs`; Paketbau | Datei liegt in jedem Standalone-Paket. |
 | `e1afef0f` | R-021 | `apps/datasecure-standalone/MACOS-START.md`, `docs/TESTING.md`, `docs/canonical/STANDALONE_ARCHITECTURE.md` | `npm run test:docs` | `MACOS-START.md` ist Fingerprint-Eingabe. |
 
-Nicht umgesetzt und begründet:
+Zweite Runde:
 
-- **R-006 (Listen als Tabellen)** – berührt den Feldschutz der Anonymisierung;
-  braucht eine eigene Gegenprüfung beider Zwecke.
-- **R-010 bis R-014** – Löschlogik im privaten Bereich und Rust-Shell. Ohne
-  Rust-Tests je Ziel und ohne Mac nicht verantwortbar zu ändern.
+| Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
+| --- | --- | --- | --- | --- |
+| `7b078d75`, Test `7693e162` | R-024 | `privacy/structured.js`: ein Zeitwort mit Jahreszahl oder Jahresspanne („im Zeitraum 2019‑2024“) gilt nicht als Straßenadresse (geschlossene Wortliste). | `tests/test-privacy-time-periods.js` (1 Fall mit vier Gegenfällen, darunter „Zeitraumstraße 12“) | Gemeinsamer Kern, auch Cowork. |
+| `cfee417a`, `ac74cf71` | R-017 | `privacy/engine.js`: abgekürzte Anrede („Hr.“, „Fr.“), „Nachname, Vorname“, Kennungen mit `_` und `.`, Genitiv eines bekannten Alias im Folgedokument. Die hier eingeführte Ganzersetzung von Links und die Regel für umgestellte Namen waren fehlerhaft; siehe „Dritte Prüfung“. Grenze in `docs/canonical/STANDALONE_SECURITY_MODEL.md`. | `tests/test-privacy-name-variants.js` (am Endstand 9 Fälle, mit Gegenfällen) | Gemeinsamer Kern, auch Cowork. Policy-Fingerprint ändert sich. |
+| `97a70cd0`, `f8c69fe3`, Tests `7693e162` | R-010 | `standalone/markdown-retention.js`: verwaiste `.pending-…`-Ordner werden entfernt, wenn sie älter sind als die Aufbewahrungsfrist und in jedem Fall älter als eine Stunde; ein verschwindender Eintrag bricht den Lauf nicht ab. Der Schutz einer laufenden Veröffentlichung beruht auf dem Alter, nicht auf einer Sperre. | `tests/test-markdown-retention.js` (15 Fälle) | Nur Standalone, alle Ziele; nur unter Windows ausgeführt. |
+| `5f8bf47b`, `3b8fbba9`, Kommentar `d5992265` | R-011 | `tauri-contract/src/export_directory.rs`: nur verwaiste Vorbereitungen zählen gegen die Grenze von 2 048; die Gesamtzahl der Namen ist auf 65 536 begrenzt, das sind rund 16 000 Exporte je Zielordner. Windows-Listing mit einer Menge je Listing. | Rust-Test `completed_records_do_not_exhaust_the_abandoned_preparation_bound` | `write_record_bounded` ist plattformneutral; das Listing ist ein Windows-Zweig. macOS nicht übersetzt. |
+| `8c0dd30b` | R-012 | `native_export_broker.rs`, `native_export_channel.rs`, `main.rs`, `diagnostic_bundle.rs`: Diagnoseereignis `native_export_failed` mit Fehlerklasse und Systemcode, ohne Pfad; `frontend/document-review.js`: Hinweistext mit möglichen Ursachen. | Rust-Tests für die Erfassung der Ursache und für die Bereinigung des Ereignisses. Kein Test zeigt, dass ein fehlschlagender Export das Ereignis tatsächlich schreibt: der Aufruf ist im Testbau abgeschaltet. | Plattformneutraler Code; macOS nicht übersetzt. Commit allein nicht übersetzbar. |
+| `b30a6dbc`, `1fb7eaee` | R-013 | `main.rs`: höchstens 64 protokollierte erfolgreiche Anzeigeabfragen je Art; Fehler immer, bei Bedarf mit nachgeholter Startzeile. | Rust-Test `successful_display_polls_stop_filling_the_session_log_after_their_budget` | wie oben. `b30a6dbc` allein nicht übersetzbar. |
+| `aef66f19`, `22688d75`, Kommentar `d5992265` | R-014 | `main.rs`: `validate_document_review_request` prüft Form und Grenzen aller Nachbearbeitungs-Argumente vor dem privaten Frame, mit den Grenzen und Codes von `validatePrivateMessage` im Core. Strenger als der Core ist sie nur bei JSON, das die Oberfläche nie erzeugt (Zahl als Bruch, Nicht-Zeichenkette). | Rust-Test `document_review_arguments_are_refused_natively_before_they_become_a_private_frame` | wie oben |
+| `803acbb9` | R-018 | `document-parser.js`, `core/csv-table-shape.js`, `standalone/markdown-extractor.js`: Zeile nur aus Leerzeichen gilt als leer; abweichender Vorspann ergibt den Hinweis `SOURCE_COVERAGE_UNVERIFIED`. | `tests/test-markdown-extractor.js`, `tests/test-csv-source.js` | Gemeinsamer Kern. |
+| `0d9e115c`, `a0d3e340` | R-003 | `ooxml.js`: `w:sym` wird zum Zeichen (Symbol-Schrift: griechische Buchstaben) oder zum Marker `[Symbol]`; lose Marken außerhalb eines Absatzes bleiben folgenlos. | `tests/test-docx-inline-run-content.js` (5 Fälle) | Gemeinsamer Kern, beide Zwecke. |
+| `2726675a` | R-020, R-025, R-018 | `frontend/workspace.js`, `workflow-presentation.js`, `review.html`, `design-tokens.css`, `workspace.css`, `review-workspace.css` | `tests/test-workflow-presentation.js` (54 Fälle) | Nur Standalone, alle Ziele; kein WKWebView-Nachweis. |
+| `7e9e0530` | R-019 | `tests/test-standalone-loaded-frontend-contract.js`: Vertrag gegen die tatsächlich geladenen Dateien | 4 Fälle | — |
+| `871daa7f` | R-016 | `scripts/lib/standalone-conversion-runtime.mjs`: SPDX-Ausdruck für emf-converter | Paketbau und Paketprüfung | Paketmanifest aller Ziele. |
+| `6a90ed16` | R-023 | `scripts/audit-standalone-dependencies.mjs`, `npm run audit:standalone` | lokal ausgeführt: paketierte Locks ohne Befund | Fragt die npm-Registry mit Paketnamen und Versionen ab; kein Bestandteil der Suite. |
+| `2e34d532` | R-004, R-015, R-021 | `docs/FORMAT_COVERAGE_MATRIX.md`, `docs/TESTING.md`, `docs/RELEASE.md`, `docs/canonical/DOCUMENT_REGISTER.md`, `docs/canonical/TRACEABILITY.md` | `npm run test:docs` | keine |
+
+Dritte Prüfung (Einzelheiten in BEFUNDE.md, „Dritte Prüfung“):
+
+| Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
+| --- | --- | --- | --- | --- |
+| `3e4a1be1` | R-017, Regression aus `cfee417a` | `privacy/engine.js`: „Nachname, Vorname“ gilt nicht, wo es einen vollen Namen in üblicher Reihenfolge schneidet („Anna Müller, Hans Müller“). | `tests/test-privacy-name-variants.js`, Fall „an enumeration of full names …“; schlägt am Stand `a0d3e340` fehl | Gemeinsamer Kern, auch Cowork. |
+| `d91462b9` | R-026 | `privacy/engine.js`: in den Profilen, die jeden Link ersetzen, weichen Namenstreffer, die ganz im Link liegen, der Ganzersetzung, sofern nichts anderes den Link berührt. | derselbe Test, Fall „profiles that replace every link …“, mit E-Mail-Domain und überstehendem Namen als Gegenfällen | wie oben |
+| `d4740dd6` | R-017 | `privacy/engine.js`: „Fr.“ nach einer Wochentagsspanne bleibt stehen. | derselbe Test, Fall „abbreviated salutations …“ | wie oben |
+| `e07ca2e6` | R-017, Regressionen aus `cfee417a` und `ac74cf71` | `privacy/engine.js`: keine Ganzersetzung von Links mehr; der Namensteil und eine prozentkodierte E-Mail-Adresse im Link werden an Ort und Stelle ersetzt (`linkIdentityHits`), die Restprüfung nutzt dieselbe Funktion. Voller Name ohne Umlaute als weitere Schreibweise (`asciiNameSpellings`). Zusätzliche Schreibweisen gehen nicht mehr an die Restprüfung. `docs/canonical/STANDALONE_SECURITY_MODEL.md`. | derselbe Test (9 Fälle); `tests/test-pii-regression.js` (164 Fälle, am Stand `a0d3e340` 1 Fehler); Differenzlauf | wie oben. Policy-Fingerprint ändert sich. |
+| `7693e162` | R-010, R-024 | nur Tests | `tests/test-markdown-retention.js`, `tests/test-privacy-time-periods.js` | — |
+| `d5992265` | R-011, R-014 | zwei Kommentare in `export_directory.rs` und `main.rs` berichtigt, kein Code | `cargo test`, Clippy | — |
+
+Nicht umgesetzt und begründet (Einzelheiten in BEFUNDE.md, „Entscheidungen je
+Befund“):
+
+- **R-027, Zugangsdaten hinter einem Label mitten in der Zeile** – erst am
+  Ende der dritten Prüfung gefunden; der Detektor erkennt absichtlich nur ein
+  Feld am Zeilenanfang. Eine Änderung braucht eine eigene Analyse und
+  Gegenprüfung.
+- **R-003, Zustand alter Formular-Kontrollkästchen** – liegt im Feldmodell
+  des Word-Lesers, nicht im Lauftext; nicht bearbeitet.
+
+- **R-006 (Listen als Tabellen)** – die Tabellenform schützt die erzeugte
+  Listennummer vor der Anonymisierung und ist durch einen Test
+  festgeschrieben. Eine lesbare Form nur für „Nur umwandeln“ braucht eine
+  Darstellungsoption im Konvertervertrag.
 - **R-004, Zahlentrennzeichen** – de-DE wäre für englische Dokumente ebenso
-  falsch; Produktentscheidung.
-- **R-015, R-023** – Freigabe- und Repository-Einstellungen, außerhalb des
-  Auftrags.
-- **R-017, R-018, R-019, R-020 (Rest), R-024, R-025** – belegt, aber nicht
-  mehr in dieser Sitzung bearbeitet.
+  falsch; als feste Schreibweise dokumentiert, Umstellung ist
+  Produktentscheidung.
+- **R-017, einzelner Nachname ohne Personenkontext im Folgedokument** –
+  bewusste Abwägung des Kerns; als Grenze dokumentiert.
+- **R-012, öffentlicher Fehlercode** – unverändert, weil Core und Oberfläche
+  auf den bekannten Codes aufbauen.
+- **R-013, alte Protokolldateien; R-020, Seitenzoom** – nativer Löschcode
+  und eine zusätzliche macOS-Berechtigung sind ohne Mac nicht verantwortbar.
+- **R-015, R-023 (Rest)** – Freigabe- und Repository-Einstellungen.
+- **R-022** – Hypothesen für macOS; nur auf einem Zielgerät zu klären.
+- **R-019, Tests der alten Oberfläche** – bestehen weiter; entfernen hieße,
+  `app.js` aus dem Paket zu nehmen, und das ist eine eigene Entscheidung.
 
 ## Tests und Nachweise
 
@@ -131,8 +246,8 @@ wurden, jeweils mit Projektskripten und hash-geprüften Eingaben:
 | gebündelte Laufzeit | `node scripts/build-runtime-target.mjs --target windows-x64 …` | wie Node |
 | vorbereitete Standalone-Laufzeit | `node scripts/prepare-standalone-runtime.mjs` | — |
 
-`docs/TESTING.md` nennt nur die Markdown-Laufzeit als Voraussetzung. Die
-übrigen fünf fehlen dort.
+In RC178 nannte `docs/TESTING.md` nur die Markdown-Laufzeit. Seit `2e34d532`
+stehen dort alle sechs Voraussetzungen.
 
 ### Nativer Windows-Lauf über die Oberfläche
 
@@ -163,25 +278,32 @@ keine E1/E2/E3-Abnahme. Vier erfundene Dateien (TXT, DOCX, XLSX).
 
 ## Urteil je Prüfdimension
 
-Zahlen aus ABDECKUNG.tsv, nur Einzeleinheiten.
+Zahlen aus ABDECKUNG.tsv am Stand `d5992265`, nur Einzeleinheiten. Das
+Register zählte in der ersten Runde Produktivcode hinter einem
+`#[cfg(test)]` irrtümlich als Rust-Testmodul und damit als offen. Die
+Erkennung ist korrigiert; dadurch gelten rund 460 Rust-Einheiten jetzt als
+teilgeprüft, weil ihre Datei im Rust-Review vollständig gelesen wurde. Das
+ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 
 | Dimension | Urteil | Befunde | Abdeckung (geprüft / teilgeprüft / offen) und Grenze |
 | --- | --- | --- | --- |
-| Fachlichkeit und Formatqualität | Text und CSV solide; DOCX und XLSX mit stillen Verlusten, davon drei behoben. | R-003 bis R-006, R-018 | 2 / 278 / 603. PDF, Scan-PDF, Bild-OCR und Office-OCR im Review nicht ausgeführt; Diagramme, SmartArt, Formeln nur über die Suite. |
-| Anonymisierung und Zuordnungen | Zwei Leckmuster behoben; weitere bekannt und offen. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024 | 6 / 231 / 455. Geführte Entscheidungen und `privacy/entities.js`, `credentials.js`, `person-ambiguities.js` nicht gelesen. |
-| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. | R-008, R-009, R-020, R-025 | 0 / 233 / 46. Quelltext plus ein Windows-Lauf; kein Screenreader, kein Zoom, kein WKWebView. |
-| Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. | R-011 bis R-014, R-022 | 0 / 288 / 987. Rust nur gelesen, Testmodule nicht; macOS-Zweige ohne Lauf. |
-| Implementierung und Wartbarkeit | `main.rs` (4 110 Zeilen) und `ooxml.js` (223 KB) sind zu groß für sichere Einzeländerungen; dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, zwei ungenutzte Commands). | — (Verbesserungen, nicht als Befund geführt) | 1 / 203 / 675. Kein systematischer Durchgang. |
-| Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. | R-010, R-012 | 0 / 13 / 175. Retention, JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
-| Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. | R-007, R-010, R-022 | 0 / 157 / 450. Wiederaufnahme, Absturzpfade, voller Datenträger nicht untersucht. |
-| Leistung und Ressourcen | Keine Messung durchgeführt. | — | Nur Startzeit (1,8 s) und Suite-Laufzeiten beobachtet. BL-047.5 bleibt ohne Zielhostmessung. |
-| Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. | R-019 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
-| Abhängigkeiten, CI und Lieferkette | Locks, Pins und Rechte sauber; Nachweis für Windows und Schutz von Tag und Release fehlen. | R-015, R-016, R-023 | 0 / 71 / 217. Paketinhalte der Release-Assets nicht geprüft; kein `cargo audit`. |
-| Dokumentation und Nachvollziehbarkeit | Mehrere Drifts, vier korrigiert. | R-007, R-016, R-021 | Gruppe `TEILGEPRÜFT`. BACKLOG, CURRENT_STATE und TRACEABILITY nur über Suche. |
+| Fachlichkeit und Formatqualität | Text und CSV solide; die belegten stillen Verluste in DOCX, XLSX und CSV sind behoben oder als Hinweis sichtbar, bis auf den Zustand alter Formular-Kontrollkästchen. Listen bleiben Tabellen. Ein Lebenslauf mit Namenslink ist jetzt automatisch verarbeitbar. | R-003 bis R-006, R-018, R-026 | 5 / 277 / 603. PDF, Scan-PDF, Bild-OCR und Office-OCR im Review nicht ausgeführt; Diagramme, SmartArt, Formeln nur über die Suite. |
+| Anonymisierung und Zuordnungen | Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung. Offen: Zugangsdaten mitten in der Zeile (R-027), dokumentierte Grenzen der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027 | 9 / 234 / 455. Geführte Entscheidungen nicht ausgeführt; `privacy/entities.js`, `credentials.js`, `person-ambiguities.js` nicht gelesen. |
+| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. | R-008, R-009, R-020, R-025 | 0 / 234 / 46. Quelltext plus Windows-Läufe; kein Screenreader, kein Zoom, kein WKWebView. |
+| Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Vier Befunde der Rust-Shell behoben oder eingegrenzt. | R-011 bis R-014, R-022 | 11 / 752 / 530. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
+| Implementierung und Wartbarkeit | `main.rs` (rund 4 400 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, zwei ungenutzte Commands). Die zweite Runde hat `main.rs` um rund 280 Zeilen vergrößert. | — (Verbesserungen, nicht als Befund geführt) | 1 / 203 / 675. Kein systematischer Durchgang. |
+| Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. | R-010, R-012 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
+| Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. Verwaiste Vorbereitungen werden bereinigt; eine laufende Veröffentlichung schützt allein ihr Alter. | R-007, R-010, R-022 (Hypothese) | 0 / 157 / 450. Wiederaufnahme, Absturzpfade, voller Datenträger nicht untersucht. |
+| Leistung und Ressourcen | Nur ein Vorher-nachher-Vergleich des Datenschutzkerns: 109 KB Prosa 0,86 s zu 0,89 s, 328 KB 5,9 s zu 5,7 s. Der Kern skaliert schon in RC178 überlinear. | — | Dazu Startzeit und Suite-Laufzeiten. BL-047.5 bleibt ohne Zielhostmessung. |
+| Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. | R-019 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
+| Abhängigkeiten, CI und Lieferkette | Locks, Pins und Rechte sauber; paketierte JavaScript-Abhängigkeiten lokal ohne bekannten Befund. Nachweis für Windows und Schutz von Tag und Release fehlen. | R-015, R-016, R-023 | 0 / 71 / 217. Paketinhalte der Release-Assets nicht geprüft; kein `cargo audit`. |
+| Dokumentation und Nachvollziehbarkeit | Mehrere Drifts korrigiert, darunter Testvoraussetzungen, Formatverhalten und Release-Herkunft. | R-007, R-015, R-016, R-021 | Gruppe `TEILGEPRÜFT`. BACKLOG, CURRENT_STATE und TRACEABILITY nur über Suche. |
 
 ## Bewertung der Testsuite
 
 Auf Nachfrage des Anwenders. Zahlen per Mustersuche, also Größenordnungen.
+Umfang und Laufzeit wurden am Stand der ersten Runde (`e1afef0f`, 361
+Dateien) erhoben; die zweite Runde ergänzt drei Dateien auf 364.
 
 - **Umfang** – 361 Dateien im Headless-Profil, rund 124 000 Testzeilen,
   5 400 Testfälle, 31 000 Prüfaussagen. Der Produktcode (Server und
@@ -213,8 +335,10 @@ Auf Nachfrage des Anwenders. Zahlen per Mustersuche, also Größenordnungen.
     `app.js`, die das Hauptfenster nicht lädt.
   - Die Oberfläche wird nie in einer WebView ausgeführt; der einzige Befund
     dieser Art (R-025) kam aus dem nativen Lauf.
-  - Die Suite bricht beim ersten Fehler ab und braucht sechs nicht
-    dokumentierte Voraussetzungen.
+  - Die Suite bricht beim ersten Fehler ab und braucht sechs
+    Voraussetzungen, die erst seit der zweiten Runde dokumentiert sind.
+  - Auch die Befunde der zweiten Runde hat sie nicht gezeigt; zwei davon
+    (R-024, R-025) kamen aus dem nativen Lauf, die übrigen aus dem Lesen.
 - **Urteil** – Die Zahl der Dateien ist nicht das Problem: zwei Drittel
   kosten zusammen unter vier Minuten. Teuer sind rund zwanzig
   Prozess- und Lebenszyklustests, und die prüfen vor allem Abläufe (Export,
@@ -226,19 +350,37 @@ Auf Nachfrage des Anwenders. Zahlen per Mustersuche, also Größenordnungen.
   `tests/test-result-generations.js` untersuchen; ein schnelles Profil für
   den gemeinsamen Kern anbieten; einen kleinen fachlichen Korpus mit
   unabhängigen Sollwerten je Format aufbauen (BL-049.2); die Tests der alten
-  Oberfläche auf `workspace.js` umstellen oder entfernen.
+  Oberfläche auf `workspace.js` umstellen oder entfernen. Für den letzten
+  Punkt bindet `tests/test-standalone-loaded-frontend-contract.js` seit der
+  zweiten Runde den Quelltextvertrag an die geladenen Dateien.
 
 ## Mac-Status
 
 | Ebene | Apple Silicon | Intel |
 | --- | --- | --- |
-| Quelltext in diesem Review | gelesen, nicht ausgeführt | gelesen, nicht ausgeführt |
+| Quelltext in diesem Review | gelesen und in der zweiten Runde geändert, nicht übersetzt | gelesen und geändert, nicht übersetzt |
 | CI-Runner (RC178, `13ed39ff`) | `macos-15`: Paket, Start, Konvertierung aus dem ZIP | `macos-15-intel`: ebenso |
 | CI-Runner für den geänderten Stand | `NOT_RUN` (keine Actions gestartet) | `NOT_RUN` |
 | Reales Gerät | `NOT_RUN` | `NOT_RUN` |
 
-Die Änderungen dieses Reviews liegen im gemeinsamen JavaScript-Kern und im
-Frontend. Plattformzweige wurden nicht berührt. Ob die zweispurige
+Die erste Runde änderte nur den gemeinsamen JavaScript-Kern und das Frontend.
+Die zweite Runde ändert zusätzlich fünf Rust-Dateien (`main.rs`,
+`export_directory.rs`, `native_export_broker.rs`, `native_export_channel.rs`,
+`diagnostic_bundle.rs`). Der neue Code ist plattformneutral geschrieben, mit
+einer Ausnahme: `parse_names_seen` liegt im Windows-Zweig des
+Verzeichnislistings. Den macOS-Zweig desselben Listings habe ich nicht
+angefasst; er hat dieselbe Signatur und prüft Duplikate schon bisher linear
+(`export_directory.rs:1005-1038`).
+
+Ein Typcheck für `aarch64-apple-darwin` von Windows aus (`cargo check
+--locked --all-targets --target aarch64-apple-darwin`) kam bis zum eigenen
+Crate: 42 Abhängigkeiten wurden geprüft, dann stoppte das Build-Skript des
+Projekts, weil der freigegebene statische macOS-Core
+(`dist/macos-static-core/macos-arm64`) auf diesem Host fehlt. Diese Prüfung
+ist gewollt; ich habe sie nicht umgangen. Der Rust-Code der Shell ist damit
+für macOS weder übersetzt noch typgeprüft. Ob der Stand auf macOS übersetzt
+und die Rust-Tests dort bestehen, ist der erste Prüfpunkt für einen
+Mac-Runner. Ob die zweispurige
 Vorbereitung auf macOS aktiv wird, hängt an `os.freemem()` (R-022) und ist
 nur auf einem Zielgerät zu klären.
 

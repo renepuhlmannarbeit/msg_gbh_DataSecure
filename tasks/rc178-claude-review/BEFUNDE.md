@@ -68,9 +68,10 @@ Einzelregister in [ABDECKUNG.tsv](ABDECKUNG.tsv).
   wurde das Windows-Paket aus dem geänderten Stand gebaut, gestartet und über
   die Oberfläche bedient. Beobachtungen stehen in ERGEBNIS.md.
 - **Baseline-Tests** – siehe ERGEBNIS.md, Abschnitt Tests. Kurzfassung:
-  `npm run test:docs` PASS. `npm run test:product:headless` brauchte drei
-  nicht mit dem Checkout gelieferte Voraussetzungen (gesperrte
-  Markdown-Testlaufzeit, gepinntes Node 22.23.2, gebauter Ownership-Guard).
+  `npm run test:docs` PASS. `npm run test:product:headless` brauchte sechs
+  nicht mit dem Checkout gelieferte Voraussetzungen (gepinntes Node 22.23.2,
+  vier Pilot-Laufzeiten, OCR-Modelle, gebauter Ownership-Guard, gebündelte
+  und vorbereitete Standalone-Laufzeit; Liste in ERGEBNIS.md).
 
 ## Methode und Grenzen
 
@@ -97,34 +98,39 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | --- | --- | --- | --- | --- | --- |
 | R-001 | hoch | Anonymisierung, alle | Genitivformen bekannter Personennamen („Müllers Auto“) bleiben im freigegebenen Markdown, weil Redaktion und Restprüfung dieselbe exakte Wortgrenze nutzen. | BL-050.6 | behoben (`8cf00fa7`) |
 | R-002 | hoch | Anonymisierung, alle | Eine im Dokument bereits erkannte Telefonnummer bleibt an weiteren Stellen ohne Label im Klartext. | BL-050.6 | behoben (`af203451`) |
-| R-003 | hoch | Formatqualität DOCX, alle | `w:noBreakHyphen`, `w:ptab`, `w:sym` und der Zustand alter Formular-Kontrollkästchen werden ohne Hinweis verworfen („Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“). | BL-049.2, DS-085 | teilweise behoben (`14c12ee1`); `w:sym` und Kontrollkästchen offen |
-| R-004 | hoch | Formatqualität XLSX, alle | Das Standard-Datumsformat 14 erscheint als `mm-dd-yy`, Zahlen mit US-Trennzeichen; `03-05-23` und `1,234` sind für deutsche Leser mehrdeutig. | BL-049.2, DS-085 | teilweise behoben (`7f7f4d6f`); Trennzeichen und Monatsnamen offen |
+| R-003 | hoch | Formatqualität DOCX, alle | `w:noBreakHyphen`, `w:ptab`, `w:sym` und der Zustand alter Formular-Kontrollkästchen werden ohne Hinweis verworfen („Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“). | BL-049.2, DS-085 | behoben (`14c12ee1`, `0d9e115c`, `a0d3e340`); Zustand alter Formular-Kontrollkästchen offen |
+| R-004 | hoch | Formatqualität XLSX, alle | Das Standard-Datumsformat 14 erscheint als `mm-dd-yy`, Zahlen mit US-Trennzeichen; `03-05-23` und `1,234` sind für deutsche Leser mehrdeutig. | BL-049.2, DS-085 | teilweise behoben (`7f7f4d6f`); feste Zahlenschreibweise in der Formatmatrix dokumentiert (`2e34d532`), Umstellung bleibt Produktentscheidung |
 | R-005 | hoch | Formatqualität DOCX, alle | Überschriften werden nur über die englische Formatvorlagen-ID erkannt, nicht über den Vorlagennamen; lokalisierte IDs verlieren die Gliederung. | BL-049.2 | behoben (`c79f3aa4`), nur an synthetischen Fixtures gezeigt |
-| R-006 | hoch | Formatqualität DOCX, alle | Jede Word-Liste und jede nummerierte Überschrift wird als zwei einzellige Tabellen ausgegeben. | BL-049.2 | offen |
+| R-006 | hoch | Formatqualität DOCX, alle | Jede Word-Liste und jede nummerierte Überschrift wird als zwei einzellige Tabellen ausgegeben. | BL-049.2 | offen, bewusst nicht geändert (siehe Einzelbefund) |
 | R-007 | hoch | Dokumentation | CLAUDE.md, Vertrag und Kanon nennen den Batchrunner seriell; ausgeliefert ist eine zweispurige Konvertervorbereitung auf Windows x64 und macOS. | BL-047.5, DS-047 | behoben (`8e18e44d`) |
 | R-008 | mittel | Oberfläche, alle | Der Hinweis „Entscheidung nicht bestätigt“ wird in der eingebetteten Prüfung in ein ausgeblendetes Element geschrieben. | BL-010.53 | behoben (`c62bb1dd`) |
 | R-009 | mittel | Oberfläche, alle | Fünf Meldungen nennen Bedienelemente mit Namen, die es in der Oberfläche nicht gibt. | BL-010.53 | behoben (`c62bb1dd`) |
-| R-010 | mittel | Betrieb, alle | Nach hartem Abbruch bleibt ein `.pending-dm_*`-Ordner mit nicht anonymisiertem Markdown dauerhaft im privaten Bereich. | BL-050.6 | offen |
-| R-011 | mittel bis hoch | Rust-Shell, alle | Die private Exportwurzel füllt sich mit vier Einträgen je Vorgang ohne Bereinigung; nach etwa 512 Exporten scheitert jeder weitere. | BL-050.6 | offen |
-| R-012 | mittel | Rust-Shell, alle | Voller Datenträger, entferntes Ziel und verweigerter Zugriff werden alle als „Konflikt“ gemeldet, ohne Diagnoseereignis. | BL-050.6 | offen |
-| R-013 | mittel | Rust-Shell, alle | Der Diagnose-Sink verstummt nach 16 MiB je Sitzung, und das Diagnosepaket bricht ab 129 Einträgen im Ordner ab. | BL-050.6 | offen |
-| R-014 | mittel | Rust-Shell, alle | Nativ nicht vorgeprüfte Argumente der Nachbearbeitung beenden den Core statt abgelehnt zu werden. | BL-050.6 | offen |
-| R-015 | hoch | Release-Nachweis | `main` enthält den RC178-Quellstand nicht, und das Windows-Paket hat keinen unabhängigen Lauf. | Freigabeentscheidung | offen |
-| R-016 | mittel | Lieferkette | Die paketierten Drittanbieterhinweise nennen `emf-converter` nicht und beschreiben die macOS-Laufzeit unzutreffend. | BL-050.6 | teilweise behoben (`03c621a4`); SBOM-Lizenzausdruck offen |
-| R-017 | mittel | Anonymisierung, alle | Drei weitere Unterredaktionsmuster: Einzelnachname in Folgedokumenten, Name im Linkziel, „Nachname, Vorname“. | BL-050.6, BL-021.1 | offen |
-| R-018 | mittel | Formatqualität CSV, alle | Eine einzelne Zeile abweichender Breite lässt die Trennzeichenerkennung still auf eine Spalte fallen, mit Abdeckung „vollständig“. | BL-049.2 | offen |
-| R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | offen |
-| R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise, teilweise behoben (`c62bb1dd`, nur Gruppenlabel) |
-| R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | teilweise, teilweise behoben (`e1afef0f`) |
+| R-010 | mittel | Betrieb, alle | Nach hartem Abbruch bleibt ein `.pending-dm_*`-Ordner mit nicht anonymisiertem Markdown dauerhaft im privaten Bereich. | BL-050.6 | behoben (`97a70cd0`, `f8c69fe3`, Tests in `7693e162`) |
+| R-011 | mittel bis hoch | Rust-Shell, alle | Die private Exportwurzel füllt sich mit vier Einträgen je Vorgang ohne Bereinigung; nach etwa 512 Exporten scheitert jeder weitere. | BL-050.6 | teilweise behoben (`5f8bf47b`, `3b8fbba9`): Grenze von rund 512 auf rund 16 000 Exporte je Zielordner angehoben; abgeschlossene Datensätze werden weiterhin nie aufgeräumt. Nur Windows-Tests |
+| R-012 | mittel | Rust-Shell, alle | Voller Datenträger, entferntes Ziel und verweigerter Zugriff werden alle als „Konflikt“ gemeldet, ohne Diagnoseereignis. | BL-050.6 | teilweise behoben (`8c0dd30b`): Diagnoseursache und Hinweistext; öffentlicher Code bleibt „Konflikt“ |
+| R-013 | mittel | Rust-Shell, alle | Der Diagnose-Sink verstummt nach 16 MiB je Sitzung, und das Diagnosepaket bricht ab 129 Einträgen im Ordner ab. | BL-050.6 | teilweise behoben (`b30a6dbc`, `1fb7eaee`); Inventargrenze des Diagnosepakets und Aufbewahrung alter Protokolle offen |
+| R-014 | mittel | Rust-Shell, alle | Nativ nicht vorgeprüfte Argumente der Nachbearbeitung beenden den Core statt abgelehnt zu werden. | BL-050.6 | behoben (`aef66f19`, `22688d75`) für alles, was die geladene Oberfläche sendet; nur Windows-Tests |
+| R-015 | hoch | Release-Nachweis | `main` enthält den RC178-Quellstand nicht, und das Windows-Paket hat keinen unabhängigen Lauf. | Freigabeentscheidung | offen; Sachstand in `docs/RELEASE.md` festgehalten (`2e34d532`) |
+| R-016 | mittel | Lieferkette | Die paketierten Drittanbieterhinweise nennen `emf-converter` nicht und beschreiben die macOS-Laufzeit unzutreffend. | BL-050.6 | behoben (`03c621a4`, `871daa7f`) |
+| R-017 | mittel | Anonymisierung, alle | Drei weitere Unterredaktionsmuster: Einzelnachname in Folgedokumenten, Name im Linkziel, „Nachname, Vorname“. | BL-050.6, BL-021.1 | teilweise behoben (`cfee417a`, `ac74cf71`, nachgebessert in `3e4a1be1`, `d4740dd6`, `e07ca2e6`); einzelner Nachname ohne Personenkontext im Folgedokument bleibt dokumentierte Grenze |
+| R-018 | mittel | Formatqualität CSV, alle | Eine einzelne Zeile abweichender Breite lässt die Trennzeichenerkennung still auf eine Spalte fallen, mit Abdeckung „vollständig“. | BL-049.2 | behoben (`803acbb9`, Hinweistexte in `2726675a`) |
+| R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | teilweise behoben (`7e9e0530`): Vertrag an die geladene Oberfläche gebunden; Tests der alten Oberfläche bestehen weiter |
+| R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise behoben (`c62bb1dd`, `2726675a`); Seitenzoom, versteckte Live-Regionen und Bidi-Steuerzeichen offen |
+| R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | behoben (`e1afef0f`, `2e34d532`) |
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
-| R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | offen |
-| R-024 | mittel | Anonymisierung, alle | „im Zeitraum 2019-2024“ wird als Ort maskiert; mit geschütztem Bindestrich bleibt „‑2024“ stehen. Gefunden im nativen Windows-Lauf, am unveränderten RC178-Kern bestätigt. | BL-050.6 | offen |
-| R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | offen |
+| R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | teilweise behoben (`6a90ed16`): lokale Prüfung der paketierten JavaScript-Abhängigkeiten; Rust-Crates und Repository-Einstellungen offen |
+| R-024 | mittel | Anonymisierung, alle | „im Zeitraum 2019-2024“ wird als Ort maskiert; mit geschütztem Bindestrich bleibt „‑2024“ stehen. Gefunden im nativen Windows-Lauf, am unveränderten RC178-Kern bestätigt. | BL-050.6 | behoben (`7b078d75`, Gegenfall im Test seit `7693e162`) |
+| R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | behoben (`2726675a`) |
+| R-026 | hoch | Fachlichkeit; Anonymisierung; alle Ziele | In den Profilen Personalprofil, Bewerbung und Kunde stoppt ein Dokument mit `RESIDUAL_PII`, sobald ein Link den Namen der Person enthält. Ein Lebenslauf mit LinkedIn-Adresse lässt sich nicht automatisch anonymisieren. Gefunden im Differenzlauf gegen den RC178-Kern. | BL-050.6 | behoben (`d91462b9`) |
+| R-027 | hoch | Anonymisierung; alle Ziele | Zugangsdaten werden nur als Feld am Zeilenanfang erkannt. „Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711“ bleibt vollständig stehen. Gefunden im Differenzlauf; in RC178 und im Endstand gleich. | BL-050.6 | offen; nicht mehr bearbeitet |
 
 ## Einzelbefunde
 
-Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
-`plugins/data-secure/server/`, `app/` für `apps/datasecure-standalone/`.
+Alle Fundstellen beziehen sich auf `e88f1b8d`, also auf den Stand vor den
+Änderungen. `srv/` steht für `plugins/data-secure/server/`, `app/` für
+`apps/datasecure-standalone/`. Die Abschnitte beschreiben den Befund, wie er
+in der Analyse festgehalten wurde; was daraus in der zweiten Runde wurde,
+steht in der Übersicht oben und im Abschnitt „Zweite Runde“.
 
 ### R-001 · Genitivformen bekannter Namen bleiben stehen
 
@@ -188,9 +194,13 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
   auf U+2011 ab, die Datenschutzmuster kennen U+2011 als Strich
   (`privacy/base.js:74`).
 - **Engste geeignete Änderung** – `w:noBreakHyphen` → U+2011, `w:ptab` →
-  Tabulator im selben Zweig. `w:sym` und Kontrollkästchen bleiben offen: für
-  Symbolschrift-Codepunkte gibt es ohne Zuordnungstabelle kein belegbares
-  Unicode-Zeichen.
+  Tabulator im selben Zweig. `w:sym` und Kontrollkästchen blieben in der
+  ersten Runde offen: für Symbolschrift-Codepunkte gibt es ohne
+  Zuordnungstabelle kein belegbares Unicode-Zeichen.
+- **Zweite Runde** – `w:sym` umgesetzt (`wordSymbolText`): Zeichen einer
+  gewöhnlichen Schrift direkt, Buchstaben der Schrift „Symbol“ über eine
+  feste Tabelle der griechischen Buchstaben, alles andere als Marker
+  `[Symbol]`. Der Zustand alter Formular-Kontrollkästchen bleibt offen.
 - **Abnahme** – Positiv: beide Zeichen erscheinen. Negativ: `w:softHyphen`
   erzeugt weiterhin nichts.
 
@@ -228,8 +238,9 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
   `Absatzinhalt:` mit je einer einzelligen Tabelle. Soll: `- Apfel`.
 - **Gegenbeleg** – Der Kommentar ab `:1483` begründet die Trennung mit dem
   Feldschutz der Anonymisierung.
-- **Entscheidung** – Nicht umgesetzt. Die Änderung berührt den Feldschutz und
-  braucht eine eigene Gegenprüfung beider Zwecke.
+- **Entscheidung** – Nicht umgesetzt, auch in der zweiten Runde nicht. Die
+  Änderung berührt den Feldschutz; Begründung und Vorschlag stehen unter
+  „Zweite Runde, Entscheidungen je Befund“.
 
 ### R-007 · „Seriell“ in den Dokumenten, zweispurig im Produkt
 
@@ -258,7 +269,7 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
   beschriftet ist.
 - **Evidenz** – Quelltext. Keine WebView-Beobachtung.
 
-### R-010 bis R-014 · Betrieb und Rust-Shell (offen)
+### R-010 bis R-014 · Betrieb und Rust-Shell
 
 - **R-010** – `srv/standalone/markdown-store.js:75-99,120-123`;
   `markdown-retention.js:64-68` überspringt unbekannte Namen bewusst. Nur
@@ -271,9 +282,12 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
   `diagnostic_bundle.rs:200-208`; Polls schreiben drei Ereignisse
   (`main.rs:1572,1664,1753`).
 - **R-014** – `main.rs:2431-2445`, `srv/standalone/desktop-sidecar.js:321-325`.
-- **Warum offen** – Jede Korrektur ändert die Rust-Shell oder Löschlogik im
-  privaten Bereich und braucht Rust-Tests, Clippy und einen nativen
-  Paketlauf je Ziel. Auf diesem Host ist nur Windows verfügbar.
+- **Erste Runde** – offen gelassen: Jede Korrektur ändert die Rust-Shell oder
+  Löschlogik im privaten Bereich und braucht Rust-Tests, Clippy und einen
+  nativen Paketlauf je Ziel. Auf diesem Host ist nur Windows verfügbar.
+- **Zweite Runde** – auf ausdrücklichen Auftrag umgesetzt, mit Rust-Tests,
+  Clippy und Paketlauf für Windows. Die Einschränkung für macOS gilt
+  unverändert und steht in ERGEBNIS.md unter „Mac-Status“.
 
 ### R-015 · Release-Nachweis
 
@@ -294,7 +308,7 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
   (`scripts/lib/standalone-conversion-runtime.mjs:97`), fehlt aber in den
   Hinweisen.
 
-### R-017 bis R-023 · weitere offene Punkte
+### R-017 bis R-023 · weitere Punkte
 
 - **R-017** – Einzelnachname im Folgedokument (`engine.js:346,720`; als
   Abwägung dokumentiert in `CURRENT_STATE.md:8118-8126`); Name im Linkziel
@@ -320,8 +334,9 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
 
 ### R-024 und R-025 · Beobachtungen aus dem nativen Windows-Lauf
 
-- **R-024 Fundstelle** – Ortserkennung in `srv/privacy/` (genaue Regel nicht
-  eingegrenzt). Auslöser: `Ansprechpartner im Zeitraum 2019-2024 war das Team.`
+- **R-024 Fundstelle** – in der ersten Runde nicht eingegrenzt; in der zweiten
+  als Detektor `STREET_ADDRESS` in `srv/privacy/structured.js` bestimmt, der
+  „Zeitraum 2019“ wie „Straßenname Hausnummer“ liest. Auslöser: `Ansprechpartner im Zeitraum 2019-2024 war das Team.`
   ergibt `Ansprechpartner [LOCATION_REDACTED] war das Team.`, auch ohne
   Namensfeld im Dokument. Mit U+2011 statt `-` wird nur „im Zeitraum 2019“
   ersetzt und „‑2024“ bleibt stehen.
@@ -331,8 +346,210 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
 - **Evidenz** – Paketlauf über die Oberfläche (Dokument-002 der automatischen
   Maskierung) und Scratch-Skript gegen alten und neuen Kern mit vier
   Strichvarianten.
-- **R-025** – `app/frontend/workspace.js` (Jobtext und Verlaufszeile); nur in
-  der laufenden App beobachtet, Quellstelle nicht eingegrenzt.
+- **R-025** – `app/frontend/workspace.js` (Jobtext und Verlaufszeile) und
+  `workflow-presentation.js`; in der laufenden App beobachtet, in der zweiten
+  Runde an den Zähltexten behoben.
+
+### R-026 · Link mit Personenname stoppt die strengen Profile
+
+- **Fundstelle** – `srv/privacy/engine.js`, Schleife über `URL_RE` für die
+  Profile `personnel_profile`, `applicant` und `customer` (in RC178 ab
+  Zeile 760): der Link bekommt den Rang `URL` (58), ein Namenstreffer darin
+  `PERSON` (72).
+- **Auslöser** – `Lebenslauf`, `Bewerbung`, `Name: Laura Stein` und
+  `Profil: https://www.linkedin.com/in/laura-stein-12345`. Die automatische
+  Profilerkennung wählt „Bewerbung“.
+- **Ist und Soll** – Ist: nur „laura-stein“ wird ersetzt, der Rest des Links
+  bleibt, die Restprüfung meldet den Link, der Lauf stoppt mit
+  `RESIDUAL_PII`. Soll: der Link wird wie jeder andere in diesen Profilen
+  als Ganzes ersetzt.
+- **Auswirkung** – Kein Leck. Ein Dokumenttyp, für den das Profil gebaut ist,
+  lässt sich im automatischen Weg nicht verarbeiten.
+- **Evidenz** – Differenzlauf (`alt`: `RESIDUAL_PII`, `neu`: vollständig
+  ersetzt); nativer Lauf siehe ERGEBNIS.md.
+- **Änderung** – Namenstreffer, die vollständig in einem solchen Link liegen,
+  weichen ihm, sofern nichts anderes den Link berührt.
+
+### R-027 · Zugangsdaten hinter einem Label mitten in der Zeile
+
+- **Fundstelle** – `srv/privacy/base.js:381-384` (`CREDENTIAL_FIELD_RE`): das
+  Label muss am Zeilenanfang stehen, der Wert ist der Rest der Zeile. Der
+  Kommentar darüber nennt die Beschränkung auf ein ausdrückliches Feld als
+  Absicht.
+- **Auslöser** – `Login sepp@firma.example, Passwort: geheim99` oder
+  `Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711`.
+- **Ist und Soll** – Ist: Passwort und PIN bleiben im freigegebenen Markdown,
+  ohne Stopp. `Passwort: geheim99` allein in der Zeile wird ersetzt. Soll:
+  offen. Ein Label nach Komma oder Semikolon ließe sich erfassen; wo der Wert
+  endet, ist dann aber nicht mehr eindeutig.
+- **Auswirkung** – Zugangsdaten im Ergebnis. In RC178 und im Endstand gleich.
+- **Status** – Offen. Der Befund kam am Ende der dritten Prüfung; eine
+  Änderung am Zugangsdaten-Detektor braucht eine eigene Analyse und
+  Gegenprüfung. Die Grenze steht noch nicht im Sicherheitsmodell.
+
+## Zweite Runde · Behebung der offenen Befunde und Gegenprüfung
+
+Auftrag des Anwenders vom 23.11.2026 nach der ersten Übergabe: die offenen
+Befunde beheben und revalidieren. Die Hauptsession hat jeden Befund am Code
+erneut gelesen, die Änderungen sequenziell umgesetzt und danach zwei
+unabhängige Read-only-Prüfer mit dem ausdrücklichen Auftrag eingesetzt, die
+Änderungen zu widerlegen. Deren berechtigte Einwände sind als eigene Commits
+eingearbeitet.
+
+### Entscheidungen je Befund
+
+- **R-006 (Listen)** – nicht geändert. `srv/ooxml.js` trennt die erzeugte
+  Listennummer bewusst vom Absatzinhalt, damit eine Nummer nie Teil eines
+  Feldwerts der Anonymisierung wird; `tests/test-word-context-integration.js`
+  schreibt diese Form fest. Dieselbe Extraktion speist beide Zwecke, und der
+  Zweck erreicht den Konverter nicht. Eine lesbare Listenform nur für „Nur
+  umwandeln“ braucht eine Darstellungsoption im Konvertervertrag und eine
+  eigene Datenschutz-Gegenprüfung. Vorschlag für die Folgearbeit: Option
+  `listProjection` im Inhaltsoptionsvertrag, im Zweck „Nur umwandeln“
+  gesetzt, mit Sollwert `- Apfel` beziehungsweise `1. Eins`.
+- **R-017, einzelner Nachname im Folgedokument** – nicht geändert. Der Kern
+  entscheidet nach dokumentierter Abwägung an der Fundstelle, weil derselbe
+  Laut ein gewöhnliches Wort sein kann. Ergänzt wurden nur belegbare
+  Personenkontexte. Die Grenze steht jetzt in
+  `docs/canonical/STANDALONE_SECURITY_MODEL.md`.
+- **R-012** – der öffentliche Fehlercode bleibt unverändert, weil die
+  Exportzustandsmaschine in Core und Oberfläche auf den bekannten Codes
+  aufbaut. Unterscheidbar wird die Ursache über ein neues, inhaltsfreies
+  Diagnoseereignis.
+- **R-013** – das Protokollieren erfolgreicher Anzeigeabfragen ist begrenzt.
+  Eine Aufbewahrungsregel für alte Protokolldateien wurde nicht eingeführt:
+  das Diagnosemodul kennt bewusst nur Anlegen und Anhängen, und nativer
+  Löschcode ist ohne macOS-Lauf nicht verantwortbar.
+- **R-020** – Seitenzoom nicht aktiviert: Tauri verlangt dafür auf macOS eine
+  zusätzliche Berechtigung und ein eingeschleustes Skript; ohne Mac nicht
+  prüfbar.
+- **R-015, R-022, R-023 (Rest)** – nicht durch Code lösbar: Release- und
+  Repository-Einstellungen sowie Messungen auf Zielgeräten.
+
+### Einwände der Gegenprüfung und ihr Ergebnis
+
+| Einwand | Einstufung | Ergebnis |
+| --- | --- | --- |
+| Linkziel mit Name und zugleich Telefonnummer, IBAN oder E-Mail-Adresse: der Teiltreffer verdrängte die Ganzersetzung, die Restprüfung stoppte ein vorher durchlaufendes Dokument. | Regression | behoben in `ac74cf71`; Test ergänzt |
+| Verzeichnislisting unter Windows wurde mit der angehobenen Grenze quadratisch (Mikrobenchmark: rund 4 s bei 65 536 Namen). | Fehler | behoben in `3b8fbba9` |
+| Native Argumentprüfung strenger als der Core (Korrektur ohne Bereiche) und abweichender Code bei `acknowledge` auf der Vorschau. | Abweichung | behoben in `22688d75` |
+| Protokollbudget je Datensatz statt je Anfrage: verwaiste Startzeile möglich; ein später fehlschlagender Abruf stand ohne Startzeile im Protokoll. | Restrisiko | behoben in `1fb7eaee` |
+| Symbol, geschützter Bindestrich oder Tabulator außerhalb eines Absatzes stoppte ein vorher konvertierbares (ungültig aufgebautes) Dokument. Für Bindestrich und Tabulator stammt der Stopp schon aus `14c12ee1`, war also im Stand der ersten Übergabe (`e1afef0f`) enthalten; nur das Symbol kam in der zweiten Runde dazu. | Regression, sehr selten | behoben in `a0d3e340`; Test ergänzt |
+| Verschwindender Eintrag zwischen Auflisten und Prüfen brach die gesamte Bereinigung ab; bei Aufbewahrung 0 Tage galt ein gerade geschriebener Ordner als veraltet. | Regression, gering | behoben in `f8c69fe3`; Tests für beide Fälle erst in der dritten Prüfung ergänzt. Der Schutz beruht allein auf dem Alter (älter als eine Stunde, jede Datei ebenso), nicht auf einer Sperre. |
+| Genitiv gewöhnlicher Wörter, die als Nachname bekannt sind („Kochs Rezept“, im Folgedokument „Mit Sommers Hilfe“), wird jetzt ersetzt. | Überredaktion | hingenommen: entspricht der schon bestehenden Ersetzung der Grundform; seit der dritten Prüfung im Sicherheitsmodell benannt |
+| „Fr.“ als Wochentag unmittelbar vor einem bekannten Namen („Mo. bis Fr. Müller“). | Verhaltensänderung, vom Faktencheck ausgeführt und bestätigt: „Fr.“ verschwand | in der dritten Prüfung eingegrenzt: nach einer Wochentagsspanne bleibt „Fr.“ stehen |
+| Zwei Zwischencommits (`8c0dd30b`, `b30a6dbc`) übersetzen nicht, weil beim Aufteilen der Änderungen Code an die falsche Stelle geriet; der Endstand ist korrekt. | Mangel der Historie | offengelegt, nicht umgeschrieben (Projektregel: keine History-Rewrites); `git bisect` muss diese beiden Commits überspringen |
+
+Ohne Befund blieben: die Zuordnung der Symbolschrift (alle 52 Buchstaben
+gegen die Adobe-Symbol-Kodierung), die Geschlossenheit der
+Diagnosebereinigung, die Vollständigkeit der nativen Argumentprüfung gegen
+alles, was die Oberfläche tatsächlich sendet, und die Laufzeit des Kerns
+(109 KB Prosa: 0,86 s vorher, 0,89 s nachher; 328 KB: 5,9 s und 5,7 s). Der
+Kern skaliert schon in RC178 überlinear; das ist eine Beobachtung, kein
+Ergebnis dieser Änderungen.
+
+## Dritte Prüfung · Faktencheck, Differenzlauf und Nachbesserung
+
+Der Stand `a0d3e340` war das vorgesehene Ende der zweiten Runde. Vor der
+Übergabe habe ich vier weitere Prüfungen angesetzt. Sie haben Fehler in
+meinen eigenen Änderungen gefunden, darunter zwei Lecks, die weder die neuen
+Tests noch die erste Gegenprüfung gezeigt hatten. `a0d3e340` wurde nie
+gepusht; die Korrekturen stehen in sechs weiteren Commits bis `d5992265`.
+
+- **Eigene Probe für den nativen Lauf** – Beim Zusammenstellen der Eingaben
+  blieb „hans_mueller“ zu „Hans Müller“ stehen; die Nachverfolgung führte auf
+  die Regression in Aufzählungen.
+- **Faktencheck des Berichts** – ein unabhängiger Read-only-Prüfer hat die
+  Aussagen dieses Berichts gegen Code und Historie geprüft und 13 Punkte
+  beanstandet: dieselbe Regression, einen falschen Testdateinamen, einen
+  behaupteten, aber nicht vorhandenen Gegenfall und überzogene
+  Formulierungen. Alle sind eingearbeitet.
+- **Differenzlauf alt gegen neu** – ein Skript führt den Kern von RC178 und
+  den geänderten Kern über dasselbe synthetische Korpus und zählt, wo der
+  neue Kern stoppt, wo der alte durchlief, und wo mehr Namensteile sichtbar
+  bleiben. Zahlen siehe unten.
+- **Zweite und dritte Gegenprüfung des Datenschutzkerns** – zwei unabhängige
+  Read-only-Prüfer mit dem Auftrag, die Korrekturen zu widerlegen. Die zweite
+  hat meine erste Fassung der Korrektur selbst widerlegt (siehe Tabelle).
+
+### Was dabei gefunden wurde
+
+| Befund | Herkunft | Einstufung | Ergebnis |
+| --- | --- | --- | --- |
+| In einer Aufzählung voller Namen griff die Regel für „Nachname, Vorname“ über das Komma: „Anna Müller, Hans Müller“ → „Anna [PERSON_001] [PERSON_001]“. Der Vorname der ersten Person blieb stehen; bei „Hans Müller, Hans Müller“ ohne Stopp der Restprüfung. | meine Änderung `cfee417a` | Leck, Regression | behoben in `3e4a1be1`: die Umstellung gilt nicht, wo sie einen vollen Namen in üblicher Reihenfolge schneidet. |
+| Die Ganzersetzung eines Links mit Personenname hatte Vorrang vor jedem anderen Treffer. Bei einer E-Mail-Adresse, deren Domain den Namen enthält, blieb dadurch der Teil vor dem @ stehen: „l.meier@laura-stein.de“ → „l.meier@[URL_REDACTED]“. | meine Änderungen `cfee417a`, `ac74cf71` | Leck, Regression | behoben in `e07ca2e6`: keine Ganzersetzung mehr. Im Link wird nur der Namensteil ersetzt, an Ort und Stelle, so wie RC178 es für „…/in/laura-stein“ schon tat; zusammengeschrieben, mit Trennzeichen, umgekehrt, prozentkodiert oder ohne Umlaute. |
+| Derselbe Vorrang stoppte ein Dokument mit dem Link in spitzen Klammern (`AMBIGUITY_REVIEW_REQUIRED`) und verdrängte einen Zugangsdaten-Treffer neben dem Link. | wie oben | neuer Stopp, Regression | behoben in `e07ca2e6` |
+| Die Restprüfung brach ab, wenn sie die bekannten Werte nicht als Liste bekam. `tests/test-pii-regression.js` schlug damit am Stand `a0d3e340` in einem von 164 Fällen fehl. | meine Änderung `cfee417a` | Fehler, von der Suite erkennbar | behoben in `e07ca2e6`. Die Suite war auf `a0d3e340` noch nicht durchgelaufen. |
+| In den Profilen Personalprofil, Bewerbung und Kunde stoppte ein Dokument mit `RESIDUAL_PII`, wenn ein Link den Namen als Kennung mit `_` oder `.` enthielt (`…/laura_stein.pdf`). | meine Änderung `cfee417a` | neuer Stopp, Regression | behoben in `d91462b9` zusammen mit R-026 |
+| **R-026** – Dasselbe gilt in RC178 schon für Links mit Bindestrich oder dem bloßen Nachnamen: Ein Lebenslauf mit `https://www.linkedin.com/in/laura-stein-12345` stoppt im Profil Bewerbung mit `RESIDUAL_PII`. | vorbestehend (RC178) | fachlicher Fehler: ein üblicher Lebenslauf lässt sich nicht automatisch anonymisieren; kein Leck | behoben in `d91462b9`: Namenstreffer, die vollständig im Link liegen, weichen der Ganzersetzung, die diese Profile ohnehin vornehmen. Das gilt nur, wenn nichts anderes den Link berührt; sonst bleibt es beim Verhalten von RC178. |
+| Der volle Name ohne Umlaute („Hans Mueller“, „hans_mueller“, „Hans-Muller“) blieb außerhalb von Links stehen. | Lücke von R-017 | Leck, vorbestehend | behoben in `e07ca2e6`: nur der volle Name, nicht der Nachname allein, und nicht, wenn die Schreibweise im Lauf eine eigene Person ist. |
+| Meine erste Fassung dieser beiden Korrekturen (nicht committet) hob den Rang des Links in den drei strengen Profilen an und gab die neuen Schreibweisen an die Restprüfung weiter. Folge: wieder ein sichtbarer E-Mail-Teil („l.meier@stein-beratung.de“), ein freigegebener Namensrest hinter einem Link („…/team/Wei Li.pdf“ → „[URL_REDACTED] Li.pdf“) und Stopps bei „Mit freundlichen Grüßen / Hans Mueller“. | zweite Gegenprüfung | Leck und neue Stopps, vor dem Commit gefunden | Ansatz verworfen. Der Link gewinnt jetzt nur gegen Namenstreffer, die ganz in ihm liegen; die zusätzlichen Schreibweisen erreichen die Restprüfung nicht mehr, sie urteilt über dieselben Werte wie in RC178. |
+| „Fr.“ als Wochentag vor einem bekannten Namen verschwand („Mo. bis Fr. Müller“). | meine Änderung `cfee417a` | Verlust von Sachinhalt | eingegrenzt in `d4740dd6` |
+| Für die Nachbesserung der Bereinigung (`f8c69fe3`) gab es keinen Test; der Gegenfall „Zeitraumstraße 12“ stand im Bericht, aber nicht im Test. | Faktencheck | Testlücke | ergänzt in `7693e162` |
+| Zwei Kommentare im Rust-Code versprachen mehr, als der Code hält („nie strenger als der Core“, „keine Grenze für abgeschlossene Exporte“). | Faktencheck | irreführender Kommentar | berichtigt in `d5992265`; R-011 ist deshalb nur „teilweise behoben“ |
+
+### Was bewusst bleibt
+
+- Folgt auf einen umgestellten Namen unmittelbar ein weiterer Name, der im
+  Dokument noch einmal vorkommt („Müller, Hans Peter Schmidt“), stoppt der
+  Kern mit `AMBIGUITY_REVIEW_REQUIRED`; RC178 lief durch und ließ „Hans
+  Peter Schmidt“ stehen. Der Stopp entsteht in der Rückführung offener
+  Personenhinweise auf den Ursprungstext, nicht in der geänderten Regel. Ich
+  habe ihn nicht aufgelöst.
+- Steht die Schreibweise ohne Umlaute allein in einer Zeile, vergibt die
+  Personenprüfung wie in RC178 ein eigenes Pseudonym; mitten im Satz erhält
+  dieselbe Schreibweise das Pseudonym der bekannten Person. Kein Leck, aber
+  in der Zuordnung zwei Einträge für mutmaßlich eine Person.
+- „So, Fr. Müller kommt.“ verliert „Fr.“, weil nur eine Wochentagsspanne
+  mit Punkt oder „bis“ als solche gilt.
+- Die dritte Gegenprüfung hat für den Namensteil im Link keine Regression
+  gegenüber RC178 gefunden, aber Lücken der neuen Regel. Sie sind nicht
+  behoben: Keine ist schlechter als RC178, und jede weitere Änderung am Kern
+  hätte Suite, Differenzlauf und Gegenprüfung erneut verlangt. Ich habe an
+  dieser Stelle aufgehört.
+  - Steht der Name unmittelbar vor einer prozentkodierten E-Mail-Adresse
+    (`?a=Laura%20Stein%40firma-x.de`), gewinnt der E-Mail-Treffer und der
+    Vorname bleibt stehen (`Laura%[EMAIL_REDACTED]`). RC178 ließ alles stehen.
+  - Zwischen Vor- und Nachname gilt im Link genau ein Trennzeichen aus
+    `- _ . + ,` oder `%20`. `/Laura/Stein/`, `Laura~Stein`, `Laura--Stein`,
+    `Laura%2BStein` und prozentkodierte Buchstaben werden nicht erkannt; die
+    verworfene Ganzersetzung hätte einige davon erfasst.
+  - Eine doppelt kodierte Adresse (`%2540`) oder ein kodierter Punkt in der
+    Domain (`%2E`) bleibt stehen.
+- Ein Link in einer Bewerbung auf eine Lernplattform
+  (`[…](https://learn.microsoft.com/users/stein-laura)`) stoppt mit einem
+  Fehler ohne Code aus der Nachbearbeitung. RC178 stoppt denselben Text und
+  auch einen Link ohne Namen dort; nicht untersucht.
+
+### Zahlen des Differenzlaufs
+
+77 Satzmuster, 8 Namen, 4 Kopfformen und 5 Profile, jeweils einzeln und als
+zweites Dokument eines Laufs: 15 400 Fälle je Stand, verglichen mit dem
+unveränderten Kern von RC178.
+
+| Ergebnis gegenüber RC178 | Stand `a0d3e340` | Endstand `d5992265` |
+| --- | --- | --- |
+| gleiche Ausgabe | 9 553 | 10 130 |
+| weniger Namensteile sichtbar | 2 612 | 2 816 |
+| andere Ausgabe bei gleicher Zählung | 1 556 | 1 130 |
+| läuft durch, wo RC178 stoppte | 0 | 336 |
+| stoppt in beiden | 1 314 | 978 |
+| **mehr Namensteile sichtbar** | **180** | **10** |
+| **stoppt neu** | **185** | **0** |
+
+Die zehn verbliebenen Fälle der vorletzten Zeile sind dieselbe gewollte
+Wirkung von R-024: „im Winter 2022“ wird nicht mehr als Adresse maskiert, und
+„Winter“ ist dort die Jahreszeit, nicht die Person. Die 1 130 Abweichungen
+bei gleicher Zählung habe ich je Satzmuster an Stichproben gelesen; sie
+entsprechen den beabsichtigten Änderungen (Zeitraum, Anrede, Tabellenzelle,
+Telefonwiederholung, Namensteil im Link).
+
+Grenzen: Das Korpus ist von mir geschrieben und deckt, was mir und den
+Prüfern einfiel. Es enthält keine echten Dokumente, deutsche Namen mit einem
+französischen Beispiel, und es prüft nur den automatischen Weg. Die
+Regression in Aufzählungen hat es erst gezeigt, nachdem ich solche Muster
+aufgenommen hatte; die E-Mail-Domain mit Namen erst nach dem Hinweis der
+Gegenprüfung.
 
 ## Annahmen und Revalidierung
 
@@ -346,6 +563,15 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
 | A-006 | Die Standalone-Projektion übersieht keine dynamisch geladenen Module. | Regex erfasst nur literale `require`. | Dynamisches `require` wäre unsichtbar. | Lieferketten-Review, Suche über 276 Dateien | Bestätigt für RC178; kein Wächter für die Zukunft. |
 | A-007 | Die Diagnose enthält keine Pfade oder Dateinamen. | Geschlossenes Vokabular, Sanitisierung im Paket. | Fehlertexte aus Kindprozessen. | Rust-Review | Bestätigt am Quelltext; JS-Diagnose nicht gelesen. |
 | A-008 | Die Oberfläche ist gegen HTML-Injektion über Dateinamen geschützt. | Kein `innerHTML` im Frontend, CSP `script-src 'self'`. | Bidi-Steuerzeichen im Namen. | Oberflächen-Review | Bestätigt; Bidi bleibt offen (R-020). |
+| A-009 | Die Ganzersetzung eines Links mit Personenname stört keine andere Erkennung. | Der Link trägt den Namen; ihn ganz zu ersetzen ist die sichere Seite. | Telefonnummer, IBAN oder E-Mail-Adresse im selben Linkziel erzeugen einen überlappenden Treffer mit höherem Rang. | Datenschutz-Gegenprüfung (read-only) | Widerlegt in der ersten Fassung: ein vorher durchlaufendes Dokument stoppte in der Restprüfung. Behoben in `ac74cf71` mit eigenem Rang der Ganzersetzung. |
+| A-010 | Ein verwaister Vorbereitungsordner ist am Namen und am Alter sicher erkennbar. | Namensmuster `.pending-<dm_…>-<24 hex>` wird nur vom Speicher selbst erzeugt. | Eine gerade laufende Veröffentlichung; Aufbewahrung 0 Tage; Eintrag verschwindet während der Prüfung. | Laufzeit-Gegenprüfung (read-only) | Teilweise widerlegt: bei 0 Tagen galt ein frischer Ordner als veraltet. Behoben in `f8c69fe3` mit fester Schonfrist. |
+| A-011 | Die native Argumentprüfung lehnt nichts ab, was der Core annimmt. | Regeln aus `validatePrivateMessage` übernommen. | Sonderfälle des Core (Korrektur ohne Bereiche, `acknowledge` auf der Vorschau). | Rust-Gegenprüfung (read-only) gegen Core und alle Aufrufe der Oberfläche | Widerlegt in zwei Fällen; angeglichen in `22688d75`. Danach ohne Abweichung für alles, was die geladene Oberfläche sendet. |
+| A-012 | Die höhere Grenze für kontrollierte Namen kostet keine Laufzeit. | Die Prüfung ist eine einfache Zählung. | Das Windows-Listing prüfte Duplikate je Seite gegen alle bisherigen Namen. | Rust-Gegenprüfung mit Mikrobenchmark | Widerlegt: quadratisch, rund 4 s bei 65 536 Namen. Behoben in `3b8fbba9`. |
+| A-013 | Ein neuer Zweig für `w:sym` (und in der ersten Runde für `w:noBreakHyphen` und `w:ptab`) ändert nur Dokumente mit diesen Marken in Absätzen. | Der Zweig erzeugt nur Text. | Dieselbe Marke außerhalb eines Absatzes traf die Prüfung „Text außerhalb eines Absatzes“. | Konvertierungs-Gegenprüfung (read-only) | Widerlegt für ungültig aufgebaute Dokumente, für zwei der drei Marken schon im Stand der ersten Übergabe; behoben in `a0d3e340`. |
+| A-015 | „Nachname, Vorname“ einer bekannten Person ist immer dieselbe Person. | Nur bekannte volle Namen werden umgestellt gesucht. | Eine Aufzählung „Anna Müller, Hans Müller“ enthält dieselbe Zeichenfolge über die Kommagrenze. | eigene Probe, Faktencheck, Differenzlauf | Widerlegt; `3e4a1be1`. Meine Tests hatten nur den Namen allein und in einer Tabellenzelle geprüft. |
+| A-016 | Ein Link mit Personenname lässt sich gefahrlos als Ganzes ersetzen, wenn die Ersetzung jeden anderen Treffer schlägt. | Der Name verschwindet sicher. | Der Linkausdruck trifft auch die Domain hinter dem @ einer E-Mail-Adresse; Treffer, die über den Link hinausreichen, werden ganz verworfen. | zweite Gegenprüfung (read-only) mit Beispielen | Widerlegt; Ansatz in `e07ca2e6` aufgegeben. Ersetzt wird nur der Namensteil, mit dem Rang jedes anderen Namenstreffers. |
+| A-017 | Zusätzliche Schreibweisen dürfen wie alle Wörterbuchwerte an die Restprüfung gehen. | Mehr Werte, mehr Sicherheit. | Eine Schreibweise, die die Personenprüfung gerade als offenen Hinweis hält, wird dann zum harten Rest und stoppt das Dokument. | zweite Gegenprüfung (read-only) | Widerlegt; die zusätzlichen Schreibweisen bleiben seit `e07ca2e6` Sache der Ersetzung. |
+| A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung
 
@@ -362,3 +588,18 @@ Datenschutz und Datenverlust zuerst.
 | 6 | R-008, R-009, R-020 (Label) | Meldungen sichtbar und zutreffend. | `app/frontend/*` | Frontend-Tests | umgesetzt |
 | 7 | R-007, R-016, R-021 | Dokumente an den Iststand angleichen. | CLAUDE.md, Vertrag, Backlog, Hinweise | `npm run test:docs` | umgesetzt |
 | 8 | alle | Gesamtverifikation und Bericht. | `tasks/rc178-claude-review/*` | Headless, Docs, `git diff --check`, Plugin-Gates | umgesetzt |
+
+### Plan der zweiten Runde
+
+Festgehalten vor den Änderungen der zweiten Runde. Reihenfolge wieder:
+Datenschutz und Datenverlust zuerst, dann Betrieb, dann Darstellung.
+
+| Reihenfolge | Befund-IDs | Ziel und relevante Invarianten | Geänderte Pfade | Verifikation | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | R-024, R-017 | Zeiträume bleiben stehen; weitere Schreibweisen bekannter Personen werden ersetzt und von der Restprüfung gleich erkannt; keine neue Erkennung unbekannter Personen. | `srv/privacy/structured.js`, `srv/privacy/engine.js`, Sicherheitsmodell | neue Tests, Golden-Tests, Laufzeitvergleich | umgesetzt, Rest dokumentiert |
+| 2 | R-010 | Verwaiste Vorbereitungen verschwinden; eine laufende Veröffentlichung wird nie berührt. | `srv/standalone/markdown-retention.js` | Retention-Tests | umgesetzt |
+| 3 | R-011 bis R-014 | Export scheitert nicht an abgeschlossenen Datensätzen; Ursache eines Exportfehlers ist diagnostizierbar; Protokoll läuft nicht voll; die native Grenze prüft, was der Core prüft. Kein Pfad und kein Inhalt in der Diagnose. | fünf Dateien unter `app/tauri-contract/src/`, `app/frontend/document-review.js` | `cargo test`, Clippy, Paketlauf (Windows) | umgesetzt; macOS offen |
+| 4 | R-018, R-003 | Kein stiller Verlust: Abweichung wird als Hinweis sichtbar, Symbole bleiben als Zeichen oder Marker. | `srv/document-parser.js`, `srv/core/csv-table-shape.js`, `srv/standalone/markdown-extractor.js`, `srv/ooxml.js` | Extraktor-, CSV- und DOCX-Tests | umgesetzt |
+| 5 | R-020, R-025, R-019 | Texte in Einzahl, Hinweise handlungsleitend, Felder erkennbar; der Vertrag prüft die geladene Oberfläche. | `app/frontend/*`, Tests | Frontend-Tests, nativer Lauf | umgesetzt, Rest offen |
+| 6 | R-016, R-023, R-004, R-015, R-021 | Lizenzangabe, lokale Abhängigkeitsprüfung und Dokumente entsprechen dem Iststand. | `scripts/*`, `docs/*` | Paketprüfung, `npm run test:docs` | umgesetzt |
+| 7 | alle | Unabhängige Gegenprüfung, Nachbesserung, Gesamtverifikation, Bericht. | `tasks/rc178-claude-review/*` | Headless, Konverter, Rust, Paket, nativer Lauf | umgesetzt |

@@ -113,6 +113,35 @@ function extentOf(lines, start) {
   return start;
 }
 
+// Zeilen, die nur im Testbau übersetzt werden: Module mit "test" im Namen und
+// das Element nach einem #[cfg(test)]. Produktivcode hinter einem Testmodul
+// zählt nicht dazu.
+function rustTestLines(lines) {
+  const marked = new Set();
+  const blockEnd = (start) => {
+    let depth = 0; let opened = false;
+    for (let index = start; index < lines.length; index += 1) {
+      for (const char of lines[index]) {
+        if (char === '{') { depth += 1; opened = true; }
+        else if (char === '}') depth -= 1;
+      }
+      if (opened && depth <= 0) return index;
+      if (!opened && /;\s*$/u.test(lines[index])) return index;
+    }
+    return lines.length - 1;
+  };
+  const mark = (start) => { for (let index = start, end = blockEnd(start); index <= end; index += 1) marked.add(index); };
+  lines.forEach((line, index) => {
+    if (/^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+\w*tests?\w*\s*\{/u.test(line)) mark(index);
+    if (/^\s*#\[cfg\((?:all\()?test\b/u.test(line)) {
+      let next = index + 1;
+      while (next < lines.length && /^\s*(?:#\[|\/\/|$)/u.test(lines[next])) next += 1;
+      if (next < lines.length) mark(next);
+    }
+  });
+  return marked;
+}
+
 const units = [];
 const tokensByFile = new Map();
 function tokens(file) {
@@ -128,10 +157,10 @@ for (const file of [...unitFiles].sort()) {
   const text = fs.readFileSync(path.join(root, file), 'utf8');
   const lines = text.split('\n');
   const patterns = /\.rs$/u.test(file) ? rustPatterns : /\.(?:c|cc|cpp|h)$/u.test(file) ? cPatterns : jsPatterns;
-  let inTests = false;
+  const testLines = /\.rs$/u.test(file) ? rustTestLines(lines) : new Set();
   let found = 0;
   lines.forEach((line, index) => {
-    if (/\.rs$/u.test(file) && /^\s*mod\s+tests\b|#\[cfg\(test\)\]/u.test(line)) inTests = true;
+    const inTests = testLines.has(index);
     for (const [pattern, kind] of patterns) {
       const match = pattern.exec(line);
       if (!match || KEYWORDS.has(match[1])) continue;
@@ -169,11 +198,18 @@ const rows = [header.join('\t')];
 const counts = {};
 const byDimension = {};
 const seenIds = new Map();
+const usedSymbolKeys = new Set();
 const short = (file) => file.replace(/^plugins\/data-secure\/server\//u, 'srv/').replace(/^apps\/datasecure-standalone\//u, 'app/');
 
 for (const unit of units) {
   const fileReview = review.files[unit.file] || {};
-  const symbolReview = (review.symbols[unit.file] || {})[unit.symbol] || {};
+  // Ein Schlüssel "name@zeile" trifft genau eine von mehreren gleichnamigen Einheiten.
+  const fileSymbols = review.symbols[unit.file] || {};
+  const exactKey = `${unit.symbol}@${unit.line}`;
+  const hasExact = Object.keys(fileSymbols).some((key) => key.startsWith(`${unit.symbol}@`));
+  const symbolKey = fileSymbols[exactKey] ? exactKey : hasExact ? null : unit.symbol;
+  const symbolReview = (symbolKey && fileSymbols[symbolKey]) || {};
+  if (symbolKey && fileSymbols[symbolKey]) usedSymbolKeys.add(`${unit.file}\t${symbolKey}`);
   // Rust test modules were not read by any review, whatever the file status.
   const rustTest = unit.kind.includes('Rust-Testmodul') && !symbolReview.status;
   const status = rustTest ? 'OFFEN' : symbolReview.status || fileReview.symbolStatus || 'OFFEN';
@@ -213,4 +249,7 @@ for (const row of groupRows) {
 }
 fs.writeFileSync(path.join(here, '..', 'ABDECKUNG.tsv'), `${rows.join('\n')}\n`);
 const unknownFiles = Object.keys(review.files).filter((file) => !unitFiles.has(file));
+const unknownSymbols = Object.entries(review.symbols).flatMap(([file, names]) => Object.keys(names)
+  .filter((name) => !usedSymbolKeys.has(`${file}\t${name}`)).map((name) => `${file} ${name}`));
+if (unknownSymbols.length) throw new Error(`Einheiten aus coverage-status.json ohne Treffer: ${unknownSymbols.join('; ')}`);
 console.log(JSON.stringify({ commit, unitFiles: unitFiles.size, units: units.length, groups: groupRows.length, counts, byDimension, unknownFiles }, null, 2));
