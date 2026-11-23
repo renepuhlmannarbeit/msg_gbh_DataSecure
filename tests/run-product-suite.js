@@ -52,7 +52,7 @@ const baseFiles = [
   'tests/test-product-bootstrap.js', 'tests/test-standalone.js',
   'tests/test-source-snapshot-storage.js',
   'tests/test-standalone-frontend.js',
-  'tests/test-standalone-workspace.js',
+  'tests/test-standalone-workspace.js', 'tests/test-standalone-loaded-frontend-contract.js',
   'tests/test-workflow-presentation.js', 'tests/test-markdown-start-transport.js', 'tests/test-office-image-ocr.mjs', 'tests/test-office-image-relevance.js',
   'tests/test-partial-conversion.js', 'tests/test-conversion-checkpoints.js', 'tests/test-conversion-parent-lifetime.js',
   'tests/test-conversion-timings.js',
