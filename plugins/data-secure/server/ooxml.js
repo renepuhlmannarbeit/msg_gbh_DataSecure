@@ -11,7 +11,7 @@ const { renderTableCells, tableFieldPlan } = require('./office-table-projection'
 const { createDrawingTableCollector } = require('./drawing-table-grid');
 const { createOfficeMathCollector } = require('./office-math');
 const { mathMarkdown, mathParagraphMarkdown } = require('./office-math-projection');
-const {readWordNumbering,createWordNumberingSession,readWordCommentMetadata,createWordStoryContext}=require('./word-content-context');
+const {readWordNumbering,createWordNumberingSession,readWordCommentMetadata,createWordStoryContext,wordHeadingLevel}=require('./word-content-context');
 const {isProtectedFieldHeader}=require('./privacy/field-value-coverage');
 const {CONTENT_PERSON_FIELD_POLICY}=require('./core/person-field-policy');
 const { readPresentationComments, createPresentationCommentBudget } = require('./presentation-comments');
@@ -1175,7 +1175,10 @@ function parseWordStructure(body, options = {}) {
       } else if (node.type === 'tr' && name === 'w:tblHeader') {
         node.header = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
       } else if (node.type === 'p' && name === 'w:pStyle') {
-        const level = /^heading\s*([1-6])$/i.exec(attrs.get('w:val') || '')?.[1];
+        // The style ID is locale dependent; with a bound styles part the
+        // built-in style name decides (RC178 review R-005).
+        const level = /^heading\s*([1-6])$/i.exec(attrs.get('w:val') || '')?.[1] ||
+          (context ? wordHeadingLevel(context.numberingModel, xmlDecode(attrs.get('w:val') || '')) : undefined);
         if (level) node.prefix = '#'.repeat(Number(level)) + ' ';
         if(story){const p=propertyParents();if(p.at(-1)?.name!=='w:pPr'||p.at(-2)?.name!=='w:p')throw wordStructureError();oneProperty(node,'w:pStyle');node.wordNumbering.pStyle=xmlDecode(attrs.get('w:val')||'');}
       } else if (node.type === 'p' && name === 'w:numPr') {

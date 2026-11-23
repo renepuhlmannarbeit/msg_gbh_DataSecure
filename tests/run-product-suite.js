@@ -61,7 +61,7 @@ const baseFiles = [
   'tests/test-word-content-context.js', 'tests/test-word-context-integration.js', 'tests/test-word-parent-scope.js',
   'tests/test-xlsx-content-context.js',
   'tests/test-office-chart-model.js', 'tests/test-office-chartex-model.js', 'tests/test-office-math.js', 'tests/test-office-math-projection.js', 'tests/test-office-math-integration.js',
-  'tests/test-office-projection-countercases.js', 'tests/test-docx-table-grid.js', 'tests/test-docx-inline-run-content.js',
+  'tests/test-office-projection-countercases.js', 'tests/test-docx-table-grid.js', 'tests/test-docx-inline-run-content.js', 'tests/test-docx-heading-style-names.js',
   'tests/test-office-table-context.js',
   'tests/test-office-table-projection.js', 'tests/test-sensitive-field-coverage.js', 'tests/test-explicit-prose-field-coverage.js',
   'tests/test-xlsx-table-ranges.js', 'tests/test-drawing-table-grid.js',

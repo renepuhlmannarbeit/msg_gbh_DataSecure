@@ -137,7 +137,12 @@ function readWordNumbering(numberingXml, stylesXml) {
       const styleId=attr(node,'styleId'), type=attr(node,'type');
       if (!styleId || styleId.length>253 || styles.has(styleId)) throw failure();
       const based=value(node,'basedOn'), p=one(node,'pPr');
-      styles.set(styleId,{type,based,pr:numPr(p && one(p,'numPr'))});
+      // Word localizes the style ID (German: "berschrift1") but keeps the
+      // built-in name "heading N". The name is read leniently: a missing or
+      // repeated name element only means that this style is no heading.
+      const names=children(node,'name'), named=names.length===1?attr(names[0],'val'):undefined;
+      const heading=type==='paragraph'&&typeof named==='string'?/^heading\s*([1-6])$/iu.exec(named)?.[1]:undefined;
+      styles.set(styleId,{type,based,pr:numPr(p && one(p,'numPr')),...(heading?{heading:Number(heading)}:{})});
     }
   }
   if (numberingXml !== undefined && numberingXml !== null) {
@@ -403,5 +408,16 @@ function createWordStoryContext(options) {
   return Object.freeze({start,visible,textAllowed,projectionState,end,finish});
 }
 
-module.exports=Object.freeze({WORD_NAMESPACES,LIMITS,readWordNumbering,createWordNumberingSession,
+// Heading level of a paragraph style by its built-in name, following the
+// bounded basedOn chain so a derived style keeps the level of its parent.
+function wordHeadingLevel(token, styleId) {
+  const data=models.get(token); if(!data||typeof styleId!=='string')return undefined;
+  const seen=new Set();
+  for(let name=styleId;name!==undefined&&!seen.has(name)&&seen.size<LIMITS.styleDepth;) {
+    seen.add(name); const style=data.styles.get(name); if(!style)return undefined;
+    if(style.heading)return style.heading; name=style.based;
+  }
+  return undefined;
+}
+module.exports=Object.freeze({WORD_NAMESPACES,LIMITS,readWordNumbering,createWordNumberingSession,wordHeadingLevel,
   readWordCommentMetadata,createWordStoryContext});
