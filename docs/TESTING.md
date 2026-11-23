@@ -527,7 +527,7 @@ und Zeitplan sind durch einen Vertragstest ausgeschlossen. Vor der
 Runner-Zuteilung muss `confirm_private_runner_minutes` aktiviert werden, weil
 macOS-Runner in einem privaten Repository das enthaltene Actions-Kontingent
 verbrauchen und danach Kosten auslösen können. Standardmäßig wird nur
-`macos-arm64` auf `macos-14` ausgeführt; `macos-x64` verwendet
+`macos-arm64` auf `macos-15` ausgeführt; `macos-x64` verwendet
 `macos-15-intel`, `both` startet beide.
 
 Der Lauf installiert nur gepinnte Abhängigkeiten, lädt die bereits

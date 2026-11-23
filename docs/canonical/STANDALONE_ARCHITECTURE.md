@@ -524,7 +524,7 @@ ausdrücklich keine vollständige Identitätszuordnung.
 Es gibt auf Nutzerwunsch **keinen TTL- oder Startup-Löschpfad** für diese
 Zuordnung. Sie bleibt nach Ablauf der Arbeitsjournale erhalten; die App
 bietet keinen Löschbutton. Eine etwaige Löschung ist eine manuelle
-Betriebssystemaktion. Da der Verlauf nur 20 Läufe zeigt, öffnet eine separate
+Betriebssystemaktion. Da der Verlauf nur die letzten 5 Läufe zeigt, öffnet eine separate
 Einstellungsaktion den privaten Zuordnungsordner im Betriebssystem; die
 inhaltsfreie Hauptansicht erhält auch dabei keine Originalwerte. Der lokale
 Zugriff folgt dem Betriebssystemkonto; zusätzliche

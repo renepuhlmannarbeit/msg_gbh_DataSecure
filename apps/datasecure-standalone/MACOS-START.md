@@ -340,7 +340,7 @@ Downloadreferenzen**, nicht das neue Entwicklungspaket oder dessen Abnahme:
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
 - Deklarierter Binärvertrag: macOS 13.5 für beide Architekturen.
-  Die regulären Paketgates laufen auf macOS 15 (Intel) und macOS 14 (ARM).
+  Die regulären Paketgates laufen auf macOS 15 (Intel und ARM).
   Das optionale macOS-26-Profil ist ein gesonderter Nachweis;
   die Zielhost-Abnahme auf M2/macOS 26.2 und macOS 13.5 bleibt offen.
 
