@@ -9,8 +9,8 @@ Der Bericht hat zwei Runden. Die erste endete mit dem Remote-Stand
 `d07bfced` (geprüfter Code `e1afef0f`). Danach hat der Anwender beauftragt,
 die offenen Befunde zu beheben und erneut zu prüfen. Die zweite Runde umfasst
 20 Codecommits bis `a0d3e340`. Eine dritte Prüfung vor der Übergabe hat in
-diesem Stand eigene Fehler gefunden; sechs weitere Commits bis `d5992265`
-beheben sie. Dieser Bericht beschreibt den Endstand `d5992265`.
+diesem Stand eigene Fehler gefunden; sieben weitere Commits bis `ffab4fa7`
+beheben sie. Dieser Bericht beschreibt den Endstand `ffab4fa7`.
 
 ## Identität und Umfang
 
@@ -83,6 +83,9 @@ aber den Build-Fingerprint `0dac7e18…`.
      dieses Berichts, ein Differenzlauf des RC178-Kerns gegen den geänderten
      Kern und zwei weitere Gegenprüfungen. Keiner meiner Tests und nicht die
      erste Gegenprüfung hatten es gezeigt.
+   - Der native Lauf hat danach noch einen Fehler gezeigt, den auch diese
+     Prüfungen nicht gemeldet hatten: In der vertraulichen Zuordnung fehlte
+     die Person, sobald eine der neuen Schreibweisen im Dokument stand.
    - Die Korrektur ist ein Umbau, kein Flicken: Ein Link wird in den
      Profilen, die Links behalten, nicht mehr als Ganzes ersetzt, sondern nur
      der Namensteil darin. Einzelheiten in BEFUNDE.md, „Dritte Prüfung“.
@@ -179,6 +182,7 @@ Dritte Prüfung (Einzelheiten in BEFUNDE.md, „Dritte Prüfung“):
 | `e07ca2e6` | R-017, Regressionen aus `cfee417a` und `ac74cf71` | `privacy/engine.js`: keine Ganzersetzung von Links mehr; der Namensteil und eine prozentkodierte E-Mail-Adresse im Link werden an Ort und Stelle ersetzt (`linkIdentityHits`), die Restprüfung nutzt dieselbe Funktion. Voller Name ohne Umlaute als weitere Schreibweise (`asciiNameSpellings`). Zusätzliche Schreibweisen gehen nicht mehr an die Restprüfung. `docs/canonical/STANDALONE_SECURITY_MODEL.md`. | derselbe Test (9 Fälle); `tests/test-pii-regression.js` (164 Fälle, am Stand `a0d3e340` 1 Fehler); Differenzlauf | wie oben. Policy-Fingerprint ändert sich. |
 | `7693e162` | R-010, R-024 | nur Tests | `tests/test-markdown-retention.js`, `tests/test-privacy-time-periods.js` | — |
 | `d5992265` | R-011, R-014 | zwei Kommentare in `export_directory.rs` und `main.rs` berichtigt, kein Code | `cargo test`, Clippy | — |
+| `ffab4fa7` | R-017, Regression aus `cfee417a` und `e07ca2e6` | `privacy/engine.js`: zusätzliche Schreibweisen tragen den eingeführten Namen der Person als Identität. Vorher fehlte die Person in der vertraulichen Zuordnung, sobald eine dieser Schreibweisen im Dokument stand. | `tests/test-privacy-name-variants.js` (10 Fälle), Fall „every spelling of one person …“; schlägt am Stand `d5992265` fehl. Im nativen Lauf gefunden und danach dort bestätigt. | Gemeinsamer Kern, auch Cowork. |
 
 Nicht umgesetzt und begründet (Einzelheiten in BEFUNDE.md, „Entscheidungen je
 Befund“):

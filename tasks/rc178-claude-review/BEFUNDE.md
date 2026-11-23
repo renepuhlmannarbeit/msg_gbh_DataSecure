@@ -454,7 +454,7 @@ Der Stand `a0d3e340` war das vorgesehene Ende der zweiten Runde. Vor der
 Übergabe habe ich vier weitere Prüfungen angesetzt. Sie haben Fehler in
 meinen eigenen Änderungen gefunden, darunter zwei Lecks, die weder die neuen
 Tests noch die erste Gegenprüfung gezeigt hatten. `a0d3e340` wurde nie
-gepusht; die Korrekturen stehen in sechs weiteren Commits bis `d5992265`.
+gepusht; die Korrekturen stehen in sieben weiteren Commits bis `ffab4fa7`.
 
 - **Eigene Probe für den nativen Lauf** – Beim Zusammenstellen der Eingaben
   blieb „hans_mueller“ zu „Hans Müller“ stehen; die Nachverfolgung führte auf
@@ -471,6 +471,10 @@ gepusht; die Korrekturen stehen in sechs weiteren Commits bis `d5992265`.
 - **Zweite und dritte Gegenprüfung des Datenschutzkerns** – zwei unabhängige
   Read-only-Prüfer mit dem Auftrag, die Korrekturen zu widerlegen. Die zweite
   hat meine erste Fassung der Korrektur selbst widerlegt (siehe Tabelle).
+- **Nativer Lauf über die Oberfläche** – mit Eingaben, die genau die
+  geänderten Fälle enthalten. Er hat einen Fehler in der vertraulichen
+  Zuordnung gezeigt, den Suite, Differenzlauf und Gegenprüfungen nicht
+  gemeldet hatten.
 
 ### Was dabei gefunden wurde
 
@@ -484,6 +488,7 @@ gepusht; die Korrekturen stehen in sechs weiteren Commits bis `d5992265`.
 | **R-026** – Dasselbe gilt in RC178 schon für Links mit Bindestrich oder dem bloßen Nachnamen: Ein Lebenslauf mit `https://www.linkedin.com/in/laura-stein-12345` stoppt im Profil Bewerbung mit `RESIDUAL_PII`. | vorbestehend (RC178) | fachlicher Fehler: ein üblicher Lebenslauf lässt sich nicht automatisch anonymisieren; kein Leck | behoben in `d91462b9`: Namenstreffer, die vollständig im Link liegen, weichen der Ganzersetzung, die diese Profile ohnehin vornehmen. Das gilt nur, wenn nichts anderes den Link berührt; sonst bleibt es beim Verhalten von RC178. |
 | Der volle Name ohne Umlaute („Hans Mueller“, „hans_mueller“, „Hans-Muller“) blieb außerhalb von Links stehen. | Lücke von R-017 | Leck, vorbestehend | behoben in `e07ca2e6`: nur der volle Name, nicht der Nachname allein, und nicht, wenn die Schreibweise im Lauf eine eigene Person ist. |
 | Meine erste Fassung dieser beiden Korrekturen (nicht committet) hob den Rang des Links in den drei strengen Profilen an und gab die neuen Schreibweisen an die Restprüfung weiter. Folge: wieder ein sichtbarer E-Mail-Teil („l.meier@stein-beratung.de“), ein freigegebener Namensrest hinter einem Link („…/team/Wei Li.pdf“ → „[URL_REDACTED] Li.pdf“) und Stopps bei „Mit freundlichen Grüßen / Hans Mueller“. | zweite Gegenprüfung | Leck und neue Stopps, vor dem Commit gefunden | Ansatz verworfen. Der Link gewinnt jetzt nur gegen Namenstreffer, die ganz in ihm liegen; die zusätzlichen Schreibweisen erreichen die Restprüfung nicht mehr, sie urteilt über dieselben Werte wie in RC178. |
+| In der vertraulichen Pseudonym-Zuordnung fehlte eine Person, sobald eine der neuen Schreibweisen im Dokument vorkam („Müller, Hans“, „hans_mueller“, Name im Link); alle ihre Vorkommen zählten dort als mehrdeutig. Der Text selbst war richtig ersetzt. Die Schreibweisen trugen sich selbst als Identität ein, und die Zuordnung verlangt je Pseudonym genau einen vollen Namen. | meine Änderungen `cfee417a`, `e07ca2e6` | fachlicher Fehler der lokalen Zuordnung, kein Leck; von keinem Test gemeldet | gefunden im nativen Lauf; behoben in `ffab4fa7`: die Schreibweisen tragen den Namen ein, unter dem das Pseudonym eingeführt wurde. Test ergänzt, schlägt am Stand `d5992265` fehl. |
 | „Fr.“ als Wochentag vor einem bekannten Namen verschwand („Mo. bis Fr. Müller“). | meine Änderung `cfee417a` | Verlust von Sachinhalt | eingegrenzt in `d4740dd6` |
 | Für die Nachbesserung der Bereinigung (`f8c69fe3`) gab es keinen Test; der Gegenfall „Zeitraumstraße 12“ stand im Bericht, aber nicht im Test. | Faktencheck | Testlücke | ergänzt in `7693e162` |
 | Zwei Kommentare im Rust-Code versprachen mehr, als der Code hält („nie strenger als der Core“, „keine Grenze für abgeschlossene Exporte“). | Faktencheck | irreführender Kommentar | berichtigt in `d5992265`; R-011 ist deshalb nur „teilweise behoben“ |
@@ -527,7 +532,7 @@ gepusht; die Korrekturen stehen in sechs weiteren Commits bis `d5992265`.
 zweites Dokument eines Laufs: 15 400 Fälle je Stand, verglichen mit dem
 unveränderten Kern von RC178.
 
-| Ergebnis gegenüber RC178 | Stand `a0d3e340` | Endstand `d5992265` |
+| Ergebnis gegenüber RC178 | Stand `a0d3e340` | Endstand `ffab4fa7` (an `d5992265` dieselben Zahlen) |
 | --- | --- | --- |
 | gleiche Ausgabe | 9 553 | 10 130 |
 | weniger Namensteile sichtbar | 2 612 | 2 816 |
