@@ -105,8 +105,11 @@ const GENDERED_PREFIX_RE = new RegExp(
 
 // "Hr. Müller" and "Fr. Müller" in front of an already known person. The
 // abbreviation is only evaluated at such an occurrence, never as a discovery
-// anchor: "Mo.-Fr. Sprechzeiten" must not turn a noun into a person.
-const ABBREVIATED_SALUTATION_PREFIX_RE = /(?:^|[\s(«"'])((?:Hr|Fr)\.[ \t]*)$/u;
+// anchor: "Mo.-Fr. Sprechzeiten" must not turn a noun into a person. After a
+// weekday range ("Mo. bis Fr. Müller erreichbar") "Fr." is the Friday and
+// stays in the text.
+const ABBREVIATED_SALUTATION_PREFIX_RE =
+  /(?:^|[\s(«"'])(?<!(?<![\p{L}])(?:Mo|Di|Mi|Do|Sa|So)(?:\.[ \t]*(?:bis|und|[-–,/])|[ \t]*(?:bis|[-–]))[ \t]*)((?:Hr|Fr)\.[ \t]*)$/u;
 
 function growOverHonorific(text, span) {
   const before = text.slice(Math.max(0, span.start - 192), span.start);

@@ -48,6 +48,8 @@ async function main() {
   await testAsync('abbreviated salutations are consumed only in front of the known person', async () => {
     assert.equal(await known('Hr. Österreicher und Fr. Österreicher kamen.'), '[PERSON_001] und [PERSON_001] kamen.');
     assert.equal(await known('Mo.-Fr. Sprechzeiten bleiben.'), 'Mo.-Fr. Sprechzeiten bleiben.');
+    // After a weekday range "Fr." is the Friday.
+    assert.equal(await known('Mo. bis Fr. Österreicher erreichbar.'), 'Mo. bis Fr. [PERSON_001] erreichbar.');
   });
 
   await testAsync('profiles that replace every link replace it as a whole when it spells the name', async () => {
