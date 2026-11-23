@@ -612,6 +612,10 @@ impl Directory {
         let lock = platform::lock_existing_control(&self.inner)?;
         platform::regular_identity(&lock.file)?; self.check()?; Ok(lock)
     }
+    /// Upper bound for one listing of a controlled record directory. It limits
+    /// memory and time of the abandoned-preparation check, not the number of
+    /// completed exports a user may accumulate under one result folder.
+    const MAX_CONTROLLED_RECORD_NAMES: usize = 262_144;
     /// Fully prepare a bounded private journal record before exposing its
     /// final name. A crash leaves only an unowned temporary file, never a torn
     /// final record. Existing final names are not replaced. No temp cleanup.
@@ -642,7 +646,12 @@ impl Directory {
         leaf(name)?; self.check()?;
         if bytes.len() > maximum { return Err(unsafe_io()); }
         // Bound abandoned private preparations; never traverse/delete them.
-        platform::list_names(&self.inner, entries)?;
+        // Only the temporary "pending-" names of this writer count: every
+        // completed export keeps its final records in the same private root,
+        // so a bound on all names turned the 513th export under one result
+        // folder into a permanent conflict. The listing itself stays bounded.
+        let names = platform::list_names(&self.inner, Self::MAX_CONTROLLED_RECORD_NAMES)?;
+        if names.iter().filter(|existing| existing.starts_with("pending-")).count() > entries { return Err(unsafe_io()); }
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|_| unsafe_io())?.as_nanos();
         let temp = format!("pending-{}-{stamp}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         let mut file = platform::create_record(&self.inner, &temp)?;
@@ -1392,6 +1401,22 @@ mod tests {
         assert!(parent.lock_control().is_err());
         drop(second);
         parent.lock_control().unwrap();
+    }
+    #[test]
+    fn completed_records_do_not_exhaust_the_abandoned_preparation_bound() {
+        // RC178 review R-011: four final entries per export stay in the
+        // private root. Only abandoned "pending-" preparations are bounded.
+        let f = Fixture::new(); let parent = f.directory();
+        let private = parent.create_controlled_child("private-native").unwrap();
+        let root = f.path.join("private-native");
+        for index in 0..2100 { fs::write(root.join(format!("{index:032x}-parents-intent.json")), b"{}").unwrap(); }
+        private.write_record_atomic("after-many-exports.json", b"{\"synthetic\":true}").unwrap();
+        assert_eq!(private.read_bounded("after-many-exports.json", 64).unwrap(), b"{\"synthetic\":true}");
+        for index in 0..2048 { fs::write(root.join(format!("pending-1-{index}-0")), b"").unwrap(); }
+        private.write_record_atomic("at-the-bound.json", b"{}").unwrap();
+        fs::write(root.join("pending-1-overflow-0"), b"").unwrap();
+        assert!(private.write_record_atomic("beyond-the-bound.json", b"{}").is_err());
+        assert!(private.read_bounded("beyond-the-bound.json", 64).is_err());
     }
     #[test]
     fn native_private_parent_creation_and_identity_bound_reopen_are_verified() {
