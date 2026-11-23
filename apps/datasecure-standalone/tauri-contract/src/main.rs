@@ -2555,8 +2555,10 @@ fn valid_document_decision(value: &Value) -> Result<(), &'static str> {
 /// review commands. The Core treats a malformed private frame as a host
 /// protocol violation and ends itself; a renderer argument therefore has to
 /// be refused here, with the same public code, before it becomes a frame.
-/// The checks are never stricter than `validatePrivateMessage` in
-/// `desktop-ipc.js`, so every request the Core accepts still reaches it.
+/// Bounds and codes follow `validatePrivateMessage` in `desktop-ipc.js`,
+/// so every request the loaded frontend sends still reaches the Core. Only
+/// JSON the frontend never produces is refused earlier than there: a number
+/// written as a fraction ("1.0") or a non-string where the Core would coerce.
 fn validate_document_review_request(action: &str, fields: &Value) -> Result<(), &'static str> {
     let object = fields.as_object().ok_or("DOCUMENT_REVIEW_INVALID")?;
     let allowed: &[&str] = match action {

@@ -613,8 +613,9 @@ impl Directory {
         platform::regular_identity(&lock.file)?; self.check()?; Ok(lock)
     }
     /// Upper bound for one listing of a controlled record directory. It limits
-    /// memory and time of the abandoned-preparation check, not the number of
-    /// completed exports a user may accumulate under one result folder.
+    /// memory and time of the abandoned-preparation check. Completed exports
+    /// keep four records each and nothing removes them, so this is still a
+    /// ceiling of roughly 16 000 exports under one result folder.
     const MAX_CONTROLLED_RECORD_NAMES: usize = 65_536;
     /// Fully prepare a bounded private journal record before exposing its
     /// final name. A crash leaves only an unowned temporary file, never a torn
