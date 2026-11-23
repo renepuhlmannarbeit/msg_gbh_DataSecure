@@ -247,6 +247,21 @@ fn diagnostic_native_configure_failure(failure: native_export_broker::ConfigureF
     diagnostic_log::append(&diagnostic_directory(), &record);
 }
 
+// Same closed construction for a failed export operation: fixed event, the
+// ErrorKind enum name and the integer OS code. No Display text, no pathname.
+#[cfg_attr(test, allow(dead_code))]
+fn diagnostic_native_export_failure(failure: native_export_broker::ExportFailure) {
+    let record = json!({
+        "schema": "datasecure-standalone-interaction/1",
+        "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "component": "desktop", "session_id": diagnostic_session(),
+        "event": "native_export_failed", "outcome": "failed", "error_code": "AI_EXPORT_CONFLICT",
+        "product_version": env!("CARGO_PKG_VERSION"), "build_id": build_id(), "runtime_target": runtime_target(),
+        "io_error_kind": failure.io_error_kind, "raw_os_error": failure.raw_os_error
+    });
+    diagnostic_log::append(&diagnostic_directory(), &record);
+}
+
 // Only a failed Windows NtCreateFile with a non-null creation descriptor
 // produces this fixed, content-free event. It is not a renderer error or a
 // configure-only claim: other controlled directory callers use the same gate.
@@ -266,21 +281,6 @@ fn diagnostic_native_controlled_directory_create_failure(
 }
 
 struct SidecarProcess {
-// Same closed construction for a failed export operation: fixed event, the
-// ErrorKind enum name and the integer OS code. No Display text, no pathname.
-#[cfg_attr(test, allow(dead_code))]
-fn diagnostic_native_export_failure(failure: native_export_broker::ExportFailure) {
-    let record = json!({
-        "schema": "datasecure-standalone-interaction/1",
-        "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-        "component": "desktop", "session_id": diagnostic_session(),
-        "event": "native_export_failed", "outcome": "failed", "error_code": "AI_EXPORT_CONFLICT",
-        "product_version": env!("CARGO_PKG_VERSION"), "build_id": build_id(), "runtime_target": runtime_target(),
-        "io_error_kind": failure.io_error_kind, "raw_os_error": failure.raw_os_error
-    });
-    diagnostic_log::append(&diagnostic_directory(), &record);
-}
-
     child: ipc_transport::ChildControl,
     writes: mpsc::Sender<ipc_transport::WriteRequest>,
     responses: Receiver<Result<Value, String>>,
@@ -2462,9 +2462,133 @@ async fn publish_result_documents(window: tauri::WebviewWindow, state: State<'_,
     Ok(result)
 }
 
+fn lower_hex(value: Option<&Value>, length: usize) -> bool {
+    value.and_then(Value::as_str).is_some_and(|text| text.len() == length &&
+        text.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)))
+}
+fn bounded_integer(value: Option<&Value>, maximum: u64) -> Option<u64> {
+    // JSON integers only: 1.0 and 1e2 are not accepted by Number.isSafeInteger
+    // callers either way, and the frontend never sends them.
+    value.filter(|number| number.is_u64()).and_then(Value::as_u64).filter(|number| *number <= maximum)
+}
+fn exact_keys(value: &Value, keys: &[&str]) -> bool {
+    value.as_object().is_some_and(|object| object.len() == keys.len() && keys.iter().all(|key| object.contains_key(*key)))
+}
+fn valid_export_selection(value: Option<&Value>, maximum_revision: u64) -> bool {
+    let Some(rows) = value.and_then(Value::as_array) else { return false; };
+    if rows.is_empty() || rows.len() > 200 { return false; }
+    let mut seen = std::collections::HashSet::new();
+    rows.iter().all(|row| exact_keys(row, &["document_id", "output_sha256", "revision"]) &&
+        lower_hex(row.get("document_id"), 32) && lower_hex(row.get("output_sha256"), 64) &&
+        bounded_integer(row.get("revision"), maximum_revision).is_some() &&
+        seen.insert(row["document_id"].as_str().unwrap_or_default().to_string()))
+}
+fn valid_document_decision(value: &Value) -> Result<(), &'static str> {
+    let invalid = "DOCUMENT_REVIEW_INVALID";
+    let object = value.as_object().ok_or(invalid)?;
+    let action = object.get("action").and_then(Value::as_str).ok_or(invalid)?;
+    if !["approve", "revoke", "redact", "restore_base", "correct", "entities"].contains(&action) { return Err(invalid); }
+    let mut keys = vec!["action", "operation_id", "output_sha256", "ranges", "revision"];
+    if action == "entities" { keys.push("entity_decisions"); if object.contains_key("scope") { keys.push("scope"); } }
+    if object.contains_key("repair_binding") { keys.push("repair_binding"); }
+    if !exact_keys(value, &keys) { return Err(invalid); }
+    if object.contains_key("repair_binding") && (!lower_hex(object.get("repair_binding"), 64) ||
+        !["entities", "redact", "restore_base"].contains(&action)) { return Err(invalid); }
+    if object.get("scope").is_some_and(|scope| !matches!(scope.as_str(), Some("document" | "run"))) { return Err(invalid); }
+    if !lower_hex(object.get("operation_id"), 32) || !lower_hex(object.get("output_sha256"), 64) ||
+        bounded_integer(object.get("revision"), 10_000).is_none() { return Err(invalid); }
+    let ranges = object.get("ranges").and_then(Value::as_array).ok_or(invalid)?;
+    if ranges.len() > 500 || (action == "correct" && ranges.len() != 1) { return Err(invalid); }
+    for range in ranges {
+        let expected: &[&str] = if action == "correct" { &["end", "replacement", "start"] } else { &["end", "start"] };
+        if !exact_keys(range, expected) { return Err(invalid); }
+        let start = bounded_integer(range.get("start"), 8 * 1024 * 1024).ok_or(invalid)?;
+        let end = bounded_integer(range.get("end"), 8 * 1024 * 1024).ok_or(invalid)?;
+        if end < start || (action != "correct" && end == start) { return Err(invalid); }
+        if action == "correct" {
+            let replacement = range.get("replacement").and_then(Value::as_str).ok_or(invalid)?;
+            // The Core measures JavaScript string length, that is UTF-16 units.
+            if replacement.encode_utf16().count() > 32_768 || replacement.contains('\0') { return Err(invalid); }
+        }
+    }
+    if action == "entities" {
+        let entity_invalid = "DOCUMENT_ENTITY_INVALID";
+        let decisions = object.get("entity_decisions").and_then(Value::as_array).ok_or(entity_invalid)?;
+        if !ranges.is_empty() || decisions.is_empty() || decisions.len() > 500 { return Err(entity_invalid); }
+        let mut seen = std::collections::HashSet::new();
+        for row in decisions {
+            let id = row.get("entity_id").and_then(Value::as_str).unwrap_or_default();
+            if !exact_keys(row, &["decision", "entity_id"]) || id.len() != 13 || !id.starts_with("entity_") ||
+                !id[7..].bytes().all(|c| c.is_ascii_digit()) || !seen.insert(id.to_string()) ||
+                !matches!(row.get("decision").and_then(Value::as_str), Some("default" | "keep" | "person" | "organization")) {
+                return Err(entity_invalid);
+            }
+        }
+    }
+    Ok(())
+}
+/// Native mirror of the Core's private-message validation for the document
+/// review commands. The Core treats a malformed private frame as a host
+/// protocol violation and ends itself; a renderer argument therefore has to
+/// be refused here, with the same public code, before it becomes a frame.
+/// The checks are never stricter than `validatePrivateMessage` in
+/// `desktop-ipc.js`, so every request the Core accepts still reaches it.
+fn validate_document_review_request(action: &str, fields: &Value) -> Result<(), &'static str> {
+    let object = fields.as_object().ok_or("DOCUMENT_REVIEW_INVALID")?;
+    let allowed: &[&str] = match action {
+        "get_document_reviews" => &[],
+        "get_document_review_chunk" => &["document_id", "revision", "chunk_index"],
+        "get_document_entities" => &["document_id", "revision", "page"],
+        "decide_document_review" => &["document_id", "decision"],
+        "decide_document_review_batch" => &["decision"],
+        "preview_document_export" => &["operation_id", "selection"],
+        "export_approved_documents" => &["operation_id", "selection", "acknowledge"],
+        "abandon_document_export" => &["operation_id", "digest"],
+        "resolve_document_export" | "resolve_document_identity_overview" => &["operation_id"],
+        _ => return Err("DOCUMENT_REVIEW_INVALID"),
+    };
+    if object.keys().any(|key| !allowed.contains(&key.as_str())) { return Err("DOCUMENT_REVIEW_INVALID"); }
+    match action {
+        "get_document_review_chunk" => {
+            if !lower_hex(object.get("document_id"), 32) || bounded_integer(object.get("revision"), 10_000).is_none() ||
+                bounded_integer(object.get("chunk_index"), 1024).is_none() { return Err("DOCUMENT_REVIEW_INVALID"); }
+        },
+        "get_document_entities" => {
+            if !lower_hex(object.get("document_id"), 32) { return Err("DOCUMENT_REVIEW_INVALID"); }
+            if bounded_integer(object.get("revision"), 10_000).is_none() ||
+                bounded_integer(object.get("page"), 10_000).is_none() { return Err("DOCUMENT_ENTITY_INVALID"); }
+        },
+        "decide_document_review" => {
+            if !lower_hex(object.get("document_id"), 32) { return Err("DOCUMENT_REVIEW_INVALID"); }
+            valid_document_decision(object.get("decision").ok_or("DOCUMENT_REVIEW_INVALID")?)?;
+        },
+        "decide_document_review_batch" => {
+            let decision = object.get("decision").ok_or("DOCUMENT_REVIEW_INVALID")?;
+            if !exact_keys(decision, &["action", "operation_id", "selection"]) ||
+                !matches!(decision.get("action").and_then(Value::as_str), Some("approve" | "revoke")) ||
+                !lower_hex(decision.get("operation_id"), 32) ||
+                !valid_export_selection(decision.get("selection"), 999) { return Err("DOCUMENT_REVIEW_INVALID"); }
+        },
+        "preview_document_export" | "export_approved_documents" => {
+            if object.get("acknowledge").is_some_and(|value| value != &json!(true)) ||
+                !lower_hex(object.get("operation_id"), 32) ||
+                !valid_export_selection(object.get("selection"), 10_000) { return Err("AI_EXPORT_INVALID"); }
+        },
+        "abandon_document_export" => {
+            if !lower_hex(object.get("operation_id"), 32) || !lower_hex(object.get("digest"), 64) { return Err("AI_EXPORT_INVALID"); }
+        },
+        "resolve_document_export" if !lower_hex(object.get("operation_id"), 32) => return Err("AI_EXPORT_INVALID"),
+        "resolve_document_identity_overview"
+            if object.contains_key("operation_id") && !lower_hex(object.get("operation_id"), 32) => return Err("AI_EXPORT_INVALID"),
+        _ => {},
+    }
+    Ok(())
+}
+
 async fn document_review_rpc(window: tauri::WebviewWindow, state: DesktopState, batch_id: String,
     action: &'static str, fields: Value) -> Result<Value, String> {
     document_review_surface(&window, &state, Some(&batch_id))?;
+    validate_document_review_request(action, &fields)?;
     let owned = state.clone();
     let batch = batch_id.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
@@ -3838,6 +3962,86 @@ mod tests {
     }
 
     #[test]
+    fn successful_display_polls_stop_filling_the_session_log_after_their_budget() {
+        // RC178 review R-013.
+        let polls = std::sync::atomic::AtomicU64::new(0);
+        let mut written = 0;
+        for _ in 0..DISPLAY_POLL_DIAGNOSTIC_BUDGET {
+            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
+                assert!(!display_poll_suppressed(event, "get_public_state", &polls)); written += 1;
+            }
+        }
+        assert_eq!(written, 3 * DISPLAY_POLL_DIAGNOSTIC_BUDGET);
+        for _ in 0..1000 {
+            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
+                assert!(display_poll_suppressed(event, "get_ui_context", &polls), "{event}");
+            }
+            // A failing poll and every non-display action stay recorded.
+            for event in ["ipc_request_failed", "ipc_response_error", "ipc_response_invalid", "ipc_request_queue_busy"] {
+                assert!(!display_poll_suppressed(event, "get_public_state", &polls), "{event}");
+            }
+            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
+                assert!(!display_poll_suppressed(event, "start_admitted_batch", &polls));
+                assert!(!display_poll_suppressed(event, "get_run_history", &polls));
+            }
+        }
+    }
+    #[test]
+    fn document_review_arguments_are_refused_natively_before_they_become_a_private_frame() {
+        // RC178 review R-014. Accepted shapes follow validatePrivateMessage.
+        let document = "a".repeat(32); let operation = "b".repeat(32); let digest = "c".repeat(64);
+        let row = json!({ "document_id": document, "output_sha256": digest, "revision": 1 });
+        let ok = |action: &str, fields: Value| validate_document_review_request(action, &fields);
+        assert_eq!(ok("get_document_reviews", json!({})), Ok(()));
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document, "revision": 0, "chunk_index": 1024 })), Ok(()));
+        assert_eq!(ok("get_document_entities", json!({ "document_id": document, "revision": 10000, "page": 0 })), Ok(()));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()] })), Ok(()));
+        assert_eq!(ok("export_approved_documents", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": true })), Ok(()));
+        assert_eq!(ok("abandon_document_export", json!({ "operation_id": operation, "digest": digest })), Ok(()));
+        assert_eq!(ok("resolve_document_export", json!({ "operation_id": operation })), Ok(()));
+        assert_eq!(ok("resolve_document_identity_overview", json!({})), Ok(()));
+        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "approve", "operation_id": operation, "selection": [row.clone()] } })), Ok(()));
+        let decision = |action: &str, ranges: Value| json!({ "action": action, "operation_id": operation,
+            "output_sha256": digest, "revision": 3, "ranges": ranges });
+        for (action, ranges) in [("approve", json!([])), ("redact", json!([{ "start": 0, "end": 4 }])),
+            ("correct", json!([{ "start": 2, "end": 2, "replacement": "Ersatz" }]))] {
+            assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": decision(action, ranges) })), Ok(()), "{action}");
+        }
+        let mut entities = decision("entities", json!([]));
+        entities["entity_decisions"] = json!([{ "entity_id": "entity_000001", "decision": "keep" }]);
+        entities["scope"] = json!("run"); entities["repair_binding"] = json!(digest);
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": entities.clone() })), Ok(()));
+
+        // The reported trigger and its relatives are refused with the Core's own codes.
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": "x", "revision": 0, "chunk_index": 0 })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document, "revision": 0, "chunk_index": 1025 })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document.to_uppercase(), "revision": 0, "chunk_index": 0 })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("get_document_entities", json!({ "document_id": document, "revision": 0, "page": 10001 })), Err("DOCUMENT_ENTITY_INVALID"));
+        assert_eq!(ok("abandon_document_export", json!({ "operation_id": operation, "digest": "kurz" })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("resolve_document_identity_overview", json!({ "operation_id": 7 })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("export_approved_documents", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": false })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [] })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone(), row.clone()] })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()], "path": "C:/x" })), Err("DOCUMENT_REVIEW_INVALID"));
+        let mut extra = row.clone(); extra["path"] = json!("C:/x");
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [extra] })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "delete", "operation_id": operation, "selection": [row.clone()] } })), Err("DOCUMENT_REVIEW_INVALID"));
+        let mut late = row.clone(); late["revision"] = json!(1000);
+        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "approve", "operation_id": operation, "selection": [late] } })), Err("DOCUMENT_REVIEW_INVALID"));
+        for bad in [decision("redact", json!([{ "start": 4, "end": 4 }])), decision("redact", json!([{ "start": 5, "end": 4 }])),
+            decision("correct", json!([{ "start": 0, "end": 1 }])), decision("correct", json!([{ "start": 0, "end": 1, "replacement": "a\u{0}b" }])),
+            decision("approve", json!([{ "start": 0, "end": 1, "replacement": "x" }])), decision("unknown", json!([])),
+            json!({ "action": "approve" }), json!("approve")] {
+            assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": bad.clone() })), Err("DOCUMENT_REVIEW_INVALID"), "{bad}");
+        }
+        let mut repeated = entities.clone();
+        repeated["entity_decisions"] = json!([{ "entity_id": "entity_000001", "decision": "keep" }, { "entity_id": "entity_000001", "decision": "person" }]);
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": repeated })), Err("DOCUMENT_ENTITY_INVALID"));
+        let mut approve_with_binding = decision("approve", json!([])); approve_with_binding["repair_binding"] = json!(digest);
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": approve_with_binding })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("unknown_action", json!({})), Err("DOCUMENT_REVIEW_INVALID"));
+    }
+    #[test]
     fn recorded_export_request_has_only_exact_receipt_identifiers() {
         let batch = "a".repeat(64);
         let operation = "b".repeat(32);
@@ -3961,86 +4165,6 @@ mod tests {
         }
         let mut invalid = response;
         invalid["error_details"]["selection_files"][0]["reason_code"] = json!("raw error with content");
-    #[test]
-    fn successful_display_polls_stop_filling_the_session_log_after_their_budget() {
-        // RC178 review R-013.
-        let polls = std::sync::atomic::AtomicU64::new(0);
-        let mut written = 0;
-        for _ in 0..DISPLAY_POLL_DIAGNOSTIC_BUDGET {
-            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
-                assert!(!display_poll_suppressed(event, "get_public_state", &polls)); written += 1;
-            }
-        }
-        assert_eq!(written, 3 * DISPLAY_POLL_DIAGNOSTIC_BUDGET);
-        for _ in 0..1000 {
-            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
-                assert!(display_poll_suppressed(event, "get_ui_context", &polls), "{event}");
-            }
-            // A failing poll and every non-display action stay recorded.
-            for event in ["ipc_request_failed", "ipc_response_error", "ipc_response_invalid", "ipc_request_queue_busy"] {
-                assert!(!display_poll_suppressed(event, "get_public_state", &polls), "{event}");
-            }
-            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
-                assert!(!display_poll_suppressed(event, "start_admitted_batch", &polls));
-                assert!(!display_poll_suppressed(event, "get_run_history", &polls));
-            }
-        }
-    }
-    #[test]
-    fn document_review_arguments_are_refused_natively_before_they_become_a_private_frame() {
-        // RC178 review R-014. Accepted shapes follow validatePrivateMessage.
-        let document = "a".repeat(32); let operation = "b".repeat(32); let digest = "c".repeat(64);
-        let row = json!({ "document_id": document, "output_sha256": digest, "revision": 1 });
-        let ok = |action: &str, fields: Value| validate_document_review_request(action, &fields);
-        assert_eq!(ok("get_document_reviews", json!({})), Ok(()));
-        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document, "revision": 0, "chunk_index": 1024 })), Ok(()));
-        assert_eq!(ok("get_document_entities", json!({ "document_id": document, "revision": 10000, "page": 0 })), Ok(()));
-        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()] })), Ok(()));
-        assert_eq!(ok("export_approved_documents", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": true })), Ok(()));
-        assert_eq!(ok("abandon_document_export", json!({ "operation_id": operation, "digest": digest })), Ok(()));
-        assert_eq!(ok("resolve_document_export", json!({ "operation_id": operation })), Ok(()));
-        assert_eq!(ok("resolve_document_identity_overview", json!({})), Ok(()));
-        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "approve", "operation_id": operation, "selection": [row.clone()] } })), Ok(()));
-        let decision = |action: &str, ranges: Value| json!({ "action": action, "operation_id": operation,
-            "output_sha256": digest, "revision": 3, "ranges": ranges });
-        for (action, ranges) in [("approve", json!([])), ("redact", json!([{ "start": 0, "end": 4 }])),
-            ("correct", json!([{ "start": 2, "end": 2, "replacement": "Ersatz" }]))] {
-            assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": decision(action, ranges) })), Ok(()), "{action}");
-        }
-        let mut entities = decision("entities", json!([]));
-        entities["entity_decisions"] = json!([{ "entity_id": "entity_000001", "decision": "keep" }]);
-        entities["scope"] = json!("run"); entities["repair_binding"] = json!(digest);
-        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": entities.clone() })), Ok(()));
-
-        // The reported trigger and its relatives are refused with the Core's own codes.
-        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": "x", "revision": 0, "chunk_index": 0 })), Err("DOCUMENT_REVIEW_INVALID"));
-        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document, "revision": 0, "chunk_index": 1025 })), Err("DOCUMENT_REVIEW_INVALID"));
-        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document.to_uppercase(), "revision": 0, "chunk_index": 0 })), Err("DOCUMENT_REVIEW_INVALID"));
-        assert_eq!(ok("get_document_entities", json!({ "document_id": document, "revision": 0, "page": 10001 })), Err("DOCUMENT_ENTITY_INVALID"));
-        assert_eq!(ok("abandon_document_export", json!({ "operation_id": operation, "digest": "kurz" })), Err("AI_EXPORT_INVALID"));
-        assert_eq!(ok("resolve_document_identity_overview", json!({ "operation_id": 7 })), Err("AI_EXPORT_INVALID"));
-        assert_eq!(ok("export_approved_documents", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": false })), Err("AI_EXPORT_INVALID"));
-        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [] })), Err("AI_EXPORT_INVALID"));
-        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone(), row.clone()] })), Err("AI_EXPORT_INVALID"));
-        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()], "path": "C:/x" })), Err("DOCUMENT_REVIEW_INVALID"));
-        let mut extra = row.clone(); extra["path"] = json!("C:/x");
-        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [extra] })), Err("AI_EXPORT_INVALID"));
-        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "delete", "operation_id": operation, "selection": [row.clone()] } })), Err("DOCUMENT_REVIEW_INVALID"));
-        let mut late = row.clone(); late["revision"] = json!(1000);
-        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "approve", "operation_id": operation, "selection": [late] } })), Err("DOCUMENT_REVIEW_INVALID"));
-        for bad in [decision("redact", json!([{ "start": 4, "end": 4 }])), decision("redact", json!([{ "start": 5, "end": 4 }])),
-            decision("correct", json!([{ "start": 0, "end": 1 }])), decision("correct", json!([{ "start": 0, "end": 1, "replacement": "a\u{0}b" }])),
-            decision("approve", json!([{ "start": 0, "end": 1, "replacement": "x" }])), decision("unknown", json!([])),
-            json!({ "action": "approve" }), json!("approve")] {
-            assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": bad.clone() })), Err("DOCUMENT_REVIEW_INVALID"), "{bad}");
-        }
-        let mut repeated = entities.clone();
-        repeated["entity_decisions"] = json!([{ "entity_id": "entity_000001", "decision": "keep" }, { "entity_id": "entity_000001", "decision": "person" }]);
-        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": repeated })), Err("DOCUMENT_ENTITY_INVALID"));
-        let mut approve_with_binding = decision("approve", json!([])); approve_with_binding["repair_binding"] = json!(digest);
-        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": approve_with_binding })), Err("DOCUMENT_REVIEW_INVALID"));
-        assert_eq!(ok("unknown_action", json!({})), Err("DOCUMENT_REVIEW_INVALID"));
-    }
         assert!(validate_private_response(&invalid, id).is_err());
     }
 
