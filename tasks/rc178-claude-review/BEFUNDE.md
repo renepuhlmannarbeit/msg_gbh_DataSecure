@@ -120,9 +120,11 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
 | R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | teilweise behoben (`6a90ed16`): lokale Prüfung der paketierten JavaScript-Abhängigkeiten; Rust-Crates und Repository-Einstellungen offen |
 | R-024 | mittel | Anonymisierung, alle | „im Zeitraum 2019-2024“ wird als Ort maskiert; mit geschütztem Bindestrich bleibt „‑2024“ stehen. Gefunden im nativen Windows-Lauf, am unveränderten RC178-Kern bestätigt. | BL-050.6 | behoben (`7b078d75`, Gegenfall im Test seit `7693e162`) |
-| R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | behoben (`2726675a`) |
+| R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | teilweise behoben (`2726675a`); die Zähltexte der geführten Prüfung sind offen |
 | R-026 | hoch | Fachlichkeit; Anonymisierung; alle Ziele | In den Profilen Personalprofil, Bewerbung und Kunde stoppt ein Dokument mit `RESIDUAL_PII`, sobald ein Link den Namen der Person enthält. Ein Lebenslauf mit LinkedIn-Adresse lässt sich nicht automatisch anonymisieren. Gefunden im Differenzlauf gegen den RC178-Kern. | BL-050.6 | behoben (`d91462b9`) |
-| R-027 | hoch | Anonymisierung; alle Ziele | Zugangsdaten werden nur als Feld am Zeilenanfang erkannt. „Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711“ bleibt vollständig stehen. Gefunden im Differenzlauf; in RC178 und im Endstand gleich. | BL-050.6 | offen; nicht mehr bearbeitet |
+| R-027 | hoch | Anonymisierung; alle Ziele | Zugangsdaten werden nur als Feld am Zeilenanfang erkannt. „Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711“ bleibt vollständig stehen. Gefunden im Differenzlauf; in RC178 und am Stand `ffab4fa7` gleich. | BL-050.6 | teilweise behoben (`283e6ed9`): ein Wort hinter einem Label mitten in der Zeile wird ersetzt; mehrwortige Geheimnisse und weitere Formen bleiben dokumentierte Grenze |
+| R-028 | niedrig | Architektur und Betrieb; Windows | Die App startet nicht, solange ein fremder Prozess einen Ordner oberhalb ihres Datenordners mit Löschzugriff geöffnet hält. Die Meldung nennt keinen vorübergehenden Zustand. Im isolierten Testprofil beobachtet, rund sieben Minuten lang. | BL-010.11, BL-010.21 | offen (Beobachtung; Ursache der Sperre nicht zugeordnet) |
+| R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert gelegentlich an einem UDP-Endpunkt eines WebView-Prozesses und verwirft dabei ihre eigene Diagnosezeile. Dreimal beobachtet, je mit Erfolg in einer späteren Wiederholung. | BL-010.21 | offen (Beobachtung) |
 
 ## Einzelbefunde
 
@@ -383,9 +385,67 @@ steht in der Übersicht oben und im Abschnitt „Zweite Runde“.
   offen. Ein Label nach Komma oder Semikolon ließe sich erfassen; wo der Wert
   endet, ist dann aber nicht mehr eindeutig.
 - **Auswirkung** – Zugangsdaten im Ergebnis. In RC178 und im Endstand gleich.
-- **Status** – Offen. Der Befund kam am Ende der dritten Prüfung; eine
-  Änderung am Zugangsdaten-Detektor braucht eine eigene Analyse und
-  Gegenprüfung. Die Grenze steht noch nicht im Sicherheitsmodell.
+- **Status nach der dritten Prüfung** – offen.
+- **Bearbeitung auf Auftrag des Anwenders** – umgesetzt in `283e6ed9`, nach
+  vier widerlegten Fassungen; siehe „R-027 · Umsetzung und Gegenprüfungen“.
+  Dabei zeigte sich, dass der Befund breiter ist als der gemeldete Fall:
+  auch `WLAN-Passwort: …` und `Admin PIN: …` am Zeilenanfang blieben stehen,
+  weil das Label das erste Wort der Zeile sein musste.
+
+### R-028 und R-029 · Beobachtungen aus dem nativen Lauf nach R-027
+
+- **R-028, Start bei fremder Ordnersperre**
+  - **Ort** – `tauri-contract/src/export_directory.rs:1138-1144`
+    (`open_directory`, Windows: Freigabe nur Lesen und Schreiben),
+    aufgerufen aus `private_namespace.rs:284-286` für den Ordner über dem
+    Datenordner.
+  - **Beobachtung** – Am 24.11.2026 zwischen etwa 00:28 und 00:35 startete
+    weder das neue Paket (Build `043e3b81`) noch das Paket vom Vortag (Build
+    `1803bce7`) im isolierten Testprofil. Die Oberfläche zeigte „Der interne
+    App-Datenordner konnte nicht sicher geöffnet oder neu angelegt werden …
+    (STANDALONE_DATA_ROOT_UNSAFE)“ beziehungsweise „Der lokale Core ist nicht
+    bereit“; der Datenordner wurde nicht angelegt.
+  - **Reproduktion der Ursache** – Ein eigenes Skript öffnete jeden Ordner
+    der Kette mit den Rechten und der Freigabe der App. Für
+    `%LOCALAPPDATA%\Temp`, im Testprofil ein Vorfahre des Datenordners, kam
+    Fehler 32 (Zugriffsverletzung der Freigabe); mit zusätzlicher
+    Löschfreigabe gelang das Öffnen. Ein anderer Prozess hielt den Ordner
+    also mit Löschzugriff offen. Welcher, habe ich nicht festgestellt; im
+    Systemprotokoll steht für 00:31 ein abgebrochener Schattenkopie-Lauf.
+    Um 00:35 war die Sperre weg, danach starteten beide Pakete.
+  - **Ist / Soll** – Die App verweigert den Start zu Recht, solange sie die
+    Ordnerkette nicht festhalten kann. Die Meldung verweist aber auf IT und
+    Installation; dass der Zustand vorübergehend sein kann und ein späterer
+    Start genügt, sagt sie nicht.
+  - **Auswirkung** – Im Produkt liegt der Datenordner unter
+    `%LOCALAPPDATA%`; betroffen wäre ein Start, während ein Sicherungs- oder
+    Aufräumprogramm `C:\Users\<Name>\AppData\Local` oder einen Ordner
+    darüber so geöffnet hält. Ob das auf Zielhosts vorkommt, ist nicht
+    belegt. Für Testläufe mit isoliertem Profil kommt der Temp-Ordner als
+    Vorfahre hinzu, und der wird häufiger angefasst.
+  - **Status** – Offen, nicht geändert. Eine Änderung der Freigabe wäre eine
+    Entscheidung über die Schutzgrenze und nichts für eine Randkorrektur.
+- **R-029, Startprobe**
+  - **Ort** – `tests/manual/standalone-native-windows-launch.ps1:401-462`
+    (`Get-NativeNetworkObservation`), Aufruf in Zeile 546.
+  - **Beobachtung** – `STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED` am
+    23.11. einmal (parallel zu anderen Läufen) und am 24.11. zweimal
+    hintereinander ohne Parallelbetrieb; je bestand eine spätere
+    Wiederholung mit 0 TCP-Listenern und 0 UDP-Endpunkten. Im Dauerbetrieb
+    hält die App nach eigener Messung über zehn Sekunden keinen Endpunkt.
+  - **Ist / Soll** – Die Probe schreibt vor dem Abbruch eine Zeile mit den
+    drei Merkmalen der Zuordnung (eigenes Profil, WebView-Prozess,
+    Microsoft-Signatur). Die Zeile entsteht in einer Funktion, deren Ausgabe
+    der Aufrufer einer Variablen zuweist; beim Abbruch geht sie verloren.
+    Welches Merkmal fehlte, ist deshalb in keinem der drei Fälle bekannt.
+  - **Auswirkung** – Ein Zielhostnachweis kann ohne Produktfehler rot
+    werden, und die Probe liefert dann nicht, was sie zur Klärung verspricht.
+  - **Status** – Offen, nicht geändert (Prüfwerkzeug; eigene Entscheidung).
+- **R-025, Rest** – In der geführten Prüfung stehen weitere Zähltexte ohne
+  Einzahl: „1 Zeilen vorgemerkt“, „Noch 1 Fundstellen offen“, „Alle 1
+  Fundstellen sind vorgemerkt“, „Nur diese Seite auswählen (1 Zeilen)“
+  (`frontend/review.js:293, 313, 473, 506-507, 551`). Im nativen Lauf mit
+  einer Fundstelle beobachtet; nicht geändert.
 
 ## Zweite Runde · Behebung der offenen Befunde und Gegenprüfung
 
@@ -556,6 +616,138 @@ Regression in Aufzählungen hat es erst gezeigt, nachdem ich solche Muster
 aufgenommen hatte; die E-Mail-Domain mit Namen erst nach dem Hinweis der
 Gegenprüfung.
 
+## R-027 · Umsetzung und Gegenprüfungen
+
+Der Anwender hat nach der Übergabe beauftragt, R-027 zu beheben. Die Regel
+steht in `283e6ed9`. Bis dahin brauchte es fünf Fassungen; vier unabhängige
+Read-only-Gegenprüfungen haben je eine widerlegt. Eine fünfte Gegenprüfung
+hat die umgesetzte Fassung nach dem Commit geprüft und nicht widerlegt.
+
+| Fassung | Idee | Womit widerlegt | Folge |
+| --- | --- | --- | --- |
+| 1 | Label mitten in der Zeile, Wert bis zum Zeilenende, in Fließtext bis zum Satzende. | „Das Passwort: abc Dr. Anna Meier“: der Satzschnitt fiel auf den Titel, der Personentreffer reichte über das Wertende, verlor gegen den Rang der Zugangsdaten und entfiel ganz; der Name wurde freigegeben. Dazu neue Stopps bei Links mit `;Token=` und quadratische Laufzeit auf langen Zeilen. | Leck gegenüber RC178 |
+| 2 | Wie 1, aber überlappende Treffer werden in den Wert aufgenommen; Label nur nach Leerraum; Wertende im Code. | Ein Geheimnis mit Satzzeichen wurde zerschnitten („Dr. Strange2024“); ein offener Personenhinweis im Wert wurde verschluckt und stoppte das Dokument; ein verdeckter Titel entzog einem Namen in der Folgezeile die Erkennung. | Leck und neue Stopps gegenüber RC178 |
+| 3 | Nur das erste Wort hinter dem Label, ersetzt im Kern zusammen mit allen anderen Treffern. | „Hans Müller“ als Unterschrift und „Zugang Passwort: Hans Müller“: der Name wird erst nach dem Kern über einen offenen Personenhinweis ersetzt; die Regel hatte „Hans“ schon ersetzt, „Müller“ blieb stehen oder das Dokument stoppte. | Leck und neue Stopps gegenüber RC178 |
+| 4 | Erstes Wort, ersetzt im gemeinsamen Prüfablauf nach dem Kern; ein Wort, das zu einem offenen Befund gehört, bleibt. | Wiederholte gleichlautende Zeilen mit noch unbekanntem Namen: der zusätzliche Platzhalter machte die Rückführung eines Personenhinweises auf den Ursprungstext mehrdeutig; 50 von 120 Fällen einer Testfamilie stoppten. | neue Stopps, kein Leck |
+| 5 (umgesetzt) | Wie 4; die Ersetzung bleibt nur, wenn die anschließende Prüfung dieselben offenen Entscheidungen ergibt wie ohne sie. Sonst bleibt der Text unverändert. | Fünfte Gegenprüfung: kein zusätzlich sichtbarer Klartext, kein neuer Stopp, keine Ausnahme. Drei Beobachtungen, siehe unten. | siehe Grenzen |
+
+### Was die umgesetzte Fassung tut
+
+- **Erkennung** – `srv/privacy/base.js` (`CREDENTIAL_INLINE_FIELD_RE`): das
+  Label am Zeilenanfang oder nach Leerraum, auch hinter einer öffnenden
+  Klammer oder einem Anführungszeichen und als Ende eines zusammengesetzten
+  Worts, gefolgt von `:` oder `=`. Der Wert ist ein Wort.
+- **Trennung vom übrigen Kern** – `srv/privacy/structured.js`: der Detektor
+  gehört nicht zur gewöhnlichen Suche (`findStructuredSpans`). Redaktion,
+  Restprüfung und Personenhinweise lesen eine solche Zeile wie in RC178.
+- **Ersetzung** – `srv/gateway/privacy-text-operation.js`
+  (`prepareTextPrivacyReview`): nach dem Kern und nach der Wiederherstellung
+  der Personenhinweise. Ein Wort, das zu einem offenen oder gemeldeten Befund
+  gehört, bleibt. Die Ersetzung wird nur übernommen, wenn die Prüfung des
+  neuen Texts dieselben offenen Entscheidungen ergibt.
+- **Ausgenommen** – Tabellenzeilen, Überschriften (das verlangt der bestehende
+  Test `tests/test-pii-regression.js`), Zeilen, die schon mit einem Label
+  beginnen, und Labels in Links.
+
+### Nachweise
+
+- `tests/test-privacy-inline-credentials.js`, 7 Fälle, darunter die Gegenfälle
+  aller vier Gegenprüfungen.
+- Differenzlauf gegen den RC178-Kern, jetzt mit 16 Zugangsdaten-Mustern:
+  18 600 Fälle, kein neuer Stopp; die einzigen „mehr sichtbar“-Fälle sind die
+  zehn von R-024.
+- Zufallstests der Gegenprüfer auf dem Endstand: 2 000, 1 280 und 120 Fälle,
+  je ohne neuen Stopp und ohne zusätzlich Sichtbares. In der vierten
+  Fassung hatte die 120er-Familie 50 Stopps.
+- Golden-Regression 164 von 164.
+- Fünfte Gegenprüfung (read-only, eigene Skripte) auf `283e6ed9`:
+  - 3 915 handgeschriebene Fälle in fünf Profilen gegen den RC178-Kern
+    (Namen und Aliase hinter elf Labels, Zeilentrenner, Markdown-Formen,
+    Vertragsprosa): keine Auffälligkeit.
+  - 66 000 Zufallsläufe, davon 42 000 gegen den RC178-Kern und 24 000 gegen
+    den Vorgängercommit, jeder dritte mit Verarbeitungsspur: 0 neue Stopps,
+    0 Ausnahmen, 0 Fehler beim Abspielen der Spur.
+  - 1 050 gezielte Fälle mit Personenmarker am Zeilenanfang: keine
+    Auffälligkeit.
+- Eigene Nachprüfung der Punkte, die diese Gegenprüfung nicht mehr erreicht
+  hat (Scratch-Skripte, RC178-Kern gegen `283e6ed9`):
+  - Lage offener Personenhinweise im Entwurf nach der Ersetzung: 1 500 Fälle,
+    1 673 Hinweise, keiner verschoben; in 879 Fällen war die Ersetzung aktiv.
+  - Zweiter Durchlauf über ein freigegebenes Ergebnis: 400 Fälle, in beiden
+    Ständen gleich viele Stopps (351), kein Fall nur im neuen Stand.
+  - Zwei Dokumente mit gemeinsamer Registry: 400 Paare, kein neuer Stopp.
+  - Laufzeit: ein Dokument mit vielen solchen Labels braucht im
+    Datenschutzkern 26 bis 45 % länger, weil die Prüfung zweimal läuft
+    (14 KB: 132 → 166 ms; 56 KB: 0,73 → 1,03 s; 226 KB: 7,1 → 10,4 s). Ein
+    Dokument ohne solches Label wird nur einmal geprüft.
+
+### Beobachtungen der fünften Gegenprüfung
+
+- **Dokumente, die RC178 stoppte, laufen jetzt durch** – vier von 66 000
+  Zufallsfällen. Nachvollzogen an drei davon: Der alte Stand stoppt in der
+  Schlussprüfung, weil nach dem Ersetzen eines Namens am Zeilenanfang
+  `[PERSON_003] - API Key: Anna` wie ein Zugangsdatenfeld am Zeilenanfang
+  aussieht (zwei Fälle) oder weil das Wort hinter dem Label als möglicher
+  Name übrig bleibt (ein Fall). Im neuen Stand ist genau dieses Wort ersetzt;
+  die unveränderte Schlussprüfung läuft über den neuen Text und findet
+  nichts. Es wird keine Prüfung umgangen. Folge: Namen an anderer Stelle,
+  die der Kern in keinem Stand erkennt (`(Hans Müller)` ohne Personenkontext
+  im Profil Allgemein), stehen in einem solchen Dokument jetzt im Ergebnis;
+  vorher verhinderte der Stopp aus anderem Grund die Ausgabe.
+- **Das Wort reicht bis zum nächsten Leerraum** – eine schließende Klammer
+  oder ein Anführungszeichen direkt dahinter geht mit: `(Passwort=abc)` →
+  `(Passwort=[CREDENTIAL_REDACTED]`. Beginnt der Text eines Markdown-Links
+  mit dem Label, geht im Profil Allgemein das Linkziel mit:
+  `[Passwort: abc](https://example.org/x)` → `[Passwort:
+  [CREDENTIAL_REDACTED]`. In den Profilen, die Links ersetzen, bleibt
+  `[URL_REDACTED])` stehen. Kein Klartext mehr als vorher; die
+  Markdown-Struktur der Zeile ist beschädigt.
+- **Ein Titel hinter dem Label geht verloren** – `Token: Dr. Hans Müller` →
+  `Token: [CREDENTIAL_REDACTED] [PERSON_001]`. Steht hinter dem Label ein
+  Name, den der Kern nicht kennt, wird nur der Vorname ersetzt; der Nachname
+  bleibt sichtbar wie in RC178 (`Nutzername: Hans Müller` ohne weiteren
+  Personenkontext).
+- **Nebenbefund zu R-017, nicht aus `283e6ed9`** – Bei bekannter „Anna
+  Meier“ liest der Stand seit `cfee417a` in „Anwesend: Meier, Anna Schmidt
+  und Weber.“ die Folge „Meier, Anna“ als umgestellten Namen: Ergebnis
+  `[PERSON_001] Schmidt`, in RC178 `[PERSON_001], Anna Schmidt`. Es ist
+  weniger Klartext sichtbar als vorher, aber der Vorname einer anderen Person
+  läuft unter dem Pseudonym der ersten, auch in der vertraulichen Zuordnung.
+  Der Schutz für Aufzählungen aus `3e4a1be1` greift nur, wenn der zweite
+  volle Name schon als Person bekannt ist. Nicht geändert.
+
+### Grenzen der umgesetzten Fassung
+
+- Von einem Geheimnis aus mehreren Wörtern hinter einem Label mitten in der
+  Zeile wird nur das erste Wort ersetzt (`…, Passwort: Sommer 2024`).
+- Für ein Dokument mit wiederholten gleichlautenden Zeilen und noch
+  unbekannten Namen kann die Ersetzung ganz unterbleiben; die Zugangsdaten
+  bleiben dort so sichtbar wie in RC178.
+- Folgt dem Label Fließtext, geht dessen erstes Wort verloren.
+- Die Restprüfung kennt die Regel nicht. Sie ist eine zusätzliche Ersetzung,
+  kein neues Tor.
+- Eine Textdatei ist kein Markdown: Zeilen, die wie eine Tabelle oder eine
+  Überschrift aussehen, kommen aus einer TXT-Quelle als gewöhnlicher Text
+  an. Im nativen Lauf wurde deshalb der Wert in `| VPN | Token: abc123def |`
+  ersetzt (in RC178 blieb er stehen), und `# Token: Aufbau und Validierung`
+  verlor „Aufbau“. Die Ausnahmen für Tabellen und Überschriften gelten nur
+  für Markdown-Quellen und für Formate, deren Tabellen als Markdown-Tabellen
+  ankommen.
+- Unverändert nicht erkannt: Wert ohne `:` oder `=`, Wert in der Folgezeile,
+  `PW`/`Pwd`, Label direkt nach Komma ohne Leerraum, JSON-Schreibweise,
+  Label in Überschriften und in Links.
+- Nicht geprüft, weder von der fünften Gegenprüfung noch von mir: die
+  geführte Prüfung mit von Hand getroffenen Entscheidungen auf einem Text mit
+  ersetzten Zugangsdaten, und der Zwischenspeicher der Zeileneinordnung nach
+  einer Ausnahme (nur gelesen: er wird in jedem Fall geleert).
+- Alle Vergleichsläufe arbeiten mit erfundenen Sätzen aus wenigen Bausteinen.
+  Sie zeigen, was bei diesen Formen passiert, nicht was in echten Dokumenten
+  vorkommt.
+- Beobachtung am Rand, in RC178 gleich: eine Überschrift aus zwei
+  großgeschriebenen Wörtern („Übergabe Arbeitsplatz“) wird als Person
+  ersetzt; ein Passwort hinter „Login x, Passwort: …“ in einer Zeile, die mit
+  einem Namensfeld beginnt, geht in `[FIELD_REDACTED]` auf.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -576,6 +768,9 @@ Gegenprüfung.
 | A-015 | „Nachname, Vorname“ einer bekannten Person ist immer dieselbe Person. | Nur bekannte volle Namen werden umgestellt gesucht. | Eine Aufzählung „Anna Müller, Hans Müller“ enthält dieselbe Zeichenfolge über die Kommagrenze. | eigene Probe, Faktencheck, Differenzlauf | Widerlegt; `3e4a1be1`. Meine Tests hatten nur den Namen allein und in einer Tabellenzelle geprüft. |
 | A-016 | Ein Link mit Personenname lässt sich gefahrlos als Ganzes ersetzen, wenn die Ersetzung jeden anderen Treffer schlägt. | Der Name verschwindet sicher. | Der Linkausdruck trifft auch die Domain hinter dem @ einer E-Mail-Adresse; Treffer, die über den Link hinausreichen, werden ganz verworfen. | zweite Gegenprüfung (read-only) mit Beispielen | Widerlegt; Ansatz in `e07ca2e6` aufgegeben. Ersetzt wird nur der Namensteil, mit dem Rang jedes anderen Namenstreffers. |
 | A-017 | Zusätzliche Schreibweisen dürfen wie alle Wörterbuchwerte an die Restprüfung gehen. | Mehr Werte, mehr Sicherheit. | Eine Schreibweise, die die Personenprüfung gerade als offenen Hinweis hält, wird dann zum harten Rest und stoppt das Dokument. | zweite Gegenprüfung (read-only) | Widerlegt; die zusätzlichen Schreibweisen bleiben seit `e07ca2e6` Sache der Ersetzung. |
+| A-018 | Hinter einem Zugangsdaten-Label darf der Wert bis zum Zeilen- oder Satzende reichen. | So arbeitet die Regel am Zeilenanfang. | Mitten in der Zeile folgt oft gewöhnlicher Text mit Namen und Titeln; ein Wert darüber verdrängt andere Treffer und verdeckt Hinweise für die Personenerkennung. | erste und zweite Gegenprüfung (read-only) | Widerlegt; der Wert ist ein Wort. |
+| A-019 | Am Ende des Kerndurchlaufs sind alle Personen ersetzt. | Der Kern ersetzt bekannte und erkannte Namen. | Noch unbekannte Namen werden erst im gemeinsamen Prüfablauf über offene Personenhinweise ersetzt. | dritte Gegenprüfung (read-only) | Widerlegt; die Regel sitzt jetzt hinter dem Kern und lässt offene Befunde unberührt. |
+| A-020 | Ein zusätzlicher Platzhalter an einer Stelle ohne Befund stört nichts. | Er ersetzt nur Klartext. | Die Rückführung offener Personenhinweise auf den Ursprungstext vergleicht Textstücke zwischen Platzhaltern; ein Platzhalter mehr kann ein Stück mehrdeutig machen. | vierte Gegenprüfung (read-only) | Widerlegt; die Ersetzung bleibt nur bei unveränderter Prüfung. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

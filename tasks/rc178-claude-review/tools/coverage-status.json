@@ -67,14 +67,17 @@
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
         "R-002",
-        "R-024"
+        "R-024",
+        "R-027"
       ],
-      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 108-125, 195-250, 408-490; zweite Runde zusätzlich die Annahmeregel der Straßenadresse); Einheiten außerhalb sind faktisch offen"
+      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 108-125, 195-250, 408-490; zweite Runde zusätzlich die Annahmeregel der Straßenadresse; für R-027 die Zugangsdaten-Detektoren und die Sammelfunktion); Einheiten außerhalb sind faktisch offen"
     },
     "plugins/data-secure/server/privacy/base.js": {
       "symbolStatus": "TEILGEPRÜFT",
-      "findings": [],
-      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 1-30, 82-135, 797-824); Einheiten außerhalb sind faktisch offen"
+      "findings": [
+        "R-027"
+      ],
+      "remark": "im Datenschutz-Review nur teilweise gelesen (Z. 1-30, 82-135, 797-824; für R-027 die Zugangsdaten-Muster); Einheiten außerhalb sind faktisch offen"
     },
     "plugins/data-secure/server/gateway/batch-review-policy.js": {
       "symbolStatus": "TEILGEPRÜFT",
@@ -714,11 +717,42 @@
         "status": "GEPRÜFT",
         "purpose": "Strukturierte Identifikatoren sammeln; Aufrufer anonymize, scanStructured (Restprüfung), replaceStructured",
         "invariant": "Redaktion und Restprüfung nutzen dieselbe Funktion",
-        "evidence": "tests/test-privacy-repeated-phones.js",
+        "evidence": "tests/test-privacy-repeated-phones.js; tests/test-privacy-inline-credentials.js (die gewöhnliche Suche kennt das Label mitten in der Zeile nicht)",
         "findings": [
-          "R-002"
+          "R-002",
+          "R-027"
         ],
-        "remark": "geändert in af203451"
+        "remark": "geändert in af203451; seit 283e6ed9 Hülle um collectStructuredSpans"
+      },
+      "collectStructuredSpans": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Schleife über alle Detektoren; Aufrufer findStructuredSpans und findInlineCredentialSpans",
+        "invariant": "der Detektor für das Label mitten in der Zeile läuft nur im eigenen Aufruf",
+        "evidence": "tests/test-privacy-inline-credentials.js; Differenzlauf",
+        "findings": [
+          "R-027"
+        ],
+        "remark": "in 283e6ed9 aus findStructuredSpans herausgelöst; nur der neue Schalter beurteilt, die Detektoren nicht einzeln"
+      },
+      "findInlineCredentialSpans": {
+        "status": "GEPRÜFT",
+        "purpose": "Wort hinter einem Zugangsdaten-Label mitten in der Zeile; einziger Aufrufer prepareTextPrivacyReview",
+        "trust": "Text nach der Redaktion des Kerns",
+        "invariant": "ein Wort je Label; keine Tabellenzeile, Überschrift oder Zeile mit Feld am Anfang; lineare Laufzeit",
+        "evidence": "tests/test-privacy-inline-credentials.js (7 Fälle); Differenzlauf 18 600 Fälle; Zufallstests der Gegenprüfer",
+        "findings": [
+          "R-027"
+        ],
+        "remark": "neu in 283e6ed9; vier frühere Fassungen in Gegenprüfungen widerlegt, die umgesetzte nicht mehr gegengeprüft"
+      },
+      "credentialLineAt": {
+        "status": "GEPRÜFT",
+        "purpose": "Zeile eines Treffers einordnen (Tabelle, Überschrift, Feld am Anfang); Aufrufer der Detektor für das Label mitten in der Zeile",
+        "evidence": "tests/test-privacy-inline-credentials.js",
+        "findings": [
+          "R-027"
+        ],
+        "remark": "neu in 283e6ed9; Zwischenspeicher je Aufruf, in findInlineCredentialSpans zurückgesetzt"
       },
       "phoneIdentity": {
         "status": "GEPRÜFT",
@@ -746,6 +780,19 @@
           "R-002"
         ],
         "remark": "neu in af203451"
+      }
+    },
+    "plugins/data-secure/server/gateway/privacy-text-operation.js": {
+      "prepareTextPrivacyReview": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Redaktion, Restprüfung und offene Entscheidungen eines Textes vorbereiten; Aufrufer beider Produktadapter",
+        "trust": "extrahiertes Markdown",
+        "invariant": "die Ersetzung von Zugangsdaten bleibt nur, wenn die Prüfung dieselben offenen Entscheidungen ergibt",
+        "evidence": "tests/test-privacy-inline-credentials.js; Differenzlauf; nativer Lauf",
+        "findings": [
+          "R-027"
+        ],
+        "remark": "geändert in 283e6ed9; beurteilt sind der neue Schritt und seine Rückfallregel, die übrigen Zweige über das Lesen der Datei"
       }
     },
     "plugins/data-secure/server/ooxml.js": {

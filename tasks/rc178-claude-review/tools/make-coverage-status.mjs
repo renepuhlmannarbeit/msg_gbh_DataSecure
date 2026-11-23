@@ -47,8 +47,8 @@ full('Datenschutz', ['standalone/confidential-overview.js', 'standalone/confiden
 full('Datenschutz', [`${app}runtime-adapters/gateway/product-automatic-review.js`]);
 part('Datenschutz', [
   [`${srv}privacy/engine.js`, 'Z. 318-460, 534-810, 1270-1340; Hauptsession zusätzlich 340-400, 655-810, 1275-1345 und in der zweiten Runde die Personen-, Alias- und Linkzweige', ['R-001', 'R-017']],
-  [`${srv}privacy/structured.js`, 'Z. 108-125, 195-250, 408-490; zweite Runde zusätzlich die Annahmeregel der Straßenadresse', ['R-002', 'R-024']],
-  [`${srv}privacy/base.js`, 'Z. 1-30, 82-135, 797-824'],
+  [`${srv}privacy/structured.js`, 'Z. 108-125, 195-250, 408-490; zweite Runde zusätzlich die Annahmeregel der Straßenadresse; für R-027 die Zugangsdaten-Detektoren und die Sammelfunktion', ['R-002', 'R-024', 'R-027']],
+  [`${srv}privacy/base.js`, 'Z. 1-30, 82-135, 797-824; für R-027 die Zugangsdaten-Muster', ['R-027']],
   [`${srv}gateway/batch-review-policy.js`, 'erste 120 Zeilen'],
   [`${srv}gateway/compliance.js`, 'Z. 15-74'],
   [`${srv}gateway/common.js`, 'nur detectProfileFromMarkdown']
@@ -140,7 +140,26 @@ sym(`${privacy}engine.js`, 'personGenitiveSuffix', {
 sym(`${privacy}structured.js`, 'findStructuredSpans', {
   purpose: 'Strukturierte Identifikatoren sammeln; Aufrufer anonymize, scanStructured (Restprüfung), replaceStructured',
   invariant: 'Redaktion und Restprüfung nutzen dieselbe Funktion',
-  evidence: 'tests/test-privacy-repeated-phones.js', findings: ['R-002'], remark: 'geändert in af203451' });
+  evidence: 'tests/test-privacy-repeated-phones.js; tests/test-privacy-inline-credentials.js (die gewöhnliche Suche kennt das Label mitten in der Zeile nicht)',
+  findings: ['R-002', 'R-027'], remark: 'geändert in af203451; seit 283e6ed9 Hülle um collectStructuredSpans' });
+sym(`${privacy}structured.js`, 'collectStructuredSpans', { status: 'TEILGEPRÜFT',
+  purpose: 'Schleife über alle Detektoren; Aufrufer findStructuredSpans und findInlineCredentialSpans',
+  invariant: 'der Detektor für das Label mitten in der Zeile läuft nur im eigenen Aufruf',
+  evidence: 'tests/test-privacy-inline-credentials.js; Differenzlauf', findings: ['R-027'],
+  remark: 'in 283e6ed9 aus findStructuredSpans herausgelöst; nur der neue Schalter beurteilt, die Detektoren nicht einzeln' });
+sym(`${privacy}structured.js`, 'findInlineCredentialSpans', {
+  purpose: 'Wort hinter einem Zugangsdaten-Label mitten in der Zeile; einziger Aufrufer prepareTextPrivacyReview',
+  trust: 'Text nach der Redaktion des Kerns', invariant: 'ein Wort je Label; keine Tabellenzeile, Überschrift oder Zeile mit Feld am Anfang; lineare Laufzeit',
+  evidence: 'tests/test-privacy-inline-credentials.js (7 Fälle); Differenzlauf 18 600 Fälle; Zufallstests der Gegenprüfer',
+  findings: ['R-027'], remark: 'neu in 283e6ed9; vier frühere Fassungen in Gegenprüfungen widerlegt, die umgesetzte nicht mehr gegengeprüft' });
+sym(`${privacy}structured.js`, 'credentialLineAt', {
+  purpose: 'Zeile eines Treffers einordnen (Tabelle, Überschrift, Feld am Anfang); Aufrufer der Detektor für das Label mitten in der Zeile',
+  evidence: 'tests/test-privacy-inline-credentials.js', findings: ['R-027'], remark: 'neu in 283e6ed9; Zwischenspeicher je Aufruf, in findInlineCredentialSpans zurückgesetzt' });
+sym(`${srv}gateway/privacy-text-operation.js`, 'prepareTextPrivacyReview', { status: 'TEILGEPRÜFT',
+  purpose: 'Redaktion, Restprüfung und offene Entscheidungen eines Textes vorbereiten; Aufrufer beider Produktadapter',
+  trust: 'extrahiertes Markdown', invariant: 'die Ersetzung von Zugangsdaten bleibt nur, wenn die Prüfung dieselben offenen Entscheidungen ergibt',
+  evidence: 'tests/test-privacy-inline-credentials.js; Differenzlauf; nativer Lauf', findings: ['R-027'],
+  remark: 'geändert in 283e6ed9; beurteilt sind der neue Schritt und seine Rückfallregel, die übrigen Zweige über das Lesen der Datei' });
 for (const name of ['phoneIdentity', 'samePhone', 'acceptRepeatedPhones']) {
   sym(`${privacy}structured.js`, name, {
     purpose: 'Wiederholung einer akzeptierten Telefonnummer erkennen; Aufrufer findStructuredSpans',
