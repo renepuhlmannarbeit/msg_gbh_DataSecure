@@ -50,6 +50,22 @@ async function main() {
     assert.equal(await known('Mo.-Fr. Sprechzeiten bleiben.'), 'Mo.-Fr. Sprechzeiten bleiben.');
   });
 
+  await testAsync('profiles that replace every link replace it as a whole when it spells the name', async () => {
+    // A name literal inside the link used to win over the link; the rest of
+    // the link stayed behind and stopped the document as residual data.
+    for (const profile of ['personnel_profile', 'applicant', 'customer']) {
+      assert.equal(body(await release('Name: Laura Stein\n\nProfil: https://example.org/in/laura-stein und https://example.org/laura_stein.pdf sowie https://example.org/stein',
+        undefined, profile)), 'Profil: [URL_REDACTED] und [URL_REDACTED] sowie [URL_REDACTED]', profile);
+      // The link yields to nothing but name literals inside it: an e-mail
+      // address whose domain spells the name stays one e-mail address, and a
+      // name that reaches beyond the end of a link still stops the document.
+      assert.equal(body(await release('Name: Laura Stein\n\nAn l.meier@stein-beratung.example und x.y@laura-stein.example bitte.', undefined, profile)),
+        'An [EMAIL_REDACTED] und [EMAIL_REDACTED] bitte.', profile);
+      await assert.rejects(release('Name: Wei Li\n\nSiehe www.example.org/team/Wei Li.pdf bitte.', undefined, profile),
+        { code: 'RESIDUAL_PII' }, profile);
+    }
+  });
+
   await testAsync('a link target carrying the known name or a hidden e-mail address is replaced', async () => {
     for (const target of [
       'https://example.org/in/marlene-oesterreicher',

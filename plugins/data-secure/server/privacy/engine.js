@@ -871,10 +871,22 @@ function anonymize(text, profile = 'general', options = {}) {
     let m;
     while ((m = URL_RE.exec(out))) {
       if(isProtectedProfessionalDomain(out,m.index,m.index+m[0].length,credentialRanges)) continue;
+      const end = m.index + m[0].length;
+      // These profiles replace every such link as a whole. Name literals that
+      // lie completely inside it ("…/in/laura-stein", "…/laura_stein.pdf")
+      // used to win over the link; its remainder stayed behind and stopped the
+      // document. They yield only when nothing else touches the link: an
+      // e-mail address around it, a name reaching beyond its end or any other
+      // detector keeps the previous resolution.
+      const touching = spans.filter((span) => span.start < end && m.index < span.end);
+      if (touching.length && touching.every((span) => span.start >= m.index && span.end <= end &&
+          (span.type === 'PERSON' || span.type === 'PERSON_ALIAS' || span.type === 'URL'))) {
+        for (const span of touching) if (span.type !== 'URL') spans.splice(spans.indexOf(span), 1);
+      }
       spans.push({
         type: 'URL',
         start: m.index,
-        end: m.index + m[0].length,
+        end,
         text: m[0],
         replacement: '[URL_REDACTED]',
         priority: PRIORITY.URL
