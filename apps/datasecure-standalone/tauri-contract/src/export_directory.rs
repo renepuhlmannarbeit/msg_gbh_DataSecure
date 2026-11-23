@@ -615,7 +615,7 @@ impl Directory {
     /// Upper bound for one listing of a controlled record directory. It limits
     /// memory and time of the abandoned-preparation check, not the number of
     /// completed exports a user may accumulate under one result folder.
-    const MAX_CONTROLLED_RECORD_NAMES: usize = 262_144;
+    const MAX_CONTROLLED_RECORD_NAMES: usize = 65_536;
     /// Fully prepare a bounded private journal record before exposing its
     /// final name. A crash leaves only an unowned temporary file, never a torn
     /// final record. Existing final names are not replaced. No temp cleanup.
@@ -1238,7 +1238,15 @@ mod platform {
         Ok(ControlLock { file: relative_security(&parent.file, std::ffi::OsStr::new("export-control.lock"),
             false, false, false, false, Some(false), std::ptr::null_mut())? })
     }
+    #[cfg(test)]
     fn parse_names(buffer: &[u8], names: &mut Vec<String>, limit: usize) -> io::Result<()> {
+        let mut seen = names.iter().cloned().collect();
+        parse_names_seen(buffer, names, &mut seen, limit)
+    }
+    /// One set per listing refuses a repeated name in constant time. A scan of
+    /// all earlier names per entry made a large listing quadratic.
+    fn parse_names_seen(buffer: &[u8], names: &mut Vec<String>, seen: &mut std::collections::HashSet<String>,
+        limit: usize) -> io::Result<()> {
         let mut offset = 0;
         loop {
             let header = buffer.get(offset..offset + 12).ok_or_else(unsafe_io)?;
@@ -1250,7 +1258,7 @@ mod platform {
             let name = String::from_utf16(&wide).map_err(|_| unsafe_io())?;
             if !matches!(name.as_str(), "." | "..") {
                 leaf(&name)?;
-                if names.len() == limit || names.contains(&name) { return Err(unsafe_io()); }
+                if names.len() == limit || !seen.insert(name.clone()) { return Err(unsafe_io()); }
                 names.push(name);
             }
             if next == 0 { return Ok(()); }
@@ -1262,6 +1270,7 @@ mod platform {
         // FileNamesInformation needs LONG alignment, not a pathname FindFirst.
         let mut buffer = vec![0u32; 4096];
         let mut names = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         let mut restart = true;
         loop {
             let mut status = IoStatus { status: 0, information: 0 };
@@ -1273,7 +1282,7 @@ mod platform {
             if result != 0 { return Err(io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(result) } as i32)); }
             if status.information < 12 || status.information > buffer.len() * 4 { return Err(unsafe_io()); }
             let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), status.information) };
-            parse_names(bytes, &mut names, limit)?;
+            parse_names_seen(bytes, &mut names, &mut seen, limit)?;
         }
         names.sort(); Ok(names)
     }
