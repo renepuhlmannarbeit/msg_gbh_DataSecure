@@ -168,24 +168,45 @@ fn diagnostic_request_id(id: &str) -> Option<&str> {
 /// The window polls its display state every few seconds for as long as it is
 /// open. Three records per successful poll filled the bounded session log
 /// (8 segments of 2 MiB) within about half a day; from then on no native
-/// event, including a later failure, was recorded. The first polls of a
-/// session stay visible for start-up diagnosis, later successful ones are not
-/// written. Failures, errors and every other action are always recorded.
+/// event, including a later failure, was recorded. The first polls of each
+/// display action stay visible for start-up diagnosis, later successful ones
+/// are not written. Every other action is always recorded.
+///
+/// The decision is taken once, at the start of a request, and kept for that
+/// request: all of its records come from the one thread that runs it. A poll
+/// that was not written and then fails is written in full, its start record
+/// first, so that the latest recorded start of an action is never an older
+/// successful one while a newer one failed.
 const DISPLAY_POLL_DIAGNOSTIC_BUDGET: u64 = 64;
-static DISPLAY_POLLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-fn display_poll_suppressed(event: &str, action: &str, polls: &std::sync::atomic::AtomicU64) -> bool {
+static PUBLIC_STATE_POLLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static UI_CONTEXT_POLLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+std::thread_local! { static DISPLAY_POLL_UNWRITTEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+#[derive(Debug, PartialEq, Eq)]
+enum PollRecord { Write, Skip, WriteWithStart }
+fn display_poll_record(event: &str, action: &str, polls: &std::sync::atomic::AtomicU64,
+    unwritten: &std::cell::Cell<bool>) -> PollRecord {
     use std::sync::atomic::Ordering;
-    if !matches!(action, "get_public_state" | "get_ui_context") { return false; }
+    if !matches!(action, "get_public_state" | "get_ui_context") { return PollRecord::Write; }
     match event {
-        "ipc_request_started" => polls.fetch_add(1, Ordering::Relaxed) >= DISPLAY_POLL_DIAGNOSTIC_BUDGET,
-        "ipc_request_sent" | "ipc_response_ok" => polls.load(Ordering::Relaxed) > DISPLAY_POLL_DIAGNOSTIC_BUDGET,
-        _ => false,
+        "ipc_request_started" => {
+            unwritten.set(polls.fetch_add(1, Ordering::Relaxed) >= DISPLAY_POLL_DIAGNOSTIC_BUDGET);
+            if unwritten.get() { PollRecord::Skip } else { PollRecord::Write }
+        },
+        "ipc_request_sent" => if unwritten.get() { PollRecord::Skip } else { PollRecord::Write },
+        "ipc_response_ok" => if unwritten.replace(false) { PollRecord::Skip } else { PollRecord::Write },
+        _ => if unwritten.replace(false) { PollRecord::WriteWithStart } else { PollRecord::Write },
     }
 }
 
 fn diagnostic_ipc_event(event: &str, action: &str, id: &str, outcome: &str,
     error_code: Option<&str>, elapsed_ms: Option<u128>) {
-    if display_poll_suppressed(event, action, &DISPLAY_POLLS) { return; }
+    let polls = if action == "get_ui_context" { &UI_CONTEXT_POLLS } else { &PUBLIC_STATE_POLLS };
+    match DISPLAY_POLL_UNWRITTEN.with(|unwritten| display_poll_record(event, action, polls, unwritten)) {
+        PollRecord::Skip => return,
+        PollRecord::WriteWithStart => diagnostic_correlated_event("ipc_request_started", Some(action), "progress", None, None,
+            diagnostic_request_id(id), None),
+        PollRecord::Write => {},
+    }
     diagnostic_correlated_event(event, Some(action), outcome, error_code, elapsed_ms,
         diagnostic_request_id(id), None);
 }
@@ -3965,26 +3986,38 @@ mod tests {
     fn successful_display_polls_stop_filling_the_session_log_after_their_budget() {
         // RC178 review R-013.
         let polls = std::sync::atomic::AtomicU64::new(0);
-        let mut written = 0;
+        let unwritten = std::cell::Cell::new(false);
+        let record = |event: &str, action: &str| display_poll_record(event, action, &polls, &unwritten);
         for _ in 0..DISPLAY_POLL_DIAGNOSTIC_BUDGET {
             for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
-                assert!(!display_poll_suppressed(event, "get_public_state", &polls)); written += 1;
+                assert_eq!(record(event, "get_public_state"), PollRecord::Write, "{event}");
             }
         }
-        assert_eq!(written, 3 * DISPLAY_POLL_DIAGNOSTIC_BUDGET);
         for _ in 0..1000 {
             for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
-                assert!(display_poll_suppressed(event, "get_ui_context", &polls), "{event}");
-            }
-            // A failing poll and every non-display action stay recorded.
-            for event in ["ipc_request_failed", "ipc_response_error", "ipc_response_invalid", "ipc_request_queue_busy"] {
-                assert!(!display_poll_suppressed(event, "get_public_state", &polls), "{event}");
-            }
-            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
-                assert!(!display_poll_suppressed(event, "start_admitted_batch", &polls));
-                assert!(!display_poll_suppressed(event, "get_run_history", &polls));
+                assert_eq!(record(event, "get_public_state"), PollRecord::Skip, "{event}");
             }
         }
+        // A poll that was not written and then fails is recorded with its start.
+        for failure in ["ipc_request_failed", "ipc_response_error", "ipc_response_invalid", "ipc_request_queue_busy"] {
+            assert_eq!(record("ipc_request_started", "get_public_state"), PollRecord::Skip);
+            assert_eq!(record("ipc_request_sent", "get_public_state"), PollRecord::Skip);
+            assert_eq!(record(failure, "get_public_state"), PollRecord::WriteWithStart, "{failure}");
+            // Only once: the same request does not repeat its start record.
+            assert_eq!(record(failure, "get_public_state"), PollRecord::Write, "{failure}");
+        }
+        // The decision belongs to its own request: the next one decides anew
+        // and a finished request leaves nothing behind for another action.
+        assert_eq!(record("ipc_request_started", "get_public_state"), PollRecord::Skip);
+        assert_eq!(record("ipc_response_ok", "get_public_state"), PollRecord::Skip);
+        for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok", "ipc_request_failed"] {
+            assert_eq!(record(event, "start_admitted_batch"), PollRecord::Write, "{event}");
+            assert_eq!(record(event, "get_run_history"), PollRecord::Write, "{event}");
+        }
+        // Each display action has its own budget.
+        let context = std::sync::atomic::AtomicU64::new(0);
+        assert_eq!(display_poll_record("ipc_request_started", "get_ui_context", &context, &unwritten), PollRecord::Write);
+        assert_eq!(display_poll_record("ipc_response_ok", "get_ui_context", &context, &unwritten), PollRecord::Write);
     }
     #[test]
     fn document_review_arguments_are_refused_natively_before_they_become_a_private_frame() {
