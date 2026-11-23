@@ -292,6 +292,26 @@ und der native Diagnose-Sink öffnet keine vorbereiteten fremden Inodes zum
 Schreiben. Gegenproben und genaue Plattformnachweise stehen im
 [Releasevertrag](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
 
+## Bekannte Erkennungsgrenzen der Personenerkennung (RC178-Review)
+
+Die Erkennung ersetzt eine bereits bekannte Person auch in diesen
+Schreibweisen: Genitiv (`Müllers`, `Müller's`), umgestellt
+(`Österreicher, Marlene`), als Dateinamenteil mit Unterstrich oder Punkt,
+nach `Hr.`/`Fr.` sowie als voller Name im Ziel eines Links, auch
+prozentkodiert oder in ASCII-Umschrift. Eine im Dokument erkannte
+Telefonnummer wird an jeder weiteren Stelle ersetzt.
+
+Bewusst nicht ersetzt wird ein einzelner Nachname ohne Personenkontext in
+einem späteren Dokument desselben Laufs (`Gestern rief Wüstenhagen an`).
+Derselbe Laut kann ein gewöhnliches Wort sein (`Sommer`, `Einkauf`,
+`Koch`); der Kern entscheidet deshalb an der Fundstelle und ersetzt dort nur
+mit Anrede, Namensfeld, Genitiv ohne Artikel, Umstellung mit Vornamen oder
+`z. Hd.`. Ein alleinstehender Vorname, eine ASCII-Umschrift außerhalb von
+Links (`Oesterreicher`) und eine verschleierte E-Mail-Adresse
+(`name (at) example.org`) werden ebenfalls nicht erkannt. Diese Fälle sind
+ein verbleibendes Unterredaktionsrisiko; geführte Prüfung und Nachbearbeitung
+bleiben dafür die vorgesehene Kontrolle.
+
 ## Nichtziele
 
 - keine rechtssichere Anonymitäts- oder Zertifizierungszusage;

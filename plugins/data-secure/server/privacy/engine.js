@@ -98,10 +98,18 @@ const GENDERED_PREFIX_RE = new RegExp(
   'iu'
 );
 
+// "Hr. Müller" and "Fr. Müller" in front of an already known person. The
+// abbreviation is only evaluated at such an occurrence, never as a discovery
+// anchor: "Mo.-Fr. Sprechzeiten" must not turn a noun into a person.
+const ABBREVIATED_SALUTATION_PREFIX_RE = /(?:^|[\s(«"'])((?:Hr|Fr)\.[ \t]*)$/u;
+
 function growOverHonorific(text, span) {
   const before = text.slice(Math.max(0, span.start - 192), span.start);
   const m = before.match(GENDERED_PREFIX_RE);
-  if (!m) return span;
+  if (!m) {
+    const abbreviated = before.match(ABBREVIATED_SALUTATION_PREFIX_RE);
+    return abbreviated ? { ...span, start: span.start - abbreviated[1].length } : span;
+  }
   // Anrede/Geschlecht entfernen, die fachliche akademische Qualifikation nach
   // DS-012 jedoch unverändert vor dem Personenpseudonym erhalten.
   return { ...span, start: span.start - m[1].length - (m[2]?.length || 0), replacement: `${m[2] || ''}${span.replacement}` };
@@ -339,7 +347,7 @@ function isExplicitPersonOccurrence(text, span, coveringOrganizations = [], pers
     if (ambiguousCustomerLabel && coveringOrganizations.some((org) => org.provenCompany === true || ORG_SUFFIX_TAIL_RE.test(org.text))) return false;
     return true;
   }
-  if (HONORIFIC_PREFIX_RE.test(before)) return true;
+  if (HONORIFIC_PREFIX_RE.test(before) || ABBREVIATED_SALUTATION_PREFIX_RE.test(before)) return true;
   return /(?:Zertifikat|Bescheinigung|certificate|credential)\s+(?:für|for)\s*$/iu.test(linePrefix);
 }
 
@@ -358,7 +366,13 @@ function isPersistedPersonAliasOccurrence(text, span, coveringOrganizations = []
   if (header && isPersonFieldLabel(normalizeSpaces(header), personFieldPolicy)) return true;
 
   const before = text.slice(Math.max(0, span.start - 80), span.start);
-  return /(?:z\.\s*hd\.?|zu\s+händen)\s*:?\s*$/iu.test(before);
+  if (/(?:z\.\s*hd\.?|zu\s+händen)\s*:?\s*$/iu.test(before)) return true;
+  // A genitive without a determiner ("Wüstenhagens Büro") is how a person is
+  // named; the season or trade of the same spelling takes an article or an
+  // inflected adjective ("des Sommers", "letzten Sommers"). The bare
+  // nominative stays undecided here and is documented as a residual risk.
+  const genitive = span.text.length > String(span.identity_value || '').length && /^\p{Lu}/u.test(span.text);
+  return genitive && !/(?:^|[^\p{L}])\p{Ll}*(?:es|en|er|em)[ \t]+$/u.test(before);
 }
 
 // German and English attach the genitive directly to a personal name
@@ -371,11 +385,57 @@ function personGenitiveSuffix(needle) {
   return /[\p{L}]$/u.test(needle) && !/[sßxz]$/iu.test(needle) ? "(?:['’]?s)?" : '';
 }
 
+// A name written as one file-name token ("Marlene_Österreicher_Lebenslauf")
+// is bounded by underscores, which the Unicode word boundary treats as part
+// of a word. Slug entries therefore use a boundary without the underscore.
+const SLUG_NB = '(?<![\\p{L}\\p{N}])';
+const SLUG_NA = '(?![\\p{L}\\p{N}])';
+const INVERTED_NAME_RE = /(?<![\p{L}\p{N}_])(\p{Lu}[\p{L}'’-]{1,40}),[ \t]+(\p{Lu}[\p{L}'’-]{1,40})(?![\p{L}\p{N}_])/gu;
+
+// Comparison view for names inside link targets: percent-decoded, lower case,
+// without diacritics. A name is tried in both common ASCII spellings
+// ("österreicher" as "osterreicher" and "oesterreicher").
+function foldIdentityText(value, transliterate = false) {
+  let text = String(value).toLowerCase().replace(/ß/gu, 'ss');
+  if (transliterate) text = text.replace(/ä/gu, 'ae').replace(/ö/gu, 'oe').replace(/ü/gu, 'ue');
+  return text.normalize('NFKD').replace(/\p{M}+/gu, '');
+}
+function decodeLinkTarget(value) {
+  return String(value).replace(/(?:%[0-9a-f]{2})+/giu, (run) => {
+    try { return decodeURIComponent(run); } catch { return run; }
+  }).replace(/\++/gu, ' ');
+}
+// True when a link target spells a known full person name (given name and
+// surname next to each other, in either order, or joined) or, only visible
+// after percent-decoding, an e-mail address. Single surnames are not used:
+// a path segment equal to one common word proves nothing.
+function linkTargetCarriesIdentity(target, personNames) {
+  const decoded = decodeLinkTarget(target);
+  if (decoded !== String(target) && findStructuredSpans(decoded).some((span) => span.type === 'EMAIL')) return true;
+  const tokens = foldIdentityText(decoded).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (!tokens.length) return false;
+  for (const name of personNames) {
+    const parts = normalizeSpaces(name).split(/[ \t,]+/u).filter(Boolean);
+    if (parts.length !== 2 || parts.some((part) => part.length < 2) || parts[1].length < 3) continue;
+    for (const transliterate of [false, true]) {
+      const [given, surname] = parts.map((part) => foldIdentityText(part, transliterate));
+      if (!given || !surname) continue;
+      if (tokens.includes(given + surname) || tokens.includes(surname + given)) return true;
+      for (let index = 0; index + 1 < tokens.length; index++) {
+        if ((tokens[index] === given && tokens[index + 1] === surname) ||
+            (tokens[index] === surname && tokens[index + 1] === given)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function findLiteralSpans(text, needle, replacement, type, priority, options = {}) {
   if (!needle) return [];
   const literal = String(needle).split(/\s+/u).map(escapeRegExp).join('[ \\t\\r\\n]+');
   const suffix = options.personGenitive === true ? personGenitiveSuffix(String(needle)) : '';
-  const re = new RegExp(`${NB}${literal}${suffix}${NA}`, 'giu');
+  const [before, after] = options.slugBoundary === true ? [SLUG_NB, SLUG_NA] : [NB, NA];
+  const re = new RegExp(`${before}${literal}${suffix}${after}`, 'giu');
   const spans = [];
   let m;
   while ((m = re.exec(text))) {
@@ -422,6 +482,10 @@ function buildPersonDictionary(seeds, reg) {
     // otherwise "Laura-Stein" becomes the leaking "Laura-[PERSON]".
     if (/^[\p{L}][\p{L}'’]+[ \t]+[\p{L}][\p{L}'’]+$/u.test(canonical)) {
       entries.push({ value: canonical.replace(/[ \t]+/u, '-'), placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
+      for (const separator of ['_', '.']) {
+        entries.push({ value: canonical.replace(/[ \t]+/u, separator), placeholder: ph, type: 'PERSON',
+          priority: PRIORITY.PERSON, slugBoundary: true });
+      }
     }
     if (seed.matchValue && seed.matchValue !== seed.value) {
       entries.push({ value: seed.matchValue, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
@@ -684,6 +748,25 @@ function anonymize(text, profile = 'general', options = {}) {
 
   for (const seed of seeds) findings.push({ type: 'PERSON', value_hash: hashShort(seed.value) });
 
+  // "Österreicher, Marlene" is the same identity as "Marlene Österreicher".
+  // Only an inversion of a full name this document or the batch already
+  // knows is added; an arbitrary "Word, Word" pair is never a new person.
+  const fullNamePlaceholders = new Map(dictionary
+    .filter((entry) => entry.type === 'PERSON' && /^[\p{L}][\p{L}'’-]+[ \t]+[\p{L}][\p{L}'’-]+$/u.test(normalizeSpaces(entry.value)))
+    .map((entry) => [key(normalizeSpaces(entry.value)), entry.placeholder]));
+  INVERTED_NAME_RE.lastIndex = 0;
+  const invertedSeen = new Set();
+  for (let inverted; (inverted = INVERTED_NAME_RE.exec(out));) {
+    const full = `${inverted[2]} ${inverted[1]}`;
+    if (invertedSeen.has(key(inverted[0]))) continue;
+    invertedSeen.add(key(inverted[0]));
+    const known = fullNamePlaceholders.get(key(full)) ||
+      (typeof reg.lookup === 'function' ? reg.lookup('PERSON', titleCase(full)) : null);
+    if (typeof known !== 'string' || !known.startsWith('[PERSON')) continue;
+    dictionary.push({ value: inverted[0], placeholder: known, type: 'PERSON', priority: PRIORITY.PERSON });
+    fullNamePlaceholders.set(key(full), known);
+  }
+
   if (profile === 'personnel_profile' || profile === 'applicant') {
     for (const loc of [...new Set(reg.locations.filter(Boolean))]) {
       dictionary.push({
@@ -737,7 +820,7 @@ function anonymize(text, profile = 'general', options = {}) {
   }
   for (const entry of dictionary) {
     const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority,
-      { personGenitive: entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS' });
+      { personGenitive: entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS', slugBoundary: entry.slugBoundary === true });
     for (const span of found) {
       const coveringOrganizations = organizationCoverage.filter((org) =>
         span.start >= org.start && span.end <= org.end
@@ -753,6 +836,19 @@ function anonymize(text, profile = 'general', options = {}) {
           ? growOverMarkdownLabel(out, growOverHonorific(out, span))
           : span
       );
+    }
+  }
+  // In every profile a link target that spells a known full name, or hides
+  // an e-mail address behind percent-encoding, is replaced as a whole. The
+  // visible label is handled by the dictionary; its target must not keep the
+  // same identity ("[Profil](https://example.org/in/marlene-oesterreicher)").
+  const knownFullNames = [...fullNamePlaceholders.keys()];
+  if (profile !== 'personnel_profile' && profile !== 'applicant' && profile !== 'customer') {
+    URL_RE.lastIndex = 0;
+    for (let link; (link = URL_RE.exec(out));) {
+      if (!linkTargetCarriesIdentity(link[0], knownFullNames)) continue;
+      spans.push({ type: 'URL', start: link.index, end: link.index + link[0].length, text: link[0],
+        replacement: '[URL_REDACTED]', priority: PRIORITY.PERSON + 1 });
     }
   }
   if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {
@@ -1303,6 +1399,18 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
           !isTechnologyOrganizationSpan(clean,s.start,s.end))) {
         out.push({ type: 'ORGANIZATION_CANDIDATE', text: org });
       }
+    }
+  }
+
+  const knownPersonNames = (knownValues || []).filter((value) => value && typeof value === 'object' && value.type === 'PERSON')
+    .map((value) => normalizeSpaces(value.value));
+  if (knownPersonNames.length) {
+    URL_RE.lastIndex = 0;
+    for (let link; (link = URL_RE.exec(clean));) {
+      const range = { start: link.index, end: link.index + link[0].length };
+      if (insideCredentialValue(range.start, range.end) ||
+          reviewedLiterals.some((reviewed) => range.start >= reviewed.start && range.end <= reviewed.end)) continue;
+      if (linkTargetCarriesIdentity(link[0], knownPersonNames)) out.push({ type: 'URL', text: link[0] });
     }
   }
 
