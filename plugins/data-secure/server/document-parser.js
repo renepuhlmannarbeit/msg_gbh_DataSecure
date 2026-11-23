@@ -91,14 +91,24 @@ function parseCsvDialect(source, options = {}) {
   for (const delimiter of CSV_DELIMITERS) {
     let rows;
     try { rows = parseCsvRows(source, delimiter, options); } catch { continue; }
-    const widths = rows.filter((row) => options.preserveRecords !== true || row.length !== 1 || row[0] !== '')
+    // A record that consists of blanks only is as empty as an empty record
+    // for the column count; its authored spaces stay in the cell.
+    const widths = rows.filter((row) => options.preserveRecords !== true || row.length !== 1 || row[0].trim() !== '')
       .map((row) => row.length).filter((width) => width > 0);
     const maxWidth = widths.reduce((maximum, width) => Math.max(maximum, width), 0);
     const consistent = maxWidth > 1 && widths.length > 0 && widths.every((width) => width === maxWidth);
-    candidates.push({ delimiter, maxWidth, consistent });
+    candidates.push({ delimiter, maxWidth, consistent, widest: widths.filter((width) => width === maxWidth).length });
   }
   const viable = candidates.filter((candidate) => candidate.consistent);
-  if (!viable.length) return { delimiter: ',', rows: parseCsvRows(source, ',', options) }; // RFC-4180-compatible one-column data.
+  if (!viable.length) {
+    // RFC-4180-compatible one-column data. When another delimiter splits at
+    // least two records into the same number of columns, the file is rather a
+    // table with deviating lines (preamble, totals). The one-column result
+    // keeps every character, but the caller must not call it complete.
+    const unstructured = options.preserveRecords === true &&
+      candidates.some((candidate) => candidate.delimiter !== ',' && candidate.maxWidth > 1 && candidate.widest >= 2);
+    return { delimiter: ',', rows: parseCsvRows(source, ',', options), ...(unstructured ? { unstructured: true } : {}) };
+  }
   viable.sort((left, right) => right.maxWidth - left.maxWidth);
   if (viable.length > 1 && viable[0].maxWidth === viable[1].maxWidth) {
     throw new Error('CSV_DELIMITER_AMBIGUOUS');

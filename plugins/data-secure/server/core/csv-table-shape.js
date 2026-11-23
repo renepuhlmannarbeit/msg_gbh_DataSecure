@@ -10,7 +10,7 @@ function csvTableWidth(rows) {
       throw new Error('CSV_ROW_WIDTH_INVALID');
     width = Math.max(width, row.length);
   }
-  for (const row of rows) if (row.length !== width && !(row.length === 1 && row[0] === ''))
+  for (const row of rows) if (row.length !== width && !(row.length === 1 && row[0].trim() === ''))
     throw new Error('CSV_ROW_WIDTH_INVALID');
   return width;
 }

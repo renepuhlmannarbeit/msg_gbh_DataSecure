@@ -161,6 +161,20 @@ test('malformed quoting and nonblank ragged CSV rows stop explicitly', () => {
   rejects('Name,Value\nSYNTHETIC_SECRET,"unterminated', '.csv', 'CSV_QUOTE_INVALID');
   rejects('A,B\nC', '.csv', 'CSV_ROW_WIDTH_INVALID');
 });
+test('a blanks-only CSV record keeps the table; a deviating preamble is never called complete', () => {
+  // RC178 review R-018.
+  const trailing = extract('a;b\n1;2\n   \n', '.csv');
+  assert.ok(trailing.markdown.includes('| 1 | a | b |') && trailing.markdown.includes('| 2 | 1 | 2 |'));
+  assert.ok(trailing.markdown.includes('| 3 | &#32;&#32;&#32; |  |'), 'authored blanks stay in their cell');
+  assert.deepStrictEqual(trailing.coverage, { status: 'complete', reason_codes: [] });
+  const preamble = extract('Bericht vom Montag\na;b\n1;2\n3;4\n', '.csv');
+  assert.ok(preamble.markdown.includes('a;b') && preamble.markdown.includes('3;4'), 'every line is retained verbatim');
+  assert.deepStrictEqual(preamble.coverage, { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] });
+  // Genuine one-column text, also with an occasional semicolon, stays complete.
+  for (const text of ['Nur eine Spalte\nohne Trennzeichen\n', 'Erstens; zweitens\nSatz ohne\n']) {
+    assert.deepStrictEqual(extract(text, '.csv').coverage, { status: 'complete', reason_codes: [] }, text);
+  }
+});
 test('CSV escaping expansion stops instead of returning a truncated successful prefix', () => {
   rejects(','.repeat(450_000), '.csv', 'TEXT_TOO_LARGE');
 });

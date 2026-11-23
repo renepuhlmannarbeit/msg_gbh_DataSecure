@@ -35,8 +35,11 @@ class MarkdownExtractionError extends Error {
   }
 }
 
-function extractCsv(source, literalGfm) {
-  const { rows } = parseCsvDialect(source, { preserveRecords: true });
+function extractCsv(source, literalGfm, reasons) {
+  const { rows, unstructured } = parseCsvDialect(source, { preserveRecords: true });
+  // The lines are preserved verbatim in one column, but a table structure
+  // that most records share was not applied (RC178 review R-018).
+  if (unstructured === true) reasons.add('SOURCE_COVERAGE_UNVERIFIED');
   const width = require('../core/csv-table-shape').csvTableWidth(rows);
   const lines = [];
   let chars = 0;
@@ -86,7 +89,7 @@ function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImag
       const source = decodeStandaloneTextSource(buffer);
       markdown = source_type === 'txt' && options.markdownOutput === 'content-v1' ? literalText(source) : source;
     } else if (source_type === 'csv') {
-      markdown = extractCsv(decodeStandaloneTextSource(buffer), options.markdownOutput === 'content-v1');
+      markdown = extractCsv(decodeStandaloneTextSource(buffer), options.markdownOutput === 'content-v1', reasons);
     } else {
       const parsed = parseOoxml(buffer, `.${source_type}`, undefined, {
         preserveText: true,
