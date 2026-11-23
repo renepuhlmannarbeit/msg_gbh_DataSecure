@@ -48,9 +48,10 @@ function bindExistingArtifactDirectory(directory) {
 // ".pending-<artifact>-<random>" directory and renames it on success. A killed
 // process leaves that directory behind; its own finally block never runs and
 // no journal refers to the random name. Such a directory is removed once it is
-// older than the normal retention cutoff (or one hour for an explicit purge),
-// which a publication lasting seconds can never reach. Anything that is not
-// exactly this shape stays untouched.
+// older than the normal retention cutoff and in every case older than one
+// hour, which a publication lasting seconds can never reach, also when
+// retention is configured to zero days or a purge is forced. Anything that is
+// not exactly this shape stays untouched.
 const PENDING_PUBLICATION_RE = /^\.pending-(dm_[a-f0-9]{32})-[a-f0-9]{24}$/u;
 const PENDING_PURGE_GRACE_MS = 60 * 60 * 1000;
 
@@ -87,9 +88,13 @@ function cleanupMarkdownArtifacts(options = {}) {
     // Abandoned pending publications are removed in their own pass, before
     // the store snapshot that guards the completed-artifact plan is taken:
     // removing an entry changes the store directory's own timestamps.
-    const stalePendingBefore = options.force === true ? Date.now() - PENDING_PURGE_GRACE_MS : cutoff;
+    const stalePendingBefore = Math.min(options.force === true ? Infinity : cutoff, Date.now() - PENDING_PURGE_GRACE_MS);
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      const pending = stalePendingPublication(directory, entry, stalePendingBefore);
+      // Another worker may rename its pending directory between the listing
+      // and this inspection. A vanished or unreadable entry is simply not a
+      // stale candidate; it must not abort the whole retention pass.
+      let pending = null;
+      try { pending = stalePendingPublication(directory, entry, stalePendingBefore); } catch { pending = null; }
       if (!pending) continue;
       // Bound to the identities seen now; a replaced or locked entry is
       // counted as an error and left in place.
