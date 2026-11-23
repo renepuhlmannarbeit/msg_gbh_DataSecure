@@ -15,8 +15,8 @@ const pii = require('../plugins/data-secure/server/pii-engine');
 const { testAsync, test, assert, done } = createSuite('Known person name variants');
 const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: true };
 
-async function release(text, registry = makeRegistry()) {
-  const operation = prepareTextPrivacyReview({ text, profile: 'general', productChannel: 'standalone',
+async function release(text, registry = makeRegistry(), profile = 'general') {
+  const operation = prepareTextPrivacyReview({ text, profile, productChannel: 'standalone',
     consumerOptions: { productChannel: 'standalone', contentOptions }, registry, captureTrace: false });
   const resolved = await resolveTextPrivacyReview(operation, undefined, { reviewPolicy: 'automatic-conservative' });
   return finalizeTextPrivacyReview(operation, resolved, { prefix: '', suffix: '' }).markdown;
@@ -31,6 +31,18 @@ async function main() {
       '| Name | Rolle |\n|---|---|\n| [PERSON_001] | Leitung |');
     assert.equal(await known('Datei Marlene_Österreicher_Lebenslauf.pdf liegt vor.'), 'Datei [PERSON_001]_Lebenslauf.pdf liegt vor.');
     assert.equal(await known('Konto marlene.österreicher angelegt.'), 'Konto [PERSON_001] angelegt.');
+  });
+
+  await testAsync('an enumeration of full names is never read as an inverted name', async () => {
+    // Regression of the first inverted-name rule: "Müller, Hans" was matched
+    // across the comma of a list and the given name in front stayed behind.
+    assert.equal(await known('Unterschriften: Marlene Österreicher, Marlene Österreicher'), 'Unterschriften: [PERSON_001], [PERSON_001]');
+    assert.equal(await known('Dr. Österreicher, Marlene Österreicher und andere.'), 'Dr. [PERSON_001], [PERSON_001] und andere.');
+    const two = 'Name: Hans Müller\nVertreterin: Anna Müller\n\n';
+    assert.equal(body(await release(`${two}Anwesend: Anna Müller, Hans Müller. Entschuldigt: Hans Müller, Anna Müller.`)),
+      'Anwesend: [PERSON_002], [PERSON_001]. Entschuldigt: [PERSON_001], [PERSON_002].');
+    // The inverted form next to the list still counts.
+    assert.equal(body(await release(`${two}Müller, Hans; Müller, Anna`)), '[PERSON_001]; [PERSON_002]');
   });
 
   await testAsync('abbreviated salutations are consumed only in front of the known person', async () => {

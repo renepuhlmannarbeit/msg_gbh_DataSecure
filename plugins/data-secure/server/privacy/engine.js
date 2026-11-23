@@ -768,7 +768,7 @@ function anonymize(text, profile = 'general', options = {}) {
     const known = fullNamePlaceholders.get(key(full)) ||
       (typeof reg.lookup === 'function' ? reg.lookup('PERSON', titleCase(full)) : null);
     if (typeof known !== 'string' || !known.startsWith('[PERSON')) continue;
-    dictionary.push({ value: inverted[0], placeholder: known, type: 'PERSON', priority: PRIORITY.PERSON });
+    dictionary.push({ value: inverted[0], placeholder: known, type: 'PERSON', priority: PRIORITY.PERSON, inverted: true, matchOnly: true });
     fullNamePlaceholders.set(key(full), known);
   }
 
@@ -823,10 +823,20 @@ function anonymize(text, profile = 'general', options = {}) {
     }
     if (matched) findings.push({ type: 'PERSON', value_hash: hashShort(alias.value) });
   }
+  // In an enumeration "Anna Müller, Hans Müller" the comma separates two
+  // people. "Müller, Hans" is an inverted name only where it does not cut
+  // through a full name written in the usual order; otherwise the given name
+  // in front of it would stay behind.
+  const literalOptions = (entry) => ({ personGenitive: entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS',
+    slugBoundary: entry.slugBoundary === true, identifierJoin: entry.identifierJoin === true });
+  const forwardFullNames = dictionary.some((entry) => entry.inverted === true)
+    ? dictionary.filter((entry) => entry.type === 'PERSON' && entry.inverted !== true && /\s/u.test(normalizeSpaces(entry.value)))
+      .flatMap((entry) => findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority, literalOptions(entry)))
+    : [];
   for (const entry of dictionary) {
-    const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority,
-      { personGenitive: entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS', slugBoundary: entry.slugBoundary === true });
+    const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority, literalOptions(entry));
     for (const span of found) {
+      if (entry.inverted === true && forwardFullNames.some((full) => full.start < span.end && span.start < full.end)) continue;
       const coveringOrganizations = organizationCoverage.filter((org) =>
         span.start >= org.start && span.end <= org.end
       );
