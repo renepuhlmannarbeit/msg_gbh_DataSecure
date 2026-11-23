@@ -51,6 +51,14 @@ const POSTAL_QUANTITY_RE = /^\d{5}[ \t]+(?:Euro|EUR|Stück|Stueck|Punkte|Stunden
 // addresses such as "ISO Consult, 20457 Hamburg" remain detectable.
 const POSTAL_STANDARD_CONTEXT_RE = /(?:^|[^\p{L}\p{N}_])(?:ISO|IEC|DIN|EN)[ \t]*$/iu;
 const MONTH_YEAR_STREET_FALSE_POSITIVE_RE = /^Im[ \t]+(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)[ \t]+\d{4}$/iu;
+// "Im Zeitraum 2019-2024" or "Am Jahresende 2023" has the shape of a street
+// with a house number (range), but a closed temporal noun followed by a year
+// between 1900 and 2099 is a period, not an address. The list is deliberately
+// closed: an unknown word before a number keeps the address interpretation.
+const TEMPORAL_YEAR_STREET_FALSE_POSITIVE_RE = new RegExp('^(?:Im|Am|Zum|Zur)[ \\t]+(?:Zeitraum|Jahr|Jahre|Kalenderjahr|' +
+  'Geschäftsjahr|Geschaeftsjahr|Wirtschaftsjahr|Haushaltsjahr|Berichtsjahr|Schuljahr|Vorjahr|Folgejahr|Halbjahr|Quartal|' +
+  'Frühjahr|Fruehjahr|Frühling|Fruehling|Sommer|Herbst|Winter|Jahresanfang|Jahresbeginn|Jahresende|Jahreswechsel|Stichtag)' +
+  '[ \\t]+(?:19|20)\\d{2}(?:[ \\t]*[–—-][ \\t]*(?:(?:19|20)\\d{2}|\\d{2}))?$', 'iu');
 
 // A Markdown converter may preserve URI punctuation with a preceding
 // backslash. Keep it inside the redacted URI token instead of stopping before
@@ -264,7 +272,8 @@ const DETECTORS = [
     re: STREET_ADDRESS_RE,
     placeholder: '[LOCATION_REDACTED]',
     priority: 77,
-    accept: (value) => !MONTH_YEAR_STREET_FALSE_POSITIVE_RE.test(value)
+    accept: (value) => !MONTH_YEAR_STREET_FALSE_POSITIVE_RE.test(value) &&
+      !TEMPORAL_YEAR_STREET_FALSE_POSITIVE_RE.test(value.trim())
   },
   {
     type: 'POSTAL_ADDRESS',

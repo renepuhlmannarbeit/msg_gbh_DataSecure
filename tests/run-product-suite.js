@@ -134,7 +134,7 @@ const baseFiles = [
   'tests/test-source-extraction-contract.js', 'tests/test-wide-privacy-extraction.js',
   'tests/test-standalone-anonymized-artifact.js',
   'tests/test-wide-privacy-orchestrator.js',
-  'tests/test-privacy-text-operation.js', 'tests/test-privacy-inflected-names.js', 'tests/test-privacy-repeated-phones.js',
+  'tests/test-privacy-text-operation.js', 'tests/test-privacy-inflected-names.js', 'tests/test-privacy-repeated-phones.js', 'tests/test-privacy-time-periods.js',
   'tests/test-wide-mixed-batch-recovery.js',
   'tests/test-prepublication-error-policy.js',
   'tests/test-batch-processing-purpose.js', 'tests/test-markdown-batch-export.js',
