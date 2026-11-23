@@ -14,7 +14,13 @@ Release-Tag `v3.2.0-rc178`.
 Produktfingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655`.
 
 RC178 übernimmt die App-Logik des RC177 vom November. Windows x64, Apple
-Silicon und Intel wurden aus demselben Quellstand neu gebaut. Die lokale
+Silicon und Intel wurden aus demselben Quellstand neu gebaut. Der Quellstand
+ist der Tag `v3.2.0-rc178`; `main` enthält ihn nicht (keine Mainintegration,
+Stand 23.11.2026: `main` führt den Produktstand RC165). Der macOS-Core stammt
+aus dem über Quellhashes gebundenen Produzentenlauf eines früheren Commits
+(`native/runtime/macos-core-transport-lock.json`), nicht aus einem Bau am
+Tag-Commit. Die Windows-Prüfung ist ein lokaler, nicht durch einen
+unabhängigen Lauf belegter Nachweis. Die lokale
 Windows-Paketprüfung und die nativen Start-, Konvertierungs- und Paketprüfungen
 auf beiden Mac-Architekturen sind bestanden. Die Mac-Pakete verwenden lokale
 Ad-hoc-Versiegelung ohne Apple Developer-ID oder Notarisierung.

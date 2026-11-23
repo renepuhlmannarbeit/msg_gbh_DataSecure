@@ -754,6 +754,41 @@ Architektur.
 Pflichtfelder, den ungestarteten Vorlagenstatus und die GO-Grenze. Eine Vorlage
 mit `NOT_RUN` ist keine Evidence.
 
+## Voraussetzungen der Headless-Suite
+
+`npm run test:product:headless` läuft auf einem frischen Checkout nicht
+durch; die Suite bricht am ersten Fehler ab. Vorher sind herzustellen
+(Stand RC178-Review, 23.11.2026, Windows x64):
+
+1. die vier gesperrten Pilot-Laufzeiten:
+   `npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund`,
+   ebenso für `native/ocr/pilot`, `native/pdfjs/pilot` und
+   `native/graphics/pilot`;
+2. das gepinnte Node 22.23.2 als erstes `node` im Suchpfad (mehrere Tests
+   prüfen die exakte Version; das Archiv und sein SHA-256 stehen in
+   `native/runtime/runtime-contract.json`);
+3. die OCR-Modelle unter `native/ocr/pilot/models`
+   (`node native/ocr/pilot/fetch-models.mjs`, Prüfsummen in
+   `models.lock.json`);
+4. der Ownership-Guard:
+   `node scripts/build-ownership-guard.mjs --output dist/native-ownership-guard/<Zielordner> --fetch-official-inputs`
+   (unter Windows aus PowerShell, damit das System-`tar` verwendet wird; den
+   Zielordner nennt `ownershipGuardBuildLocation` in
+   `scripts/lib/ownership-guard-artifact.mjs`);
+5. die gebündelte Laufzeit:
+   `node scripts/build-runtime-target.mjs --target windows-x64 --archive <Node-Archiv> --output dist/windows-x64`;
+6. die vorbereitete Standalone-Laufzeit:
+   `node scripts/prepare-standalone-runtime.mjs`.
+
+Ein Durchlauf umfasst 364 Dateien und dauert auf einem aktuellen
+Windows-Rechner knapp 50 Minuten; rund ein Viertel davon entfällt auf
+`tests/test-result-generations.js`.
+
+`npm run audit:standalone` fragt für die vier paketierten Pilot-Lockfiles den
+npm-Advisory-Dienst ab und meldet die Entwicklungsabhängigkeiten getrennt. Der
+Befehl braucht Netzzugang, installiert nichts und gehört deshalb nicht zur
+Offline-Suite; Rust-Crates und die gepinnte Node.js-Laufzeit deckt er nicht ab.
+
 ## Umgang mit Fehlern
 
 Für die neue Standalone-Inhaltssyntax ist vor den lokalen Konvertertests
