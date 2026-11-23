@@ -64,6 +64,9 @@ Einzelregister in [ABDECKUNG.tsv](ABDECKUNG.tsv).
     Verfehlt bei R-001, R-002 und R-017.
 - **Widersprüche zwischen Dokumentation, CI und Quellcode** – siehe R-007,
   R-015, R-016 und R-021.
+- **Nativer Lauf** – Nach ausdrücklicher Freigabe des Anwenders am 23.11.2026
+  wurde das Windows-Paket aus dem geänderten Stand gebaut, gestartet und über
+  die Oberfläche bedient. Beobachtungen stehen in ERGEBNIS.md.
 - **Baseline-Tests** – siehe ERGEBNIS.md, Abschnitt Tests. Kurzfassung:
   `npm run test:docs` PASS. `npm run test:product:headless` brauchte drei
   nicht mit dem Checkout gelieferte Voraussetzungen (gesperrte
@@ -115,6 +118,8 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | teilweise, teilweise behoben (`e1afef0f`) |
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
 | R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | offen |
+| R-024 | mittel | Anonymisierung, alle | „im Zeitraum 2019-2024“ wird als Ort maskiert; mit geschütztem Bindestrich bleibt „‑2024“ stehen. Gefunden im nativen Windows-Lauf, am unveränderten RC178-Kern bestätigt. | BL-050.6 | offen |
+| R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | offen |
 
 ## Einzelbefunde
 
@@ -312,6 +317,22 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
 - **R-023** – `security.yml` enthält nur CodeQL und Gitleaks.
   `npm audit --package-lock-only`: vier Pilot-Locks ohne Befund, Root-Lock
   zehn Befunde ausschließlich in Entwicklungsabhängigkeiten.
+
+### R-024 und R-025 · Beobachtungen aus dem nativen Windows-Lauf
+
+- **R-024 Fundstelle** – Ortserkennung in `srv/privacy/` (genaue Regel nicht
+  eingegrenzt). Auslöser: `Ansprechpartner im Zeitraum 2019-2024 war das Team.`
+  ergibt `Ansprechpartner [LOCATION_REDACTED] war das Team.`, auch ohne
+  Namensfeld im Dokument. Mit U+2011 statt `-` wird nur „im Zeitraum 2019“
+  ersetzt und „‑2024“ bleibt stehen.
+- **Einordnung** – Überredaktion von Sachinhalt, kein Leck. Vorbestehend:
+  dieselbe Ausgabe am unveränderten Kern (Kopie von `dfed2d4e`). Erst durch
+  R-003 erreicht ein geschützter Bindestrich die Erkennung überhaupt.
+- **Evidenz** – Paketlauf über die Oberfläche (Dokument-002 der automatischen
+  Maskierung) und Scratch-Skript gegen alten und neuen Kern mit vier
+  Strichvarianten.
+- **R-025** – `app/frontend/workspace.js` (Jobtext und Verlaufszeile); nur in
+  der laufenden App beobachtet, Quellstelle nicht eingegrenzt.
 
 ## Annahmen und Revalidierung
 
