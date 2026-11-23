@@ -361,10 +361,21 @@ function isPersistedPersonAliasOccurrence(text, span, coveringOrganizations = []
   return /(?:z\.\s*hd\.?|zu\s+händen)\s*:?\s*$/iu.test(before);
 }
 
-function findLiteralSpans(text, needle, replacement, type, priority) {
+// German and English attach the genitive directly to a personal name
+// ("Müllers Auto", "Müller's Auto"). The exact word boundary alone lets such a
+// known name pass both the redactor and the residual gate. The suffix is only
+// accepted directly at the name and directly before a word boundary, so
+// "Müllerstraße" or "Müllersche" still do not match. Names ending in a sibilant
+// take no "s" and already match before their apostrophe.
+function personGenitiveSuffix(needle) {
+  return /[\p{L}]$/u.test(needle) && !/[sßxz]$/iu.test(needle) ? "(?:['’]?s)?" : '';
+}
+
+function findLiteralSpans(text, needle, replacement, type, priority, options = {}) {
   if (!needle) return [];
   const literal = String(needle).split(/\s+/u).map(escapeRegExp).join('[ \\t\\r\\n]+');
-  const re = new RegExp(`${NB}${literal}${NA}`, 'giu');
+  const suffix = options.personGenitive === true ? personGenitiveSuffix(String(needle)) : '';
+  const re = new RegExp(`${NB}${literal}${suffix}${NA}`, 'giu');
   const spans = [];
   let m;
   while ((m = re.exec(text))) {
@@ -712,7 +723,8 @@ function anonymize(text, profile = 'general', options = {}) {
     // for its final replacement or the private transformation identity.
     const finalPlaceholder = typeof reg.lookup === 'function' ? reg.lookup('PERSON', alias.value) : alias.placeholder;
     if (!finalPlaceholder) continue;
-    const found = findLiteralSpans(out, alias.value, finalPlaceholder, 'PERSON_ALIAS', PRIORITY.PERSON_ALIAS);
+    const found = findLiteralSpans(out, alias.value, finalPlaceholder, 'PERSON_ALIAS', PRIORITY.PERSON_ALIAS,
+      { personGenitive: true });
     for (const span of found) {
       const coveringOrganizations = organizationCoverage.filter((org) =>
         span.start >= org.start && span.end <= org.end
@@ -724,7 +736,8 @@ function anonymize(text, profile = 'general', options = {}) {
     if (matched) findings.push({ type: 'PERSON', value_hash: hashShort(alias.value) });
   }
   for (const entry of dictionary) {
-    const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority);
+    const found = findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority,
+      { personGenitive: entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS' });
     for (const span of found) {
       const coveringOrganizations = organizationCoverage.filter((org) =>
         span.start >= org.start && span.end <= org.end
@@ -1298,7 +1311,10 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     const typed = value && typeof value === 'object';
     const v = normalizeSpaces(typed ? value.value : value);
     if (v.length < 3) continue;
-    const occurrences=findLiteralSpans(clean,v,'','RESIDUAL_ENTITY',0);
+    // The gate recognizes the same inflected person form as the redactor, but
+    // only for entries the dictionary typed as a person.
+    const occurrences=findLiteralSpans(clean,v,'','RESIDUAL_ENTITY',0,
+      { personGenitive: typed && ['PERSON','PERSON_ALIAS'].includes(value.type) });
     const credentialOrg=typed ? ['ORGANIZATION','PROJECT'].includes(value.type) : residualOrgKeys.has(key(v));
     const remaining = occurrences.filter((s)=>!isActualFieldHeader(s) && !reviewedLiterals.some(range => s.start >= range.start && s.end <= range.end) &&
         !insideCredentialValue(s.start, s.end) && !(credentialOrg &&
