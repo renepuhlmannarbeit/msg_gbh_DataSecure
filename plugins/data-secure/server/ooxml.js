@@ -1165,9 +1165,13 @@ function parseWordStructure(body, options = {}) {
           } else node[name === 'w:gridBefore' ? 'gridBefore' : 'gridAfter'] = wordGridNumber(value, true, wordStructureError);
           wordGridLeaf = true;
         }
-      } else if (name === 'w:t' || (story&&name==='w:instrText') || name === 'w:tab' || name === 'w:br' || name === 'w:cr') {
+      } else if (name === 'w:t' || (story&&name==='w:instrText') || name === 'w:tab' || name === 'w:br' || name === 'w:cr' ||
+          name === 'w:noBreakHyphen' || name === 'w:ptab') {
         if (node.type !== 'p') throw wordStructureError();
-        if (!['w:t','w:instrText'].includes(name)&&(!story||story.visible(storyEvent))) sourceText(node,name === 'w:tab' ? '\t' : '\n',storyEvent);
+        // A non-breaking hyphen and a positional tab are visible run content.
+        // Dropping them joins "Müller‑Schmidt" or "2019‑2024" into one token.
+        if (!['w:t','w:instrText'].includes(name)&&(!story||story.visible(storyEvent)))
+          sourceText(node,name === 'w:noBreakHyphen' ? '‑' : name === 'w:br' || name === 'w:cr' ? '\n' : '\t',storyEvent);
       } else if (node.type === 'tr' && name === 'w:tblHeader') {
         node.header = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
       } else if (node.type === 'p' && name === 'w:pStyle') {
