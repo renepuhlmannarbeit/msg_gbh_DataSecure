@@ -163,7 +163,7 @@ function referencing(files, symbol, except) {
   return hits;
 }
 
-const clean = (value) => String(value ?? '').replace(/[\t\r\n]+/gu, ' ').trim();
+const clean = (value) => String(value ?? '').replace(/[\t\r\n]+/gu, ' ').trim() || '-';
 const header = ['id', 'commit', 'pfad', 'zeile', 'symbol_oder_grenze', 'dimension', 'plattform_zweck', 'zweck_aufrufer', 'eingaben_vertrauen', 'zustand_nebenwirkungen', 'fehler_cleanup', 'invariante', 'test_oder_evidenz', 'befund_ids', 'status', 'bemerkung'];
 const rows = [header.join('\t')];
 const counts = {};
@@ -174,7 +174,9 @@ const short = (file) => file.replace(/^plugins\/data-secure\/server\//u, 'srv/')
 for (const unit of units) {
   const fileReview = review.files[unit.file] || {};
   const symbolReview = (review.symbols[unit.file] || {})[unit.symbol] || {};
-  const status = symbolReview.status || fileReview.symbolStatus || 'OFFEN';
+  // Rust test modules were not read by any review, whatever the file status.
+  const rustTest = unit.kind.includes('Rust-Testmodul') && !symbolReview.status;
+  const status = rustTest ? 'OFFEN' : symbolReview.status || fileReview.symbolStatus || 'OFFEN';
   const callers = referencing(scopeFiles, unit.symbol, unit.file);
   const tests = referencing(testFiles, unit.symbol, null);
   const sameFile = (fs.readFileSync(path.join(root, unit.file), 'utf8').match(new RegExp(`(?<![\\w$])${unit.symbol.replace(/[#$]/gu, '\\$&')}(?![\\w$])`, 'gu')) || []).length - 1;
@@ -190,8 +192,8 @@ for (const unit of units) {
     symbolReview.errors || `mechanisch: Fehlerpfad ${unit.hasCatch ? 'vorhanden' : 'nicht erkannt'}; Cleanup ${unit.hasFinally ? 'vorhanden' : 'nicht erkannt'}`,
     symbolReview.invariant || fileReview.invariant || '',
     symbolReview.evidence || (tests.length ? `mechanisch: Bezeichner in ${tests.length} Testdatei(en), z. B. ${tests.slice(0, 3).join(', ')}` : 'mechanisch: kein Bezeichnertreffer in tests/'),
-    (symbolReview.findings || fileReview.findings || []).join(','), status,
-    symbolReview.remark || fileReview.remark || ''
+    (rustTest ? [] : symbolReview.findings || fileReview.findings || []).join(','), status,
+    rustTest ? 'Rust-Testmodul; im Review nicht gelesen' : symbolReview.remark || fileReview.remark || ''
   ].map(clean).join('\t'));
   counts[status] = (counts[status] || 0) + 1;
   byDimension[dimension] ||= {};

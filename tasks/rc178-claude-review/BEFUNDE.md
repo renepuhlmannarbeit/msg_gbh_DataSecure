@@ -92,27 +92,27 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 
 | ID | Priorität | Dimension und Plattform | Befund in einem Satz | Backlog oder Entscheidung | Status |
 | --- | --- | --- | --- | --- | --- |
-| R-001 | hoch | Anonymisierung, alle | Genitivformen bekannter Personennamen („Müllers Auto“) bleiben im freigegebenen Markdown, weil Redaktion und Restprüfung dieselbe exakte Wortgrenze nutzen. | BL-050.6 | siehe Ergebnis |
-| R-002 | hoch | Anonymisierung, alle | Eine im Dokument bereits erkannte Telefonnummer bleibt an weiteren Stellen ohne Label im Klartext. | BL-050.6 | siehe Ergebnis |
-| R-003 | hoch | Formatqualität DOCX, alle | `w:noBreakHyphen`, `w:ptab`, `w:sym` und der Zustand alter Formular-Kontrollkästchen werden ohne Hinweis verworfen („Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“). | BL-049.2, DS-085 | siehe Ergebnis |
-| R-004 | hoch | Formatqualität XLSX, alle | Das Standard-Datumsformat 14 erscheint als `mm-dd-yy`, Zahlen mit US-Trennzeichen; `03-05-23` und `1,234` sind für deutsche Leser mehrdeutig. | BL-049.2, DS-085 | siehe Ergebnis |
-| R-005 | hoch | Formatqualität DOCX, alle | Überschriften werden nur über die englische Formatvorlagen-ID erkannt, nicht über den Vorlagennamen; lokalisierte IDs verlieren die Gliederung. | BL-049.2 | siehe Ergebnis |
+| R-001 | hoch | Anonymisierung, alle | Genitivformen bekannter Personennamen („Müllers Auto“) bleiben im freigegebenen Markdown, weil Redaktion und Restprüfung dieselbe exakte Wortgrenze nutzen. | BL-050.6 | behoben (`8cf00fa7`) |
+| R-002 | hoch | Anonymisierung, alle | Eine im Dokument bereits erkannte Telefonnummer bleibt an weiteren Stellen ohne Label im Klartext. | BL-050.6 | behoben (`af203451`) |
+| R-003 | hoch | Formatqualität DOCX, alle | `w:noBreakHyphen`, `w:ptab`, `w:sym` und der Zustand alter Formular-Kontrollkästchen werden ohne Hinweis verworfen („Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“). | BL-049.2, DS-085 | teilweise behoben (`14c12ee1`); `w:sym` und Kontrollkästchen offen |
+| R-004 | hoch | Formatqualität XLSX, alle | Das Standard-Datumsformat 14 erscheint als `mm-dd-yy`, Zahlen mit US-Trennzeichen; `03-05-23` und `1,234` sind für deutsche Leser mehrdeutig. | BL-049.2, DS-085 | teilweise behoben (`7f7f4d6f`); Trennzeichen und Monatsnamen offen |
+| R-005 | hoch | Formatqualität DOCX, alle | Überschriften werden nur über die englische Formatvorlagen-ID erkannt, nicht über den Vorlagennamen; lokalisierte IDs verlieren die Gliederung. | BL-049.2 | behoben (`c79f3aa4`), nur an synthetischen Fixtures gezeigt |
 | R-006 | hoch | Formatqualität DOCX, alle | Jede Word-Liste und jede nummerierte Überschrift wird als zwei einzellige Tabellen ausgegeben. | BL-049.2 | offen |
-| R-007 | hoch | Dokumentation | CLAUDE.md, Vertrag und Kanon nennen den Batchrunner seriell; ausgeliefert ist eine zweispurige Konvertervorbereitung auf Windows x64 und macOS. | BL-047.5, DS-047 | siehe Ergebnis |
-| R-008 | mittel | Oberfläche, alle | Der Hinweis „Entscheidung nicht bestätigt“ wird in der eingebetteten Prüfung in ein ausgeblendetes Element geschrieben. | BL-010.53 | siehe Ergebnis |
-| R-009 | mittel | Oberfläche, alle | Fünf Meldungen nennen Bedienelemente mit Namen, die es in der Oberfläche nicht gibt. | BL-010.53 | siehe Ergebnis |
+| R-007 | hoch | Dokumentation | CLAUDE.md, Vertrag und Kanon nennen den Batchrunner seriell; ausgeliefert ist eine zweispurige Konvertervorbereitung auf Windows x64 und macOS. | BL-047.5, DS-047 | behoben (`8e18e44d`) |
+| R-008 | mittel | Oberfläche, alle | Der Hinweis „Entscheidung nicht bestätigt“ wird in der eingebetteten Prüfung in ein ausgeblendetes Element geschrieben. | BL-010.53 | behoben (`c62bb1dd`) |
+| R-009 | mittel | Oberfläche, alle | Fünf Meldungen nennen Bedienelemente mit Namen, die es in der Oberfläche nicht gibt. | BL-010.53 | behoben (`c62bb1dd`) |
 | R-010 | mittel | Betrieb, alle | Nach hartem Abbruch bleibt ein `.pending-dm_*`-Ordner mit nicht anonymisiertem Markdown dauerhaft im privaten Bereich. | BL-050.6 | offen |
 | R-011 | mittel bis hoch | Rust-Shell, alle | Die private Exportwurzel füllt sich mit vier Einträgen je Vorgang ohne Bereinigung; nach etwa 512 Exporten scheitert jeder weitere. | BL-050.6 | offen |
 | R-012 | mittel | Rust-Shell, alle | Voller Datenträger, entferntes Ziel und verweigerter Zugriff werden alle als „Konflikt“ gemeldet, ohne Diagnoseereignis. | BL-050.6 | offen |
 | R-013 | mittel | Rust-Shell, alle | Der Diagnose-Sink verstummt nach 16 MiB je Sitzung, und das Diagnosepaket bricht ab 129 Einträgen im Ordner ab. | BL-050.6 | offen |
 | R-014 | mittel | Rust-Shell, alle | Nativ nicht vorgeprüfte Argumente der Nachbearbeitung beenden den Core statt abgelehnt zu werden. | BL-050.6 | offen |
 | R-015 | hoch | Release-Nachweis | `main` enthält den RC178-Quellstand nicht, und das Windows-Paket hat keinen unabhängigen Lauf. | Freigabeentscheidung | offen |
-| R-016 | mittel | Lieferkette | Die paketierten Drittanbieterhinweise nennen `emf-converter` nicht und beschreiben die macOS-Laufzeit unzutreffend. | BL-050.6 | siehe Ergebnis |
+| R-016 | mittel | Lieferkette | Die paketierten Drittanbieterhinweise nennen `emf-converter` nicht und beschreiben die macOS-Laufzeit unzutreffend. | BL-050.6 | teilweise behoben (`03c621a4`); SBOM-Lizenzausdruck offen |
 | R-017 | mittel | Anonymisierung, alle | Drei weitere Unterredaktionsmuster: Einzelnachname in Folgedokumenten, Name im Linkziel, „Nachname, Vorname“. | BL-050.6, BL-021.1 | offen |
 | R-018 | mittel | Formatqualität CSV, alle | Eine einzelne Zeile abweichender Breite lässt die Trennzeichenerkennung still auf eine Spalte fallen, mit Abdeckung „vollständig“. | BL-049.2 | offen |
 | R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | offen |
-| R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise, siehe Ergebnis |
-| R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | teilweise, siehe Ergebnis |
+| R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise, teilweise behoben (`c62bb1dd`, nur Gruppenlabel) |
+| R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | teilweise, teilweise behoben (`e1afef0f`) |
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
 | R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | offen |
 
@@ -318,10 +318,10 @@ Alle Fundstellen beziehen sich auf `e88f1b8d`. `srv/` steht für
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
 | --- | --- | --- | --- | --- | --- |
 | A-001 | Die Restprüfung fängt Unterredaktion ab. | Sie stoppt mit `RESIDUAL_PII`. | Sie nutzt dieselbe Wortgrenze wie die Redaktion (R-001). | Datenschutz-Review; zweiter Lauf Hauptsession | Widerlegt für flektierte Formen. R-001 ändert beide Stellen. |
-| A-002 | Das Genitivsuffix führt nicht zu Überredaktion. | Suffix nur direkt am Namen, danach Wortgrenze. | Namen, die mit `s` verlängert ein anderes Wort ergeben. | Fachliche Datentreue; Negativfälle im Test | siehe Ergebnis |
-| A-003 | U+2011 ist für die Anonymisierung unschädlich. | `privacy/base.js:74` führt U+2011 als Strich. | Namensmuster `NAME_BODY` kennt nur `-`. | Datenschutz; Test mit Doppelnamen | siehe Ergebnis |
+| A-002 | Das Genitivsuffix führt nicht zu Überredaktion. | Suffix nur direkt am Namen, danach Wortgrenze. | Namen, die mit `s` verlängert ein anderes Wort ergeben. | Fachliche Datentreue; Negativfälle im Test | Bestätigt für „Müllerstraße“, „Müllersche“, Organisationen und untypisierte Werte. Rest: ein Nachname, dessen s-Form ein eigenes Wort ist, wird wie bisher schon in der Grundform ersetzt; das Suffix erweitert diesen Fall nur um die s-Form. |
+| A-003 | U+2011 ist für die Anonymisierung unschädlich. | `privacy/base.js:74` führt U+2011 als Strich. | Namensmuster `NAME_BODY` kennt nur `-`. | Datenschutz; Regressionslauf | Nicht widerlegt: 181 datenschutz- und 181 officebezogene Suite-Dateien bestehen. Nicht gezeigt: dass ein Doppelname mit U+2011 als ein Name erkannt wird. Vorher ging der Strich ganz verloren, der Name war also ebenfalls nicht als Doppelname erkennbar. Offen als Folgepunkt zu R-003. |
 | A-004 | „Seriell“ in CLAUDE.md beschreibt die Laufzeit. | Vertrag und Backlog sagen dasselbe. | `standalone-conversion-window.js` ist verdrahtet und getestet. | Laufzeit-Review und Lieferketten-Review unabhängig | Widerlegt. R-007. |
-| A-005 | Ein ISO-Datum für Format 14 ist verlustfrei. | Tag, Monat und Jahr sind vollständig. | Das Original zeigt zweistellige Jahre; Tests schreiben US fest. | Fachliche Datentreue | siehe Ergebnis |
+| A-005 | Ein ISO-Datum für Format 14 ist verlustfrei. | Tag, Monat und Jahr sind vollständig. | Das Original zeigt zweistellige Jahre; Tests schreiben US fest. | Fachliche Datentreue | Bestätigt: der Zellwert ist die Seriennummer, das vierstellige Jahr ist daraus eindeutig. Der festgeschriebene Testwert `01-01-04` wurde auf `1904-01-01` geändert. Die Ausgabe weicht bewusst von der Excel-Anzeige ab. |
 | A-006 | Die Standalone-Projektion übersieht keine dynamisch geladenen Module. | Regex erfasst nur literale `require`. | Dynamisches `require` wäre unsichtbar. | Lieferketten-Review, Suche über 276 Dateien | Bestätigt für RC178; kein Wächter für die Zukunft. |
 | A-007 | Die Diagnose enthält keine Pfade oder Dateinamen. | Geschlossenes Vokabular, Sanitisierung im Paket. | Fehlertexte aus Kindprozessen. | Rust-Review | Bestätigt am Quelltext; JS-Diagnose nicht gelesen. |
 | A-008 | Die Oberfläche ist gegen HTML-Injektion über Dateinamen geschützt. | Kein `innerHTML` im Frontend, CSP `script-src 'self'`. | Bidi-Steuerzeichen im Namen. | Oberflächen-Review | Bestätigt; Bidi bleibt offen (R-020). |
@@ -333,11 +333,11 @@ Datenschutz und Datenverlust zuerst.
 
 | Reihenfolge | Befund-IDs | Ziel und relevante Invarianten | Geänderte Pfade | Verifikation | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | R-001 | Genitivformen bekannter Personen werden ersetzt und von der Restprüfung erkannt; Organisationen und andere Wörter unverändert. | `srv/privacy/engine.js`, Test | neuer Test am Kernel, Golden-Tests, Policy-Fingerprint | geplant |
-| 2 | R-002 | Wiederholte Telefonnummern werden ersetzt; Label-Regel für Einzelvorkommen bleibt. | `srv/privacy/structured.js`, Test | neuer Test, Golden-Tests | geplant |
-| 3 | R-003 | Geschützter Bindestrich und positionierter Tabulator bleiben erhalten. | `srv/ooxml.js`, Test | neuer Test über `extractMarkdownBuffer`, DOCX-Tests | geplant |
-| 4 | R-005 | Überschriften über den Vorlagennamen erkennen. | `srv/ooxml.js`, Test | neuer Test, DOCX-Tests | geplant, abhängig vom Aufwand |
-| 5 | R-004 | Format 14 und 22 eindeutig ausgeben. | `srv/xlsx-number-format.js`, Tests | XLSX-Tests | geplant |
-| 6 | R-008, R-009, R-020 (Label) | Meldungen sichtbar und zutreffend. | `app/frontend/*` | Frontend-Tests | geplant |
-| 7 | R-007, R-016, R-021 | Dokumente an den Iststand angleichen. | CLAUDE.md, Vertrag, Backlog, Hinweise | `npm run test:docs` | geplant |
-| 8 | alle | Gesamtverifikation und Bericht. | `tasks/rc178-claude-review/*` | Headless, Docs, `git diff --check`, Plugin-Gates | geplant |
+| 1 | R-001 | Genitivformen bekannter Personen werden ersetzt und von der Restprüfung erkannt; Organisationen und andere Wörter unverändert. | `srv/privacy/engine.js`, Test | neuer Test am Kernel, Golden-Tests, Policy-Fingerprint | umgesetzt |
+| 2 | R-002 | Wiederholte Telefonnummern werden ersetzt; Label-Regel für Einzelvorkommen bleibt. | `srv/privacy/structured.js`, Test | neuer Test, Golden-Tests | umgesetzt |
+| 3 | R-003 | Geschützter Bindestrich und positionierter Tabulator bleiben erhalten. | `srv/ooxml.js`, Test | neuer Test über `extractMarkdownBuffer`, DOCX-Tests | umgesetzt |
+| 4 | R-005 | Überschriften über den Vorlagennamen erkennen. | `srv/ooxml.js`, Test | neuer Test, DOCX-Tests | umgesetzt |
+| 5 | R-004 | Format 14 und 22 eindeutig ausgeben. | `srv/xlsx-number-format.js`, Tests | XLSX-Tests | umgesetzt |
+| 6 | R-008, R-009, R-020 (Label) | Meldungen sichtbar und zutreffend. | `app/frontend/*` | Frontend-Tests | umgesetzt |
+| 7 | R-007, R-016, R-021 | Dokumente an den Iststand angleichen. | CLAUDE.md, Vertrag, Backlog, Hinweise | `npm run test:docs` | umgesetzt |
+| 8 | alle | Gesamtverifikation und Bericht. | `tasks/rc178-claude-review/*` | Headless, Docs, `git diff --check`, Plugin-Gates | umgesetzt |
