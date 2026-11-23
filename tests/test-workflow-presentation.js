@@ -160,6 +160,20 @@ test('guidance preserves OS facts and never recommends a security bypass', () =>
   assert.match(failureAdvice('UNKNOWN_CAUSE'), /Ursache.*nicht bestätigt/u);
   assert.match(failureAdvice('MARKDOWN_CONTENT_TRANSFORM_FAILED'), /separaten Kopie.*keine unklar begrenzten Inhalte/u);
 });
+test('count texts use the singular and encoding or CSV stops say what to do', () => {
+  // RC178 review R-025 and the advice part of R-018.
+  const feedback = (count) => ({ schema: 'datasecure-conversion-feedback/1', ocr_enabled: false, selected_count: count, result_count: count,
+    not_converted_count: 0, ocr_omitted_count: 0, error_count: 0, content_notice_count: 0, pending_count: 0, complete: true });
+  const owner = (count) => ({ processing_mode: 'markdown-only', status: 'results_available', selected_count: count, result_count: count,
+    failed_count: 0, result_location: 'available', conversion_feedback: feedback(count) });
+  assert.match(conversionSummary(owner(1)).counts, /^1 Datei · 1 Markdown-Datei · /u);
+  assert.match(conversionSummary(owner(3)).counts, /^3 Dateien · 3 Markdown-Dateien · /u);
+  for (const code of ['SOURCE_TEXT_INVALID', 'TEXT_ENCODING_INVALID', 'TEXT_CONTROL_INVALID'])
+    assert.match(failureAdvice(code), /UTF-8.*Windows-1252.*CSV UTF-8/u, code);
+  for (const code of ['CSV_ROW_WIDTH_INVALID', 'CSV_DELIMITER_AMBIGUOUS', 'CSV_QUOTE_INVALID', 'CSV_EMPTY'])
+    assert.match(failureAdvice(code), /Tabellenform.*Vorspann- und Summenzeilen/u, code);
+  assert.match(failureAdvice('SOURCE_READ_FAILED'), /Lesezugriff prüfen/u);
+});
 test('available document bodies alone do not prove the whole run complete', () => {
   const result = documents({ document_count: 1, approved_count: 1, export_complete: true, processing_complete: false });
   assert.notEqual(result.phase, 'exported');

@@ -398,6 +398,8 @@
     }
   }) });
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  // German count texts need the singular: "1 Datei", not "1 Dateien".
+  const counted = (value, one, many) => `${count(value)} ${count(value) === 1 ? one : many}`;
   const safeLabel = value => typeof value === 'string' && value.length > 0 && value.length <= 1024 &&
     !/^[/\\]|^[A-Za-z]:/u.test(value) && !/[:\\\u0000-\u001f\u007f]/u.test(value) &&
     value.split('/').every(part => part && part !== '.' && part !== '..');
@@ -489,6 +491,9 @@
   function feedback(message, error = false, owner = null) {
     if (bootstrapFailure) { renderBootstrapFailure(); return; }
     feedbackOwner = owner; $('feedback').textContent = message; $('feedback').hidden = !message;
+    // An error interrupts; a status waits its turn. The role is set before
+    // the region becomes visible so assistive technology announces it.
+    $('feedback').setAttribute('role', error ? 'alert' : 'status');
     $('feedback').className = `notice${error ? ' error' : ''}`; $('connection-help').hidden = true; }
   function deliveryFeedback(batchId) {
     feedback('Der Ergebnisordner dieses Laufs ist noch nicht als bereit bestätigt. DataSecure gleicht den Stand erneut ab. Wenn der Hinweis bestehen bleibt, die Hinweise dieses Laufs prüfen; keine neue Kopie starten.', false,
@@ -863,12 +868,22 @@
   async function pick(command) {
     if (busy) { await explainBlockedPicker(command, 'busy'); return; }
     const connection = connectionEpoch;
+    // The picker hides the drop zone together with the button that opened it.
+    const origin = document.activeElement;
     admitting = true; renderTree();
     const operation = perform(command), request = generation;
     const result = await operation;
     if (connection !== connectionEpoch || request !== generation) return;
     admitting = false; renderTree();
-    if (!result || result.cancelled) return;
+    if (!result || result.cancelled) {
+      // Give the keyboard focus back after a cancelled dialog instead of
+      // leaving it on the document body.
+      try {
+        if (origin && typeof origin.focus === 'function') origin.focus();
+        if (document.activeElement !== origin) $(catalogue.length ? 'add-more' : 'select-files')?.focus?.();
+      } catch { /* focus is a convenience, never a failure of the picker */ }
+      return;
+    }
     try { applyContext(result.ui_context); $('add-options').hidden = true; $('add-more').setAttribute('aria-expanded', 'false');
       feedback('Dateien aufgenommen. Häkchen prüfen und dann starten.'); $('select-all').focus(); } catch (error) { showError(error); }
   }
@@ -1232,7 +1247,7 @@
       ? `${reviews} Datei${reviews === 1 ? ' wartet' : 'en warten'} auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
       : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.' : `${done} von ${total} Dateien abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
-      : state.state === 'results_available' ? `${count(state.result_count)} ${rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
+      : state.state === 'results_available' ? `${count(state.result_count)} ${count(state.result_count) === 1 ? rawResults ? 'Markdown-Ergebnis (nicht anonymisiert)' : anonymousResults ? 'technisch geprüftes anonymisiertes Ergebnis' : 'Ergebnis mit unbestätigtem Verarbeitungszweck' : rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
       : state.state === 'stopped' ? 'Der lokale Zwischenstand ist gespeichert. Fortsetzen verarbeitet nur noch offene Schritte.'
       : state.state === 'paused' ? 'Der Lauf ist pausiert. Fortsetzen verarbeitet nur offene Dateien. Die privaten Arbeitskopien unterliegen weiterhin der eingestellten Aufbewahrung.'
       : state.state === 'export_pending' ? 'Die sichtbare Bereitstellung der Ergebnisse ist noch nicht bestätigt. Bitte zunächst warten. Bleibt dieser Zustand bestehen, kannst du im Verlauf den gespeicherten Stand prüfen. Dabei wird kein Export erstellt; bereits vorhandene Dateien bleiben erhalten.'
@@ -1602,10 +1617,10 @@
         stateLabel.id = `history-${entry.batch_id}-state`;
         detail.append(element('p', `${raw ? 'Markdown-Konvertierung' : anonymous ? 'Anonymisierung' : 'Verarbeitungszweck nicht bestätigt'} · ${dateLabel}`, 'history-title'),
           element('p', conversion?.counts || (anonymous && reasonBreakdownValid
-            ? `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${expectedOcr} ohne OCR nicht umgewandelt${privacyStops ? ` · ${privacyStops} aus Datenschutzgründen angehalten` : ''} · ${technicalProblems} technische Fehler`
+            ? `${counted(entry.selected_count, 'Datei', 'Dateien')} · ${counted(entry.result_count, 'Ergebnis', 'Ergebnisse')} · ${expectedOcr} ohne OCR nicht umgewandelt${privacyStops ? ` · ${privacyStops} aus Datenschutzgründen angehalten` : ''} · ${technicalProblems} technische Fehler`
             : anonymous && unknownStops
-              ? `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${unknownStops} nicht verarbeitet (Gründe im Verlauf nicht mehr klassifiziert)`
-            : `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${count(entry.failed_count)} ${anonymous ? count(entry.failed_count) === 1 ? 'Datei nicht verarbeitet' : 'Dateien nicht verarbeitet' : count(entry.failed_count) === 1 ? 'Problem' : 'Probleme'}`), 'history-meta'),
+              ? `${counted(entry.selected_count, 'Datei', 'Dateien')} · ${counted(entry.result_count, 'Ergebnis', 'Ergebnisse')} · ${unknownStops} nicht verarbeitet (Gründe im Verlauf nicht mehr klassifiziert)`
+            : `${counted(entry.selected_count, 'Datei', 'Dateien')} · ${counted(entry.result_count, 'Ergebnis', 'Ergebnisse')} · ${count(entry.failed_count)} ${anonymous ? count(entry.failed_count) === 1 ? 'Datei nicht verarbeitet' : 'Dateien nicht verarbeitet' : count(entry.failed_count) === 1 ? 'Problem' : 'Probleme'}`), 'history-meta'),
           stateLabel);
         if (anonymous && entry.status === 'results_available') detail.append(element('p',
           'Nur die gewünschten Markdown-Dateien weitergeben. Vertrauliche Zuordnungen enthalten Originalnamen und gehören nicht zur Weitergabe.', 'history-meta'));

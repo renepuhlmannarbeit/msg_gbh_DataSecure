@@ -28,7 +28,7 @@
       </div>
       <div class="matrix-actions-pinned">
         <div class="matrix-selection"><strong>1. Werte auswählen</strong><button id="select-filtered">Alle gefilterten Zeilen auswählen</button><span id="matrix-count" role="status"></span></div>
-        <div class="bulk-actions" aria-label="Gemeinsame Behandlung der angehakten Zeilen">
+        <div class="bulk-actions" role="group" aria-label="Gemeinsame Behandlung der angehakten Zeilen">
           <label for="bulk-treatment">2. Entscheidung wählen</label>
           <select id="bulk-treatment" aria-describedby="bulk-hint" disabled><option value="">Behandlung wählen …</option></select>
           <button id="bulk-apply" class="primary" aria-describedby="bulk-hint" disabled>Auf Auswahl anwenden</button>
@@ -55,7 +55,7 @@
       <label id="occurrence-label" for="occurrence">Vorkommen im Vergleich</label><select id="occurrence"></select>
       <h2 id="finding-title">Wie soll diese Fundstelle behandelt werden?</h2>
       <p class="exact-label">Aktuell im Vergleich – nicht automatisch angehakt</p>
-      <p id="exact-text" class="exact" tabindex="0"></p>
+      <p id="exact-text" class="exact" tabindex="0" role="note" aria-label="Aktuelle Fundstelle"></p>
       <p id="group-note" class="note"></p>
       <figure id="contact-original" hidden>
         <h3>Originalbildausschnitt – nur lokal</h3>
@@ -63,8 +63,8 @@
         <figcaption id="contact-image-note"></figcaption>
       </figure>
       <div class="comparison">
-        <div><h3>Quellkontext</h3><pre id="source-context" tabindex="0"></pre></div>
-        <div><h3 id="output-title">Vorgesehene Ausgabe</h3><pre id="output-context" tabindex="0"></pre></div>
+        <div><h3 id="source-title">Quellkontext</h3><pre id="source-context" tabindex="0" role="region" aria-labelledby="source-title"></pre></div>
+        <div><h3 id="output-title">Vorgesehene Ausgabe</h3><pre id="output-context" tabindex="0" role="region" aria-labelledby="output-title"></pre></div>
       </div>
       </div>
       </div>

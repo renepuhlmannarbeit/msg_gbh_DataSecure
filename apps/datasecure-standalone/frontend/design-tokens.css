@@ -5,7 +5,7 @@
 @font-face{font-family:Inter;src:url('fonts/InterVariable.woff2') format('woff2');font-style:normal;font-weight:100 900;font-display:swap}
 :root {
   --c-bg:#f3f5f4;--c-surface:#fff;--c-surface-muted:#f8faf9;--c-surface-text:#fbfcfb;
-  --c-border:#e3e8e6;--c-border-soft:#eef1ef;--c-border-input:#cfd8d4;--c-border-nav:#dfe5e2;--c-border-dash:#c5d2cc;--c-control:#b7c4be;
+  --c-border:#e3e8e6;--c-border-soft:#eef1ef;--c-border-input:#cfd8d4;--c-border-field:#7a8781;--c-border-nav:#dfe5e2;--c-border-dash:#c5d2cc;--c-control:#b7c4be;
   --c-ink:#14201b;--c-ink-2:#3c4943;--c-muted:#56635d;--c-faint:#7a8781;
   --c-primary:#17694f;--c-primary-hover:#0f4c39;--c-primary-tint:#e3f1eb;--c-primary-tint-2:#f1f8f5;--c-primary-tint-3:#eef6f2;--c-primary-soft-border:#cfe5da;
   --c-warn-bg:#fdf6e7;--c-warn-bg-2:#fbeed2;--c-warn-bg-3:#fdf9f0;--c-warn-border:#f0dfb6;--c-warn-border-2:#e3cf9e;--c-warn-line:#c98a12;--c-warn-ink:#7a4f00;--c-warn-ink-2:#4a3300;

@@ -39,7 +39,7 @@
         value.not_converted_count !== Math.max(owner.failed_count || 0, owner.problem_count || 0)) return null;
     return { ...value, heading: value.error_count ? 'Lauf abgeschlossen mit Fehlern'
       : value.ocr_omitted_count || value.content_notice_count ? 'Lauf abgeschlossen mit Hinweisen' : 'Lauf abgeschlossen',
-      counts: `${value.selected_count} Dateien · ${value.result_count} Markdown-Dateien · ${value.ocr_omitted_count} ohne OCR nicht umgewandelt · ${value.error_count} technische Fehler`,
+      counts: `${value.selected_count} ${value.selected_count === 1 ? 'Datei' : 'Dateien'} · ${value.result_count} ${value.result_count === 1 ? 'Markdown-Datei' : 'Markdown-Dateien'} · ${value.ocr_omitted_count} ohne OCR nicht umgewandelt · ${value.error_count} technische Fehler`,
       description: `${value.result_count} Markdown-Datei${value.result_count === 1 ? '' : 'en'} erstellt. ` +
         (value.ocr_omitted_count ? `OCR war ausgeschaltet; ${value.ocr_omitted_count} Bild- oder Scan-Datei${value.ocr_omitted_count === 1 ? ' wurde' : 'en wurden'} nicht umgewandelt. ` : '') +
         (value.error_count ? `${value.error_count} Datei${value.error_count === 1 ? '' : 'en'} mit technischen Fehlern: Gründe ansehen. ` : '') +
@@ -303,7 +303,11 @@
     if (['CONVERSION_EXECUTABLE_DENIED', 'SOURCE_ACCESS_DENIED'].includes(code)) return 'Zugriffsrechte beziehungsweise OS-Blockade mit der IT prüfen. Schutzfunktionen nicht deaktivieren.';
     if (['CONVERSION_LIMIT_SETUP_FAILED', 'CONVERSION_ISOLATION_FAILED', 'CONVERSION_ISOLATION_UNAVAILABLE', 'CONVERSION_TERMINATION_UNCONFIRMED'].includes(code)) return 'Nicht erneut starten. Die inhaltsfreie Diagnose und das bestätigte Ende des Hintergrundprozesses prüfen.';
     if (['SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_TYPE_MISMATCH', 'SOURCE_COMPOUND_BINARY_UNSUPPORTED', 'SOURCE_FORMAT_NOT_RELEASED'].includes(code)) return 'Die Datei in der Ursprungsanwendung in einem unterstützten Format speichern und separat neu auswählen.';
-    if (['SOURCE_READ_FAILED', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_CONTAINER_CORRUPT', 'SOURCE_TEXT_INVALID', 'PARSE_FAILED'].includes(code)) return 'Die Quelldatei und den lokalen Lesezugriff prüfen; anschließend eine korrigierte Kopie neu auswählen.';
+    // Text files are read as UTF-8 or as UTF-16 with a byte order mark only.
+    // The usual cause is an ANSI/Windows-1252 export; say how to fix it.
+    if (['SOURCE_TEXT_INVALID', 'TEXT_ENCODING_INVALID', 'TEXT_CONTROL_INVALID'].includes(code)) return 'Die Datei ist kein gültiger UTF-8- oder UTF-16-Text oder enthält Steuerzeichen. Häufige Ursache: ein Export in ANSI/Windows-1252. In der Ursprungsanwendung als UTF-8 speichern (in Excel „CSV UTF-8“) und die Kopie neu auswählen. Das Original bleibt unverändert.';
+    if (['CSV_ROW_WIDTH_INVALID', 'CSV_DELIMITER_AMBIGUOUS', 'CSV_QUOTE_INVALID', 'CSV_EMPTY'].includes(code)) return 'Die CSV-Datei hat keine eindeutige Tabellenform: Zeilen mit unterschiedlich vielen Spalten, mehrere mögliche Trennzeichen oder ein nicht geschlossenes Anführungszeichen. Vorspann- und Summenzeilen in einer Kopie entfernen oder die Kopie als TXT umwandeln.';
+    if (['SOURCE_READ_FAILED', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_CONTAINER_CORRUPT', 'PARSE_FAILED'].includes(code)) return 'Die Quelldatei und den lokalen Lesezugriff prüfen; anschließend eine korrigierte Kopie neu auswählen.';
     if (['LOCAL_REVIEW_TOO_LARGE', 'SOURCE_FORMAT_SIZE_LIMIT', 'CONVERSION_RESOURCE_LIMIT', 'CONVERSION_TIMEOUT'].includes(code)) return 'Das Dokument in kleinere Teile aufteilen und diese neu auswählen. Keine Prüfschritte überspringen.';
     if (['RESIDUAL_PII', 'AMBIGUITY_REVIEW_REQUIRED'].includes(code)) return 'Für diese Datei wurde kein freigabefähiger Prüfstand erstellt. Sie einzeln neu anonymisieren; bei erneutem Halt den Fehlercode über „Diagnose öffnen“ prüfen. Nicht weitergeben.';
     if (code === 'LOCAL_MAPPING_PENDING') return 'Den zugehörigen Lauf fortsetzen, um genau diese Bereitstellung erneut abzugleichen.';
