@@ -165,8 +165,27 @@ fn diagnostic_request_id(id: &str) -> Option<&str> {
         .then_some(id)
 }
 
+/// The window polls its display state every few seconds for as long as it is
+/// open. Three records per successful poll filled the bounded session log
+/// (8 segments of 2 MiB) within about half a day; from then on no native
+/// event, including a later failure, was recorded. The first polls of a
+/// session stay visible for start-up diagnosis, later successful ones are not
+/// written. Failures, errors and every other action are always recorded.
+const DISPLAY_POLL_DIAGNOSTIC_BUDGET: u64 = 64;
+static DISPLAY_POLLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn display_poll_suppressed(event: &str, action: &str, polls: &std::sync::atomic::AtomicU64) -> bool {
+    use std::sync::atomic::Ordering;
+    if !matches!(action, "get_public_state" | "get_ui_context") { return false; }
+    match event {
+        "ipc_request_started" => polls.fetch_add(1, Ordering::Relaxed) >= DISPLAY_POLL_DIAGNOSTIC_BUDGET,
+        "ipc_request_sent" | "ipc_response_ok" => polls.load(Ordering::Relaxed) > DISPLAY_POLL_DIAGNOSTIC_BUDGET,
+        _ => false,
+    }
+}
+
 fn diagnostic_ipc_event(event: &str, action: &str, id: &str, outcome: &str,
     error_code: Option<&str>, elapsed_ms: Option<u128>) {
+    if display_poll_suppressed(event, action, &DISPLAY_POLLS) { return; }
     diagnostic_correlated_event(event, Some(action), outcome, error_code, elapsed_ms,
         diagnostic_request_id(id), None);
 }
@@ -3942,6 +3961,86 @@ mod tests {
         }
         let mut invalid = response;
         invalid["error_details"]["selection_files"][0]["reason_code"] = json!("raw error with content");
+    #[test]
+    fn successful_display_polls_stop_filling_the_session_log_after_their_budget() {
+        // RC178 review R-013.
+        let polls = std::sync::atomic::AtomicU64::new(0);
+        let mut written = 0;
+        for _ in 0..DISPLAY_POLL_DIAGNOSTIC_BUDGET {
+            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
+                assert!(!display_poll_suppressed(event, "get_public_state", &polls)); written += 1;
+            }
+        }
+        assert_eq!(written, 3 * DISPLAY_POLL_DIAGNOSTIC_BUDGET);
+        for _ in 0..1000 {
+            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
+                assert!(display_poll_suppressed(event, "get_ui_context", &polls), "{event}");
+            }
+            // A failing poll and every non-display action stay recorded.
+            for event in ["ipc_request_failed", "ipc_response_error", "ipc_response_invalid", "ipc_request_queue_busy"] {
+                assert!(!display_poll_suppressed(event, "get_public_state", &polls), "{event}");
+            }
+            for event in ["ipc_request_started", "ipc_request_sent", "ipc_response_ok"] {
+                assert!(!display_poll_suppressed(event, "start_admitted_batch", &polls));
+                assert!(!display_poll_suppressed(event, "get_run_history", &polls));
+            }
+        }
+    }
+    #[test]
+    fn document_review_arguments_are_refused_natively_before_they_become_a_private_frame() {
+        // RC178 review R-014. Accepted shapes follow validatePrivateMessage.
+        let document = "a".repeat(32); let operation = "b".repeat(32); let digest = "c".repeat(64);
+        let row = json!({ "document_id": document, "output_sha256": digest, "revision": 1 });
+        let ok = |action: &str, fields: Value| validate_document_review_request(action, &fields);
+        assert_eq!(ok("get_document_reviews", json!({})), Ok(()));
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document, "revision": 0, "chunk_index": 1024 })), Ok(()));
+        assert_eq!(ok("get_document_entities", json!({ "document_id": document, "revision": 10000, "page": 0 })), Ok(()));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()] })), Ok(()));
+        assert_eq!(ok("export_approved_documents", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": true })), Ok(()));
+        assert_eq!(ok("abandon_document_export", json!({ "operation_id": operation, "digest": digest })), Ok(()));
+        assert_eq!(ok("resolve_document_export", json!({ "operation_id": operation })), Ok(()));
+        assert_eq!(ok("resolve_document_identity_overview", json!({})), Ok(()));
+        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "approve", "operation_id": operation, "selection": [row.clone()] } })), Ok(()));
+        let decision = |action: &str, ranges: Value| json!({ "action": action, "operation_id": operation,
+            "output_sha256": digest, "revision": 3, "ranges": ranges });
+        for (action, ranges) in [("approve", json!([])), ("redact", json!([{ "start": 0, "end": 4 }])),
+            ("correct", json!([{ "start": 2, "end": 2, "replacement": "Ersatz" }]))] {
+            assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": decision(action, ranges) })), Ok(()), "{action}");
+        }
+        let mut entities = decision("entities", json!([]));
+        entities["entity_decisions"] = json!([{ "entity_id": "entity_000001", "decision": "keep" }]);
+        entities["scope"] = json!("run"); entities["repair_binding"] = json!(digest);
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": entities.clone() })), Ok(()));
+
+        // The reported trigger and its relatives are refused with the Core's own codes.
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": "x", "revision": 0, "chunk_index": 0 })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document, "revision": 0, "chunk_index": 1025 })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("get_document_review_chunk", json!({ "document_id": document.to_uppercase(), "revision": 0, "chunk_index": 0 })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("get_document_entities", json!({ "document_id": document, "revision": 0, "page": 10001 })), Err("DOCUMENT_ENTITY_INVALID"));
+        assert_eq!(ok("abandon_document_export", json!({ "operation_id": operation, "digest": "kurz" })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("resolve_document_identity_overview", json!({ "operation_id": 7 })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("export_approved_documents", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": false })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [] })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone(), row.clone()] })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()], "path": "C:/x" })), Err("DOCUMENT_REVIEW_INVALID"));
+        let mut extra = row.clone(); extra["path"] = json!("C:/x");
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [extra] })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "delete", "operation_id": operation, "selection": [row.clone()] } })), Err("DOCUMENT_REVIEW_INVALID"));
+        let mut late = row.clone(); late["revision"] = json!(1000);
+        assert_eq!(ok("decide_document_review_batch", json!({ "decision": { "action": "approve", "operation_id": operation, "selection": [late] } })), Err("DOCUMENT_REVIEW_INVALID"));
+        for bad in [decision("redact", json!([{ "start": 4, "end": 4 }])), decision("redact", json!([{ "start": 5, "end": 4 }])),
+            decision("correct", json!([{ "start": 0, "end": 1 }])), decision("correct", json!([{ "start": 0, "end": 1, "replacement": "a\u{0}b" }])),
+            decision("approve", json!([{ "start": 0, "end": 1, "replacement": "x" }])), decision("unknown", json!([])),
+            json!({ "action": "approve" }), json!("approve")] {
+            assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": bad.clone() })), Err("DOCUMENT_REVIEW_INVALID"), "{bad}");
+        }
+        let mut repeated = entities.clone();
+        repeated["entity_decisions"] = json!([{ "entity_id": "entity_000001", "decision": "keep" }, { "entity_id": "entity_000001", "decision": "person" }]);
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": repeated })), Err("DOCUMENT_ENTITY_INVALID"));
+        let mut approve_with_binding = decision("approve", json!([])); approve_with_binding["repair_binding"] = json!(digest);
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": approve_with_binding })), Err("DOCUMENT_REVIEW_INVALID"));
+        assert_eq!(ok("unknown_action", json!({})), Err("DOCUMENT_REVIEW_INVALID"));
+    }
         assert!(validate_private_response(&invalid, id).is_err());
     }
 
