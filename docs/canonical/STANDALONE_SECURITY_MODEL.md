@@ -364,7 +364,17 @@ ein verbleibendes Unterredaktionsrisiko.
 
 Umgekehrt ersetzt die Regel das erste Wort auch dann, wenn dem Label
 Fließtext folgt (`Bitte ändern Sie Ihr Passwort: Es muss zwölf Zeichen
-haben.` verliert `Es`).
+haben.` verliert `Es`). Das Wort reicht bis zum nächsten Leerraum: Eine
+schließende Klammer oder ein Anführungszeichen direkt dahinter geht mit
+(`(Passwort=abc)` wird zu `(Passwort=[CREDENTIAL_REDACTED]`). Beginnt der
+Text eines Markdown-Links mit dem Label, gehört in den Profilen, die Links
+behalten, auch das Linkziel zum Wort und entfällt.
+
+Ein Dokument, das bisher an der Restprüfung stoppte, weil nach dem Ersetzen
+eines Namens das Label an den Zeilenanfang rückte, wird jetzt verarbeitet:
+Das beanstandete Wort ist ersetzt, und die unveränderte Restprüfung läuft
+über das Ergebnis. Für ein Dokument mit solchen Labels läuft die Prüfung der
+privaten Textfassung zweimal.
 
 ## Nichtziele
 
