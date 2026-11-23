@@ -470,7 +470,9 @@ function findLiteralSpans(text, needle, replacement, type, priority, options = {
       start: m.index,
       end: m.index + m[0].length,
       text: m[0],
-      identity_value: String(needle),
+      // A widened spelling names the person it stands for, not itself: the
+      // local mapping groups the occurrences of one pseudonym by this value.
+      identity_value: typeof options.identityValue === 'string' ? options.identityValue : String(needle),
       // Capture the registry's actual identity binding at the real operation,
       // not by interpreting marker-looking text in a later document diff.
       ...(['PERSON', 'PERSON_ALIAS'].includes(type) && typeof replacement === 'string' && replacement.startsWith('[PERSON_')
@@ -511,7 +513,7 @@ function buildPersonDictionary(seeds, reg) {
       entries.push({ value: canonical.replace(/[ \t]+/u, '-'), placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
       for (const separator of ['_', '.']) {
         entries.push({ value: canonical.replace(/[ \t]+/u, separator), placeholder: ph, type: 'PERSON',
-          priority: PRIORITY.PERSON, slugBoundary: true, matchOnly: true });
+          priority: PRIORITY.PERSON, slugBoundary: true, matchOnly: true, identity: canonical });
       }
     }
     // The same full name without umlauts. Never the surname alone, and not
@@ -520,7 +522,8 @@ function buildPersonDictionary(seeds, reg) {
       if (seedKeys.has(key(spelling))) continue;
       const other = typeof reg.lookup === 'function' ? reg.lookup('PERSON', spelling) : null;
       if (other && other !== ph) continue;
-      entries.push({ value: spelling, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON, identifierJoin: true, matchOnly: true });
+      entries.push({ value: spelling, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON, identifierJoin: true, matchOnly: true,
+        identity: canonical });
     }
     if (seed.matchValue && seed.matchValue !== seed.value) {
       entries.push({ value: seed.matchValue, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
@@ -786,6 +789,13 @@ function anonymize(text, profile = 'general', options = {}) {
   // "Österreicher, Marlene" is the same identity as "Marlene Österreicher".
   // Only an inversion of a full name this document or the batch already
   // knows is added; an arbitrary "Word, Word" pair is never a new person.
+  // The name under which a pseudonym was introduced. Spellings added to widen
+  // the replacement record this name as their identity.
+  const introducedNames = new Map();
+  for (const entry of dictionary) {
+    if (entry.type === 'PERSON' && entry.matchOnly !== true && /\s/u.test(normalizeSpaces(entry.value)) &&
+        !introducedNames.has(entry.placeholder)) introducedNames.set(entry.placeholder, normalizeSpaces(entry.value));
+  }
   const fullNamePlaceholders = new Map(dictionary
     .filter((entry) => entry.type === 'PERSON' && /^[\p{L}][\p{L}'’-]+[ \t]+[\p{L}][\p{L}'’-]+$/u.test(normalizeSpaces(entry.value)))
     .map((entry) => [key(normalizeSpaces(entry.value)), entry.placeholder]));
@@ -798,7 +808,8 @@ function anonymize(text, profile = 'general', options = {}) {
     const known = fullNamePlaceholders.get(key(full)) ||
       (typeof reg.lookup === 'function' ? reg.lookup('PERSON', titleCase(full)) : null);
     if (typeof known !== 'string' || !known.startsWith('[PERSON')) continue;
-    dictionary.push({ value: inverted[0], placeholder: known, type: 'PERSON', priority: PRIORITY.PERSON, inverted: true, matchOnly: true });
+    dictionary.push({ value: inverted[0], placeholder: known, type: 'PERSON', priority: PRIORITY.PERSON, inverted: true, matchOnly: true,
+      identity: introducedNames.get(known) || titleCase(full) });
     fullNamePlaceholders.set(key(full), known);
   }
 
@@ -858,7 +869,7 @@ function anonymize(text, profile = 'general', options = {}) {
   // through a full name written in the usual order; otherwise the given name
   // in front of it would stay behind.
   const literalOptions = (entry) => ({ personGenitive: entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS',
-    slugBoundary: entry.slugBoundary === true, identifierJoin: entry.identifierJoin === true });
+    slugBoundary: entry.slugBoundary === true, identifierJoin: entry.identifierJoin === true, identityValue: entry.identity });
   const forwardFullNames = dictionary.some((entry) => entry.inverted === true)
     ? dictionary.filter((entry) => entry.type === 'PERSON' && entry.inverted !== true && /\s/u.test(normalizeSpaces(entry.value)))
       .flatMap((entry) => findLiteralSpans(out, entry.value, entry.placeholder, entry.type, entry.priority, literalOptions(entry)))
@@ -892,7 +903,7 @@ function anonymize(text, profile = 'general', options = {}) {
       spans.push(hit.name === null
         // Same rank as the e-mail detector.
         ? { type: 'EMAIL', start: hit.start, end: hit.end, text: hit.text, replacement: placeholder, priority: 90 }
-        : { type: 'PERSON', start: hit.start, end: hit.end, text: hit.text, identity_value: hit.name,
+        : { type: 'PERSON', start: hit.start, end: hit.end, text: hit.text, identity_value: introducedNames.get(placeholder) || hit.name,
           ...(placeholder.startsWith('[PERSON_') ? { identity_key: `registry:PERSON:${placeholder}` } : {}),
           replacement: placeholder, priority: PRIORITY.PERSON });
     }

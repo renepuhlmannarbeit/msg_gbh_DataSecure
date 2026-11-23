@@ -118,6 +118,28 @@ async function main() {
     assert.ok(!surnameOnly.some((finding) => finding.type === 'URL'), 'a single path word is no identity');
   });
 
+  test('every spelling of one person records the same identity for the local mapping', () => {
+    // The confidential mapping lists a pseudonym only when all its full-name
+    // occurrences name one person (standalone/confidential-overview.js). A
+    // spelling that recorded itself ("Müller, Hans", "Hans Mueller") made the
+    // person disappear from that list; seen in the native Windows run.
+    const text = 'Name: Hans Müller\n\nHr. Müller rief an. In der Liste steht Müller, Hans. Kennung hans_mueller, Hans_Müller und ' +
+      'Hans-Müller sowie Hans Mueller. Profil: https://example.org/team/hans-mueller und https://example.org/u/mueller.hans';
+    const edits = [];
+    (function collect(value) {
+      if (Array.isArray(value)) value.forEach(collect);
+      else if (value && typeof value === 'object') {
+        if (typeof value.original === 'string' && typeof value.identity_key === 'string') edits.push(value);
+        Object.values(value).forEach(collect);
+      }
+    })(pii.anonymize(text, 'general', { captureTransformPlan: true }).transform_trace);
+    const person = edits.filter((edit) => edit.identity_key === 'registry:PERSON:[PERSON_001]');
+    assert.equal(person.length, 9);
+    const fullNames = new Set(person.map((edit) => edit.identity.toLocaleLowerCase('de-DE').replace(/[-‐‑]/gu, ' '))
+      .filter((identity) => identity.split(' ').length > 1));
+    assert.deepStrictEqual([...fullNames], ['hans müller']);
+  });
+
   await testAsync('ordinary comma lists and unknown inversions are never new persons', async () => {
     const lists = 'Berlin, Hamburg und München, Köln sind Städte. Müller, Schmidt und Partner.';
     assert.equal(await known(lists), lists);
