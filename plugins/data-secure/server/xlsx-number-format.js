@@ -4,10 +4,14 @@
 // ECMA-376/MS-XLSX numFmt codes are retained when this subset cannot represent
 // them. In particular, conditions, fractions, locale calendars and fill rules
 // must never silently turn a percentage/date/unit into an unqualified raw value.
+// Built-in formats 14 and 22 are the locale's short date in a spreadsheet
+// application, not a fixed pattern: a German Excel shows 15.03.2023 where the
+// ECMA-376 table lists mm-dd-yy. Their US spelling made 03-05-23 ambiguous, so
+// both are projected as an unambiguous ISO date with the full year.
 const BUILTIN = new Map([[0, 'General'], [1, '0'], [2, '0.00'], [3, '#,##0'], [4, '#,##0.00'],
-  [9, '0%'], [10, '0.00%'], [11, '0.00E+00'], [14, 'mm-dd-yy'], [15, 'd-mmm-yy'],
+  [9, '0%'], [10, '0.00%'], [11, '0.00E+00'], [14, 'yyyy-mm-dd'], [15, 'd-mmm-yy'],
   [16, 'd-mmm'], [17, 'mmm-yy'], [18, 'h:mm AM/PM'], [19, 'h:mm:ss AM/PM'],
-  [20, 'h:mm'], [21, 'h:mm:ss'], [22, 'm/d/yy h:mm'], [37, '#,##0;(#,##0)'],
+  [20, 'h:mm'], [21, 'h:mm:ss'], [22, 'yyyy-mm-dd hh:mm'], [37, '#,##0;(#,##0)'],
   [38, '#,##0;[Red](#,##0)'], [39, '#,##0.00;(#,##0.00)'],
   [40, '#,##0.00;[Red](#,##0.00)'], [45, 'mm:ss'], [46, '[h]:mm:ss'], [49, '@']]);
 const NUMERIC = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?$/u;

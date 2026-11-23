@@ -68,7 +68,13 @@ test('style formats are namespace bound and date1904 is workbook specific', () =
     '<cellStyleXfs><xf numFmtId="0"/></cellStyleXfs><cellXfs><xf numFmtId="0" xfId="0"/>' +
     '<xf numFmtId="164" xfId="0"/><xf numFmtId="14" xfId="0"/></cellXfs></styleSheet>');
   const parsed = r.worksheet(sheet('<row><c r="A1" s="1"><v>0.125</v></c><c r="B1" s="2"><v>0</v></c></row>'), [], { styles, date1904: true });
-  assert.deepEqual(parsed.rowRecords[0].values, ['12.5%', '01-01-04']);
+  // RC178 review R-004: built-in format 14 is the locale's short date and is
+  // projected as an unambiguous ISO date, not as the US pattern mm-dd-yy.
+  assert.deepEqual(parsed.rowRecords[0].values, ['12.5%', '1904-01-01']);
+  const builtin = r.worksheet(sheet('<row><c r="A1" s="2"><v>45000</v></c><c r="B1" s="3"><v>45000.25</v></c></row>'), [], {
+    styles: r.styles(`<styleSheet xmlns="${NS}"><cellStyleXfs><xf numFmtId="0"/></cellStyleXfs><cellXfs><xf numFmtId="0" xfId="0"/>` +
+      '<xf numFmtId="0" xfId="0"/><xf numFmtId="14" xfId="0"/><xf numFmtId="22" xfId="0"/></cellXfs></styleSheet>') });
+  assert.deepEqual(builtin.rowRecords[0].values, ['2023-03-15', '2023-03-15 06:00']);
   assert.equal(r.workbookProperties(`<workbook xmlns="${NS}"><workbookPr date1904="1"/></workbook>`).date1904, true);
   assert.throws(() => r.styles('<styleSheet xmlns="urn:wrong"/>'), e => e.code === 'XLSX_STRUCTURE_UNSAFE');
   assert.throws(() => r.workbookProperties(`<workbook xmlns="${NS}"><workbookPr date1904="yes"/></workbook>`));
