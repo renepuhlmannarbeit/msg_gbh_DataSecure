@@ -61,8 +61,13 @@
   automatische Arbeit einschließlich Delivery/Mapping zuerst abschließen.
   Fortschritt zählt erfolgreiche plus terminal gestoppte Positionen.
 - Produktiv arbeiten Node-/OOXML-/PDF-/OCR-Komponenten; MarkItDown/Python ist
-  nur ein optionales Engineering-Differentialorakel. Der Batchrunner arbeitet
-  aktuell seriell; adaptive Parallelität bleibt ein gesondertes Zukunftsziel.
+  nur ein optionales Engineering-Differentialorakel. Entscheidung,
+  Datenschutzprüfung, Veröffentlichung, Zuordnung und Ausgabe laufen seriell
+  in Stapelreihenfolge. Nur Standalone auf Windows x64 und macOS bereitet bei
+  ausreichenden Ressourcen bis zu drei Folgedokumente mit höchstens zwei
+  getrennten Konvertern vor (reine Umwandlung und automatische Maskierung;
+  geführte Prüfung und Cowork bleiben vollständig seriell). Weitergehende
+  adaptive Parallelität bleibt ein gesondertes Zukunftsziel.
 - Bilder bleiben lokal. Es gibt keinen auswählbaren Bildmodus und keinen Weg,
   Originalpixel an Claude freizugeben.
 - Private Arbeitskopien sind normale lokale Dateien. Keinen Keyring-, Passwort-,

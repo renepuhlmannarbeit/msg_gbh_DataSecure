@@ -11,6 +11,23 @@ unsichtbar. Der Nutzerweg bleibt eine Mehrfach-Dateiauswahl und ein Klick auf
 „Öffnen“; es gibt keine Thread-, Worker-, CPU- oder Speicheroption, keine zusätzliche
 Claude-Berechtigung und keinen zweiten parallelen Intake.
 
+**Iststand seit RC177 (am RC178-Quellstand geprüft, 23.11.2026):** Standalone
+aktiviert auf Windows x64 und macOS (arm64, x64) ein Vorbereitungsfenster mit
+höchstens zwei gleichzeitigen Konverterprozessen für bis zu drei
+Folgedokumente (`gateway/standalone-conversion-window.js`). Es gilt nur für
+reine Markdown-Umwandlung und automatische Maskierung ohne OCR-Kontaktprüfung,
+ab drei logischen Prozessoren, 6 GiB Arbeitsspeicher und 3 GiB freiem
+Speicher. Es gibt dafür keinen Feature-Flag; die Aktivierung folgt allein
+diesen Bedingungen. Entscheidung, Datenschutzprüfung, Veröffentlichung,
+Zuordnung und Ausgabe bleiben seriell, `processBatchNext` wird nicht parallel
+aufgerufen. Cowork, geführte Prüfung und Linux bleiben vollständig seriell.
+Die unten genannten Lease- und Speicherreservierungsbausteine
+(`batch-lease-store.js`, `storage-reservation-store.js`) und
+`adaptive-resource-policy.js` sind nur in Tests eingebunden und nicht Teil
+dieses Fensters. Die Abnahmeliste am Ende dieses Vertrags ist damit nur
+teilweise erfüllt; Zielhostmessungen auf beiden Mac-Architekturen stehen aus
+(BL-047.5).
+
 Der sichtbare Fortschritt und die lokale Zuordnung bleiben in ursprünglicher
 Batch-Reihenfolge monoton. Eine Fertigstellungsreihenfolge darf nie die
 Veröffentlichungs- oder Mapping-Reihenfolge bestimmen.
