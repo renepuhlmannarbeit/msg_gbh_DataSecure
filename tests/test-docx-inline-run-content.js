@@ -39,6 +39,17 @@ test('a positional tab separates its neighbours like a tab', () => {
   assert.match(markdown, /Muster GmbH(?:\t|&#9;)Seite 3/u);
 });
 
+test('an inserted symbol is a certain character or a neutral marker, never silently dropped', () => {
+  const sym = (font, char) => `<w:sym w:font="${font}" w:char="${char}"/>`;
+  const body = `<w:p><w:r>${text('Winkel ')}${sym('Symbol', 'F061')}${text(' bis ')}${sym('Symbol', 'F057')}${text(', ')}` +
+    `${sym('Arial', '00B0')}${text(' erledigt ')}${sym('Wingdings', 'F0FC')}${text(' Punkt ')}${sym('Arial', 'F0B7')}` +
+    `${text(' Zeichen ')}${sym('Symbol', 'F0B1')}${text(' defekt ')}${sym('Arial', 'ZZ')}</w:r></w:p>`;
+  const markdown = convert(body, content).replace(/\\/gu, '');
+  // Symbol-font letters are the Greek alphabet; an ordinary font carries its
+  // Unicode character. Font-specific glyphs keep their position as a marker.
+  assert.match(markdown, /Winkel α bis Ω, ° erledigt \[Symbol\] Punkt \[Symbol\] Zeichen \[Symbol\] defekt \[Symbol\]/u);
+});
+
 test('a soft hyphen still produces no visible character', () => {
   const markdown = convert(`<w:p><w:r>${text('Tren')}<w:softHyphen/>${text('nung')}</w:r></w:p>`, content);
   assert.match(markdown, /Trennung/u);

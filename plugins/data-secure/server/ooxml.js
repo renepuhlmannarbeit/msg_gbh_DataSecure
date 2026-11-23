@@ -899,6 +899,33 @@ function wordStructureError(limit = false) {
   error.code = limit ? 'DOCX_STRUCTURE_LIMIT' : 'DOCX_STRUCTURE_UNSAFE';
   return error;
 }
+// w:sym stores a character of a named font. Word writes symbol fonts with the
+// private-use offset F000. Only two cases have a certain Unicode equivalent:
+// a code point outside the private-use area in an ordinary font, and the
+// letters of the Adobe Symbol encoding, which are the Greek alphabet. Every
+// other symbol-font glyph (Wingdings ticks, arrows, ornaments) depends on the
+// font; it is shown as a fixed marker instead of being dropped or guessed.
+const WORD_SYMBOL_MARKER = '[Symbol]';
+const SYMBOL_FONT_GREEK = Object.freeze(Object.fromEntries([
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].map((letter, index) => [letter, 'ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ'[index]]).concat(
+  [...'abcdefghijklmnopqrstuvwxyz'].map((letter, index) => [letter, 'αβχδεφγηιϕκλμνοπθρστυϖωξψζ'[index]]))));
+function wordSymbolText(font, char) {
+  const hex = String(char || '');
+  if (!/^[0-9a-f]{1,6}$/iu.test(hex)) return WORD_SYMBOL_MARKER;
+  const code = Number.parseInt(hex, 16);
+  const family = String(font || '').trim().toLowerCase();
+  const symbolFont = /^(?:symbol|wingdings(?: [23])?|webdings|mt extra|zapfdingbats)$/u.test(family);
+  if (family === 'symbol') {
+    const latin = code >= 0xF000 && code <= 0xF0FF ? code - 0xF000 : code;
+    const greek = latin >= 0x41 && latin <= 0x7A ? SYMBOL_FONT_GREEK[String.fromCharCode(latin)] : undefined;
+    return greek || WORD_SYMBOL_MARKER;
+  }
+  if (symbolFont || (code >= 0xE000 && code <= 0xF8FF) || code < 0x20 || (code >= 0x7F && code <= 0x9F) ||
+      (code >= 0xD800 && code <= 0xDFFF) || code > 0x10FFFF || (code & 0xFFFE) === 0xFFFE ||
+      (code >= 0xFDD0 && code <= 0xFDEF) || code >= 0xF0000) return WORD_SYMBOL_MARKER;
+  return String.fromCodePoint(code);
+}
+
 function parseWordStructure(body, options = {}) {
   const root = { type: 'root', children: [] };
   const stack = [{ name: '', node: root, skipped: false, boxes: 0 }];
@@ -1166,12 +1193,15 @@ function parseWordStructure(body, options = {}) {
           wordGridLeaf = true;
         }
       } else if (name === 'w:t' || (story&&name==='w:instrText') || name === 'w:tab' || name === 'w:br' || name === 'w:cr' ||
-          name === 'w:noBreakHyphen' || name === 'w:ptab') {
+          name === 'w:noBreakHyphen' || name === 'w:ptab' || name === 'w:sym') {
         if (node.type !== 'p') throw wordStructureError();
         // A non-breaking hyphen and a positional tab are visible run content.
         // Dropping them joins "Müller‑Schmidt" or "2019‑2024" into one token.
+        // An inserted symbol is visible as well: its character where the
+        // code point is certain, a neutral marker where it is font specific.
         if (!['w:t','w:instrText'].includes(name)&&(!story||story.visible(storyEvent)))
-          sourceText(node,name === 'w:noBreakHyphen' ? '‑' : name === 'w:br' || name === 'w:cr' ? '\n' : '\t',storyEvent);
+          sourceText(node,name === 'w:sym' ? wordSymbolText(attrs.get('w:font'), attrs.get('w:char'))
+            : name === 'w:noBreakHyphen' ? '‑' : name === 'w:br' || name === 'w:cr' ? '\n' : '\t',storyEvent);
       } else if (node.type === 'tr' && name === 'w:tblHeader') {
         node.header = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
       } else if (node.type === 'p' && name === 'w:pStyle') {
