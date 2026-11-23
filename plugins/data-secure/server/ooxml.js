@@ -1194,14 +1194,19 @@ function parseWordStructure(body, options = {}) {
         }
       } else if (name === 'w:t' || (story&&name==='w:instrText') || name === 'w:tab' || name === 'w:br' || name === 'w:cr' ||
           name === 'w:noBreakHyphen' || name === 'w:ptab' || name === 'w:sym') {
-        if (node.type !== 'p') throw wordStructureError();
+        // Text outside a paragraph is an unsafe structure and stops as before.
+        // The three inline marks were ignored there until now; a document
+        // with such a stray mark keeps converting instead of newly stopping.
+        const inlineMark = ['w:noBreakHyphen', 'w:ptab', 'w:sym'].includes(name);
+        if (node.type !== 'p' && !inlineMark) throw wordStructureError();
+        if (node.type !== 'p') { /* stray inline mark: no text owner, nothing to emit */ } else
         // A non-breaking hyphen and a positional tab are visible run content.
         // Dropping them joins "Müller‑Schmidt" or "2019‑2024" into one token.
         // An inserted symbol is visible as well: its character where the
         // code point is certain, a neutral marker where it is font specific.
         if (!['w:t','w:instrText'].includes(name)&&(!story||story.visible(storyEvent)))
           sourceText(node,name === 'w:sym' ? wordSymbolText(attrs.get('w:font'), attrs.get('w:char'))
-            : name === 'w:noBreakHyphen' ? '‑' : name === 'w:br' || name === 'w:cr' ? '\n' : '\t',storyEvent);
+            : name === 'w:noBreakHyphen' ? '\u2011' : name === 'w:br' || name === 'w:cr' ? '\n' : '\t',storyEvent);
       } else if (node.type === 'tr' && name === 'w:tblHeader') {
         node.header = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
       } else if (node.type === 'p' && name === 'w:pStyle') {

@@ -50,6 +50,17 @@ test('an inserted symbol is a certain character or a neutral marker, never silen
   assert.match(markdown, /Winkel α bis Ω, ° erledigt \[Symbol\] Punkt \[Symbol\] Zeichen \[Symbol\] defekt \[Symbol\]/u);
 });
 
+test('a stray inline mark outside a paragraph is ignored as before, stray text still stops', () => {
+  // Found by the counter-review: the new branch must not turn a document
+  // that converted before into a structure stop.
+  const paragraph = `<w:p><w:r>${text('Inhalt')}</w:r></w:p>`;
+  for (const mark of ['<w:sym w:font="Symbol" w:char="F061"/>', '<w:noBreakHyphen/>', '<w:ptab w:relativeTo="margin" w:alignment="right" w:leader="none"/>']) {
+    assert.match(convert(mark + paragraph, content), /^Inhalt$/u, mark);
+    assert.match(convert(`<w:tbl><w:tr><w:tc>${mark}${paragraph}</w:tc></w:tr></w:tbl>`, content), /\| Inhalt \|/u, mark);
+  }
+  assert.throws(() => convert(`<w:t>lose</w:t>${paragraph}`, content));
+});
+
 test('a soft hyphen still produces no visible character', () => {
   const markdown = convert(`<w:p><w:r>${text('Tren')}<w:softHyphen/>${text('nung')}</w:r></w:p>`, content);
   assert.match(markdown, /Trennung/u);
