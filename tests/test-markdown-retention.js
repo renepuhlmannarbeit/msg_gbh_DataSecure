@@ -127,6 +127,37 @@ async function run() {
     assert.strictEqual(fs.readFileSync(unknown, 'utf8'), 'keep');
     fs.unlinkSync(unknown);
   });
+  await testAsync('a stale abandoned pending publication is removed; a fresh or irregular one is kept', async () => {
+    // RC178 review R-010: a killed publication leaves ".pending-<artifact>-<random>"
+    // with not yet anonymized Markdown; no journal refers to that random name.
+    const id = `dm_${nextId()}`, expired = new Date(NOW - 9 * DAY);
+    const make = (suffix, files, when) => {
+      const directory = path.join(artifactRoot(), `.pending-${id}-${suffix}`);
+      fs.mkdirSync(directory, { mode: 0o700 });
+      for (const [name, text] of files) {
+        fs.writeFileSync(path.join(directory, name), text, { mode: 0o600 });
+        if (when) fs.utimesSync(path.join(directory, name), when, when);
+      }
+      if (when) fs.utimesSync(directory, when, when);
+      return directory;
+    };
+    const stale = make('a'.repeat(24), [[`${id}.md`, 'Max Mustermann · Nordstern GmbH'], ['manifest.json', '{']], expired);
+    const fresh = make('b'.repeat(24), [[`${id}.md`, 'noch in Arbeit']], null);
+    const irregular = make('c'.repeat(24), [['fremd.txt', 'keep']], expired);
+    const partlyFresh = make('d'.repeat(24), [[`${id}.md`, 'neu geschrieben']], null);
+    fs.utimesSync(partlyFresh, expired, expired);
+    const wrongName = path.join(artifactRoot(), `.pending-${id}-kurz`); fs.mkdirSync(wrongName); fs.utimesSync(wrongName, expired, expired);
+    const result = cleanupMarkdownArtifacts({ cutoff: NOW - 7 * DAY, getProtection: () => ({ ids: new Set(), complete: false }) });
+    assert.strictEqual(result.errors, 0);
+    assert.strictEqual(result.removed, 1);
+    assert.strictEqual(fs.existsSync(stale), false, 'the stale pending publication is removed');
+    for (const kept of [fresh, irregular, partlyFresh, wrongName]) assert.strictEqual(fs.existsSync(kept), true, kept);
+    // An explicit purge still leaves a publication of the last hour alone.
+    const purge = cleanupMarkdownArtifacts({ cutoff: NOW - 7 * DAY, force: true, getProtection: () => ({ ids: new Set(), complete: false }) });
+    assert.strictEqual(purge.errors, 0);
+    for (const kept of [fresh, irregular, partlyFresh, wrongName]) assert.strictEqual(fs.existsSync(kept), true, kept);
+    for (const kept of [fresh, irregular, partlyFresh, wrongName]) fs.rmSync(kept, { recursive: true });
+  });
   await testAsync('an expired candidate requests protection once and preserves it on an unknown or failed proof', async () => {
     const item = await fixture('unknown-protection.txt'); old(item);
     for (const protection of [null, { ids: new Set(), complete: false }, { ids: [], complete: true }, 'throw']) {

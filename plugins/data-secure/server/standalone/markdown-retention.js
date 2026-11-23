@@ -44,6 +44,31 @@ function bindExistingArtifactDirectory(directory) {
   return missing.length ? null : binding;
 }
 
+// publishMarkdownArtifact writes the not yet anonymized Markdown into a
+// ".pending-<artifact>-<random>" directory and renames it on success. A killed
+// process leaves that directory behind; its own finally block never runs and
+// no journal refers to the random name. Such a directory is removed once it is
+// older than the normal retention cutoff (or one hour for an explicit purge),
+// which a publication lasting seconds can never reach. Anything that is not
+// exactly this shape stays untouched.
+const PENDING_PUBLICATION_RE = /^\.pending-(dm_[a-f0-9]{32})-[a-f0-9]{24}$/u;
+const PENDING_PURGE_GRACE_MS = 60 * 60 * 1000;
+
+function stalePendingPublication(directory, entry, staleBefore) {
+  const match = PENDING_PUBLICATION_RE.exec(entry.name);
+  if (!match) return null;
+  const target = path.join(directory, entry.name);
+  const stat = fs.lstatSync(target, { bigint: true });
+  if (stat.isSymbolicLink() || !stat.isDirectory() || Number(stat.mtimeMs) > staleBefore) return null;
+  const allowed = new Set([`${match[1]}.md`, 'manifest.json']);
+  for (const name of fs.readdirSync(target)) {
+    const child = fs.lstatSync(path.join(target, name), { bigint: true });
+    if (!allowed.has(name) || !child.isFile() || child.isSymbolicLink() || child.nlink !== 1n ||
+        Number(child.mtimeMs) > staleBefore) return null;
+  }
+  return { name: entry.name, identity: { dev: String(stat.dev), ino: String(stat.ino), birthtimeNs: String(stat.birthtimeNs) } };
+}
+
 // Only private, generated dm containers are disposable here. Visible Markdown,
 // mapping CSVs, source folders and historical Processed data are not targets.
 function cleanupMarkdownArtifacts(options = {}) {
@@ -56,14 +81,28 @@ function cleanupMarkdownArtifacts(options = {}) {
     directoryBinding = bindExistingArtifactDirectory(directory);
     if (!directoryBinding) return result;
     assertPrivateDirectory(directory, dataRoot());
-    const snapshot = fileIdentity(fs.lstatSync(directory, { bigint: true }), true);
     parentIdentity = identity(directory);
     const cutoff = Number(options.cutoff);
     if (!Number.isFinite(cutoff)) throw new Error('MARKDOWN_RETENTION_UNSAFE');
+    // Abandoned pending publications are removed in their own pass, before
+    // the store snapshot that guards the completed-artifact plan is taken:
+    // removing an entry changes the store directory's own timestamps.
+    const stalePendingBefore = options.force === true ? Date.now() - PENDING_PURGE_GRACE_MS : cutoff;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const pending = stalePendingPublication(directory, entry, stalePendingBefore);
+      if (!pending) continue;
+      // Bound to the identities seen now; a replaced or locked entry is
+      // counted as an error and left in place.
+      try {
+        safeRemovePrivateTree(directory, pending.name, { expectedParentIdentity: parentIdentity, expectedIdentity: pending.identity });
+        result.removed++;
+      } catch { result.errors++; }
+    }
+    assertDirectory(directoryBinding);
+    const snapshot = fileIdentity(fs.lstatSync(directory, { bigint: true }), true);
     const candidates = [];
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      // Unknown names and abandoned partial publication directories are not
-      // proven completed artifacts and are intentionally retained.
+      // Unknown names are not proven completed artifacts and are retained.
       if (!ARTIFACT_ID_RE.test(entry.name) ||
           (options.protectedIds instanceof Set && options.protectedIds.has(entry.name))) continue;
       const target = path.join(directory, entry.name);
