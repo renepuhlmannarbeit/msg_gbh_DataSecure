@@ -20,14 +20,14 @@ beheben sie. Dieser Bericht beschreibt den Endstand `ffab4fa7`.
 | GitHub-Arbeitsbranch | [`claude/rc178-standalone-review`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review) |
 | Eingefrorener Einstieg | `e88f1b8d100421017fb3909d77e338fd25c1b421` (`origin/codex/rc178-claude-review-handoff`) |
 | RC178-Produktbaseline | `v3.2.0-rc178` → `13ed39ff979a5f5d9bb076d35021164de380b9dd`, Fingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655` (nachgerechnet, 400 Quellinputs) |
-| Geprüfter Produktstand | `d59922651508be0285034ce8b56dedc353cd6d14`, Fingerprint `0dac7e1877875c4b09e3b51c0815f44ef08e3d39c55a85c533cb7dca4223362d`. Spätere Commits ändern nur `tasks/rc178-claude-review/`. Stand der ersten Übergabe: `e1afef0f`, Fingerprint `5496fabe…`. |
+| Geprüfter Produktstand | `ffab4fa7ce6f864caeead2bdd7f95f1e445bedb8`, Fingerprint `1803bce7ea34468dcfd51b42132d5fceb67c4d9ee8ebaaf18285610bd9caccdf`. Die Commits `83836077` und `bd917222` davor und alle späteren ändern nur `tasks/rc178-claude-review/`. Stand der ersten Übergabe: `e1afef0f`, Fingerprint `5496fabe…`. |
 | Prüfumgebung | Claude Fable 5.2 (`claude-fable-5-2`) in Claude Code; Windows 11 Pro 10.0.26300 x64; Node 22.23.2 für alle Tests (Host-Node 24.18.0), npm 11.16.0, cargo/rustc 1.98.1, MSVC mit SDK 10.0.26100.0, WebView2 158.0.4370.33, Claude CLI 2.1.280 |
 | Verfügbare Zielplattformen | Nur Windows x64. Kein Mac, kein Xcode, kein iOS-Simulator. |
 | Abdeckung | 5 118 erfasste Einheiten in 346 Dateien: 26 `GEPRÜFT`, 1 941 `TEILGEPRÜFT`, 3 151 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
 
 Die Versionskennung `3.2.0-rc178` wurde nicht geändert. Der Stand ist kein
 Release; ein daraus gebautes Paket trägt dieselbe Versionsnummer wie RC178,
-aber den Build-Fingerprint `0dac7e18…`.
+aber den Build-Fingerprint `1803bce7…`.
 
 ## Ergebnis auf einen Blick
 
@@ -214,27 +214,34 @@ Befund“):
 
 ## Tests und Nachweise
 
-Alle Läufe auf Windows 11 x64 mit Node 22.23.2. Logs liegen lokal.
+Alle Läufe auf Windows 11 x64 mit Node 22.23.2. Logs liegen lokal. Die
+obere Hälfte gilt dem Endstand `ffab4fa7`, die untere hält die früheren
+Stände fest.
 
 | Bereich | Exakter Befehl und Teststand | Umgebung und Architektur | Ergebnis und Exitcode | Beobachtung |
 | --- | --- | --- | --- | --- |
-| Baseline Dokumentation | `npm run test:docs` auf `e88f1b8d` | Windows x64 | `PASS`, 0 | — |
-| Baseline Headless | `node tests/run-product-suite.js headless` auf `e88f1b8d` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS` in zwei Abschnitten: Dateien 1–294 von 357 im Runner, 295–357 fortgesetzt; je Exit 0 | Erster Abschnitt brach an `tests/test-standalone-native-export.js` ab, weil die vorbereitete Laufzeit fehlte. Kein Produktfehler. |
-| Reproduktion vor Fix | Scratch-Skripte gegen eine Kopie des Kerns von `dfed2d4e` | Windows x64 | Befunde reproduziert | „Müllers Auto“ und die zweite Telefonnummer bleiben stehen. |
-| Gezielt nach Fix | sechs neue oder erweiterte Testdateien (siehe Tabelle oben) | Windows x64 | `PASS`, 0 | — |
-| Golden | `node tests/make-fixtures.js && node tests/test-pii-regression.js` auf `af203451` | Windows x64 | `PASS`, 0 | 164 Fälle |
-| Headless nach Änderung | `node tests/run-product-suite.js headless` auf `e1afef0f` | Windows x64 | `PASS`, 0 | „Product headless suite passed (361 headless files, no native GUI executed)“ |
-| Dokumentation nach Änderung | `npm run test:docs` | Windows x64 | `PASS`, 0 | — |
-| Konverter | `npm run test:standalone:conversion` auf `e1afef0f` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder, 21 PDF-Gruppen |
-| Rust / Clippy | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf `e1afef0f` | Windows x64 | je `PASS`, 0 | 321 bestanden, 0 fehlgeschlagen, 3 ignoriert; keine Rust-Datei geändert. Nur das Windows-Ziel; macOS-Zweige werden hier nicht übersetzt. |
-| Cowork-Plugin | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Plugin-ZIP 319 Einträge; Marketplace-Validierung „Validation passed“ |
-| Windows x64 Paket | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `42965f3dfb490e36fbc7432f6eb96682a4ecef7e77e332dc2a616715d84f792b`, 1 203 Einträge |
-| Windows x64 Start | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence` | Windows x64 | `PASS`, 0 | Start 1,8 s, 0 TCP-Listener, 0 UDP-Endpunkte |
-| Windows x64 Oberfläche | `tests/manual/standalone-native-workspace-gui.ps1 -Archive …`, Bedienung per Windows-UI-Automation | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe nächster Abschnitt |
+| Headless, Endstand | `node tests/run-product-suite.js headless` auf `ffab4fa7` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (364 headless files, no native GUI executed)“; 20:25–21:19, parallel lief der Differenzlauf |
+| Headless, vorletzter Stand | derselbe Befehl auf `d5992265` | Windows x64 | `PASS`, 0 | 364 Dateien. Die Suite meldete den Fehler der Zuordnung nicht, den `ffab4fa7` behebt. |
+| Headless auf `a0d3e340` | derselbe Befehl | Windows x64 | abgebrochen, kein Ergebnis | Von mir nach rund elf Minuten gestoppt, als die Regressionen sichtbar wurden. Für diesen Stand gibt es keinen vollständigen Lauf. |
+| Golden | `node tests/make-fixtures.js && node tests/test-pii-regression.js` auf `ffab4fa7` | Windows x64 | `PASS`, 0 | 164 Fälle. Am Stand `a0d3e340`: 163 bestanden, 1 fehlgeschlagen. |
+| Gezielt | `tests/test-privacy-name-variants.js` (10), `test-privacy-time-periods.js` (1), `test-privacy-inflected-names.js` (3), `test-privacy-repeated-phones.js` (2), `test-markdown-retention.js` (15) | Windows x64 | je `PASS`, 0 | Sechs der zehn Fälle der ersten Datei schlagen am Stand `a0d3e340` fehl, einer am Stand `d5992265`; geprüft an Kopien dieser Stände. |
+| Differenzlauf | Scratch-Skript: Kern von RC178 gegen den geänderten Kern, 15 400 synthetische Fälle, fünf Profile | Windows x64 | kein neuer Stopp, 10 gewollte Abweichungen | Zahlen in BEFUNDE.md. Kein Bestandteil des Repositorys. |
+| Dokumentation | `npm run test:docs` auf `ffab4fa7` | Windows x64 | `PASS`, 0 | — |
+| Konverter | `npm run test:standalone:conversion` auf `ffab4fa7` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt zwei `.tmp-standalone-package-*`-Ordner im Repository-Root, von mir entfernt |
+| Rust / Clippy | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf `ffab4fa7` | Windows x64 | je `PASS`, 0 | 326 bestanden, 0 fehlgeschlagen, 3 ignoriert. Nur das Windows-Ziel. |
+| macOS-Typcheck | `cargo check --locked --all-targets --target aarch64-apple-darwin` auf `a0d3e340` | Windows x64 als Host | `BLOCKED` | 42 Abhängigkeiten geprüft; das Build-Skript des Projekts verlangt den freigegebenen statischen macOS-Core, der hier fehlt. Nicht umgangen. |
+| Cowork-Plugin | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` auf `ffab4fa7` | Windows x64 | je `PASS`, 0 | Plugin-ZIP 319 Einträge, SHA-256 `b3bd7b12…`. Der Bau verlangt einen sauberen Arbeitsbaum; ein erster Versuch scheiterte an den Resten des Konvertertests. |
+| Windows x64 Paket | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `ffab4fa7` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `bddfe85acd6d183c6ced5ed1c1089299f0bb3ac916d976c8dca0c1bd4ea6f366`, 113 622 532 Bytes, 1 203 Einträge. Der Paketbau überschreibt nie; das Paket des Vorstands musste vorher aus `dist/` verschoben werden. |
+| Windows x64 Start | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence` | Windows x64 | erster Versuch `FAIL` (`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`), Wiederholung `PASS`, 0 | Der erste Versuch lief parallel zu Konvertertest und Plugin-Bau; die Probe konnte einen UDP-Endpunkt eines WebView-Prozesses nicht zuordnen. Ursache nicht geklärt. Wiederholung ohne Parallelbetrieb: Start 1,9 s, 0 TCP-Listener, 0 UDP-Endpunkte. Am Stand `d5992265` bestand die Probe im ersten Versuch. |
+| Windows x64 Oberfläche | `tests/manual/standalone-native-workspace-gui.ps1 -Archive …`, Bedienung per Windows-UI-Automation, Builds `0dac7e18` und `1803bce7` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“ |
 | macOS Apple Silicon | — | — | `BLOCKED` (kein Mac) | Baseline-Beleg RC178: [Lauf 44744144419](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/44744144419), Runner `macos-15`, Commit `13ed39ff` |
 | macOS Intel | — | — | `BLOCKED` (kein Mac) | derselbe Lauf, Runner `macos-15-intel` |
 | iOS-Simulator | — | — | `BLOCKED` (kein Xcode) | — |
-| `git diff --check` | `git diff --check e88f1b8d HEAD` vor dem Berichtcommit und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | Der Zwischencommit `dfed2d4e` enthielt Leerzeichen am Zeilenende im Register; der Endstand ist sauber. |
+| `git diff --check` | `git diff --check d07bfced HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Baseline Dokumentation | `npm run test:docs` auf `e88f1b8d` | Windows x64 | `PASS`, 0 | — |
+| Baseline Headless | `node tests/run-product-suite.js headless` auf `e88f1b8d` | Windows x64 | `PASS` in zwei Abschnitten: Dateien 1–294 von 357 im Runner, 295–357 fortgesetzt; je Exit 0 | Erster Abschnitt brach an `tests/test-standalone-native-export.js` ab, weil die vorbereitete Laufzeit fehlte. Kein Produktfehler. |
+| Reproduktion vor Fix | Scratch-Skripte gegen eine Kopie des Kerns von `dfed2d4e` | Windows x64 | Befunde reproduziert | „Müllers Auto“ und die zweite Telefonnummer bleiben stehen. |
+| Erste Runde | Headless auf `e1afef0f` (361 Dateien), Konverter, Rust (321 bestanden), Plugin-Gates, Paket (`42965f3d…`), Start, Oberfläche | Windows x64 | je `PASS`, 0 | Stand der ersten Übergabe |
 
 ### Voraussetzungen der Headless-Suite
 
@@ -256,7 +263,9 @@ stehen dort alle sechs Voraussetzungen.
 ### Nativer Windows-Lauf über die Oberfläche
 
 Vom Anwender am 23.11.2026 ausdrücklich freigegeben. Technische Beobachtung,
-keine E1/E2/E3-Abnahme. Vier erfundene Dateien (TXT, DOCX, XLSX).
+keine E1/E2/E3-Abnahme. Nur erfundene Dateien.
+
+**Erste Runde** (Build `5496fabe`, vier Dateien: TXT, DOCX, XLSX)
 
 - **Start** – Kein Zweck vorbelegt, Start gesperrt mit „Bitte Aufgabe und
   Dateien auswählen.“. Der Dateidialog füllt nur den Katalog.
@@ -266,23 +275,63 @@ keine E1/E2/E3-Abnahme. Vier erfundene Dateien (TXT, DOCX, XLSX).
 - **Automatisch maskieren** – 3 Dateien unter `DataSecure-Output`, daneben
   `Vertraulich` mit Dateizuordnung (CSV) und Pseudonym-Zuordnung (TXT, XLSX).
   „Hans Müllers Auto“ → „[PERSON_001] Auto“; drei Telefonvorkommen ersetzt,
-  auch `0049`; „Müllerstraße“ bleibt. Die Zuordnung nennt „Hans Müller“,
-  „Hans Müllers“ und „Müllers“ mit 3 Vorkommen.
+  auch `0049`; „Müllerstraße“ bleibt.
 - **Selbst entscheiden** – Ohne Rückfrage abgeschlossen. Die eingebettete
   Prüfung wurde deshalb nicht beobachtet.
-- **Originale** – SHA-256 und Änderungszeit der Eingaben nach den Läufen
-  unverändert.
-- **Verlauf** – „Die letzten 5 Verarbeitungen“, drei Läufe mit Aktionen je Lauf.
-- **Diagnose** – Suche nach Namen, Dateinamen und Ordnernamen im
-  Diagnoseordner ohne Treffer.
-- **Beenden** – Fenster normal geschlossen; fünf Sekunden später kein Prozess
-  aus dem Paketordner. Im Leerlauf geprüft, nicht während eines Stapels.
 - **Neu gefunden** – R-024 (Überredaktion eines Zeitraums als Ort) und R-025
   (Zähltexte ohne Einzahl).
 
+**Endstand** (Build `1803bce7` aus `ffab4fa7`, fünf Dateien: ein Lebenslauf
+mit zwei Links, die den Namen enthalten; eine Teilnehmerliste mit zwei
+Personen gleichen Nachnamens; eine Notiz mit allen neuen Schreibweisen; ein
+Word-Dokument mit eingefügten Symbolen; eine CSV mit Vorspann)
+
+- **Start** – wie oben; Fußzeile „Version 3.2.0-rc178 · Build 1803bce7“.
+- **Automatisch maskieren, fünf Dateien** – „Anonymisierungslauf
+  abgeschlossen mit Hinweisen. 5 technisch geprüfte anonymisierte Ergebnisse
+  verfügbar.“
+  - Lebenslauf: läuft durch. Beide Links als `[URL_REDACTED]`,
+    „Unterschrift: [PERSON_001], [PERSON_001]“, „Im Zeitraum 2019-2024“
+    bleibt stehen. Am Kern von RC178 stoppt dieselbe Datei mit
+    `RESIDUAL_PII` (R-026; am Kern geprüft, nicht mit dem RC178-Paket).
+  - Teilnehmerliste: „Anwesend: [PERSON_003], [PERSON_002]. Entschuldigt:
+    [PERSON_002], [PERSON_003].“ Kein Vorname bleibt stehen. „Mo. bis Fr.“
+    bleibt; der Nachname allein wird bei zwei gleichnamigen Personen zu
+    `[PERSON_UNKLAR_001]`.
+  - Notiz: „Hr. Müller“, „Müller, Hans“, `hans_mueller`, `hans.mueller` und
+    der Name in zwei Links werden zu `[PERSON_002]`; im Link bleibt der Rest
+    der Adresse (`https://example.org/team/[PERSON_002]`). „Müllerstraße“
+    bleibt.
+  - Word-Dokument: „Winkel α bis β, erledigt [Symbol].“
+  - CSV: eine Spalte, mit Inhaltshinweis statt „vollständig“.
+- **Vertrauliche Zuordnung** – Im Build des vorletzten Stands (`0dac7e18`)
+  fehlte „Hans Müller“ in der Pseudonym-Zuordnung der Notiz; alle sieben
+  Vorkommen galten als mehrdeutig. Im Endstand steht dort „[PERSON_002] ·
+  PERSON · 7 Vorkommen → Hans Müller / Hr. Müller / Müller, Hans /
+  hans-mueller / hans.mueller / hans_mueller“.
+- **Nur umwandeln, zwei Dateien** – 2 Markdown-Dateien unter
+  `DataSecure-Markdown`, „Lauf abgeschlossen mit Hinweisen“. Die CSV
+  erscheint einspaltig; Leerzeichen der ersten Zeile stehen dort als
+  `&#32;` (bestehende wörtliche Darstellung, im Rohtext schwer lesbar).
+- **Einzahl** – Ein Lauf mit einer Datei: „1 Datei wird lokal verarbeitet.“,
+  „1 technisch geprüftes anonymisiertes Ergebnis verfügbar.“, im Verlauf
+  „1 Datei · 1 Ergebnis“.
+- **Verlauf** – „Die letzten 5 Verarbeitungen · neueste zuerst“, drei Läufe
+  mit eigener Kennung und eigenen Laufdetails. Keine automatische Navigation.
+- **Originale** – SHA-256 und Änderungszeit der fünf Eingaben nach allen
+  Läufen unverändert.
+- **Diagnose** – zwei Dateien im Diagnoseordner; Suche nach Namen,
+  Dateinamen und Ordnernamen ohne Treffer.
+- **Beenden** – Fenster normal geschlossen; fünf Sekunden später kein
+  Prozess aus dem Paketordner. Im Leerlauf geprüft, nicht während eines
+  Stapels.
+- **Nicht beobachtet** – „Selbst entscheiden“ und die eingebettete Prüfung,
+  PDF, Scan und Bild, ein Exportfehler (das neue Diagnoseereignis trat nicht
+  auf), Abbruch während eines Laufs, mehr als ein Fenster.
+
 ## Urteil je Prüfdimension
 
-Zahlen aus ABDECKUNG.tsv am Stand `d5992265`, nur Einzeleinheiten. Das
+Zahlen aus ABDECKUNG.tsv am Stand `ffab4fa7`, nur Einzeleinheiten. Das
 Register zählte in der ersten Runde Produktivcode hinter einem
 `#[cfg(test)]` irrtümlich als Rust-Testmodul und damit als offen. Die
 Erkennung ist korrigiert; dadurch gelten rund 460 Rust-Einheiten jetzt als
@@ -343,6 +392,10 @@ Dateien) erhoben; die zweite Runde ergänzt drei Dateien auf 364.
     Voraussetzungen, die erst seit der zweiten Runde dokumentiert sind.
   - Auch die Befunde der zweiten Runde hat sie nicht gezeigt; zwei davon
     (R-024, R-025) kamen aus dem nativen Lauf, die übrigen aus dem Lesen.
+  - Von meinen eigenen Fehlern der zweiten Runde hätte sie einen gemeldet
+    (ein Fall der Golden-Regression). Die beiden Lecks, die neuen Stopps und
+    die fehlende Person in der Zuordnung meldet sie nicht: Sie bestand am
+    Stand `d5992265` vollständig, obwohl die Zuordnung dort fehlerhaft war.
 - **Urteil** – Die Zahl der Dateien ist nicht das Problem: zwei Drittel
   kosten zusammen unter vier Minuten. Teuer sind rund zwanzig
   Prozess- und Lebenszyklustests, und die prüfen vor allem Abläufe (Export,
@@ -356,7 +409,11 @@ Dateien) erhoben; die zweite Runde ergänzt drei Dateien auf 364.
   unabhängigen Sollwerten je Format aufbauen (BL-049.2); die Tests der alten
   Oberfläche auf `workspace.js` umstellen oder entfernen. Für den letzten
   Punkt bindet `tests/test-standalone-loaded-frontend-contract.js` seit der
-  zweiten Runde den Quelltextvertrag an die geladenen Dateien.
+  zweiten Runde den Quelltextvertrag an die geladenen Dateien. Dazu kommt
+  aus der dritten Prüfung ein fünfter Punkt: ein Vergleichslauf des
+  Datenschutzkerns gegen den jeweils letzten freigegebenen Kern über ein
+  festes Korpus gehört in die Suite. Mein Skript dafür liegt nicht im
+  Repository; als Vorlage beschreibt BEFUNDE.md Aufbau und Zählweise.
 
 ## Mac-Status
 
@@ -435,19 +492,23 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 ## Übergabenachricht zum Weiterreichen
 
 ```text
-Claude-Code-Review für DataSecure RC178 abgeschlossen.
+Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
-Geprüfter Codecommit: e1afef0f9637803d600715bf9014185c34bc37ac
+Geprüfter Codecommit: ffab4fa7ce6f864caeead2bdd7f95f1e445bedb8 (spätere Commits nur tasks/rc178-claude-review/)
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
 Für Codex zuerst prüfen:
-1. privacy/engine.js findLiteralSpans (8cf00fa7): Genitivsuffix für Personen in Redaktion und
-   Restprüfung. Risiko: Überredaktion bei Namen, deren s-Form ein eigenes Wort ist.
-2. privacy/structured.js acceptRepeatedPhones (af203451): unbeschriftete Nummern werden bei
-   gleicher Ziffernfolge übernommen. Risiko: zufällig gleiche Zahl ohne Telefonbezug.
-3. ooxml.js w:noBreakHyphen → U+2011 (14c12ee1) zusammen mit R-024: Der Strich erreicht jetzt die
-   Erkennung; „im Zeitraum 2019‑2024“ wird teilweise als Ort maskiert (vorbestehende Überredaktion).
-Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); Rust-Befunde R-011 bis R-014
-nur am Quelltext; eingebettete Prüfung nicht nativ beobachtet; 71 % der Einheiten im Register offen.
+1. privacy/engine.js, Commits cfee417a bis ffab4fa7 als Ganzes, nicht einzeln: Die Zwischenstände
+   bis a0d3e340 enthalten zwei Lecks (Aufzählung voller Namen, E-Mail-Adresse mit Namen in der Domain).
+   Endstand: linkIdentityHits (Namensteil im Link an Ort und Stelle), asciiNameSpellings, das
+   Kennzeichen matchOnly (zusätzliche Schreibweisen gehen nicht an die Restprüfung), die Regel für
+   umgestellte Namen mit forwardFullNames und die Link-Schleife der drei strengen Profile.
+   Ein eigener Vergleich RC178-Kern gegen diesen Kern mit fremdem Korpus wäre der beste Gegenbeleg.
+2. Rust-Shell (5f8bf47b bis 22688d75, d5992265): nur für Windows übersetzt und getestet. Auf einem
+   Mac-Runner zuerst cargo test und clippy; 8c0dd30b und b30a6dbc übersetzen für sich nicht.
+3. R-027, offen und schon in RC178: „…, Passwort: Sommer2024! und PIN: 4711“ bleibt stehen, weil
+   Zugangsdaten nur als Feld am Zeilenanfang erkannt werden (privacy/base.js CREDENTIAL_FIELD_RE).
+Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
+R-015, R-022, R-027; geführte Prüfung nicht nativ beobachtet; 62 % der Einheiten im Register offen.
 ```

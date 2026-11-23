@@ -133,7 +133,7 @@ sym(`${privacy}engine.js`, 'findLiteralSpans', {
   purpose: 'Wörterbuch-Literal im Text finden; Aufrufer anonymize (Wörterbuchschleife, persistierte Aliase) und scanResidual',
   trust: 'Text aus Extraktion, Nadel aus Registry', invariant: 'Unicode-Wortgrenze; Genitivsuffix nur für Personen',
   evidence: 'tests/test-privacy-inflected-names.js; Scratch-Reproduktion vor und nach der Änderung',
-  findings: ['R-001'], remark: 'geändert in 8cf00fa7' });
+  findings: ['R-001', 'R-017'], remark: 'geändert in 8cf00fa7, e07ca2e6 (Verbinder für Kennungen) und ffab4fa7 (eingetragene Identität)' });
 sym(`${privacy}engine.js`, 'personGenitiveSuffix', {
   purpose: 'Suffixmuster für den Personengenitiv; einziger Aufrufer findLiteralSpans',
   evidence: 'tests/test-privacy-inflected-names.js', findings: ['R-001'], remark: 'neu in 8cf00fa7' });
