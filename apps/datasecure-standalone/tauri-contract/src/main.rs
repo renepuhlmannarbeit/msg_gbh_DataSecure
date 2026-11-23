@@ -2519,7 +2519,7 @@ fn valid_document_decision(value: &Value) -> Result<(), &'static str> {
     if !lower_hex(object.get("operation_id"), 32) || !lower_hex(object.get("output_sha256"), 64) ||
         bounded_integer(object.get("revision"), 10_000).is_none() { return Err(invalid); }
     let ranges = object.get("ranges").and_then(Value::as_array).ok_or(invalid)?;
-    if ranges.len() > 500 || (action == "correct" && ranges.len() != 1) { return Err(invalid); }
+    if ranges.len() > 500 { return Err(invalid); }
     for range in ranges {
         let expected: &[&str] = if action == "correct" { &["end", "replacement", "start"] } else { &["end", "start"] };
         if !exact_keys(range, expected) { return Err(invalid); }
@@ -2527,6 +2527,9 @@ fn valid_document_decision(value: &Value) -> Result<(), &'static str> {
         let end = bounded_integer(range.get("end"), 8 * 1024 * 1024).ok_or(invalid)?;
         if end < start || (action != "correct" && end == start) { return Err(invalid); }
         if action == "correct" {
+            // As in the Core, the single-range rule is checked per range: an
+            // empty list is the Core's own decision, not a malformed frame.
+            if ranges.len() != 1 { return Err(invalid); }
             let replacement = range.get("replacement").and_then(Value::as_str).ok_or(invalid)?;
             // The Core measures JavaScript string length, that is UTF-16 units.
             if replacement.encode_utf16().count() > 32_768 || replacement.contains('\0') { return Err(invalid); }
@@ -2562,7 +2565,7 @@ fn validate_document_review_request(action: &str, fields: &Value) -> Result<(), 
         "get_document_entities" => &["document_id", "revision", "page"],
         "decide_document_review" => &["document_id", "decision"],
         "decide_document_review_batch" => &["decision"],
-        "preview_document_export" => &["operation_id", "selection"],
+        "preview_document_export" => &["operation_id", "selection", "acknowledge"],
         "export_approved_documents" => &["operation_id", "selection", "acknowledge"],
         "abandon_document_export" => &["operation_id", "digest"],
         "resolve_document_export" | "resolve_document_identity_overview" => &["operation_id"],
@@ -2591,7 +2594,7 @@ fn validate_document_review_request(action: &str, fields: &Value) -> Result<(), 
                 !valid_export_selection(decision.get("selection"), 999) { return Err("DOCUMENT_REVIEW_INVALID"); }
         },
         "preview_document_export" | "export_approved_documents" => {
-            if object.get("acknowledge").is_some_and(|value| value != &json!(true)) ||
+            if object.get("acknowledge").is_some_and(|value| value != &json!(true) || action == "preview_document_export") ||
                 !lower_hex(object.get("operation_id"), 32) ||
                 !valid_export_selection(object.get("selection"), 10_000) { return Err("AI_EXPORT_INVALID"); }
         },
@@ -4054,6 +4057,11 @@ mod tests {
         assert_eq!(ok("resolve_document_identity_overview", json!({ "operation_id": 7 })), Err("AI_EXPORT_INVALID"));
         assert_eq!(ok("export_approved_documents", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": false })), Err("AI_EXPORT_INVALID"));
         assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [] })), Err("AI_EXPORT_INVALID"));
+        assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()], "acknowledge": true })), Err("AI_EXPORT_INVALID"));
+        // The Core accepts a correction without ranges and answers it itself.
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": decision("correct", json!([])) })), Ok(()));
+        assert_eq!(ok("decide_document_review", json!({ "document_id": document, "decision": decision("correct",
+            json!([{ "start": 0, "end": 1, "replacement": "a" }, { "start": 2, "end": 3, "replacement": "b" }])) })), Err("DOCUMENT_REVIEW_INVALID"));
         assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone(), row.clone()] })), Err("AI_EXPORT_INVALID"));
         assert_eq!(ok("preview_document_export", json!({ "operation_id": operation, "selection": [row.clone()], "path": "C:/x" })), Err("DOCUMENT_REVIEW_INVALID"));
         let mut extra = row.clone(); extra["path"] = json!("C:/x");
