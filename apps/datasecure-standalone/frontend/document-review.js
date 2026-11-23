@@ -286,7 +286,7 @@
     DOCUMENT_ENTITY_RUN_CONFLICT: 'Die Entitätenentscheidung konnte nicht sicher bestätigt werden. Die genannten Prüfstände und den gespeicherten Stand prüfen; nicht blind erneut speichern.',
     DOCUMENT_REVIEW_RESIDUAL_PII: 'Diese Fassung enthält mögliche personenbezogene Angaben oder unlesbare Zeichen. Die Freigabe ist nicht bestätigt. Bitte die Werte prüfen; bei unlesbarem Text eine lesbare Kopie der Quelldatei neu verarbeiten. Nicht weitergeben.',
     DOCUMENT_REVIEW_POLICY_CHANGED: 'Die gespeicherte Prüfung gehört zu einer älteren Datenschutzregel. Bitte diese Quelldatei mit der aktuellen Version neu verarbeiten.',
-    AI_EXPORT_CONFLICT: 'Im Exportordner besteht ein Konflikt. Es wurde nichts überschrieben.',
+    AI_EXPORT_CONFLICT: 'Im Exportordner besteht ein Konflikt. Es wurde nichts überschrieben. Häufige Ursachen: ein gleichnamiger Ordner oder eine gleichnamige Datei am Ziel, zu wenig freier Speicherplatz, ein entfernter oder schreibgeschützter Ergebnisordner. Die inhaltsfreie Diagnose nennt die technische Fehlerart.',
     AI_EXPORT_CONFIGURATION_REQUIRED: 'Der Export wurde nicht gestartet: Für diesen Ordner fehlt die sichere native Ordnerbindung. Wähle hier „Ergebnisordner wählen/ändern“ und bestätige den Export danach erneut. Freigaben bleiben erhalten; alte Exporte werden nicht automatisch umgestellt.',
     AI_EXPORT_VOLUME_MISMATCH: 'Der Export wurde nicht gestartet: Der Ergebnisordner liegt auf einem anderen Laufwerk als der private DataSecure-Bereich. Wähle hier einen Ordner auf demselben Laufwerk und bestätige danach erneut. Es wird keine unsichere Kopieralternative verwendet.',
     AI_EXPORT_UNCERTAIN: 'Der Exportzustand ist nicht eindeutig bestätigt. „Export erneut abgleichen“ prüft denselben Auftrag. Bleibt der Zustand bestehen, kann „Auftrag nicht weiter verfolgen“ nur dann helfen, wenn DataSecure sicher belegt, dass noch keine Kopie veröffentlicht wurde. Andernfalls bleibt der Auftrag gesperrt: Diagnose öffnen, keine neue Kopie erzwingen. Vorhandene Ordner bleiben unverändert.',
@@ -313,7 +313,7 @@
     AI_EXPORT_VOLUME_MISMATCH: 'Das gebundene Ergebnisziel und der private Arbeitsbereich liegen nicht auf einem kompatiblen Laufwerk. Es wird keine unsichere Kopieralternative verwendet. ' + publicationRecovery,
     AI_EXPORT_UNCERTAIN: 'Der Zustand der Ergebnisbereitstellung ist nicht eindeutig belegt. ' + publicationRecovery,
     AI_EXPORT_INCOMPLETE: 'Die Ergebnisbereitstellung ist noch nicht vollständig bestätigt. ' + publicationRecovery,
-    AI_EXPORT_CONFLICT: 'Ein gebundener Ordner oder eine Datei steht im Konflikt. Nichts wird überschrieben oder als Ersatz übernommen. ' + publicationRecovery,
+    AI_EXPORT_CONFLICT: 'Ein gebundener Ordner oder eine Datei steht im Konflikt, oder das Ziel ist voll, entfernt oder schreibgeschützt. Nichts wird überschrieben oder als Ersatz übernommen. ' + publicationRecovery,
     AI_EXPORT_INVALID: 'Der gespeicherte Bereitstellungsauftrag oder sein Beleg ist nicht gültig. ' + publicationRecovery,
     RESULT_PUBLICATION_LEGACY: 'Dieser ältere Lauf unterstützt keine automatische Bereitstellung neuer Ergebnisstände. Eine Nachbearbeitung kann privat gespeichert sein; vorhandene Ergebnisdateien werden dadurch nicht aktualisiert oder erneut veröffentlicht. ' +
       'Den gespeicherten Stand und die vorhandenen Ergebnisdateien prüfen. Nicht blind erneut ändern, einen neuen Lauf starten oder einen anderen Zielordner zuweisen. Frühere Dateien bleiben unverändert.'

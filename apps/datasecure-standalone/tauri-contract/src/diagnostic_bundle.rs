@@ -38,6 +38,7 @@ struct Record {
 const EVENTS: &str = "core_quarantine_state app_quarantine_state sidecar_retirement_finished drop_received drop_rejected drop_admitted runtime_component_unavailable sidecar_starting runtime_resolution_failed runtime_resolved sidecar_spawn_failed sidecar_spawned sidecar_stderr_classified sidecar_bootstrap_failed sidecar_diagnostic_unavailable sidecar_bootstrap_ready admission_progress ipc_request_started ipc_request_failed ipc_request_queue_busy sidecar_start_blocked ipc_request_sent sidecar_retirement_failed ipc_response_invalid ipc_response_error ipc_response_ok os_open_requested os_open_helper_failed os_open_handoff_failed os_open_handoff_confirmed picker_requested picker_blocked picker_invocation_started picker_failed picker_no_selection picker_completed local_target_validation_failed diagnostic_folder_opened diagnostic_folder_open_handoff_confirmed ui_picker_blocked frontend_ready review_window_open_failed sidecar_shutdown application_started webview_profile_ready webview_profile_ready workspace_page_loaded setup_started setup_completed application_run_failed page_loaded review_page_loaded core_probe_node core_probe_preloader sidecar_entry sidecar_imports_ready sidecar_import_failed sidecar_started native_export_phase runtime_integrity_checked service_initialized service_initialization_failed local_target_requested local_target_resolved local_target_resolution_failed request_received response_ready private_ipc_invalid private_ipc_output_failed request_chain_failed private_ipc_truncated private_ipc_closed private_ipc_input_failed history_capture_started history_capture_finished product_bootstrap_started product_bootstrap_finished diagnostic_bundle_requested diagnostic_bundle_saved diagnostic_bundle_cancelled diagnostic_bundle_failed";
 fn member(value: &str, vocabulary: &str) -> bool { vocabulary.split_whitespace().any(|item| item == value) }
 const CONFIGURE_EVENTS: &str = "native_configure_failed";
+const EXPORT_FAILURE_EVENTS: &str = "native_export_failed";
 const CONTROLLED_CREATE_EVENTS: &str = "native_controlled_create_failed";
 const BATCH_WORKER_EVENTS: &str = "batch_worker_failed";
 const BATCH_WORKER_PHASES: &str = "item_epoch_release registry_finalize local_delivery_verify executor_lease_release processing result_export_prepare result_export_claim result_export_plan result_export_copy result_export_claim_release mapping_publication mapping_intent mapping_recheck mapping_csv mapping_csv_root mapping_csv_lock mapping_csv_read mapping_csv_write mapping_intent_finish";
@@ -101,7 +102,7 @@ fn sanitize(bytes: &[u8], component: &str, correlation: &mut Correlation) -> Opt
     // Derived Deserialize rejects duplicate fields as well as unknown fields.
     let record: Record = serde_json::from_slice(bytes).ok()?;
     if record.schema != "datasecure-standalone-interaction/1" || record.component != component ||
-        record.time_ms > 4_102_444_800_000 || !(member(&record.event, EVENTS) || member(&record.event, CAPTURE_EVENTS) || member(&record.event, PROBE_EVENTS) || member(&record.event, RECOVERY_EVENTS) || member(&record.event, OWNERSHIP_EVENTS) || member(&record.event, CONFIGURE_EVENTS) || member(&record.event, BATCH_WORKER_EVENTS) || member(&record.event, CONTROLLED_CREATE_EVENTS)) ||
+        record.time_ms > 4_102_444_800_000 || !(member(&record.event, EVENTS) || member(&record.event, CAPTURE_EVENTS) || member(&record.event, PROBE_EVENTS) || member(&record.event, RECOVERY_EVENTS) || member(&record.event, OWNERSHIP_EVENTS) || member(&record.event, CONFIGURE_EVENTS) || member(&record.event, EXPORT_FAILURE_EVENTS) || member(&record.event, BATCH_WORKER_EVENTS) || member(&record.event, CONTROLLED_CREATE_EVENTS)) ||
         !member(&record.outcome, OUTCOMES) ||
         record.session_id.as_deref().is_some_and(|v| !hex(v)) ||
         record.request_id.as_deref().is_some_and(|v| !hex(v)) ||
@@ -126,6 +127,13 @@ fn sanitize(bytes: &[u8], component: &str, correlation: &mut Correlation) -> Opt
         record.journal_count.is_some() || record.export_count.is_some() || record.recovery_requested.is_some() || record.elapsed_ms.is_some()) {
         return None;
     }
+    let exporting = record.event == "native_export_failed";
+    if exporting && (component != "desktop" || record.outcome != "failed" || record.action.is_some() ||
+        record.configure_stage.is_some() || record.phase.is_some() ||
+        record.error_code.as_deref() != Some("AI_EXPORT_CONFLICT") ||
+        record.io_error_kind.as_deref().is_none_or(|kind| !crate::native_export_broker::valid_configure_io_kind(kind))) {
+        return None;
+    }
     let configuring = record.event == "native_configure_failed";
     if configuring {
         if component != "desktop" || record.action.as_deref() != Some("configure_results") ||
@@ -133,7 +141,7 @@ fn sanitize(bytes: &[u8], component: &str, correlation: &mut Correlation) -> Opt
             record.io_error_kind.as_deref().is_none_or(|kind| !crate::native_export_broker::valid_configure_io_kind(kind)) {
             return None;
         }
-    } else if record.configure_stage.is_some() || record.io_error_kind.is_some() || record.raw_os_error.is_some() {
+    } else if record.configure_stage.is_some() || (!exporting && (record.io_error_kind.is_some() || record.raw_os_error.is_some())) {
         return None;
     }
     let controlled_create = record.event == "native_controlled_create_failed";
@@ -148,6 +156,10 @@ fn sanitize(bytes: &[u8], component: &str, correlation: &mut Correlation) -> Opt
     }
     let mut output = json!({ "time_ms": record.time_ms, "event": record.event, "outcome": record.outcome });
     if controlled_create { output["controlled_create"] = json!(record.controlled_create); }
+    if exporting {
+        output["io_error_kind"] = json!(record.io_error_kind);
+        output["raw_os_error"] = json!(record.raw_os_error);
+    }
     if configuring {
         output["configure_stage"] = json!(record.configure_stage);
         output["io_error_kind"] = json!(record.io_error_kind);
@@ -458,6 +470,28 @@ mod tests {
         let mut raw = record(); raw["event"] = json!("core_probe_cleanup"); raw["outcome"] = json!("failed");
         raw["error_code"] = json!("STANDALONE_CORE_PROBE_VENDOR_TEXT");
         assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).is_none());
+    }
+    #[test]
+    fn export_failure_diagnostics_keep_only_the_closed_kind_and_integer_os_code() {
+        // RC178 review R-012.
+        let raw = json!({ "schema": "datasecure-standalone-interaction/1", "time_ms": 10,
+            "component": "desktop", "event": "native_export_failed", "outcome": "failed",
+            "error_code": "AI_EXPORT_CONFLICT", "io_error_kind": "StorageFull", "raw_os_error": 112 });
+        let output = sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).unwrap();
+        assert_eq!(output["io_error_kind"], "StorageFull");
+        assert_eq!(output["raw_os_error"], 112);
+        assert!(output.get("configure_stage").is_none());
+        for (key, value) in [("io_error_kind", json!("/PRIVATE/vendor-error")), ("raw_os_error", json!("112")),
+            ("component", json!("sidecar")), ("action", json!("configure_results")), ("outcome", json!("ready")),
+            ("error_code", json!("AI_EXPORT_UNCERTAIN")), ("configure_stage", json!("private_create")),
+            ("phase", json!("publish")), ("path", json!("/PRIVATE/path")), ("message", json!("vendor text"))] {
+            let mut bad = raw.clone(); bad[key] = value;
+            assert!(sanitize(&serde_json::to_vec(&bad).unwrap(), "desktop", &mut Correlation::default()).is_none(), "{key}");
+        }
+        for key in ["io_error_kind", "error_code"] {
+            let mut bad = raw.clone(); bad.as_object_mut().unwrap().remove(key);
+            assert!(sanitize(&serde_json::to_vec(&bad).unwrap(), "desktop", &mut Correlation::default()).is_none(), "{key}");
+        }
     }
     #[test]
     fn configure_diagnostics_keep_only_the_closed_native_stage_kind_and_integer_os_code() {

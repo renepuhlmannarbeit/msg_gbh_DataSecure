@@ -339,7 +339,15 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
     state.sequence = sequence as u32; state.native_id = Some(native_id.into());
     match outcome {
         Ok(()) => response["ok"] = json!(true),
-        Err(e) => { response["ok"] = json!(false); response["error_code"] = json!(crate::native_export_broker::public_code(&e)); },
+        Err(e) => {
+            // public_code folds every native IO failure into the generic
+            // conflict. Record the closed ErrorKind and OS code before that
+            // identity is lost, so a full volume, a removed target and a
+            // denied access can be told apart in the local diagnostics.
+            #[cfg(not(test))]
+            if let Some(failure) = crate::native_export_broker::ExportFailure::capture(&e) { crate::diagnostic_native_export_failure(failure); }
+            response["ok"] = json!(false); response["error_code"] = json!(crate::native_export_broker::public_code(&e));
+        },
     }
     Ok(Some(response))
 }

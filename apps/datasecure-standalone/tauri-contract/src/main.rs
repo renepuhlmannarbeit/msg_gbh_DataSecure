@@ -247,6 +247,21 @@ fn diagnostic_native_controlled_directory_create_failure(
 }
 
 struct SidecarProcess {
+// Same closed construction for a failed export operation: fixed event, the
+// ErrorKind enum name and the integer OS code. No Display text, no pathname.
+#[cfg_attr(test, allow(dead_code))]
+fn diagnostic_native_export_failure(failure: native_export_broker::ExportFailure) {
+    let record = json!({
+        "schema": "datasecure-standalone-interaction/1",
+        "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "component": "desktop", "session_id": diagnostic_session(),
+        "event": "native_export_failed", "outcome": "failed", "error_code": "AI_EXPORT_CONFLICT",
+        "product_version": env!("CARGO_PKG_VERSION"), "build_id": build_id(), "runtime_target": runtime_target(),
+        "io_error_kind": failure.io_error_kind, "raw_os_error": failure.raw_os_error
+    });
+    diagnostic_log::append(&diagnostic_directory(), &record);
+}
+
     child: ipc_transport::ChildControl,
     writes: mpsc::Sender<ipc_transport::WriteRequest>,
     responses: Receiver<Result<Value, String>>,

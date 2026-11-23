@@ -192,6 +192,26 @@ impl ConfigureFailure {
             raw_os_error: error.raw_os_error() }
     }
 }
+/// Content-free cause of a failed export operation. Only a real OS failure
+/// that the public vocabulary reports as the generic conflict is captured;
+/// the fixed transaction outcomes (uncertain, incomplete, abandoned, closing)
+/// already name themselves.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ExportFailure {
+    pub io_error_kind: String,
+    pub raw_os_error: Option<i32>,
+}
+impl ExportFailure {
+    pub(crate) fn capture(error: &io::Error) -> Option<Self> {
+        if public_code(error) != "AI_EXPORT_CONFLICT" { return None; }
+        let kind = format!("{:?}", error.kind());
+        // io::Error::other carries this module's own invariant refusals; only
+        // an OS code or a specific ErrorKind identifies an environment cause.
+        if error.raw_os_error().is_none() && (kind == "Other" || !valid_configure_io_kind(&kind)) { return None; }
+        Some(Self { io_error_kind: if valid_configure_io_kind(&kind) { kind } else { "Other".into() },
+            raw_os_error: error.raw_os_error() })
+    }
+}
 fn configure_step<T>(stage: ConfigureStage, result: io::Result<T>,
     observe: &mut impl FnMut(ConfigureFailure)) -> io::Result<T> {
     // Inspect the original error before public_code erases its OS identity.
@@ -460,6 +480,22 @@ pub(crate) fn public_code(e: &io::Error) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn export_failure_keeps_only_a_closed_kind_and_os_code_for_generic_conflicts() {
+        // RC178 review R-012.
+        let full = io::Error::from(io::ErrorKind::StorageFull);
+        assert_eq!(public_code(&full), "AI_EXPORT_CONFLICT");
+        assert_eq!(ExportFailure::capture(&full), Some(ExportFailure { io_error_kind: "StorageFull".into(), raw_os_error: None }));
+        let denied = io::Error::from_raw_os_error(5);
+        let captured = ExportFailure::capture(&denied).unwrap();
+        assert_eq!(captured.raw_os_error, Some(5));
+        assert!(valid_configure_io_kind(&captured.io_error_kind) || captured.io_error_kind == "Other");
+        // Named transaction outcomes and internal invariant errors carry no OS cause.
+        for code in ["AI_EXPORT_UNCERTAIN", "AI_EXPORT_INCOMPLETE", "AI_EXPORT_ABANDONED", "STANDALONE_CLOSING", "AI_EXPORT_CONFLICT"] {
+            assert_eq!(ExportFailure::capture(&error(code)), None, "{code}");
+        }
+        assert_eq!(ExportFailure::capture(&io::Error::other("C:/PRIVATE/path vendor text")), None);
+    }
     use crate::{ipc_transport::Lifecycle, native_export_channel::{handle_publication, PublicationState}};
     use sha2::{Digest, Sha256};
     use std::{fs, io::{BufRead, Write}};
