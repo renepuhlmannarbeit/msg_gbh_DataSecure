@@ -13,10 +13,17 @@ vergibt ein Auftrag nie eigenmächtig; er schlägt sie vor und lässt sie
 menschlich bestätigen. Namenskonvention im Root von `tasks/`:
 `AUFTRAG-<ADRESSAT>-<RC>-<THEMA>.md`. Jeder neue Umsetzungsauftrag muss
 mindestens eine konkrete Story `BL-nnn.x` nennen; reine Backlogpflege darf `BL-001`
-zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`. Der
-aktuelle schreibende Auftrag ist
-[`AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md`](AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md).
-Die sechs verknüpften Spezifikationen und die Aufgabenvorlage liegen unter
+zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`.
+
+Der zur Zuweisung an Claude Code vorbereitete
+[RC178-Standalone-Reviewauftrag](AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md)
+beginnt mit einer Analyse und beschreibt danach Umsetzung, Prüfung und
+Rückübergabe an Codex. Die [Vorlagen](rc178-claude-review/VORLAGEN.md) gehören
+zum Auftrag.
+
+Der frühere
+[`AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md`](AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md)
+verlinkt seine sechs Spezifikationen und die Aufgabenvorlage unter
 [`rc160-workflow`](rc160-workflow/VORLAGE.md). Sie definieren Ergebnisse und
 Abnahme, sind aber keine zweite Statusliste. Der frühere RC123-Auftrag liegt
 mit seinem damaligen Inhalt im [Archiv](archiv/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md). Der
