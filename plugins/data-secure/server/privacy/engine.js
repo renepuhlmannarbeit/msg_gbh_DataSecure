@@ -71,7 +71,12 @@ const PRIORITY = {
   ORGANIZATION: 70,
   PROJECT: 68,
   LOCATION: 60,
-  URL: 58
+  URL: 58,
+  // A link target that carries a known identity is replaced as a whole and
+  // therefore has to win against every detector that matches a part of it
+  // (e-mail, telephone, IBAN: up to 96). A partial replacement would leave
+  // the name in the target, which the residual gate then rightly refuses.
+  IDENTITY_LINK: 200
 };
 
 function uppercasePresentationHypothesis(seed) {
@@ -848,7 +853,7 @@ function anonymize(text, profile = 'general', options = {}) {
     for (let link; (link = URL_RE.exec(out));) {
       if (!linkTargetCarriesIdentity(link[0], knownFullNames)) continue;
       spans.push({ type: 'URL', start: link.index, end: link.index + link[0].length, text: link[0],
-        replacement: '[URL_REDACTED]', priority: PRIORITY.PERSON + 1 });
+        replacement: '[URL_REDACTED]', priority: PRIORITY.IDENTITY_LINK });
     }
   }
   if (profile === 'personnel_profile' || profile === 'applicant' || profile === 'customer') {

@@ -48,6 +48,12 @@ async function main() {
       const markdown = await known(`[Profil](${target})`);
       assert.equal(markdown, '[Profil]([URL_REDACTED])', target);
     }
+    // Counter-review: a detector matching a part of the link (telephone,
+    // IBAN, e-mail) must not displace the whole-link replacement. Otherwise
+    // the name stays in the target and the residual gate stops the document.
+    for (const tail of ['?tel=+49301234567', '?iban=DE89370400440532013000', ',jan.mustermann@example.org']) {
+      assert.equal(await known(`Siehe https://example.org/in/marlene-oesterreicher${tail} ende`), 'Siehe [URL_REDACTED] ende', tail);
+    }
     const unrelated = 'Siehe https://example.org/produkte/sommer-2024 und https://example.org/team.';
     assert.equal(await known(unrelated), unrelated);
   });
