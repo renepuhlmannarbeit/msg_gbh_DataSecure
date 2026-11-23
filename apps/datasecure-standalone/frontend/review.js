@@ -400,7 +400,7 @@ function bulkDecision(value) {
   for (const row of rows) {
     const replacement = state.inputs.get(row.id) || '';
     if (contact && value === 'confirm_contact' && replacement && replacement !== row.exact) {
-      el('matrix-message').textContent = `Nichts angewendet: „${row.exact}“ in ${row.names.join(', ')} hat eine geänderte Eingabe. Wähle „Eingegebene Korrekturen übernehmen“ oder leere dieses Korrekturfeld.`;
+      el('matrix-message').textContent = `Nichts angewendet: „${row.exact}“ in ${row.names.join(', ')} hat eine geänderte Eingabe. Wähle „Erkennung korrigieren – Eingabe vormerken“ oder leere dieses Korrekturfeld.`;
       return;
     }
     if (contact && value === 'correct_contact' && !validContact(replacement, row.candidate)) {
@@ -569,7 +569,7 @@ async function sendAnswer(answer) {
     state.handoffAccepted = answer.action === 'reviewed';
     state.waiting = false;
     setWaiting(answer.action === 'deferred'
-      ? 'Die Vertagung wurde an die lokale Prüfung übergeben. Prüfe im Verlauf, ob dieser Lauf unter „Prüfung offen“ fortgesetzt werden kann.'
+      ? 'Die Vertagung wurde an die lokale Prüfung übergeben. Prüfe im Verlauf, ob dieser Lauf unter „Prüfung erforderlich“ fortgesetzt werden kann.'
       : markdownContact
         ? 'OCR-Kontaktentscheidungen wurden an die lokale Verarbeitung übergeben. DataSecure setzt die Markdown-Umwandlung nach gesicherter Übernahme fort. Weitere Kontaktgruppen erscheinen hier bei Bedarf. Eine Dokumentfreigabe zur Anonymisierung ist nicht erforderlich. Den Abschlussstatus siehst du beim Lauf im Hauptfenster.'
         : 'Entscheidungen wurden an die lokale Verarbeitung übergeben. DataSecure prüft ihre Übernahme und ob weitere Fundstellen folgen. Bitte warten; die nächste Gruppe erscheint hier. Nach der letzten Gruppe werden die Ergebnisdateien bereitgestellt. Keine zweite Dateiauswahl, Freigabe oder Exportbestätigung nötig.',
@@ -682,8 +682,13 @@ async function poll(manual = false) {
       state.cursor = Math.min(pending.cursor, draft.ambiguities.length - 1);
     }
     render();
-    if (pending?.reviewId === session.review_id) el('summary').textContent =
-      'Die Entscheidung ist nicht bestätigt; dieser Prüfschritt ist weiterhin offen. Deine Eingaben sind erhalten. Bitte prüfen und bewusst erneut freigeben oder später entscheiden.';
+    if (pending?.reviewId === session.review_id) {
+      const unconfirmed = 'Die Entscheidung ist nicht bestätigt; dieser Prüfschritt ist weiterhin offen. Deine Eingaben sind erhalten. Bitte prüfen und bewusst erneut freigeben oder später entscheiden.';
+      el('summary').textContent = unconfirmed;
+      // The embedded review hides its header including #summary; the status
+      // line above the list is visible in both presentations.
+      el('matrix-message').textContent = unconfirmed;
+    }
     // New groups start at their shared controls, not the lower detail pane.
     // This also keeps the bulk actions visible in the stacked narrow layout.
     el('matrix-title').focus();

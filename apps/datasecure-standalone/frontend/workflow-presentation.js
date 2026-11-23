@@ -291,7 +291,7 @@
     return output;
   }
   function failureAdvice(code) {
-    if (['IMAGE_OCR_REQUIRED', 'PDF_TEXT_UNAVAILABLE_BY_POLICY'].includes(code)) return 'Die betroffene Originaldatei neu auswählen und „Text aus Scans, Bildern und Grafiken per OCR lesen“ einschalten. Die Optionen eines bestehenden Laufs werden nicht nachträglich geändert.';
+    if (['IMAGE_OCR_REQUIRED', 'PDF_TEXT_UNAVAILABLE_BY_POLICY'].includes(code)) return 'Die betroffene Originaldatei neu auswählen und „Text aus Bildern und Scans lesen (OCR)“ einschalten. Die Optionen eines bestehenden Laufs werden nicht nachträglich geändert.';
     if (code === 'PDF_OCR_SCOPE_REQUIRED') return 'Die betroffene PDF für einen neuen Lauf mit der gemeinsamen OCR-Option auswählen. Es werden keine unklaren Bereiche ohne deine Auswahl gelesen.';
     if (code === 'OFFICE_IMAGE_OCR_UNAVAILABLE') return 'Das betreffende Bild separat als PNG, JPEG oder BMP auswählen oder eine PDF-Kopie des Dokuments mit OCR umwandeln. Das Original bleibt unverändert.';
     if (code === 'MARKDOWN_IMAGE_OCR_UNAVAILABLE') return 'Die benötigten Bilddateien zusätzlich ausdrücklich auswählen. Alternativ Markdown ohne Bild-OCR umwandeln; vorhandene Bildbeschriftungen bleiben erhalten.';

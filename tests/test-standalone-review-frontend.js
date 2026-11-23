@@ -940,8 +940,8 @@ testAsync('a lost answer acknowledgement reconciles publication without claiming
   assert.equal(h.calls.filter((call) => call.command === 'submit_review').length, 1);
 });
 
-testAsync('an unaccepted answer returns to the same draft with choices but never automatic resubmission', async () => {
-  const h = harness(null, false, false, { invoke: async (command, args, normal) => {
+for (const embedded of [false, true]) testAsync(`an unaccepted answer returns to the same draft with choices but never automatic resubmission (${embedded ? 'embedded' : 'native window'})`, async () => {
+  const h = harness(null, false, false, { embedded, invoke: async (command, args, normal) => {
     if (command === 'submit_review') return { accepted: false };
     return normal(command, args);
   } });
@@ -952,6 +952,11 @@ testAsync('an unaccepted answer returns to the same draft with choices but never
   assert.equal(h.element('release').disabled, false);
   assert.match(h.element('summary').textContent, /weiterhin offen/u);
   assert.doesNotMatch(h.element('summary').textContent, /nichts freigegeben/u);
+  // RC178 review R-008: the embedded review hides its header with #summary
+  // (review-workspace.css), so the same notice must reach the visible status.
+  assert.match(h.element('matrix-message').textContent, /nicht bestätigt.*weiterhin offen/u);
+  assert.match(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/review-workspace.css'), 'utf8'),
+    /body\.embedded header\{display:none\}/u, 'the hidden-header premise of this case');
   assert.equal(h.calls.filter((call) => call.command === 'submit_review').length, 1);
 });
 

@@ -40,7 +40,7 @@
     STANDALONE_PAUSE_CONTROL_BUSY: 'Der Lauf speichert gerade seinen Zustand. Pause noch nicht bestätigt; bitte erneut versuchen.',
     STANDALONE_PAUSE_CONTROL_INVALID: 'Der Pausestand konnte nicht sicher bestätigt werden. Keine weitere Datei wird ungeprüft gestartet; bitte den Laufstatus erneut prüfen.',
     OCR_CONTACT_SKIP_UNAVAILABLE: 'Nur eine offene OCR-Kontaktprüfung eines reinen Markdown-Laufs kann übersprungen werden. Bitte den aktuellen Laufstatus laden.',
-    OCR_CONTACT_SKIP_NOT_READY: 'Die OCR-Prüfgruppe wird noch vorbereitet. Bitte kurz warten und danach erneut „Prüfung überspringen“ wählen.',
+    OCR_CONTACT_SKIP_NOT_READY: 'Die OCR-Prüfgruppe wird noch vorbereitet. Bitte kurz warten und danach erneut „Ohne diesen Vergleich fortfahren“ wählen.',
     RESULT_EXPORT_ABANDON_UNAVAILABLE: 'Dieser Lauf ist noch aktiv, bereits vollständig bereitgestellt oder nicht mehr sicher belegbar. Bitte den aktuellen Status prüfen.',
     RESULT_EXPORT_BUSY: 'Der Ergebnisexport arbeitet noch. Bitte warten und den Status erneut laden.',
     RESULT_EXPORT_STATE_UNSAFE: 'Der gespeicherte Exportstand ist nicht sicher lesbar. Nichts wurde als abgeschlossen bestätigt; bitte die lokale Diagnose prüfen.',
@@ -795,7 +795,7 @@
       for (let n = 0; n < Math.min(depth, 8); n++) heading.append(element('span', undefined, 'tree-indent'));
       const collapse = button(expanded.get(folder) ? '⌄' : '›', () => { expanded.set(folder, !expanded.get(folder)); renderTree(); });
       collapse.id = `group-toggle-${index}`; collapse.className = 'collapse'; collapse.setAttribute('aria-expanded', String(expanded.get(folder)));
-      collapse.setAttribute('aria-controls', `group-files-${index}`); collapse.setAttribute('aria-label', `${folder} ${expanded.get(folder) ? 'zuklappen' : 'aufklappen'}`);
+      collapse.setAttribute('aria-controls', `group-files-${index}`); collapse.setAttribute('aria-label', `${folder || 'Dateien ohne Unterordner'} ${expanded.get(folder) ? 'zuklappen' : 'aufklappen'}`);
       const label = element('label'), input = document.createElement('input'); input.type = 'checkbox'; input.id = `group-select-${index}`; checkState(input, items);
       input.addEventListener('change', () => chooseItems(items, input.checked)); label.append(input, element('span', name)); label.title = folder || 'Dateien';
       const metadata = element('div', undefined, 'group-metadata');
@@ -2339,7 +2339,7 @@
         }
       })); nativeDropReady = true; } catch { feedback('Drag-and-drop ist nicht verfügbar. Bitte die Auswahlbuttons verwenden.'); }
       try { unlisteners.push(await window.__TAURI__.event.listen('datasecure-admission-progress', event => {
-        if (busy && event.payload?.phase === 'validating') feedback('Dateien und Unterordner werden lokal geprüft. Die Verarbeitung beginnt erst mit „Starten“.');
+        if (busy && event.payload?.phase === 'validating') feedback('Dateien und Unterordner werden lokal geprüft. Die Verarbeitung beginnt erst mit „Verarbeitung starten“.');
       })); } catch { /* Status remains available through the closed command API. */ }
       unlisteners.push(await window.__TAURI__.event.listen('datasecure-review-closed', async event => {
         const origin = reviewOrigin;
