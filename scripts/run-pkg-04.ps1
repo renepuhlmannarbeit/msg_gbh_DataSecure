@@ -80,7 +80,8 @@ foreach ($label in @('candidate-a', 'candidate-b')) {
     Invoke-Checked 'node.exe' @('scripts/verify-standalone-package.mjs', $candidateArchive)
     Invoke-Checked 'node.exe' @('tests/test-standalone-package-smoke.mjs', $candidateArchive)
     Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-        'tests/manual/standalone-native-windows-launch.ps1', '-Archive', $candidateArchive, '-AssertReviewWindow')
+        'tests/manual/standalone-native-windows-launch.ps1', '-Archive', $candidateArchive, '-AssertReviewWindow',
+        '-AssertNoOutbound')
     $expanded = Join-Path $candidateDirectory 'expanded'
     Expand-Archive -LiteralPath $candidateArchive -DestinationPath $expanded
     $productDirectory = Resolve-StandaloneProductDirectory $expanded ([string] $package.version)

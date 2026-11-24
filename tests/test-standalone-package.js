@@ -341,6 +341,8 @@ test('PKG-04 binds two fresh engineering builds without reusing the default arch
   assert.match(source, /PKG04_BRANCH_NOT_MAIN/u);
   assert.match(source, /PKG04_WORKTREE_NOT_CLEAN/u);
   assert.match(loop, /standalone-native-windows-launch\.ps1/u, 'native acceptance remains a separate required gate');
+  assert.match(loop, /'-Archive', \$candidateArchive, '-AssertReviewWindow',\s+'-AssertNoOutbound'\)/u,
+    'each candidate is observed for outbound connections of the embedded WebView2');
 });
 
 test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () => {
