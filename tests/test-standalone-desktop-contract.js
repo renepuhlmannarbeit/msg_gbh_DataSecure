@@ -670,6 +670,28 @@ test('prepared selections remove exactly one item through the private native con
   assert.doesNotMatch(rust.match(/fn removal_request[\s\S]*?\n\}/u)?.[0] || '', /source_paths|raw_content/u);
 });
 
+test('every namespace failure before the Core starts is classified, and only a busy attempt returns its generation', () => {
+  const spawn = rust.slice(rust.indexOf('fn spawn_sidecar('), rust.indexOf('\nfn ', rust.indexOf('fn spawn_sidecar(') + 1));
+  assert.ok(spawn.includes('let mut child = command.spawn()'));
+  const beforeSpawn = spawn.slice(0, spawn.indexOf('let mut child = command.spawn()'));
+  assert.equal(beforeSpawn.split('.map_err(|error| namespace_bootstrap_code(&error))').length - 1, 4,
+    'prepare, both handoffs and the binding recheck report a held chain as busy');
+  assert.doesNotMatch(spawn, /STANDALONE_DATA_ROOT_(?:UNSAFE|BUSY)/u, 'no bootstrap site keeps a fixed namespace code');
+  assert.doesNotMatch(spawn.slice(spawn.indexOf('let mut child = command.spawn()')), /namespace_bootstrap_code/u,
+    'a busy code can only arise before a Core process exists');
+  const release = rust.slice(rust.indexOf('fn release_unspawned_generation('), rust.indexOf('fn reserve_sidecar_generation('));
+  assert.ok(release.includes('if code != "STANDALONE_DATA_ROOT_BUSY" { return; }'));
+  assert.doesNotMatch(rust.slice(rust.indexOf('fn release_unspawned_generation(') - 16, rust.indexOf('fn release_unspawned_generation(')),
+    /#\[cfg\(/u, 'the release is part of every build, not a test-only item');
+  assert.match(rust, /Err\(code\) => \{\s+release_unspawned_generation\(&state\.retired_owner_generations, &reserved_generation, &code\);/u);
+  const publication = rust.slice(rust.indexOf('fn publication_data_root('), rust.indexOf('async fn blocking_rpc('));
+  assert.doesNotMatch(publication, /namespace_bootstrap_code|STANDALONE_DATA_ROOT_BUSY/u,
+    'publication keeps its existing refusal; the busy wording describes a start');
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
+  assert.match(workspace, /'STANDALONE_DATA_ROOT_UNSAFE', 'STANDALONE_DATA_ROOT_BUSY',/u,
+    'a busy start is held like every other refused start; only an explicit recheck retries');
+});
+
 test('native smoke isolates data, Documents, diagnostics and WebView before product startup', () => {
   const isolation = fs.readFileSync(path.join(root, 'tauri-contract/src/native_smoke.rs'), 'utf8');
   const host = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-host.ps1'), 'utf8');

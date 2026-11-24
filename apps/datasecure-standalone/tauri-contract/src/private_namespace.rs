@@ -57,6 +57,36 @@ fn unsafe_namespace() -> io::Error {
     io::Error::other("STANDALONE_DATA_ROOT_UNSAFE")
 }
 
+/// ERROR_SHARING_VIOLATION while pinning the directory chain: another process
+/// holds one of these directories in a way that excludes our no-DELETE-sharing
+/// pin, typically with DELETE access. Nothing was created or changed. This is
+/// contention, not evidence about the namespace; the sharing policy itself is
+/// unchanged and the caller still gets no namespace.
+const SHARING_VIOLATION: i32 = 32;
+/// Bounded wait for a short foreign hold, before this call created anything.
+/// A longer hold is reported to the caller as contention.
+const CONTENTION_ATTEMPTS: u32 = 20;
+const CONTENTION_PAUSE: std::time::Duration = std::time::Duration::from_millis(100);
+
+pub(crate) fn is_contention(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(SHARING_VIOLATION)
+}
+
+/// Repeats an idempotent first open: the parent chain, and an already existing
+/// root. Both share one budget of repetitions. Every open after a create stays
+/// a single attempt, so a root created by this call is never re-observed.
+fn open_waiting(path: &Path, repetitions: &mut u32) -> io::Result<Directory> {
+    loop {
+        match Directory::open_existing(path, None) {
+            Err(error) if is_contention(&error) && *repetitions > 0 => {
+                *repetitions -= 1;
+                std::thread::sleep(CONTENTION_PAUSE);
+            }
+            result => return result,
+        }
+    }
+}
+
 type Handle = *mut c_void;
 #[repr(C)]
 struct UnicodeString {
@@ -283,7 +313,8 @@ fn prepare_impl(
     #[cfg(test)] checkpoint: &mut dyn FnMut(Checkpoint) -> io::Result<()>,
 ) -> io::Result<PreparedNamespace> {
     let parent_path = namespace_parent(path)?;
-    let parent = Directory::open_existing(parent_path, None)?;
+    let mut repetitions = CONTENTION_ATTEMPTS - 1;
+    let parent = open_waiting(parent_path, &mut repetitions)?;
     let (root, origin) = if parent.child_absent(NAMESPACE_LEAF)? {
         #[cfg(test)]
         checkpoint(Checkpoint::ObservedAbsent)?;
@@ -300,7 +331,8 @@ fn prepare_impl(
         // open_existing holds all ancestors and refuses reparse points. Do not
         // apply export_private_security's stricter exact-one-ACE policy here:
         // that would change the C guard's existing-root admission contract.
-        let root = Directory::open_existing(path, None)?;
+        // This root was not created by this call; waiting changes nothing.
+        let root = open_waiting(path, &mut repetitions)?;
         parent.inspect_child(NAMESPACE_LEAF, root.identity())?;
         (root, Origin::ExistingCandidate)
     };
@@ -1379,6 +1411,130 @@ try {
         assert!(fs::rename(&fixture.path, &parent_replacement).is_err());
         assert!(!parent_replacement.exists());
         prepared.verify_binding().unwrap();
+    }
+
+    /// A handle as a backup, cleanup or move tool holds it: DELETE access.
+    /// Every sharing is granted, so only our own no-DELETE-sharing pin fails.
+    fn foreign_delete_hold(path: &Path) -> File {
+        OpenOptions::new()
+            .access_mode(0x0001_0000 | 0x0010_0000) // DELETE | SYNCHRONIZE
+            .share_mode(7)
+            .custom_flags(BACKUP_NOFOLLOW)
+            .open(path)
+            .unwrap()
+    }
+
+    #[test]
+    fn lasting_foreign_delete_hold_on_parent_or_ancestor_is_contention_and_creates_nothing() {
+        for held in ["outer", "outer/inner"] {
+            let fixture = Fixture::new();
+            fs::create_dir_all(fixture.path.join("outer/inner")).unwrap();
+            let root = fixture.path.join("outer/inner").join(NAMESPACE_LEAF);
+            let hold = foreign_delete_hold(&fixture.path.join(held));
+            let started = Instant::now();
+            let error = match prepare(&root) {
+                Ok(_) => panic!("a chain that cannot be pinned was accepted: {held}"),
+                Err(error) => error,
+            };
+            assert!(is_contention(&error), "{held}: {error:?}");
+            // The bounded wait was spent, and it stays far below the bootstrap budget.
+            assert!(started.elapsed() >= CONTENTION_PAUSE * (CONTENTION_ATTEMPTS - 1));
+            assert!(started.elapsed() < Duration::from_secs(6));
+            assert!(!root.exists(), "{held}: contention must not create the namespace");
+            drop(hold);
+            let prepared = prepare(&root).unwrap();
+            assert_eq!(prepared.handoff().unwrap().origin, Origin::Created);
+            prepared.root.verify_controlled().unwrap();
+        }
+    }
+
+    #[test]
+    fn short_foreign_delete_hold_is_waited_out_before_anything_is_created() {
+        let fixture = Fixture::new();
+        fs::create_dir(fixture.path.join("outer")).unwrap();
+        let root = fixture.path.join("outer").join(NAMESPACE_LEAF);
+        let hold = foreign_delete_hold(&fixture.path.join("outer"));
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(350));
+            drop(hold);
+        });
+        let started = Instant::now();
+        let prepared = prepare(&root).unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(300));
+        release.join().unwrap();
+        assert_eq!(prepared.handoff().unwrap().origin, Origin::Created);
+        prepared.root.verify_controlled().unwrap();
+        prepared.verify_binding().unwrap();
+    }
+
+    #[test]
+    fn foreign_delete_hold_on_an_existing_root_is_contention_and_leaves_it_unchanged() {
+        let fixture = Fixture::new();
+        fs::create_dir(fixture.root()).unwrap();
+        fs::write(fixture.root().join("existing.txt"), b"must survive contention unchanged").unwrap();
+        let before = security_bytes(&fixture.root());
+        let hold = foreign_delete_hold(&fixture.root());
+        let started = Instant::now();
+        let error = match prepare(&fixture.root()) {
+            Ok(_) => panic!("a root that cannot be pinned was accepted"),
+            Err(error) => error,
+        };
+        assert!(is_contention(&error), "{error:?}");
+        // The existing root uses the same single budget as the parent chain.
+        assert!(started.elapsed() >= CONTENTION_PAUSE * (CONTENTION_ATTEMPTS - 1));
+        assert!(started.elapsed() < Duration::from_secs(6));
+        drop(hold);
+        assert_eq!(security_bytes(&fixture.root()), before);
+        assert_eq!(fs::read(fixture.root().join("existing.txt")).unwrap(),
+            b"must survive contention unchanged");
+        assert_eq!(prepare(&fixture.root()).unwrap().handoff().unwrap().origin,
+            Origin::ExistingCandidate);
+    }
+
+    #[test]
+    fn short_foreign_delete_hold_on_an_existing_root_is_waited_out_without_changing_it() {
+        let fixture = Fixture::new();
+        fs::create_dir(fixture.root()).unwrap();
+        fs::write(fixture.root().join("existing.txt"), b"must survive the wait unchanged").unwrap();
+        let before = security_bytes(&fixture.root());
+        let original = Directory::open_existing(&fixture.root(), None).unwrap().identity();
+        let hold = foreign_delete_hold(&fixture.root());
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(350));
+            drop(hold);
+        });
+        let started = Instant::now();
+        let prepared = prepare(&fixture.root()).unwrap();
+        assert!(started.elapsed() >= Duration::from_millis(300));
+        release.join().unwrap();
+        let handoff = prepared.handoff().unwrap();
+        assert_eq!(handoff.origin, Origin::ExistingCandidate);
+        assert_eq!(handoff.identity, original);
+        assert_eq!(security_bytes(&fixture.root()), before);
+        assert_eq!(fs::read(fixture.root().join("existing.txt")).unwrap(),
+            b"must survive the wait unchanged");
+    }
+
+    #[test]
+    fn only_a_sharing_violation_is_contention() {
+        assert!(is_contention(&io::Error::from_raw_os_error(32)));
+        for code in [2, 3, 5, 33, 4390, 4395] {
+            assert!(!is_contention(&io::Error::from_raw_os_error(code)), "{code}");
+        }
+        assert!(!is_contention(&unsafe_namespace()));
+        assert!(!is_contention(&io::Error::new(io::ErrorKind::AlreadyExists, "collision")));
+        // A reparse point or a missing parent stays an unsafe namespace.
+        let fixture = Fixture::new();
+        fs::create_dir(fixture.path.join("foreign")).unwrap();
+        fixture.junction_to_foreign("alias");
+        for path in [fixture.path.join("alias").join(NAMESPACE_LEAF),
+            fixture.path.join("missing").join(NAMESPACE_LEAF)] {
+            let error = match prepare(&path) {
+                Ok(_) => panic!("an unsafe parent was accepted"),
+                Err(error) => error,
+            };
+            assert!(!is_contention(&error), "{error:?}");
+        }
     }
 
     #[test]

@@ -505,7 +505,7 @@ testAsync(`unbound ${code} cannot bootstrap with ${bad} snapshot; a later fresh 
     'decide_document_review_batch'].includes(call.command)), false);
 });
 
-for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
+for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED', 'STANDALONE_DATA_ROOT_BUSY'])
 testAsync(`a stale in-flight snapshot for ${code} cannot authorize retry after a newer native failure`, async () => {
   let h, firstContext = true, resolveSnapshot, good = false, recovered = false;
   const nativeSnapshot = epoch => ({ phase: 'owned', connection_epoch: recovered ? 3 : epoch,
@@ -537,7 +537,7 @@ testAsync('ordinary explicit status without a native failure proof never sets th
   assert.equal(h.calls.some(call => call.command === 'get_public_state' && call.args?.retryBootstrap === true), false);
 });
 
-for (const code of ['STANDALONE_DATA_ROOT_UNSAFE', 'STANDALONE_OWNERSHIP_RUNTIME_INVALID', 'STANDALONE_OWNERSHIP_RUNTIME_DENIED',
+for (const code of ['STANDALONE_DATA_ROOT_UNSAFE', 'STANDALONE_DATA_ROOT_BUSY', 'STANDALONE_OWNERSHIP_RUNTIME_INVALID', 'STANDALONE_OWNERSHIP_RUNTIME_DENIED',
   'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED', 'STANDALONE_OWNERSHIP_RUNTIME_LOAD_FAILED'])
 testAsync(`${code} keeps the platform-specific startup reason without automatic reconnect`, async () => {
   const h = harness({ invoke(command, args, fallback) {
@@ -551,6 +551,23 @@ testAsync(`${code} keeps the platform-specific startup reason without automatic 
   await h.act('nav-history'); await h.act('connection-diagnostics');
   assert.equal(h.el('feedback').textContent, banner);
   assert.equal(h.calls.filter(call => ['get_public_state', 'get_run_history'].includes(call.command)).length, 0);
+  assert.equal(h.el('connection-help').hidden, false);
+});
+
+testAsync('a data folder held by another program is explained as temporary, with the explicit recheck instead of an installation check', async () => {
+  const code = 'STANDALONE_DATA_ROOT_BUSY';
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context') throw Error(code);
+    return fallback();
+  } });
+  await tick(); await tick();
+  const banner = h.el('feedback').textContent;
+  assert.match(banner, /anderes Programm.*meist vorübergehend.*kurz warten.*„Verbindung und Laufstatus prüfen“.*\(STANDALONE_DATA_ROOT_BUSY\)/u);
+  assert.match(banner, /keine Daten verändert oder gelöscht/u);
+  assert.match(banner, /Schutzfunktionen nicht abschalten/u);
+  assert.doesNotMatch(banner, /Installation mit der IT prüfen|nicht sicher geöffnet/u);
+  assert.match(h.el('connection-status').textContent,
+    /Nach kurzer Wartezeit „Verbindung und Laufstatus prüfen“ wählen; ein Neustart der App ist dafür nicht nötig/u);
   assert.equal(h.el('connection-help').hidden, false);
 });
 

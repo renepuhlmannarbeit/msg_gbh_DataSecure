@@ -831,6 +831,15 @@ fn runtime_spawn_code_for_os(error: &std::io::Error, os: &str) -> &'static str {
     }
 }
 
+// A held namespace chain is reported before any Core exists. That attempt
+// owned no process and no control state, so no successor has to retire its
+// generation, and waiting for a foreign hold must not use up the bounded
+// recovery attempts. Every other failure keeps its generation.
+fn release_unspawned_generation(generations: &Mutex<Vec<String>>, generation: &str, code: &str) {
+    if code != "STANDALONE_DATA_ROOT_BUSY" { return; }
+    if let Ok(mut retired) = generations.lock() { retired.retain(|value| value != generation); }
+}
+
 #[cfg(test)]
 fn reserve_sidecar_generation(lifecycle: &ipc_transport::Lifecycle, generations: &Mutex<Vec<String>>)
     -> Result<(ipc_transport::SpawnGuard, String, Vec<String>), String> {
@@ -956,6 +965,15 @@ fn macos_core_probe(app: &tauri::AppHandle, executable: &Path, script_directory:
     }
 }
 
+// A directory of the chain is held by another process (sharing violation).
+// The Core is not started either way; only the reported cause differs, so
+// that a passing hold is not presented as an unsafe installation.
+#[cfg(windows)]
+fn namespace_bootstrap_code(error: &std::io::Error) -> String {
+    if private_namespace::is_contention(error) { "STANDALONE_DATA_ROOT_BUSY" }
+    else { "STANDALONE_DATA_ROOT_UNSAFE" }.to_string()
+}
+
 fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, spawn_guard: ipc_transport::SpawnGuard, deadline: Instant,
     owner_generation: String, retired_generations: Vec<String>) -> Result<SidecarProcess, String> {
     let bootstrap_started = Instant::now();
@@ -983,9 +1001,9 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
     #[cfg(windows)]
     let namespace = {
         let prepared = private_namespace::prepare(&native_export_data_root()?)
-            .map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?;
+            .map_err(|error| namespace_bootstrap_code(&error))?;
         let prepared = Arc::new(prepared);
-        let handoff = prepared.handoff().map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?;
+        let handoff = prepared.handoff().map_err(|error| namespace_bootstrap_code(&error))?;
         command.env(private_namespace::CHILD_ROOT_ENV, handoff.root);
         diagnostic_event("private_namespace_bound", None, "ready", Some(match handoff.origin {
             private_namespace::Origin::Created => "STANDALONE_NAMESPACE_CREATED",
@@ -1027,10 +1045,10 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         command.creation_flags(0x08000000);
     }
     #[cfg(windows)]
-    namespace.verify_binding().map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?;
+    namespace.verify_binding().map_err(|error| namespace_bootstrap_code(&error))?;
     #[cfg(windows)]
     let namespace_identity = namespace.handoff()
-        .map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?.identity;
+        .map_err(|error| namespace_bootstrap_code(&error))?.identity;
     #[cfg(target_os = "macos")]
     let core_binding = macos_core::bind(&executable, deadline)?;
     #[cfg(target_os = "macos")]
@@ -1678,6 +1696,7 @@ fn rpc_request(
             .inspect_err(|code| diagnostic_event("sidecar_start_blocked", None, "blocked", Some(code), None))?;
         let app = state.app.clone();
         let lifecycle = state.lifecycle.clone();
+        let reserved_generation = owner_generation.clone();
         let (sender, receiver) = mpsc::channel();
         let bootstrap_deadline = Instant::now() + rpc_bootstrap_duration();
         let bootstrap = std::thread::Builder::new().name("sidecar-bootstrap".into()).spawn(move || {
@@ -1690,6 +1709,7 @@ fn rpc_request(
         match spawned {
             Ok(process) => *process_guard = Some(process),
             Err(code) => {
+                release_unspawned_generation(&state.retired_owner_generations, &reserved_generation, &code);
                 // Invalidate queued commands even if no service reached Ready.
                 invalidate_connection_with_bootstrap_failure(state, Some(&code));
                 early_failure(&code);
@@ -4248,6 +4268,47 @@ mod tests {
             let (decoded_code, decoded_details) = local_error_parts(&encoded);
             assert_eq!(decoded_code, code);
             assert_eq!(decoded_details.expect("local details")["selection_files"][0]["name"], "~$port.docx");
+        }
+    }
+
+    #[test]
+    fn only_a_busy_namespace_attempt_gives_its_recovery_generation_back() {
+        let generations = Mutex::new(vec!["a".repeat(32), "b".repeat(32), "c".repeat(32)]);
+        for code in ["STANDALONE_DATA_ROOT_UNSAFE", "STANDALONE_RUNTIME_START_FAILED", ipc_transport::TIMEOUT,
+            ipc_transport::FAILED, "STANDALONE_OWNERSHIP_STORAGE_UNSAFE", ""] {
+            release_unspawned_generation(&generations, &"b".repeat(32), code);
+            assert_eq!(generations.lock().unwrap().len(), 3, "{code}");
+        }
+        release_unspawned_generation(&generations, &"b".repeat(32), "STANDALONE_DATA_ROOT_BUSY");
+        assert_eq!(*generations.lock().unwrap(), vec!["a".repeat(32), "c".repeat(32)]);
+        // An unknown generation removes nothing.
+        release_unspawned_generation(&generations, &"d".repeat(32), "STANDALONE_DATA_ROOT_BUSY");
+        assert_eq!(generations.lock().unwrap().len(), 2);
+        // Twenty busy attempts in a row never reach the limit of sixteen.
+        let lifecycle = ipc_transport::Lifecycle::default();
+        let generations = Mutex::new(Vec::new());
+        for _ in 0..20 {
+            let (guard, generation, previous) = reserve_sidecar_generation(&lifecycle, &generations).unwrap();
+            assert!(previous.is_empty());
+            release_unspawned_generation(&generations, &generation, "STANDALONE_DATA_ROOT_BUSY");
+            drop(guard);
+        }
+        for _ in 0..16 {
+            let (guard, _, _) = reserve_sidecar_generation(&lifecycle, &generations).unwrap();
+            drop(guard);
+        }
+        assert_eq!(reserve_sidecar_generation(&lifecycle, &generations).err().as_deref(),
+            Some("STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_held_namespace_chain_is_reported_as_busy_and_everything_else_stays_unsafe() {
+        assert_eq!(namespace_bootstrap_code(&std::io::Error::from_raw_os_error(32)), "STANDALONE_DATA_ROOT_BUSY");
+        for error in [std::io::Error::from_raw_os_error(5), std::io::Error::from_raw_os_error(2),
+            std::io::Error::from_raw_os_error(4390), std::io::Error::other("STANDALONE_DATA_ROOT_UNSAFE"),
+            std::io::Error::new(std::io::ErrorKind::AlreadyExists, "private path")] {
+            assert_eq!(namespace_bootstrap_code(&error), "STANDALONE_DATA_ROOT_UNSAFE");
         }
     }
 

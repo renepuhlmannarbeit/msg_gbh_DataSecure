@@ -292,6 +292,29 @@ und der native Diagnose-Sink öffnet keine vorbereiteten fremden Inodes zum
 Schreiben. Gegenproben und genaue Plattformnachweise stehen im
 [Releasevertrag](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
 
+## Start bei belegter Ordnerkette des Datenroots (Windows, RC178-Review)
+
+Die Windows-Hülle hält vor dem Start des Core jeden Ordner vom Laufwerk bis
+zum Datenroot ohne Löschfreigabe offen, damit kein Name dieser Kette während
+der Sitzung ersetzt werden kann. Hält ein anderer Prozess einen dieser Ordner
+so geöffnet, dass dieser Halt nicht möglich ist – typisch mit Löschzugriff,
+etwa eine Datensicherung oder Bereinigung –, wiederholt die Hülle das erste
+Öffnen der Kette bis zum Ordner über dem Datenroot und das Öffnen eines schon
+vorhandenen Datenroots zusammen höchstens rund zwei Sekunden lang. Bleibt ein
+Ordner belegt, verweigert sie den Start mit `STANDALONE_DATA_ROOT_BUSY` statt
+mit `STANDALONE_DATA_ROOT_UNSAFE`. Nach dem Anlegen eines neuen Datenroots
+wird nichts mehr wiederholt.
+
+Freigabe und Schutzgrenze sind unverändert: Ohne gehaltene Kette startet kein
+Core, und solange die Kette nicht gehalten ist, wird nichts angelegt oder
+verändert. Die Oberfläche nennt den Zustand als meist vorübergehend;
+**Verbindung und Laufstatus prüfen** versucht den Start im selben Fenster
+erneut. Ein solcher Versuch zählt nicht zu den höchstens 16 Startversuchen je
+laufender App, weil dabei kein Core entstanden ist. Verknüpfung, abweichende
+Identität und fehlender Ordner bleiben `STANDALONE_DATA_ROOT_UNSAFE`. Die
+spätere Ergebnisbereitstellung meldet eine solche Belegung weiterhin als
+`STANDALONE_DATA_ROOT_UNSAFE`.
+
 ## Bekannte Erkennungsgrenzen der Personenerkennung (RC178-Review)
 
 Die Erkennung ersetzt eine bereits bekannte Person auch in diesen

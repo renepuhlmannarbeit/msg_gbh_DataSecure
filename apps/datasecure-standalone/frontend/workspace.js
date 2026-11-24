@@ -20,6 +20,7 @@
     STANDALONE_HISTORY_ACTIVE: 'Dieser Lauf hat noch offene oder nicht bestätigte Vorgänge. Er bleibt sichtbar. Ausblenden beendet keinen Lauf und bricht keinen Export ab.',
     STANDALONE_HISTORY_VISIBILITY_INVALID: 'Die Anzeigepräferenz konnte nicht sicher gelesen oder gespeichert werden. Es wurden keine Laufdateien gelöscht.',
     STANDALONE_DATA_ROOT_UNSAFE: 'Der interne App-Datenordner konnte nicht sicher geöffnet oder neu angelegt werden. Das ist nicht der Ergebnisordner. Bitte die Diagnose sichern und Zugriff sowie Installation mit der IT prüfen. Vorhandene Daten nicht löschen und Schutzfunktionen nicht abschalten.',
+    STANDALONE_DATA_ROOT_BUSY: 'Ein anderes Programm hält gerade den internen App-Datenordner oder einen Ordner darüber geöffnet, zum Beispiel eine Datensicherung oder eine Bereinigung. Solange DataSecure diese Ordner nicht selbst festhalten kann, startet es den lokalen Core nicht. Das ist meist vorübergehend: bitte kurz warten und dann „Verbindung und Laufstatus prüfen“ wählen. Es wurden keine Daten verändert oder gelöscht. Bleibt die Meldung bestehen, die Diagnose sichern und mit der IT prüfen; Schutzfunktionen nicht abschalten.',
     UNSAFE_STORAGE_LOCATION: 'Die Trennung zwischen internen App-Daten und Ergebnisordnern konnte nicht sicher geprüft werden. Ein gespeicherter Speicherort kann unzugänglich oder ungeeignet sein. Bitte die Diagnose sichern; vorhandene Daten nicht löschen und Schutzfunktionen nicht abschalten.',
     STANDALONE_OWNERSHIP_RUNTIME_DENIED: 'Das Betriebssystem verweigert den Zugriff auf die Komponente zur Prozessabsicherung. Bitte das vollständige Paket und die Berechtigungen mit der IT prüfen; Schutzfunktionen nicht abschalten.',
     STANDALONE_OWNERSHIP_SIGNATURE_REFUSED: 'macOS hat beim Laden der Prozessabsicherung einen Signatur- oder Bibliotheksprüfungsfehler gemeldet. Bitte die Diagnose sichern und ein korrekt signiertes Paket verwenden. Gatekeeper und Bibliotheksprüfung nicht abschalten.',
@@ -104,7 +105,7 @@
     STANDALONE_DOCUMENT_VIEW_UNAVAILABLE: 'Die Ergebnisprüfung konnte nicht geöffnet werden. Bitte das vollständige App-Paket verwenden. Die gespeicherten Entscheidungen bleiben erhalten; kein Lauf wurde neu gestartet.'
   };
   const terminalCoreStartupCodes = new Set([
-    'STANDALONE_DATA_ROOT_UNSAFE',
+    'STANDALONE_DATA_ROOT_UNSAFE', 'STANDALONE_DATA_ROOT_BUSY',
     'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_RUNTIME_INVALID',
     'STANDALONE_OWNERSHIP_RUNTIME_DENIED', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED',
     'STANDALONE_OWNERSHIP_RUNTIME_LOAD_FAILED', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED',
@@ -415,6 +416,8 @@
     $('connection-help').hidden = false;
     $('connection-status').textContent = bootstrapFailure.code === 'STANDALONE_RESULT_ROOT_ACCESS_DENIED'
       ? 'Der lokale Dienst hat eine Zugriffsverweigerung am eingestellten Ergebnisziel gemeldet. In diesem Startzustand kann der Ordner nicht in der App gewechselt werden. Nach Wiederherstellung des Zugriffs „Verbindung und Laufstatus prüfen“ wählen. Kein Lauf oder Export wurde erneut gestartet.'
+      : bootstrapFailure.code === 'STANDALONE_DATA_ROOT_BUSY'
+      ? 'Der lokale Core wurde nicht gestartet, weil ein anderes Programm einen benötigten Ordner gerade geöffnet hält. Dateiauswahl und Ergebnisordner bleiben solange gesperrt. Automatische Verbindungsversuche sind angehalten. Nach kurzer Wartezeit „Verbindung und Laufstatus prüfen“ wählen; ein Neustart der App ist dafür nicht nötig. Kein Lauf oder Export wurde erneut gestartet.'
       : 'Der lokale Core konnte keine Verbindung herstellen. Dateiauswahl und Ergebnisordner bleiben absichtlich gesperrt. Automatische Verbindungsversuche sind angehalten. Bitte zuerst die Diagnose sichern und die Ursache prüfen; danach die Verbindung ausdrücklich erneut prüfen. Ein Lauf oder Export wurde nicht erneut gestartet.';
   }
   function holdBootstrapFailure(epoch, code, nativeBound = false) {
