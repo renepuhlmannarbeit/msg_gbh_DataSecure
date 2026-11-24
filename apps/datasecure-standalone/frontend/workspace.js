@@ -555,7 +555,7 @@
       get_run_history: 'den gespeicherten Verlauf', get_document_review_history_summary: 'den Freigabe- und Exportstatus',
       get_document_reviews: 'die Dokumentprüfstände', admit_selected_sources: 'die Dateiauswahl' }[activity.action] || 'einen lokalen Vorgang';
     const seconds = Math.floor(Math.min(activity.elapsed_ms, 86400000) / 1000);
-    return `DataSecure bearbeitet noch ${operation} (seit ${seconds} Sekunden). Der Abschluss steht noch aus.`;
+    return `DataSecure bearbeitet noch ${operation} (seit ${seconds} ${seconds === 1 ? 'Sekunde' : 'Sekunden'}). Der Abschluss steht noch aus.`;
   }
   function nativeCoreDescription(snapshot) {
     if (snapshot?.phase === 'closing') return 'DataSecure schließt erst, wenn der lokale Dienst sicher beendet ist. Bitte warten.';
@@ -1390,16 +1390,18 @@
           throw Error('DOCUMENT_REVIEW_INVALID');
         contents.append(element('p', data.result_publication?.state === 'repair_required'
           ? `${data.reviewable_count === 1 ? '1 privater Dokumentstand' : `${data.reviewable_count} private Dokumentstände`}. Vor neuen Ergebnisdateien ist eine sichere Nachbearbeitung nötig. Es wird nichts automatisch geändert.`
-          : `${data.reviewable_count} gespeicherte Ergebnisstände. Nachbearbeitung ist freiwillig; keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig.`, 'history-meta'));
+          : `${data.reviewable_count} ${data.reviewable_count === 1 ? 'gespeicherter Ergebnisstand' : 'gespeicherte Ergebnisstände'}. Nachbearbeitung ist freiwillig; keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig.`, 'history-meta'));
         if (data.review_policy) contents.append(element('p',
           'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.', 'history-meta'));
-        if (data.unavailable_count) contents.append(element('p', `${data.unavailable_count} Dokumentprüfstände nicht verfügbar. Betroffene Dateien in der optionalen Nachbearbeitung ansehen.`, 'history-meta'));
-        if (data.unclassified_source_count) contents.append(element('p', `${data.unclassified_source_count} Quelldateien mit unklarem früheren Ergebnisstatus. Die vollständige Verarbeitung dieses Laufs ist nicht belegbar. Dateinamen in der Dokumentansicht ansehen.`, 'history-meta'));
+        if (data.unavailable_count) contents.append(element('p', `${data.unavailable_count} ${data.unavailable_count === 1 ? 'Dokumentprüfstand' : 'Dokumentprüfstände'} nicht verfügbar. ${data.unavailable_count === 1 ? 'Betroffene Datei' : 'Betroffene Dateien'} in der optionalen Nachbearbeitung ansehen.`, 'history-meta'));
+        if (data.unclassified_source_count) contents.append(element('p', `${data.unclassified_source_count} ${data.unclassified_source_count === 1 ? 'Quelldatei' : 'Quelldateien'} mit unklarem früheren Ergebnisstatus. Die vollständige Verarbeitung dieses Laufs ist nicht belegbar. Dateinamen in der Dokumentansicht ansehen.`, 'history-meta'));
         if (rejectedCount) contents.append(element('p', raw
-          ? `${rejectedCount} Quelldateien nicht umgewandelt. Gründe und Namen unter den Hinweisen dieses Laufs ansehen.`
-          : `${rejectedCount} Quelldateien wurden nicht verarbeitet. Dateinamen und Gründe in der Dokumentansicht ansehen; sie sind nicht in den Ergebnisdateien enthalten.`, 'history-meta'));
+          ? `${rejectedCount} ${rejectedCount === 1 ? 'Quelldatei' : 'Quelldateien'} nicht umgewandelt. Gründe und Namen unter den Hinweisen dieses Laufs ansehen.`
+          : `${rejectedCount} ${rejectedCount === 1 ? 'Quelldatei wurde' : 'Quelldateien wurden'} nicht verarbeitet. ${rejectedCount === 1 ? 'Dateiname und Grund in der Dokumentansicht ansehen; sie ist' : 'Dateinamen und Gründe in der Dokumentansicht ansehen; sie sind'} nicht in den Ergebnisdateien enthalten.`, 'history-meta'));
         if (data.recorded_export_count) contents.append(element('p',
-          `${data.recorded_export_count} frühere zusätzliche Kopien mit Beleg. Sie gehören zu ihren damaligen Textständen und werden beim Öffnen erneut geprüft; keine neue Kopie nötig.`, 'history-meta'));
+          data.recorded_export_count === 1
+            ? '1 frühere zusätzliche Kopie mit Beleg. Sie gehört zu ihrem damaligen Textstand und wird beim Öffnen erneut geprüft; keine neue Kopie nötig.'
+            : `${data.recorded_export_count} frühere zusätzliche Kopien mit Beleg. Sie gehören zu ihren damaligen Textständen und werden beim Öffnen erneut geprüft; keine neue Kopie nötig.`, 'history-meta'));
         const last = data.last_recorded_export;
         if (last) {
           if (!['markdown-only', 'markdown-and-anonymize'].includes(last.processing_mode) ||
@@ -1411,7 +1413,7 @@
           contents.append(element('p', `${last.recorded_at ? 'Neuester datierter Exportbeleg' : 'Exportbeleg ohne erfassten Zeitpunkt'}: ${last.document_count} ${last.document_count === 1 ? 'Datei' : 'Dateien'} · ${when}${last.processing_mode === 'markdown-only' ? ' · nicht anonymisiert' : ''}.`, 'history-meta'));
         }
         if (data.pending_incomplete_count || data.pending_confirmation_count) contents.append(element('p',
-          `${data.pending_incomplete_count} unvollständige Exportaufträge · ${data.pending_confirmation_count} fertige Kopien mit offener Empfangsbestätigung. In der Dokumentansicht abgleichen, nicht neu exportieren.`, 'history-meta'));
+          `${data.pending_incomplete_count} ${data.pending_incomplete_count === 1 ? 'unvollständiger Exportauftrag' : 'unvollständige Exportaufträge'} · ${data.pending_confirmation_count} ${data.pending_confirmation_count === 1 ? 'fertige Kopie' : 'fertige Kopien'} mit offener Empfangsbestätigung. In der Dokumentansicht abgleichen, nicht neu exportieren.`, 'history-meta'));
         status.textContent = data.result_publication?.state === 'repair_required'
           ? 'Gespeicherte Texte nachbearbeiten: sensible Stellen bewusst maskieren, sicher ersetzen oder den Basisstand ausdrücklich wiederherstellen. Erst alle betroffenen Dokumente reparieren; kein wiederholter Bereitstellungsversuch. Frühere Ergebnisse bleiben unverändert.'
           : data.result_publication?.state === 'unavailable'

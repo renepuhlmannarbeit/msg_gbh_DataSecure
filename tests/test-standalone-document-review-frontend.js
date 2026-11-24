@@ -213,7 +213,7 @@ testAsync('unopened anonymized documents require a separate bound human confirma
   const h = harness({ explicitApproval: true }); await h.api.open('a'.repeat(64)); await h.all();
   await h.act('documents-approve');
   assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 0);
-  assert.match(h.el('documents-approve-confirm-text').textContent, /2 von 2.*nicht.*geöffnet/u);
+  assert.match(h.el('documents-approve-confirm-text').textContent, /2 von 2 ausgewählten Dokumentständen wurden .*nicht.*geöffnet.*Öffne sie zuerst, oder/u);
   await h.act('documents-approve-cancel');
   assert.equal(h.el('documents-approve-confirm').hidden, true);
   await h.act('documents-approve');
@@ -224,7 +224,7 @@ testAsync('unopened anonymized documents require a separate bound human confirma
   await h.all();
   await h.act(h.el('documents-list').children[0].children[1].children[0]);
   await h.act('documents-approve');
-  assert.match(h.el('documents-approve-confirm-text').textContent, /1 von 2.*nicht.*geöffnet/u);
+  assert.match(h.el('documents-approve-confirm-text').textContent, /1 von 2 ausgewählten Dokumentständen wurde .*nicht.*geöffnet.*Öffne ihn zuerst, oder/u);
   await h.act('documents-approve-proceed');
   assert.equal(h.calls.filter(isDecision).length, 1);
 });
@@ -882,9 +882,11 @@ testAsync('export progress uses only the bound independent native snapshot and n
   try {
     assert.equal(h.document.activeElement, h.el('document-export-result'));
     h.advance(2000); await tick();
-    assert.match(h.el('document-export-result').textContent, /1 von 2 Dateien.*Zwischenbereich/u);
+    assert.match(h.el('document-export-result').textContent, /1 von 2 Dateien ist im geschützten Zwischenbereich/u);
+    staged = 0; h.advance(2000); await tick();
+    assert.match(h.el('document-export-result').textContent, /0 von 2 Dateien sind im geschützten Zwischenbereich/u);
     staged = 2; h.advance(2000); await tick();
-    assert.match(h.el('document-export-result').textContent, /2 von 2 Dateien.*Danach.*geprüft/u);
+    assert.match(h.el('document-export-result').textContent, /2 von 2 Dateien sind im geschützten Zwischenbereich.*Danach.*geprüft/u);
     assert.equal(h.el('document-export-close').disabled, true);
     assert.doesNotMatch(h.el('document-export-title').textContent, /fertig|gespeichert/u);
     phase = 'verifying'; h.advance(2000); await tick();
@@ -3063,4 +3065,27 @@ testAsync('discarding an interrupted recovery is explicit and its late reader ca
     assert.equal(h.calls.some(isDecision), false);
   } finally { finish({}); await pending; await tick(); }
 });
+// The harness always exports two documents. The sentences for exactly one file are evaluated from the
+// renderer's own expressions, so that verb and noun agree for 0, 1 and 2.
+testAsync('count sentences of the document review agree in number for one file', async () => {
+  const expression = (pattern, ...names) => {
+    const found = source.match(pattern); assert.ok(found, String(pattern));
+    return new Function(...names, `return ${found[1]};`);
+  };
+  const copying = expression(/if \(progress\.phase === 'copying'\) return (`[^\n]+`);/u, 'progress');
+  const said = (staged, total) => copying({ staged_count: staged, total_count: total }).split(' im geschützten')[0];
+  assert.deepEqual([said(0, 1), said(1, 1), said(0, 2), said(1, 2), said(2, 2)],
+    ['0 von 1 Datei ist', '1 von 1 Datei ist', '0 von 2 Dateien sind', '1 von 2 Dateien ist', '2 von 2 Dateien sind']);
+  const unopened = expression(/\$\('documents-approve-confirm-text'\)\.textContent = (`[\s\S]+?keinen Export\.`);/u, 'notOpened', 'rows');
+  assert.match(unopened(1, [{}]), /^Der ausgewählte Dokumentstand wurde in dieser Sitzung nicht zum Vergleich geöffnet\. .* Öffne ihn zuerst, oder bestätige/u);
+  assert.match(unopened(3, [{}, {}, {}]), /^3 von 3 ausgewählten Dokumentständen wurden .* Öffne sie zuerst, oder bestätige/u);
+  const scope = expression(/const scope = (unavailableSourceCount \? [\s\S]+?Markdown-Prüfständen'\}\.`);/u, 'unavailableSourceCount', 'sourceCount', 'unavailableReasons');
+  assert.equal(scope(0, 1, ''), 'Dieser Lauf umfasst 1 Quelldatei mit verfügbarem Markdown-Prüfstand.');
+  assert.equal(scope(0, 2, ''), 'Dieser Lauf umfasst 2 Quelldateien mit verfügbaren Markdown-Prüfständen.');
+  assert.equal(scope(1, 1, '1 ohne OCR'), 'Dieser Lauf umfasst 1 Quelldatei; 1 davon hat keinen verfügbaren Markdown-Prüfstand (1 ohne OCR).');
+  assert.equal(scope(2, 4, 'x'), 'Dieser Lauf umfasst 4 Quelldateien; 2 davon haben keinen verfügbaren Markdown-Prüfstand (x).');
+  const seconds = expression(/const seconds = (value => `[^\n]+`);/u)();
+  assert.deepEqual([seconds(0), seconds(1), seconds(2)], ['0 Sekunden', '1 Sekunde', '2 Sekunden']);
+});
+
 done();

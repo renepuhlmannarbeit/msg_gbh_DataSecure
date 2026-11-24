@@ -93,7 +93,7 @@
   }
   function exportProgressText(progress) {
     if (!progress) return 'Ein verlässlicher Dateifortschritt ist momentan nicht verfügbar.';
-    if (progress.phase === 'copying') return `${progress.staged_count} von ${progress.total_count} ${progress.total_count === 1 ? 'Datei' : 'Dateien'} ${progress.staged_count === 1 ? 'ist' : 'sind'} im geschützten Zwischenbereich gespeichert. Danach wird die vollständige Kopie geprüft.`;
+    if (progress.phase === 'copying') return `${progress.staged_count} von ${progress.total_count} ${progress.total_count === 1 ? 'Datei' : 'Dateien'} ${progress.staged_count === 1 || progress.total_count === 1 ? 'ist' : 'sind'} im geschützten Zwischenbereich gespeichert. Danach wird die vollständige Kopie geprüft.`;
     if (progress.phase === 'preparing') return 'Die ausgewählten Textstände werden für die Kopie geprüft und vorbereitet.';
     if (progress.phase === 'verifying') return 'DataSecure prüft die kopierten Dateien und stellt den Exportordner fertig.';
     return 'DataSecure gleicht die Kopie mit dem gespeicherten Abschlussbeleg ab.';
@@ -1012,7 +1012,9 @@
     if (!notOpened) { pendingApproval = null; void decideRows('approve', rows); return; }
     pendingApproval = { batchId, selection: rows.map(({ document_id, revision, output_sha256 }) =>
       ({ document_id, revision, output_sha256 })) };
-    $('documents-approve-confirm-text').textContent = `${notOpened} von ${rows.length} ausgewählten Dokumentständen wurden in dieser Sitzung nicht zum Vergleich geöffnet. Die technische Anonymisierung ersetzt keine Sichtprüfung. Öffne sie zuerst, oder bestätige nur nach einer eigenen Prüfung außerhalb dieser Ansicht. Diese Freigabe erstellt noch keinen Export.`;
+    $('documents-approve-confirm-text').textContent = `${rows.length === 1
+      ? 'Der ausgewählte Dokumentstand wurde in dieser Sitzung nicht zum Vergleich geöffnet. Die technische Anonymisierung ersetzt keine Sichtprüfung. Öffne ihn zuerst'
+      : `${notOpened} von ${rows.length} ausgewählten Dokumentständen ${notOpened === 1 ? 'wurde' : 'wurden'} in dieser Sitzung nicht zum Vergleich geöffnet. Die technische Anonymisierung ersetzt keine Sichtprüfung. Öffne ${notOpened === 1 ? 'ihn' : 'sie'} zuerst`}, oder bestätige nur nach einer eigenen Prüfung außerhalb dieser Ansicht. Diese Freigabe erstellt noch keinen Export.`;
     controls();
     $('documents-approve-proceed').focus?.();
   }
@@ -1039,12 +1041,14 @@
     const otherStops = unavailableSourceCount - omissionSourceCount - privacyStopCount;
     const unavailableReasons = [omissionSourceCount ? `${omissionSourceCount} ohne OCR` : '',
       privacyStopCount ? `${privacyStopCount} aus Datenschutzgründen angehalten` : '',
-      otherStops ? `${otherStops} sonstige nicht verfügbare Prüfstände` : ''].filter(Boolean).join(' · ');
-    const scope = unavailableSourceCount ? `Dieser Lauf umfasst ${sourceCount} Quelldateien; ${unavailableSourceCount} davon haben keinen verfügbaren Markdown-Prüfstand (${unavailableReasons}).` :
-      `Dieser Lauf umfasst ${sourceCount} Quelldateien mit verfügbaren Markdown-Prüfständen.`;
+      otherStops ? `${otherStops} ${otherStops === 1 ? 'sonstiger nicht verfügbarer Prüfstand' : 'sonstige nicht verfügbare Prüfstände'}` : ''].filter(Boolean).join(' · ');
+    const scope = unavailableSourceCount ? `Dieser Lauf umfasst ${sourceCount} ${sourceCount === 1 ? 'Quelldatei' : 'Quelldateien'}; ${unavailableSourceCount} davon ${unavailableSourceCount === 1 ? 'hat' : 'haben'} keinen verfügbaren Markdown-Prüfstand (${unavailableReasons}).` :
+      `Dieser Lauf umfasst ${sourceCount} ${sourceCount === 1 ? 'Quelldatei mit verfügbarem Markdown-Prüfstand' : 'Quelldateien mit verfügbaren Markdown-Prüfständen'}.`;
     $('document-export-title').textContent = complete ? 'Empfang der fertigen Kopie bestätigen' : isRaw ? 'Markdown-Kopie speichern' : 'Dateien exportieren';
     $('document-export-purpose').textContent = isRaw ? `Nur ${dialogSelection.length === 1 ? 'diese eine ausgewählte Datei' : `diese ${dialogSelection.length} ausgewählten Dateien`} als zusätzliche Markdown-Kopie speichern. Bereits erzeugte Dateien bleiben unverändert. Nicht anonymisiert: Die Kopie enthält Originalinhalte.` :
-      `Nur ${dialogSelection.length} ausgewählte Markdown-Textstände werden in einen separaten Exportordner kopiert. ${exportRequest ? 'Der gespeicherte Auftrag bleibt an seine bereits bestätigten Textstände gebunden.' : 'Mit der Exportbestätigung gibst du genau diese Textstände zur Verwendung frei; eine gesonderte Freigabe ist nicht nötig.'} ${automatic() ? 'Schnellweg: Die automatische Erstfreigabe ist keine menschliche Prüfung. ' : ''}Technische Schutzprüfungen bleiben aktiv, ersetzen aber keine fachliche Sichtprüfung. ${scope} Weitere verfügbare, aber nicht ausgewählte Dateien sind ebenfalls nicht Teil dieses Exports.`;
+      `${dialogSelection.length === 1
+        ? `Nur der eine ausgewählte Markdown-Textstand wird in einen separaten Exportordner kopiert. ${exportRequest ? 'Der gespeicherte Auftrag bleibt an seinen bereits bestätigten Textstand gebunden.' : 'Mit der Exportbestätigung gibst du genau diesen Textstand zur Verwendung frei; eine gesonderte Freigabe ist nicht nötig.'}`
+        : `Nur ${dialogSelection.length} ausgewählte Markdown-Textstände werden in einen separaten Exportordner kopiert. ${exportRequest ? 'Der gespeicherte Auftrag bleibt an seine bereits bestätigten Textstände gebunden.' : 'Mit der Exportbestätigung gibst du genau diese Textstände zur Verwendung frei; eine gesonderte Freigabe ist nicht nötig.'}`} ${automatic() ? 'Schnellweg: Die automatische Erstfreigabe ist keine menschliche Prüfung. ' : ''}Technische Schutzprüfungen bleiben aktiv, ersetzen aber keine fachliche Sichtprüfung. ${scope} Weitere verfügbare, aber nicht ausgewählte Dateien sind ebenfalls nicht Teil dieses Exports.`;
     $('document-export-target').textContent = `${dialogResultFolder || 'Ergebnisordner'} (Bindung beim Export geprüft) → ${namespace(dialogMode)} → ${exportRequest ? `Export-${exportRequest.operationId} (${pendingMetadata || knownExport ? 'gespeicherter Auftrag' : 'Bestätigung des Auftrags noch offen'})` : 'neuer Exportordner'}`;
     $('document-export-filenames-heading').textContent = isRaw ? 'Enthaltene Markdown-Dateien · gespeicherter Dateinamenplan' : 'Enthalten · neutrale Dateinamen';
     $('document-export-confirm').textContent = complete ? 'Empfang bestätigen' : exportRequest ? pendingMetadata ? 'Export erneut abgleichen' : 'Export erneut versuchen' : isRaw ? 'Kopie speichern' : 'Freigeben und exportieren';
@@ -1150,7 +1154,8 @@
     const announce = () => {
       if (!active()) return;
       const elapsed = Math.max(0, Math.floor((monotonicNow() - startedAt) / 1000));
-      const duration = elapsed < 60 ? `${elapsed} Sekunden` : `${Math.floor(elapsed / 60)} ${elapsed < 120 ? 'Minute' : 'Minuten'} ${elapsed % 60} Sekunden`;
+      const seconds = value => `${value} ${value === 1 ? 'Sekunde' : 'Sekunden'}`;
+      const duration = elapsed < 60 ? seconds(elapsed) : `${Math.floor(elapsed / 60)} ${elapsed < 120 ? 'Minute' : 'Minuten'} ${seconds(elapsed % 60)}`;
       // Polling is independent of the serial Core. Announce changed phases or
       // counts, but not the same waiting message every two seconds.
       const signature = JSON.stringify([receiptPhase, observed, Math.floor(elapsed / 10)]);
