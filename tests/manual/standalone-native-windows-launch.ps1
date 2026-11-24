@@ -172,7 +172,7 @@ public static class DataSecureOutboundWatch {
     static readonly HashSet<int> Tree = new HashSet<int>();
     static readonly Dictionary<int, string> Images = new Dictionary<int, string>();
     static readonly HashSet<string> Rows = new HashSet<string>();
-    static Thread worker; static volatile bool stop; static int samples; static int failures;
+    static Thread worker; static volatile bool stop; static volatile bool includeIpv6 = true; static int samples; static int failures;
     static void RefreshTree(int root) {
         Tree.Add(root);
         IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
@@ -215,7 +215,7 @@ public static class DataSecureOutboundWatch {
                     int owner = BitConverter.ToInt32(v4, o + 20);
                     if (!Tree.Contains(owner) || BitConverter.ToInt32(v4, o) == 2) continue;
                     Add(owner, "ipv4", new IPAddress((long) BitConverter.ToUInt32(v4, o + 12)), Port(v4, o + 16)); } }
-            byte[] v6 = Table(23);
+            byte[] v6 = includeIpv6 ? Table(23) : new byte[0];
             if (v6.Length >= 4) { int count = BitConverter.ToInt32(v6, 0);
                 for (int i = 0; i < count; i++) { int o = 4 + i * 56; if (o + 56 > v6.Length) break;
                     int owner = BitConverter.ToInt32(v6, o + 52);
@@ -231,6 +231,14 @@ public static class DataSecureOutboundWatch {
     public static int Samples { get { lock (Gate) { return samples; } } }
     // A table or process snapshot that could not be read, or a sampling pass that threw.
     public static int Failures { get { lock (Gate) { return failures; } } }
+    // The IPv6 table is read wherever it can be read; see the control below.
+    public static bool IncludeIpv6 { get { return includeIpv6; } set { includeIpv6 = value; } }
+    public static bool Ipv6TableReadable() {
+        int size = 0; GetExtendedTcpTable(IntPtr.Zero, ref size, false, 23, 5, 0);
+        if (size <= 0) return false;
+        size += 4096; IntPtr memory = Marshal.AllocHGlobal(size);
+        try { return GetExtendedTcpTable(memory, ref size, false, 23, 5, 0) == 0; } finally { Marshal.FreeHGlobal(memory); }
+    }
     public static void Start(int root) {
         Reset(); stop = false;
         worker = new Thread(delegate() { while (!stop) { try { Sample(root); } catch { lock (Gate) { failures++; } } Thread.Sleep(10); } });
@@ -245,10 +253,13 @@ public static class DataSecureOutboundWatch {
     # Positive control before an empty observation counts as evidence: a real
     # connection of this very process over IPv4 and over IPv6, and one of a
     # child process. The three exercise both table layouts and the process tree.
-    # A host without an IPv6 stack has no IPv6 table to read and no IPv6
-    # connection to miss; only there the IPv6 control is left out, and the
-    # evidence says so.
+    # A host without an IPv6 stack has no IPv6 connection to miss; only there
+    # the IPv6 control is left out, and the evidence says so. The IPv6 table
+    # is still read wherever it can be read. It is left out only where there
+    # is no IPv6 stack and the table itself cannot be read, so that such a
+    # host does not count every pass as a failed read.
     $script:nativeOutboundIpv6Control = [bool] [System.Net.Sockets.Socket]::OSSupportsIPv6
+    [DataSecureOutboundWatch]::IncludeIpv6 = $script:nativeOutboundIpv6Control -or [DataSecureOutboundWatch]::Ipv6TableReadable()
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
     $listener6 = $null; $client6 = $null
     $childListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
@@ -287,6 +298,20 @@ public static class DataSecureOutboundWatch {
         } while (-not $childSeen -and -not $child.HasExited -and [DateTimeOffset]::UtcNow -lt $childDeadline)
         if (-not $childSeen) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_TREE_INVALID' }
         if ([DataSecureOutboundWatch]::Failures -ne 0) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_INVALID' }
+        # The same two connections once more through the path the real
+        # observation takes: Start, the background thread, Stop. A thread
+        # that never samples or a Stop that returns nothing must not pass.
+        [DataSecureOutboundWatch]::Start($PID)
+        $workerDeadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+        while ([DataSecureOutboundWatch]::Samples -lt 3 -and [DateTimeOffset]::UtcNow -lt $workerDeadline) { Start-Sleep -Milliseconds 20 }
+        $workerSamples = [DataSecureOutboundWatch]::Samples
+        $workerFailures = [DataSecureOutboundWatch]::Failures
+        $workerRows = @([DataSecureOutboundWatch]::Stop())
+        if ($workerSamples -lt 3 -or $workerFailures -ne 0 -or
+            @($workerRows | Where-Object { $_ -like "*|ipv4|127.0.0.1|$port" }).Count -ne 1 -or
+            @($workerRows | Where-Object { $_ -like "*|ipv4|127.0.0.1|$childPort" }).Count -ne 1) {
+            throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID'
+        }
     } finally {
         if ($null -ne $child) {
             try { if (-not $child.HasExited) { $child.Kill() }; [void] $child.WaitForExit(5000) } catch { }
@@ -295,6 +320,7 @@ public static class DataSecureOutboundWatch {
         $client.Dispose(); $listener.Stop(); $childListener.Stop()
         if ($null -ne $client6) { $client6.Dispose() }
         if ($null -ne $listener6) { $listener6.Stop() }
+        try { [void] [DataSecureOutboundWatch]::Stop() } catch { }
         [DataSecureOutboundWatch]::Reset()
     }
 }

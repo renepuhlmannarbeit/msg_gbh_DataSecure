@@ -1631,7 +1631,9 @@ foreach ($case in $cases) {
 }
 [Console]::WriteLine('ACTUAL LAUNCHER WEBVIEW WAIT PASS; six synthetic listings; no app and no real process')
 `;
-  const result = spawnSync('C:\\Program Files\\PowerShell\\7\\pwsh.exe', ['-NoProfile', '-Command', script],
+  // Windows PowerShell is part of every Windows host and is what the launcher itself runs under.
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
     { encoding: 'utf8', windowsHide: true, timeout: 60000,
       env: { ...process.env, DATASECURE_REVIEW_LAUNCHER: launcher } });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
@@ -1658,6 +1660,16 @@ if (process.platform === 'win32') test('actual Windows launcher outbound observe
   assert.match(control, /if \(-not \$childSeen\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_TREE_INVALID' \}/u);
   assert.match(control, /if \(\[DataSecureOutboundWatch\]::Failures -ne 0\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_INVALID' \}/u);
   assert.match(control, /\$child\.Kill\(\)/u, 'the control child never outlives the control');
+  // The thread path the real observation uses is controlled with the same live connections.
+  const worker = control.slice(control.indexOf('[DataSecureOutboundWatch]::Start($PID)'), control.indexOf('    } finally {'));
+  assert.ok(control.indexOf('[DataSecureOutboundWatch]::Start($PID)') > control.indexOf("throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_TREE_INVALID'"));
+  assert.match(worker, /\$workerRows = @\(\[DataSecureOutboundWatch\]::Stop\(\)\)/u);
+  assert.match(worker, /if \(\$workerSamples -lt 3 -or \$workerFailures -ne 0 -or\s+@\(\$workerRows \| Where-Object \{ \$_ -like "\*\|ipv4\|127\.0\.0\.1\|\$port" \}\)\.Count -ne 1 -or\s+@\(\$workerRows \| Where-Object \{ \$_ -like "\*\|ipv4\|127\.0\.0\.1\|\$childPort" \}\)\.Count -ne 1\) \{\s+throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID'/u);
+  // The IPv6 table is skipped only where there is neither an IPv6 stack nor a readable table.
+  assert.match(control, /\[DataSecureOutboundWatch\]::IncludeIpv6 = \$script:nativeOutboundIpv6Control -or \[DataSecureOutboundWatch\]::Ipv6TableReadable\(\)/u);
+  assert.match(source, /byte\[\] v6 = includeIpv6 \? Table\(23\) : new byte\[0\];/u);
+  assert.match(source, /static volatile bool includeIpv6 = true;/u, 'reading the IPv6 table is the default');
+  assert.equal(source.split('IncludeIpv6 =').length - 1, 1, 'nothing else switches the IPv6 table off');
   assert.equal(source.split('failures++').length - 1, 4, 'the size query, the table read, the process snapshot and the sampling pass count their failures');
   assert.match(source, /if \(\$outboundFailures \* 20 -gt \$outboundSamples\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_DEGRADED' \}/u);
 });
@@ -1685,6 +1697,8 @@ test('the Windows launcher observes outbound connections from process start and 
   assert.match(launcher.slice(launcher.lastIndexOf('} finally {')), /\[DataSecureOutboundWatch\]::Stop\(\)/u);
   const measure = fs.readFileSync(path.join(__dirname, 'manual/measure-standalone-native-windows.ps1'), 'utf8');
   assert.match(measure, /if \(\$AssertNoOutbound\) \{ \$arguments \+= @\('-AssertNoOutbound', '-OutboundSeconds', \[string\] \$OutboundSeconds\) \}/u);
+  assert.match(measure, /if \(\$AssertReviewWindow\) \{ \$arguments \+= '-AssertReviewWindow' \}/u, 'the second window is measured only when the launcher is told to open it');
+  assert.match(measure, /review_window_asserted = \[bool\] \$AssertReviewWindow/u, 'the summary says whether the second window was part of the measurement');
   assert.match(measure, /\$evidence\.outbound_observed -ne \$true -or \[int\] \$evidence\.outbound_connections -ne 0/u);
 });
 

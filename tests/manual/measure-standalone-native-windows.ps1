@@ -96,6 +96,7 @@ $summary = [ordered]@{
     outbound_window_ms = if ($AssertNoOutbound) { [int] $lastEvidence.outbound_window_ms } else { $null }
     outbound_connections = if ($AssertNoOutbound) { 0 } else { $null }
     loopback_attempts_max = if ($AssertNoOutbound) { $maxLoopbackAttempts } else { $null }
+    review_window_asserted = [bool] $AssertReviewWindow
     os_build = [string] $lastEvidence.os_build
     process_architecture = [string] $lastEvidence.process_architecture
     webview2_version = [string] $lastEvidence.webview2_version

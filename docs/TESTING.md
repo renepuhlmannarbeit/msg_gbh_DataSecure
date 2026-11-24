@@ -391,7 +391,11 @@ des Betriebssystems für den Prozessbaum, bis `-OutboundSeconds` (Vorgabe 75)
 nach der Bereitschaft. Eine Positivkontrolle geht voraus: je eine eigene
 Verbindung über IPv4 und IPv6 und eine eines Kindprozesses; die über IPv6
 entfällt nur auf einem Host ohne IPv6, und der Evidenzsatz nennt das
-(`outbound_ipv6_control`). Der Release-Workflow ruft die Probe mit diesem
+(`outbound_ipv6_control`). Die beiden IPv4-Verbindungen müssen danach auch
+über den Hintergrundthread erscheinen, den die Beobachtung selbst benutzt;
+sonst endet die Probe mit `STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID`.
+Die IPv6-Tabelle bleibt nur dort ungelesen, wo der Host kein IPv6 hat und die
+Tabelle nicht lesbar ist. Der Release-Workflow ruft die Probe mit diesem
 Schalter auf. Jede beobachtete
 Verbindung außer dem Versuch von WebView2 zum eigenen lokalen Hostnamen
 (Loopback, Port 80) endet mit `STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`.
