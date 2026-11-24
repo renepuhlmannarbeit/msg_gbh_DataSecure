@@ -103,12 +103,21 @@ function Get-NativeWebViewProfile([string] $CommandLine) {
     return [System.IO.Path]::GetFullPath($argument)
 }
 
+function Test-NativeWebViewOwnProfile([string] $CommandLine, [string] $ExpectedProfile) {
+    # WebView2 does not run in WEBVIEW2_USER_DATA_FOLDER itself: it passes its
+    # fixed child EBWebView as --user-data-dir. Accept exactly the folder and
+    # that one child, never a sibling, a deeper path or another profile.
+    $argument = Get-NativeWebViewProfile $CommandLine
+    if (-not $argument) { return $false }
+    $profile = [System.IO.Path]::GetFullPath($ExpectedProfile).TrimEnd('\')
+    return ($argument.TrimEnd('\') -ieq $profile -or $argument.TrimEnd('\') -ieq (Join-Path $profile 'EBWebView'))
+}
+
 function Wait-NativeWebViewProfileExit([string] $ExpectedProfile, [DateTime] $NotBeforeUtc) {
-    $profile = [System.IO.Path]::GetFullPath($ExpectedProfile)
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(20)
     do {
         $owned = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction Stop |
-            Where-Object { (Get-NativeWebViewProfile ([string] $_.CommandLine)) -ieq $profile })
+            Where-Object { Test-NativeWebViewOwnProfile ([string] $_.CommandLine) $ExpectedProfile })
         if ($owned.Count -eq 0) { return }
         foreach ($entry in $owned) {
             $created = ([DateTime] $entry.CreationDate).ToUniversalTime()
@@ -145,6 +154,22 @@ if ($ValidateReadinessOnly) {
     foreach ($line in @('webview --other="C:\synthetic owned\webview\main"',
         'webview --user-data-dir=C:\other --user-data-dir=C:\synthetic')) {
         if (Get-NativeWebViewProfile $line) { throw 'STANDALONE_NATIVE_WEBVIEW_PROFILE_FALSE_POSITIVE' }
+        $groups++
+    }
+    foreach ($line in @('webview --user-data-dir="C:\synthetic owned\webview\main" --type=renderer',
+        'webview --user-data-dir="C:\synthetic owned\webview\main\EBWebView" --type=utility',
+        'webview --user-data-dir="c:\SYNTHETIC owned\webview\main\ebwebview\"')) {
+        if (-not (Test-NativeWebViewOwnProfile $line $profile)) { throw 'STANDALONE_NATIVE_WEBVIEW_OWN_PROFILE_REFUSED' }
+        $groups++
+    }
+    foreach ($line in @('webview --user-data-dir="C:\synthetic owned\webview\main\EBWebView\Default"',
+        'webview --user-data-dir="C:\synthetic owned\webview\main\Other"',
+        'webview --user-data-dir="C:\synthetic owned\webview\main2\EBWebView"',
+        'webview --user-data-dir="C:\synthetic owned\webview"',
+        'webview --user-data-dir="C:\other\EBWebView"',
+        'webview --type=utility',
+        'webview --user-data-dir="C:\synthetic owned\webview\main" --user-data-dir="C:\synthetic owned\webview\main\EBWebView"')) {
+        if (Test-NativeWebViewOwnProfile $line $profile) { throw 'STANDALONE_NATIVE_WEBVIEW_OWN_PROFILE_FALSE_POSITIVE' }
         $groups++
     }
     $requestA = 'a' * 35
@@ -288,6 +313,7 @@ $passed = $false
 $startupStopwatch = $null
 $startupMilliseconds = $null
 $networkEvidence = $null
+$nativeEndpointClassification = $null
 
 function Get-CheckedTree([string] $Root) {
     if ($Root -ne $cleanupContext.Root) { throw 'STANDALONE_NATIVE_ROOT_UNSAFE' }
@@ -428,21 +454,20 @@ function Get-NativeNetworkObservation([int] $RootProcessId, [DateTime] $Expected
         if ($owner.Count -ne 1 -or $freshOwner.Count -ne 1 -or
             ([DateTime] $owner[0].CreationDate).ToUniversalTime() -ne
                 ([DateTime] $freshOwner[0].CreationDate).ToUniversalTime()) {
+            $script:nativeEndpointClassification = [ordered]@{ stage = 'owner_changed';
+                owner_in_tree = [bool] ($owner.Count -eq 1); owner_running = [bool] ($freshOwner.Count -eq 1) }
             throw 'STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED'
         }
         if ([string] $freshOwner[0].Name -ine 'msedgewebview2.exe' -or
             -not $freshOwner[0].ExecutablePath -or -not $freshOwner[0].CommandLine) {
+            $script:nativeEndpointClassification = [ordered]@{ stage = 'owner_rejected';
+                webview_name = [bool] ([string] $freshOwner[0].Name -ieq 'msedgewebview2.exe');
+                executable_readable = [bool] $freshOwner[0].ExecutablePath;
+                command_line_readable = [bool] $freshOwner[0].CommandLine }
             throw 'STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED'
         }
         $commandLine = [string] $freshOwner[0].CommandLine
-        $profileMarker = [System.IO.Path]::GetFullPath($ExpectedWebViewRoot)
-        $profileMatch = [regex]::Match($commandLine,
-            '(?i)(?:^|\s)--user-data-dir(?:=|\s+)(?:"([^"]+)"|([^\s"]+))')
-        $profileArgument = if ($profileMatch.Success -and $profileMatch.Groups[1].Success) {
-            $profileMatch.Groups[1].Value
-        } elseif ($profileMatch.Success) { $profileMatch.Groups[2].Value } else { '' }
-        $isOwnProfile = $profileArgument -and
-            [System.IO.Path]::GetFullPath($profileArgument) -ieq $profileMarker
+        $isOwnProfile = Test-NativeWebViewOwnProfile $commandLine $ExpectedWebViewRoot
         $isWebView = $commandLine.Contains('--embedded-browser-webview=1') -or
             ($commandLine.Contains('--type=utility') -and $commandLine.Contains('NetworkService'))
         $signature = Get-AuthenticodeSignature -LiteralPath ([string] $freshOwner[0].ExecutablePath)
@@ -452,10 +477,12 @@ function Get-NativeNetworkObservation([int] $RootProcessId, [DateTime] $Expected
         if (-not $isOwnProfile -or -not $isWebView -or -not $isMicrosoft) {
             # A failed observation is not product-network evidence. Keep its
             # cause diagnosable without exposing paths, command lines or ports.
-            $classification = [ordered]@{ own_profile = [bool] $isOwnProfile;
+            # The caller assigns this function's output, so a line written here
+            # would be discarded by the throw; the outer finally prints it.
+            $script:nativeEndpointClassification = [ordered]@{ stage = 'classification';
+                own_profile = [bool] $isOwnProfile;
                 webview_process = [bool] $isWebView; microsoft_signature = [bool] $isMicrosoft;
                 signature_status = [string] $signature.Status }
-            Write-Output ('STANDALONE NATIVE ENDPOINT CLASSIFICATION ' + ($classification | ConvertTo-Json -Compress))
             throw 'STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED'
         }
         $udpProcesses.Add('msedgewebview2.exe')
@@ -601,6 +628,10 @@ try {
     }
     if ($EmitEvidence) {
         $facts = Get-StandaloneWebViewHostFacts
+        # A typed array keeps one shape: an untyped list serializes as {} when
+        # empty and as a bare string for a single attributed process.
+        $udpProcessEvidence = $null
+        if ($null -ne $networkEvidence) { $udpProcessEvidence = [string[]] @($networkEvidence.udp_processes) }
         $evidence = [ordered]@{
             schema = 'datasecure-standalone-native-windows-evidence/2'
             version = $expectedVersion
@@ -611,7 +642,7 @@ try {
             process_count = if ($null -ne $networkEvidence) { $networkEvidence.process_count } else { $null }
             tcp_listeners = if ($null -ne $networkEvidence) { $networkEvidence.tcp_listeners } else { $null }
             udp_endpoints = if ($null -ne $networkEvidence) { $networkEvidence.udp_endpoints } else { $null }
-            udp_processes = if ($null -ne $networkEvidence) { $networkEvidence.udp_processes } else { $null }
+            udp_processes = $udpProcessEvidence
             os_build = $facts.os_build
             process_architecture = $facts.process_architecture
             webview2_version = $facts.webview2_version
@@ -633,6 +664,16 @@ try {
         Write-Output ('STANDALONE NATIVE EVIDENCE RETAINED: ' + $testRoot)
     } catch {
         $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'RETENTION_NOTICE'; ErrorRecord = $_ })
+    }
+    if ($null -ne $nativeEndpointClassification) {
+        # Content-free cause of an unattributed endpoint: fixed stage label,
+        # booleans and the signature status only.
+        try {
+            Write-Output ('STANDALONE NATIVE ENDPOINT CLASSIFICATION ' +
+                ($nativeEndpointClassification | ConvertTo-Json -Compress))
+        } catch {
+            $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'ENDPOINT_CLASSIFICATION_NOTICE'; ErrorRecord = $_ })
+        }
     }
     if ($null -ne $process) {
         $nativeProcessMayBeRunning = $true
@@ -670,10 +711,19 @@ try {
         }
         # Tauri exit alone does not mean Chromium has finished its own profile
         # work. This separate observation never grants deletion or a writer join.
+        $nativeWebViewExitWait = [System.Diagnostics.Stopwatch]::StartNew()
         try {
             Wait-NativeWebViewProfileExit (Join-Path $testRoot 'webview\main') $rootStartedUtc
         } catch {
             $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'WEBVIEW_PROFILE'; ErrorRecord = $_ })
+        }
+        # The wait has a fixed 20-second budget. Its real duration is the only
+        # evidence of the remaining headroom on a slower host.
+        try {
+            Write-Output ('STANDALONE NATIVE WEBVIEW EXIT WAIT ' + ([ordered]@{
+                waited_ms = [int] $nativeWebViewExitWait.Elapsed.TotalMilliseconds; budget_ms = 20000 } | ConvertTo-Json -Compress))
+        } catch {
+            $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'WEBVIEW_EXIT_WAIT_NOTICE'; ErrorRecord = $_ })
         }
     }
     foreach ($nativeTeardownFailure in $nativeTeardownFailures) {

@@ -1376,6 +1376,8 @@ if (process.platform === 'win32') test('actual PowerShell readiness rejects fail
     '-File', script, '-ValidateReadinessOnly'], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /READINESS CONTRACT PASS \([0-9]+ groups; no native app launch\)/u);
+  // 45 readiness/parser groups plus ten own-profile groups for the EBWebView rule.
+  assert.ok(Number(result.stdout.match(/PASS \(([0-9]+) groups/u)[1]) >= 55, result.stdout);
 });
 else process.stdout.write('SKIP actual PowerShell readiness contract (Windows host required; not counted passed)\n');
 
@@ -1524,7 +1526,20 @@ foreach ($kind in @('setup-failure', 'early-exit', 'post-readiness-failure', 'su
   if ($caught -cne $expected) { throw ('PRIMARY_OR_TEARDOWN_CHANGED:' + $kind) }
   if ($script:deleteCalls -ne 0) { throw ('EVIDENCE_DELETE_REQUESTED:' + $kind) }
   if (-not ($script:notices | Where-Object { $_.Contains($testRoot) })) { throw ('RETENTION_NOTICE_MISSING:' + $kind) }
+  if ($script:notices | Where-Object { $_.Contains('ENDPOINT CLASSIFICATION') }) { throw ('CLASSIFICATION_WITHOUT_CAUSE:' + $kind) }
 }
+# The observation function throws while its caller assigns its output. The
+# recorded cause must still be printed, without replacing the primary error.
+$script:notices = [System.Collections.Generic.List[string]]::new(); $script:failTeardown = $false
+$process = $null
+$nativeEndpointClassification = [ordered]@{ stage = 'classification'; own_profile = $false }
+$caught = $null
+try { try { throw 'fixture-body' } finally { & $actualFinally } } catch { $caught = $_.Exception.Message }
+if ($caught -cne 'fixture-body') { throw 'CLASSIFICATION_REPLACED_PRIMARY' }
+if (-not ($script:notices | Where-Object { $_ -ceq 'STANDALONE NATIVE ENDPOINT CLASSIFICATION {"stage":"classification","own_profile":false}' })) {
+  throw 'CLASSIFICATION_NOTICE_MISSING'
+}
+$nativeEndpointClassification = $null
 [Console]::WriteLine('ACTUAL LAUNCHER FINALLY RETENTION PASS; six explicit lifecycle models; no app, file deletion or native end proof')
 `;
   const result = spawnSync('C:\\Program Files\\PowerShell\\7\\pwsh.exe', ['-NoProfile', '-Command', script],
@@ -1548,6 +1563,79 @@ test('Windows native teardown retains its evidence while the separate checked cl
   assert.match(cleanup, /Get-Item -LiteralPath \$stamp\.Path -Force -ErrorAction Stop/u);
   assert.match(cleanup, /Remove-Item -LiteralPath \$stamp\.Path -Force -ErrorAction Stop/u);
 });
+
+test('the Windows launcher binds WebView2 to its real EBWebView profile and keeps the endpoint cause across the throw', () => {
+  const launcher = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
+  const observation = launcher.slice(launcher.indexOf('function Get-NativeNetworkObservation('),
+    launcher.indexOf('function Merge-NativeNetworkEvidence('));
+  assert.match(observation, /\$isOwnProfile = Test-NativeWebViewOwnProfile \$commandLine \$ExpectedWebViewRoot/u);
+  assert.doesNotMatch(observation, /Write-Output/u, 'the caller assigns this output; a throw would discard the line');
+  assert.equal(observation.match(/throw 'STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED'/gu)?.length, 3);
+  assert.deepEqual(observation.match(/\$script:nativeEndpointClassification = \[ordered\]@\{ stage = '[a-z_]+'/gu)
+    ?.map(value => value.match(/'([a-z_]+)'$/u)[1]), ['owner_changed', 'owner_rejected', 'classification']);
+  const causes = observation.match(/\$script:nativeEndpointClassification = \[ordered\]@\{[^}]*\}/gu) || [];
+  assert.equal(causes.length, 3);
+  for (const cause of causes) {
+    const values = cause.slice(cause.indexOf("'", cause.indexOf('stage = ') + 9) + 1).match(/= [^;}\r\n]+/gu) || [];
+    assert.ok(values.length >= 2, cause);
+    for (const value of values) assert.match(value.trim(), /^= (?:\[bool\] |\[string\] \$signature\.Status$)/u,
+      'the recorded cause stays content-free: booleans and the signature status only');
+  }
+  const wait = launcher.slice(launcher.indexOf('function Wait-NativeWebViewProfileExit('), launcher.indexOf('if ($ValidateReadinessOnly)'));
+  assert.match(wait, /Test-NativeWebViewOwnProfile \(\[string\] \$_\.CommandLine\) \$ExpectedProfile/u,
+    'teardown waits for the same processes the observation attributes');
+  const own = launcher.slice(launcher.indexOf('function Test-NativeWebViewOwnProfile('), launcher.indexOf('function Wait-NativeWebViewProfileExit('));
+  assert.match(own, /-ieq \$profile -or \$argument\.TrimEnd\('\\'\) -ieq \(Join-Path \$profile 'EBWebView'\)/u);
+  assert.doesNotMatch(own, /-like|-match|StartsWith|Contains/u, 'no prefix or pattern match may widen the own profile');
+  assert.match(launcher.slice(launcher.lastIndexOf('} finally {')), /STANDALONE NATIVE ENDPOINT CLASSIFICATION/u);
+  assert.match(launcher, /\$udpProcessEvidence = \[string\[\]\] @\(\$networkEvidence\.udp_processes\)/u);
+  assert.match(launcher, /udp_processes = \$udpProcessEvidence\r?\n/u);
+});
+
+if (process.platform === 'win32') test('actual Windows launcher teardown wait binds the EBWebView profile, refuses an older instance and re-enumerates', () => {
+  const launcher = path.join(__dirname, 'manual/standalone-native-windows-launch.ps1');
+  const script = String.raw`
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$tree = [System.Management.Automation.Language.Parser]::ParseFile($env:DATASECURE_REVIEW_LAUNCHER, [ref] $tokens, [ref] $errors)
+if ($errors.Count) { throw 'LAUNCHER_PARSE_FAILED' }
+foreach ($name in @('Get-NativeWebViewProfile', 'Test-NativeWebViewOwnProfile', 'Wait-NativeWebViewProfileExit')) {
+  $found = @($tree.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true))
+  if ($found.Count -ne 1) { throw ('LAUNCHER_FUNCTION_NOT_UNIQUE:' + $name) }
+  . ([scriptblock]::Create($found[0].Extent.Text))
+}
+$root = 'C:\synthetic owned\webview\main'
+$started = [DateTime]::UtcNow
+$script:listings = @(); $script:calls = 0
+function Get-CimInstance { $script:calls++; if ($script:calls -le $script:listings.Count) { return $script:listings[$script:calls - 1] } }
+function New-Entry([string] $Profile, [DateTime] $Created) {
+  # No such process id exists: acquiring it fails exactly like an exit between listing and handle.
+  [pscustomobject]@{ ProcessId = 2147483646; CreationDate = $Created; CommandLine = ('msedgewebview2.exe --type=utility --user-data-dir="' + $Profile + '" --embedded-browser-webview=1') }
+}
+function Invoke-Wait { try { Wait-NativeWebViewProfileExit $root $started; return 'returned' } catch { return $_.Exception.Message } }
+$cases = @(
+  @{ name = 'none'; listings = @(); expected = 'returned'; calls = 1 },
+  @{ name = 'sibling'; listings = @(, @(New-Entry 'C:\synthetic owned\webview\main2\EBWebView' $started.AddMinutes(-5))); expected = 'returned'; calls = 1 },
+  @{ name = 'deeper'; listings = @(, @(New-Entry 'C:\synthetic owned\webview\main\EBWebView\Default' $started.AddMinutes(-5))); expected = 'returned'; calls = 1 },
+  @{ name = 'older-child'; listings = @(, @(New-Entry 'C:\synthetic owned\webview\main\EBWebView' $started.AddMinutes(-5))); expected = 'STANDALONE_NATIVE_WEBVIEW_INSTANCE_UNSAFE'; calls = 1 },
+  @{ name = 'older-folder'; listings = @(, @(New-Entry 'C:\synthetic owned\webview\main' $started.AddMinutes(-5))); expected = 'STANDALONE_NATIVE_WEBVIEW_INSTANCE_UNSAFE'; calls = 1 },
+  @{ name = 'exited-own'; listings = @(, @(New-Entry 'C:\synthetic owned\webview\main\EBWebView' $started.AddSeconds(1))); expected = 'returned'; calls = 2 }
+)
+foreach ($case in $cases) {
+  $script:listings = $case.listings; $script:calls = 0
+  $actual = Invoke-Wait
+  if ($actual -cne $case.expected) { throw ('WAIT_RESULT:' + $case.name + ':' + $actual) }
+  if ($script:calls -ne $case.calls) { throw ('WAIT_LISTINGS:' + $case.name + ':' + $script:calls) }
+}
+[Console]::WriteLine('ACTUAL LAUNCHER WEBVIEW WAIT PASS; six synthetic listings; no app and no real process')
+`;
+  const result = spawnSync('C:\\Program Files\\PowerShell\\7\\pwsh.exe', ['-NoProfile', '-Command', script],
+    { encoding: 'utf8', windowsHide: true, timeout: 60000,
+      env: { ...process.env, DATASECURE_REVIEW_LAUNCHER: launcher } });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /ACTUAL LAUNCHER WEBVIEW WAIT PASS/u);
+});
+else console.log('SKIP Windows launcher WebView teardown wait on this host; not counted as a passed case');
 
 testAsync('actual OCR-skip scenario waits for its exact batch publication after terminal counts', async () => {
   const probe = packagedOcrSkipProbe(['STANDALONE_RESULTS_MISSING', 'ready']);

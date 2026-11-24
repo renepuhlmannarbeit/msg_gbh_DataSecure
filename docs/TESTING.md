@@ -375,7 +375,16 @@ oder Core-/Workerprozesses stoppt. Ein UDP-Endpunkt darf nur als Plattformbefund
 weiterlaufen, wenn sein Besitzer ein abstammender, gültig Microsoft-signierter
 WebView2-Prozess mit exakt geparstem `--user-data-dir` des isolierten Testprofils
 ist; unklare Zuordnung
-stoppt. Das 100-Dateien-Paketgate verwendet den wirklichen entpackten Sidecar,
+stoppt. Als eigenes Profil gilt genau der vorgegebene WebView-Ordner oder sein
+von WebView2 angelegter Unterordner `EBWebView`, den WebView2 tatsächlich als
+`--user-data-dir` übergibt; Geschwister- und tiefere Pfade gelten nicht. Bei
+einem Abbruch mit `STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED` nennt die
+Zeile `STANDALONE NATIVE ENDPOINT CLASSIFICATION` die fehlende Stufe ohne Pfad,
+Befehlszeile oder Port. Dieselbe Profilregel bestimmt, auf welche
+WebView2-Prozesse der Abbau vor dem Ende der Probe wartet; die Zeile
+`STANDALONE NATIVE WEBVIEW EXIT WAIT` nennt die tatsächliche Wartezeit
+gegenüber dem festen Budget von 20 Sekunden. Das 100-Dateien-Paketgate
+verwendet den wirklichen entpackten Sidecar,
 verlangt Strukturtreue, unveränderte Quellhashes und im reinen Modus exakt
 100 Ergebnisse ohne Zuordnungsdatei. Es weist Verarbeitungs- und gesamte
 Harnessdauer getrennt aus. Der Korpus belegt weder native UI-Interaktionen noch
