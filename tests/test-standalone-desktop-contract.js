@@ -692,6 +692,30 @@ test('every namespace failure before the Core starts is classified, and only a b
     'a busy start is held like every other refused start; only an explicit recheck retries');
 });
 
+test('every WebView2 window starts with the same switches that keep its network service local', () => {
+  const declared = rust.match(/const WEBVIEW2_BROWSER_ARGS: &str = "((?:[^"\\]|\\.)*)";/u)?.[1];
+  assert.ok(declared, 'the Rust constant must remain structurally discoverable');
+  const browserArgs = declared.replace(/\\"/gu, '"');
+  assert.strictEqual(config.app.windows.length, 1);
+  assert.strictEqual(config.app.windows[0].additionalBrowserArgs, browserArgs,
+    'WebView2 refuses a second environment with other options for the same user data folder');
+  // An explicit value replaces wry's own defaults; their feature list is
+  // repeated first. The exact string is pinned: the native probe cannot tell
+  // the switches apart, because the resolver rule alone silences the service.
+  assert.strictEqual(browserArgs, '--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection ' +
+    '--disable-background-networking --disable-component-update --no-proxy-server --disable-quic ' +
+    '--host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE tauri.localhost, EXCLUDE ipc.localhost"');
+  // The only hosts that still resolve are the two local protocol hosts the CSP names.
+  assert.match(config.app.security.csp, /connect-src ipc: http:\/\/ipc\.localhost;/u);
+  const builders = rust.split('WebviewWindowBuilder::new(').length - 1;
+  assert.strictEqual(builders, 1, 'a further window needs the same switches');
+  assert.doesNotMatch(rust, /WebviewBuilder::|WebviewWindowBuilder::from_config|WebviewWindow::builder\(|\.add_child\(/u,
+    'no other way of creating a webview bypasses the switches');
+  assert.match(rust, /WebviewWindowBuilder::new\(&app, "review", WebviewUrl::App\("review\.html"\.into\(\)\)\)\s+\.title\([^)]*\)\s+\.additional_browser_args\(WEBVIEW2_BROWSER_ARGS\)/u);
+  const macos = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/tauri.macos.conf.json'), 'utf8'));
+  assert.doesNotMatch(JSON.stringify(macos), /additionalBrowserArgs/u, 'the switches are a WebView2 matter; macOS inherits and ignores the base value');
+});
+
 test('native smoke isolates data, Documents, diagnostics and WebView before product startup', () => {
   const isolation = fs.readFileSync(path.join(root, 'tauri-contract/src/native_smoke.rs'), 'utf8');
   const host = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-host.ps1'), 'utf8');

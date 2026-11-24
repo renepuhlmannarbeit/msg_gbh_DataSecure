@@ -18,7 +18,8 @@
         "minHeight": 560,
         "resizable": true,
         "dragDropEnabled": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-networking --disable-component-update --no-proxy-server --disable-quic --host-resolver-rules=\"MAP * ~NOTFOUND, EXCLUDE tauri.localhost, EXCLUDE ipc.localhost\""
       }
     ],
     "security": {

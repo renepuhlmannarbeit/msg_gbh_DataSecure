@@ -42,6 +42,20 @@ const MAX_ADMISSION_PATH_BYTES: usize = 768 * 1024;
 const MAX_SINGLE_PATH_BYTES: usize = 32767;
 const MAX_BATCH_FILES: usize = 200;
 const MAX_PRESENTATION_GENERATION: u64 = 9_007_199_254_740_991;
+// WebView2 is a system component with its own network service. Left at its
+// defaults it queries the Edge configuration service at start, contacts the
+// Microsoft component updater about twice a minute and looks for a proxy
+// (WPAD). The pages are served from the embedded custom protocol only, so the
+// service needs no name resolution but the two local protocol hosts.
+// An explicit value replaces wry's own defaults. Their feature list is
+// repeated first; wry's autoplay switch is not, the app plays no media.
+// Every window must pass the identical string: WebView2 refuses a second
+// environment with other options for the same user data folder. The main
+// window carries it in tauri.conf.json (additionalBrowserArgs).
+// These switches are no guaranteed WebView2 interface, and WebView2 appends
+// the host's WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS to them; the native launch
+// probe (-AssertNoOutbound) is the regression gate for the product's own value.
+const WEBVIEW2_BROWSER_ARGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-networking --disable-component-update --no-proxy-server --disable-quic --host-resolver-rules=\"MAP * ~NOTFOUND, EXCLUDE tauri.localhost, EXCLUDE ipc.localhost\"";
 const IPC_SCHEMA: &str = "datasecure-standalone-private-ipc/1";
 const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -2264,6 +2278,7 @@ async fn open_review_window(app: AppHandle) -> Result<Value, String> {
             .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.opened();
         let window = WebviewWindowBuilder::new(&app, "review", WebviewUrl::App("review.html".into()))
             .title("DataSecure – lokale Prüfung")
+            .additional_browser_args(WEBVIEW2_BROWSER_ARGS)
             .visible(false)
             .inner_size(1080.0, 760.0)
             .min_inner_size(680.0, 500.0)

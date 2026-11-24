@@ -76,6 +76,25 @@ flowchart LR
   Protokollfehler oder unerwartetes Prozessende verwerfen den Kanal und beenden
   den Sidecar; der nächste Aufruf startet eine neue Instanz.
 - Es gibt keinen localhost-HTTP-/WebSocket-Listener und keinen Auto-Updater.
+- Die Oberfläche läuft unter Windows in Microsoft Edge WebView2, einer
+  Systemkomponente mit eigenem Netzwerkdienst. Ohne Vorgaben fragt dieser beim
+  Start den Konfigurationsdienst von Edge ab, meldet sich etwa zweimal je
+  Minute beim Komponenten-Updater von Microsoft und sucht einen Proxy (WPAD).
+  DataSecure startet deshalb jedes Fenster mit Schaltern, die
+  Hintergrundverkehr, Komponenten-Update, Proxy, QUIC und jede Namensauflösung
+  außer den beiden lokalen Protokollhosts abstellen (`additionalBrowserArgs`
+  in `tauri.conf.json`; das Prüffenster erhält dieselbe Zeichenkette). Diese
+  Schalter sind keine zugesicherte Schnittstelle von WebView2. Die Startprobe
+  prüft mit `-AssertNoOutbound` je Paket und Laufzeitversion, dass sie im
+  Prozessbaum keine TCP-Verbindung nach außen beobachtet. Es bleiben ein
+  Verbindungsversuch von WebView2 zum eigenen lokalen Hostnamen und ein
+  UDP-Socket, über den kein Paket gesendet wird.
+  Grenzen: WebView2 hängt eine Vorgabe des Hosts in der Umgebungsvariablen
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` an diese Schalter an; DataSecure
+  entfernt sie nicht, die Startprobe schon. Richtlinien des Hosts für
+  WebView2 sind nicht geprüft.
+  Die WebView2-Laufzeit selbst wird vom System außerhalb des Prozessbaums der
+  App aktualisiert. macOS nutzt WKWebView; dort ist das nicht gemessen.
 
 ## Datenlebenszyklus
 
