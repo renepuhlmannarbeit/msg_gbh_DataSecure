@@ -280,7 +280,7 @@ testAsync('reload invalidates changed or removed comparisons and their selection
       assert.equal(h.el('document-markdown').value, '', `${processingMode}/${change}: no old Markdown comparison`);
       assert.equal(h.el('document-revision').textContent, '');
       assert.equal(h.el('document-entities').hidden, true);
-      assert.match(h.el('documents-selected').textContent, /Ergebnisdateien verfügbar/u);
+      assert.match(h.el('documents-selected').textContent, /^\d+ angezeigt · (?:1 Ergebnisdatei|[2-9]\d* Ergebnisdateien) verfügbar$/u);
       await h.act('documents-approve');
       assert.deepEqual(h.calls.filter(call => call.command === 'decide_document_review').map(call => call.args.documentId),
         processingMode === 'markdown-only' ? [] : ['2'.repeat(32)], 'changed state cannot inherit a previous checkbox approval intent');

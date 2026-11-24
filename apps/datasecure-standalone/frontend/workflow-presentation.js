@@ -97,7 +97,7 @@
       export_complete: data.recorded_export_count > 0 && data.current_exported_count === data.reviewable_count });
     if (notProcessed) {
       projection.stages[0].status = 'warning';
-      projection.counts += ' · ' + entry.result_count + ' von ' + entry.selected_count + ' Quellen als Ergebnis verfügbar';
+      projection.counts += ' · ' + entry.result_count + ' von ' + entry.selected_count + (entry.selected_count === 1 ? ' Quelle' : ' Quellen') + ' als Ergebnis verfügbar';
       if (omitted) projection.counts += ' · ' + omitted + ' ohne OCR nicht umgewandelt';
       if (privacyStops) {
         projection.stages[1].status = 'warning';

@@ -4058,7 +4058,7 @@ testAsync('actual optional editor and nav-details preserve ready files without a
   assert.match(h.el('run-guide-title').textContent, /Anonymisierte Ergebnisse bereit/u);
   assert.equal(h.el('documents-approval-extras').hidden, true);
   assert.equal(h.el('documents-export').hidden, true);
-  assert.match(h.el('documents-selected').textContent, /1 angezeigt · 1 Ergebnisdateien verfügbar/u);
+  assert.match(h.el('documents-selected').textContent, /1 angezeigt · 1 Ergebnisdatei verfügbar/u);
   assert.equal(h.el('run-guide-stages').children[2].dataset.status, 'done');
   assert.equal(h.el('run-guide-stages').children[3].dataset.status, 'optional');
   await h.act('nav-details'); await tick();
@@ -5810,7 +5810,7 @@ testAsync('count texts of the standalone surface never put a bare plural after a
     'Ergebnisdateien', 'Einträge', 'Entscheidungen', 'Läufe', 'Seiten', 'Kontaktwerte', 'Kontaktwerten', 'OCR-Kontaktwerten',
     'Prüfzeilen', 'Markdown-Dateien', 'Inhaltshinweise', 'Fehler', 'Konvertierungsfehler', 'Dokumentstände', 'Dokumentständen',
     'Quelldateien', 'Dokumentprüfstände', 'Prüfstände', 'Prüfständen', 'Ergebnisstände', 'Textstände', 'Markdown-Textstände',
-    'Telefonwerte', 'Kopien', 'Exportaufträge', 'Sekunden', 'Minuten', 'Bilder', 'Stellen', 'Lesarten', 'OCR-Lesarten'];
+    'Telefonwerte', 'Kopien', 'Exportaufträge', 'Sekunden', 'Bilder', 'Stellen', 'Lesarten', 'OCR-Lesarten', 'Quellen'];
   const pattern = new RegExp('\\$\\{((?:[^{}`]|\\{[^{}]*\\})+)\\}`? (?:[a-zäöüß-]+ ){0,4}(?:' +
     nouns.join('|') + ')(?![\\wäöüß-])', 'gu');
   let seen = 0;
@@ -5827,6 +5827,31 @@ testAsync('count texts of the standalone surface never put a bare plural after a
     }
   }
   assert.ok(seen >= 20, `the guard still finds count texts to check (${seen})`);
+  // Two shapes the pattern above cannot see: the noun chosen by a second interpolation that
+  // decides on something else, and a count text built with `+`.
+  const plural = new RegExp(`(?:^| )(?:${nouns.join('|')})(?![\\wäöüß-])`, 'u');
+  const second = /\$\{((?:[^{}`]|\{[^{}]*\})+)\} \$\{((?:[^{}`]|\{[^{}]*\})+\?(?:[^{}`]|\{[^{}]*\})+)\}/gu;
+  const joined = /\+ '((?: [a-zäöüß-]+){0,3} [A-ZÄÖÜ][\wäöüß-]*)[^']*'/gu;
+  for (const name of ['workspace.js', 'review.js', 'document-review.js', 'workflow-presentation.js']) {
+    const text = fs.readFileSync(path.join(base, name), 'utf8');
+    const at = index => `${name}:${text.slice(0, index).split('\n').length}`;
+    for (const match of text.matchAll(second)) {
+      const number = match[1].replace(/ \|\| 0$/u, '').trim();
+      if (number.includes(' ? ') || number.includes("'")) continue;
+      const literals = [...match[2].matchAll(/'([^']*)'/gu)].map(found => found[1]);
+      // Every plural wording lies inside a decision on this very number; a decision that is
+      // closed in a bracketed branch before the wording does not count for it.
+      for (const found of match[2].matchAll(/'([^']*)'/gu)) {
+        if (!plural.test(found[1])) continue;
+        const open = match[2].slice(0, found.index).replace(/(?<=^|[\s?:])\((?:[^()]|\([^()]*\))*\)/gu, '');
+        assert.ok(open.includes(`${number} === 1`) || open.includes(`${number} > 1`), `${at(match.index)} ${match[0]}`);
+      }
+    }
+    for (const match of text.matchAll(joined)) {
+      if (!plural.test(match[1])) continue;
+      assert.match(text.slice(Math.max(0, match.index - 160), match.index + match[0].length), /=== 1 \?/u, `${at(match.index)} ${match[0]}`);
+    }
+  }
 });
 
 done();

@@ -297,6 +297,10 @@ test('bound history snapshot: 2 result revisions from 3 sources close approval a
     content_notice_count:0,content_notice_breakdown_complete:true}),receiptSummary({not_processed_count:1}));
   assert.equal(result.phase,'results_ready');assert.match(result.counts,/2 Ergebnisdateien/u);
   assert.match(result.counts,/2 von 3 Quellen als Ergebnis verfügbar.*1 ohne OCR nicht umgewandelt/u);
+  const single=historyReviewProjection(receiptEntry({selected_count:1,completed_count:1,result_count:0,failed_count:1,
+    expected_ocr_omission_count:1,failure_reason_breakdown_complete:true,
+    content_notice_count:0,content_notice_breakdown_complete:true}),receiptSummary({reviewable_count:0,approved_count:0,current_exported_count:0,not_processed_count:1}));
+  assert.equal(single,null,'one source without a result has no result line; the wording for one source is held by the count-text guard');
   assert.match(result.next,/keine zusätzliche Freigabe oder Exportbestätigung/u);
   assert.match(result.next,/1 Bild- oder Scan-Datei.*nicht umgewandelt.*kein technischer Fehler/u);
   assert.match(result.next,/nicht verarbeitete Quelle ist nicht in den Ergebnisdateien enthalten/u);

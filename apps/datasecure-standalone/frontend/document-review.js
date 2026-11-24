@@ -437,7 +437,9 @@
     $('documents-identity-reference').hidden = mode() !== 'markdown-and-anonymize';
     $('documents-identities').disabled = blocked || needsRepair || dirty() || Boolean(recoveryDraft) || !documents.length;
     $('documents-all').disabled = true;
-    $('documents-selected').textContent = `${shown.length} angezeigt · ${documents.length} ${directoryUnavailable || needsRepair ? 'private Dokumentstände lesbar' : 'Ergebnisdateien verfügbar'}`;
+    $('documents-selected').textContent = `${shown.length} angezeigt · ${documents.length} ${directoryUnavailable || needsRepair
+      ? (documents.length === 1 ? 'privater Dokumentstand lesbar' : 'private Dokumentstände lesbar')
+      : (documents.length === 1 ? 'Ergebnisdatei verfügbar' : 'Ergebnisdateien verfügbar')}`;
     $('documents-approve').hidden = raw(); $('documents-revoke').hidden = raw();
     $('documents-approve').disabled = blocked || directoryUnavailable || needsRepair || dirty() || Boolean(exportRequest) || !rows.length; $('documents-revoke').disabled = blocked || directoryUnavailable || needsRepair || dirty() || Boolean(exportRequest) || !rows.length;
     if (!raw() && rows.length && rows.every(row => row.approved)) $('documents-approve').disabled = true;
