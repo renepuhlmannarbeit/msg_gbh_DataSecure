@@ -899,12 +899,13 @@ Read-only-Prüfer hatten den Auftrag, sie zu widerlegen.
     liegen 0,5 s.
   - Ohne Sperre: automatische Maskierung einer erfundenen Datei, ein
     Ergebnis mit Zuordnung, Original unverändert.
-- **Einmalige Beobachtung, nicht zugeordnet** – In einem ersten Durchgang
-  der 20 Prüfungen hat sich das Fenster nach der elften geordnet beendet
+- **Geklärte Beobachtung, kein Befund** – In einem ersten Durchgang der 20
+  Prüfungen hat sich das Fenster nach der elften geordnet beendet
   (`sidecar_shutdown ready`, kein Absturzeintrag). Die Shell beendet sich
   nur auf eine Schließanforderung an das Fenster; das Prüfskript sendet
-  keine. Der Anwender saß zu dieser Zeit am Rechner. Die Wiederholung mit
-  20 Prüfungen lief ohne Beenden durch.
+  keine. Der Anwender hat auf Nachfrage bestätigt, dass er das Fenster
+  selbst geschlossen hat. Die Wiederholung mit 20 Prüfungen lief ohne
+  Beenden durch.
 
 ### Einwände der Gegenprüfung zu R-028 bis R-030
 

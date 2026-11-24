@@ -155,9 +155,6 @@ aber den Build-Fingerprint `b4466f2a…`.
    - Der Abbau der Startprobe wartet jetzt erstmals wirklich auf WebView2
      (hier 0,1 bis 0,3 s von 20 s). Im Release-Workflow und in
      `scripts/run-pkg-04.ps1` ist das nicht ausgeführt worden.
-   - Im nativen Lauf zu R-028 hat sich das App-Fenster einmal geordnet
-     beendet, ohne dass das Prüfskript es geschlossen hat. Die Wiederholung
-     mit 20 Prüfungen lief durch; der Auslöser ist nicht zugeordnet.
    - Nur teilweise behoben sind R-004, R-011, R-012, R-013, R-017, R-019,
      R-020, R-023, R-025 und R-027. Die Gründe stehen unten und in
      BEFUNDE.md.
@@ -520,10 +517,10 @@ erfundenen Zugangsdaten; danach eine Textdatei im geführten Lauf)
   Ergebnis verfügbar.“ Ergebnis, Dateizuordnung und Pseudonym-Zuordnung
   liegen im Ergebnisordner, das Original ist unverändert, die Diagnose
   enthält weder Dateinamen noch Passwörter noch Pfade.
-- **Einmal, nicht zugeordnet** – Im ersten Durchgang der 20 Prüfungen hat
-  sich das Fenster nach der elften geordnet beendet (`sidecar_shutdown
-  ready`). Das Prüfskript sendet keine Schließanforderung; der Anwender saß
-  zu der Zeit am Rechner. Die Wiederholung lief ohne Beenden durch.
+- **Geklärt, kein Befund** – Im ersten Durchgang der 20 Prüfungen hat sich
+  das Fenster nach der elften geordnet beendet (`sidecar_shutdown ready`).
+  Der Anwender hat bestätigt, dass er es selbst geschlossen hat. Die
+  Wiederholung lief ohne Beenden durch.
 - **Startprobe und Messung** – 14 von 14 Läufen der korrigierten Probe
   bestehen, 4 davon mit einem zugeordneten WebView2-Endpunkt; Abbau-Wartezeit
   138 bis 273 ms. Messung über zehn Starts: p50 1 993 ms, p95 2 015 ms,
