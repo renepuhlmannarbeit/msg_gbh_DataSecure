@@ -30,7 +30,9 @@ for ($iteration = 1; $iteration -le $Iterations; $iteration += 1) {
     if ($LASTEXITCODE -ne 0) {
         throw "STANDALONE_NATIVE_MEASUREMENT_FAILED:$iteration`n$($output -join [Environment]::NewLine)"
     }
-    $line = @($output | Where-Object { $_ -like 'STANDALONE NATIVE EVIDENCE *' } | Select-Object -Last 1)
+    # Only the JSON evidence line. The launcher also prints
+    # 'STANDALONE NATIVE EVIDENCE RETAINED: <path>' after it.
+    $line = @($output | Where-Object { $_ -like 'STANDALONE NATIVE EVIDENCE {*' } | Select-Object -Last 1)
     if ($line.Count -ne 1) { throw "STANDALONE_NATIVE_MEASUREMENT_MISSING:$iteration" }
     $evidence = ($line[0].Substring('STANDALONE NATIVE EVIDENCE '.Length) | ConvertFrom-Json -ErrorAction Stop)
     if (-not ($evidence.startup_ms -is [ValueType]) -or [double] $evidence.startup_ms -le 0) {
@@ -54,6 +56,9 @@ function Get-NearestRank([double] $Quantile) {
     return [Math]::Round([double] $sorted[$index], 3)
 }
 
+# A typed array keeps one shape for none, one and several processes.
+$observedUdpProcesses = $null
+if ($AssertNoListeners) { $observedUdpProcesses = [string[]] @($udpProcesses | Sort-Object) }
 $summary = [ordered]@{
     schema = 'datasecure-standalone-native-windows-summary/2'
     archive_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $archivePath).Hash.ToLowerInvariant()
@@ -67,9 +72,7 @@ $summary = [ordered]@{
     network_observed = [bool] $AssertNoListeners
     tcp_listeners = if ($AssertNoListeners) { [int] $lastEvidence.tcp_listeners } else { $null }
     observed_udp_endpoints_max = if ($AssertNoListeners) { $maxUdpEndpoints } else { $null }
-    observed_udp_processes = if ($AssertNoListeners -and $udpProcesses.Count -gt 0) {
-        @($udpProcesses | Sort-Object)
-    } elseif ($AssertNoListeners) { [System.Collections.Generic.List[string]]::new() } else { $null }
+    observed_udp_processes = $observedUdpProcesses
     os_build = [string] $lastEvidence.os_build
     process_architecture = [string] $lastEvidence.process_architecture
     webview2_version = [string] $lastEvidence.webview2_version

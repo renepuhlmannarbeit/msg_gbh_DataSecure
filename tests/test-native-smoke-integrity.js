@@ -1637,6 +1637,31 @@ foreach ($case in $cases) {
 });
 else console.log('SKIP Windows launcher WebView teardown wait on this host; not counted as a passed case');
 
+if (process.platform === 'win32') test('the Windows start measurement selects the JSON evidence line, not the later retention notice', () => {
+  const measure = fs.readFileSync(path.join(__dirname, 'manual/measure-standalone-native-windows.ps1'), 'utf8');
+  const filter = measure.match(/\$line = @\(\$output \| Where-Object \{ ([^}]+) \} \| Select-Object -Last 1\)/u)?.[1];
+  assert.ok(filter, 'the evidence filter must remain structurally discoverable');
+  // The launcher's real order: evidence, PASS, retention notice, exit-wait notice.
+  const script = `
+$output = @('STANDALONE NATIVE EVIDENCE {"startup_ms":1900.5,"udp_processes":["msedgewebview2.exe"]}',
+  'STANDALONE NATIVE WINDOWS LAUNCH PASS (load + successful IPC only; no review decisions)',
+  'STANDALONE NATIVE EVIDENCE RETAINED: C:/synthetic/not-created-native-root',
+  'STANDALONE NATIVE WEBVIEW EXIT WAIT {"waited_ms":12,"budget_ms":20000}')
+$line = @($output | Where-Object { ${filter} } | Select-Object -Last 1)
+if ($line.Count -ne 1) { throw 'EVIDENCE_LINE_NOT_UNIQUE' }
+$evidence = ($line[0].Substring('STANDALONE NATIVE EVIDENCE '.Length) | ConvertFrom-Json -ErrorAction Stop)
+if ([double] $evidence.startup_ms -ne 1900.5 -or @($evidence.udp_processes).Count -ne 1) { throw 'EVIDENCE_LINE_WRONG' }
+[Console]::WriteLine('MEASUREMENT EVIDENCE LINE PASS')
+`;
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /MEASUREMENT EVIDENCE LINE PASS/u);
+  assert.match(measure, /\$observedUdpProcesses = \[string\[\]\] @\(\$udpProcesses \| Sort-Object\)/u);
+  assert.match(measure, /observed_udp_processes = \$observedUdpProcesses\r?\n/u);
+});
+else console.log('SKIP Windows start measurement evidence line on this host; not counted as a passed case');
+
 testAsync('actual OCR-skip scenario waits for its exact batch publication after terminal counts', async () => {
   const probe = packagedOcrSkipProbe(['STANDALONE_RESULTS_MISSING', 'ready']);
   await probe.run();
