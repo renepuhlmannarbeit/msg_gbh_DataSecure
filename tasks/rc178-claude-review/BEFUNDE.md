@@ -126,6 +126,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-028 | niedrig | Architektur und Betrieb; Windows | Die App startet nicht, solange ein fremder Prozess einen Ordner oberhalb ihres Datenordners mit Löschzugriff geöffnet hält. Die Meldung nennt keinen vorübergehenden Zustand. Im isolierten Testprofil beobachtet, rund sieben Minuten lang. | BL-010.11, BL-010.21 | behoben (`b71439b2`): eigene Ursache „belegt“, kurzes Warten, Wiederanlauf im selben Fenster; die Schutzgrenze ist unverändert, eine lange Belegung verhindert den Start weiterhin |
 | R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert an jedem beobachteten UDP-Endpunkt des WebView2-Netzwerkdienstes, weil sie dessen Profilordner ohne den Unterordner `EBWebView` vergleicht; aus demselben Grund wartet ihr Abbau nie auf WebView2. Die Diagnosezeile geht beim Abbruch verloren. | BL-010.21 | behoben (`dbf98cbf`) |
 | R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
+| R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | offen (gemessen; Abhilfe über Startschalter geprüft, nicht umgesetzt) |
 
 ## Einzelbefunde
 
@@ -954,6 +955,101 @@ mehrfachem Argument).
   `scripts/run-pkg-04.ps1` läuft er damit ebenfalls zum ersten Mal wirklich;
   dort ist er nicht ausgeführt worden.
 
+## R-031 · WebView2 baut im laufenden Betrieb Verbindungen zu Microsoft auf
+
+Gemessen am 24.11.2026 auf Bitte des Anwenders, nachdem R-029 einen
+UDP-Endpunkt des WebView2-Netzwerkdienstes sichtbar gemacht hatte. Nichts am
+Produkt geändert; die Abhilfe ist geprüft, aber nicht umgesetzt.
+
+- **Ort**
+  - `apps/datasecure-standalone/tauri-contract/tauri.conf.json`: Die Fenster
+    setzen keine zusätzlichen Browserargumente. WebView2 startet mit den
+    Standardschaltern von Tauri
+    (`--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection`). Die
+    Datei ist seit RC178 unverändert.
+  - `docs/canonical/STANDALONE_SECURITY_MODEL.md`: Standalone benötige kein
+    Internet; es gebe keinen Auto-Updater.
+  - `frontend/workspace.html`: Anzeige „Lokal · ohne Upload“ und „Nur lokal“.
+  - `tests/manual/standalone-native-windows-launch.ps1`: prüft lauschende
+    TCP-Sockets und UDP-Endpunkte, aber keine ausgehenden Verbindungen.
+- **Reproduktion**
+  - Scratch-Skript: Paket `cec20d6e…` im isolierten Testprofil starten und
+    die Betriebssystemtabellen für TCP und UDP je Prozess rund alle 23 ms
+    lesen, mit einer Positivkontrolle vor jedem Lauf. Zehn Minuten, darin ein
+    Verarbeitungslauf.
+  - Zweiter Lauf über 280 s mit dem Netzprotokoll von Chromium
+    (`--log-net-log`, gesetzt über `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`;
+    das Paket bleibt unverändert). Daraus stammen Hostnamen, Pfade und
+    Mengen.
+  - Host online mit IPv6, WebView2 158.0.4370.33, keine Adminrechte.
+- **Ist**
+  - Verbindungen hat nur der Netzwerkdienst von WebView2. Shell, Node-Core
+    und die übrigen WebView2-Prozesse haben in zehn Minuten keine.
+  - Beim Start zwei `GET https://config.edge.skype.com/config/v1/Edge/<Version>`.
+    Die Adresse trägt eine Client-Kennung, Betriebssystem mit Version und
+    Architektur, das Installationsdatum und weitere Merkmale. Antwort
+    zusammen 23,9 KB.
+  - Ab Sekunde 60 `POST https://edge.microsoft.com/componentupdater/api/v1/update`,
+    danach alle 20 bis 40 Sekunden: 8 Anfragen in 280 s, zusammen 14,1 KB
+    gesendet und 22,8 KB empfangen. In der Tabelle des Betriebssystems
+    entspricht das HTTPS-Verbindungen zu Microsoft-Adressen bei 0,3 s,
+    1,3 s, 60 s, 150 s und 220 s.
+  - Beim Start die Namensauflösung `wpad`, also die automatische Suche nach
+    einem Proxy im lokalen Netz. Dazu 15 DNS-Anfragen an den Resolver des
+    Netzes.
+  - UDP-Sockets, die auf eine Microsoft-Adresse mit Port 443 gerichtet
+    werden, ohne ein gesendetes Paket (Prüfung der Erreichbarkeit). Zusammen
+    mit den DNS-Sockets ist das der Endpunkt aus R-029.
+  - Ein TCP-Versuch zu `localhost:80` beim Laden der App-Seite
+    (`tauri.localhost`).
+  - In den protokollierten Adressen und Kopfzeilen steht kein App-, Datei-
+    oder Ordnername. Die Anfragekörper zeichnet das Protokoll in dieser
+    Stufe nicht auf; ihr Inhalt ist nicht geprüft.
+- **Soll** – Der Prozessbaum einer App, die „Lokal · ohne Upload“ anzeigt
+  und laut Sicherheitsmodell kein Internet braucht und keinen Auto-Updater
+  hat, baut keine Verbindungen nach außen auf. Andernfalls nennen Dokumente
+  und Oberfläche den Plattformverkehr von WebView2.
+- **Auswirkung**
+  - Ein Abfluss von Dokumentinhalten ist nicht beobachtet.
+  - Jeder Start und jede Betriebsminute zeigt Microsoft die IP-Adresse des
+    Geräts, eine Client-Kennung von WebView2 und Systemmerkmale.
+  - In Netzen, die Außenverkehr untersagen oder protokollieren, fällt die
+    App auf, obwohl ihre Beschreibung das Gegenteil sagt.
+  - Der Komponenten-Updater kann Bestandteile in das WebView2-Profil der App
+    nachladen. In der Messung gab es nur Abfragen, keinen Download.
+  - Die Proxy-Suche kann in einem fremden Netz beantwortet werden; betroffen
+    wäre der oben genannte Verkehr.
+- **Geprüfte Abhilfe, nicht umgesetzt** – nur über die Umgebungsvariable:
+  - `--disable-background-networking --disable-component-update`: 100 s
+    ohne eine Anfrage nach außen, App arbeitsbereit. Die Auflösung von
+    `wpad` bleibt.
+  - Zusätzlich `--no-proxy-server --disable-quic
+    --host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE tauri.localhost, EXCLUDE
+    ipc.localhost"`: 150 s ohne Anfrage und ohne Namensauflösung; App
+    arbeitsbereit, ein Verarbeitungslauf abgeschlossen. Es bleiben der
+    UDP-Socket ohne gesendetes Paket und der Versuch zu `localhost:80`.
+  - Im Produkt wären das die `additionalBrowserArgs` der Fenster. Tauri
+    ersetzt damit seine eigenen Standardschalter; die drei oben genannten
+    müssen deshalb mit hinein.
+  - Die Schalter sind keine zugesicherte Schnittstelle von WebView2. Eine
+    Aktualisierung der Laufzeit kann ihre Wirkung ändern. Dauerhaft trägt
+    das nur mit einer Prüfung auf ausgehende Verbindungen in der Startprobe.
+- **Grenzen der Messung**
+  - Ein Host, eine WebView2-Version, zehn Minuten. Was nach Stunden oder
+    nach einem tatsächlichen Komponenten-Update geschieht, ist nicht
+    beobachtet.
+  - UDP ist nur über das Netzprotokoll von Chromium belegt, nicht über einen
+    Mitschnitt.
+  - Welcher der drei zusätzlichen Schalter die Proxy-Suche abstellt, ist
+    nicht einzeln getrennt.
+  - Dass das veröffentlichte RC178-Paket sich gleich verhält, folgt aus der
+    unveränderten Fensterkonfiguration und ist nicht gemessen.
+  - macOS nutzt WKWebView und ist nicht untersucht.
+- **Zuordnung** – BL-010.11 (Hülle und ihre Grenzen), BL-010.21
+  (Zielhostnachweis der Startprobe).
+- **Status** – offen. Die Umsetzung ändert die Fensterkonfiguration des
+  Produkts und braucht eine Entscheidung.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -981,6 +1077,7 @@ mehrfachem Argument).
 | A-022 | Der Abbau der Probe wartet auf die WebView2-Prozesse des Testprofils (`docs/canonical/TRACEABILITY.md`: „exakte Profilquieszenz vor Cleanup“). | Die Funktion ist vorhanden und wird aufgerufen. | Sie vergleicht denselben falschen Ordner und findet nie einen Prozess. | eigene Lektüre nach dem Befund der Ursache; Gegenprüfung | Widerlegt für alle bisherigen Läufe. Jetzt wirksam; gemessene Wartezeit 0,1 bis 0,3 s. |
 | A-023 | R-028 lässt sich nur beheben, indem die Freigabe der Ordnerkette gelockert wird (so in der ersten Meldung von R-028). | Der Start scheitert an der Freigabe. | Der Wiederanlauf im selben Fenster ging schon vorher; falsch war nur die genannte Ursache. | Nachstellung mit einem Halterprozess am alten Paket | Widerlegt. Die Korrektur benennt die Ursache und wartet kurz; Freigabe und Rechte sind unverändert. |
 | A-024 | Ein Startversuch bei belegtem Ordner darf wie jeder andere gegen die Grenze von 16 Versuchen zählen. | So zählt die Shell jeden Startversuch. | Die neue Meldung verspricht den Wiederanlauf ohne Neustart; nach 16 Prüfungen wäre das falsch gewesen, und die Oberfläche hätte es nicht gezeigt. | Gegenprüfung (read-only) | Widerlegt; ein solcher Versuch gibt seine Generation zurück. Nativ mit 20 Prüfungen belegt. |
+| A-025 | Der UDP-Endpunkt des WebView2-Netzwerkdienstes ist ein Plattformbefund ohne weitere Bedeutung (so wertet ihn die Startprobe, so stand es in R-029). | Besitzer ist ein signierter WebView2-Prozess des eigenen Profils; der Endpunkt ist kurzlebig. | Er gehört zu DNS-Anfragen und einer Erreichbarkeitsprüfung für regelmäßigen HTTPS-Verkehr zu Microsoft, den die Probe nicht ansieht. | Messung der Betriebssystemtabellen je Prozess und Netzprotokoll von Chromium | Eingegrenzt: kein DataSecure-Zugriff, aber Außenverkehr des Prozessbaums. R-031. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

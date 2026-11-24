@@ -2,7 +2,8 @@
 
 Gehört zum [Arbeitsauftrag](../AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md).
 Stand 24.11.2026, nach der zweiten Runde, einer dritten Prüfung, der
-Bearbeitung von R-027 und der Behebung von R-028 bis R-030. Befunde
+Bearbeitung von R-027, der Behebung von R-028 bis R-030 und der Messung zu
+R-031. Befunde
 und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das Einzelregister in
 [ABDECKUNG.tsv](ABDECKUNG.tsv).
 
@@ -141,17 +142,26 @@ aber den Build-Fingerprint `b4466f2a…`.
      Vergleich mit dem alten Kern über viele Satzformen hat die Fehler
      gezeigt (A-015 bis A-017).
 5. **Verbleibende Grenzen**
-   - Offen bleiben R-006 (Listen), R-015 und R-022 (Hypothesen für macOS).
+   - Offen bleiben R-006 (Listen), R-015 und R-022 (Hypothesen für macOS)
+     sowie R-031.
+   - **R-031, nach der vierten Übergabe gemessen:** Die App selbst und ihr
+     Core bauen keine Verbindungen auf, die eingebettete WebView2-Komponente
+     aber schon. Beim Start fragt sie den Konfigurationsdienst von Edge ab,
+     danach meldet sie sich alle 20 bis 40 Sekunden beim Komponenten-Updater
+     von Microsoft; dazu kommt eine automatische Proxy-Suche im lokalen
+     Netz. Dokumentinhalte habe ich darin nicht gefunden; die Anfragekörper
+     sind nicht geprüft. Das steht im Widerspruch zu „kein Internet“ und
+     „kein Auto-Updater“ im Sicherheitsmodell und gilt unverändert seit
+     RC178. Fünf Startschalter stellen den Verkehr im Versuch ab, die App
+     bleibt arbeitsfähig. Umgesetzt ist das nicht.
    - R-028 ist kein Schutz vor einer langen Belegung: Hält ein Programm
      einen Ordner der Kette länger als rund zwei Sekunden, startet der Core
      weiterhin nicht, bis der Anwender nach der Freigabe erneut prüft. Wer
      den Temp-Ordner am 24.11. sieben Minuten lang hielt, ist unbekannt; ob
      das auf Zielhosts für `AppData\Local` vorkommt, ist nicht belegt.
-   - R-029 hat eine Beobachtung sichtbar gemacht, die vorher als Fehler der
-     Probe unterging: Der WebView2-Netzwerkdienst hält beim Start in manchen
-     Läufen kurz einen UDP-Endpunkt (Adresse `::`, flüchtiger Port). Die App
-     setzt für WebView2 keine Netzwerkargumente. Ob darüber ein Paket
-     gesendet wird, habe ich nicht gemessen.
+   - Der UDP-Endpunkt, den R-029 sichtbar gemacht hat, ist inzwischen
+     zugeordnet: DNS-Anfragen und eine Erreichbarkeitsprüfung des
+     WebView2-Netzwerkdienstes (R-031).
    - Der Abbau der Startprobe wartet jetzt erstmals wirklich auf WebView2
      (hier 0,1 bis 0,3 s von 20 s). Im Release-Workflow und in
      `scripts/run-pkg-04.ps1` ist das nicht ausgeführt worden.
@@ -311,6 +321,7 @@ folgenden halten die früheren Stände fest.
 | Windows x64 Messung | `tests/manual/measure-standalone-native-windows.ps1 -Archive … -ExpectedSha256 cec20d6e… -Iterations 10 -AssertNoListeners` am Stand `0b99529c` | Windows x64 | `PASS`, 0; am Stand `b11a6131` `FAIL` in Wiederholung 1 | p50 1 993 ms, p95 2 015 ms, 0 TCP-Listener, kein UDP-Endpunkt in dieser Serie. Der Fehlschlag davor ist der zweite Teil von R-030 (Zeile der App auf dem Fehlerkanal). Die Messung mit 30 Starts habe ich nicht ausgeführt. |
 | Windows x64 Oberfläche, R-028 | eigenes Startskript nach dem Muster von `tests/manual/standalone-native-workspace-gui.ps1` mit einem Halterprozess (Löschzugriff auf einen Ordner des Testprofils), Bedienung per Windows-UI-Automation, Pakete `b30c5511…` und `cec20d6e…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Nach R-028 bis R-030“ |
 | Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `14e3d87b` (Produktstand `0b99529c`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `5c669b7c…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderungen dieser Runde berühren das Plugin nicht (Rust-Shell, Standalone-Oberfläche, Prüfskripte). |
+| Netzverkehr, Endstand | Scratch-Skript: Paket `cec20d6e…` im isolierten Profil, Betriebssystemtabellen für TCP und UDP je Prozess rund alle 23 ms, Positivkontrolle je Lauf; 600 s unverändert, 280 s mit Netzprotokoll von Chromium, je ein Versuch mit zwei und mit fünf zusätzlichen Startschaltern (100 s und 150 s) | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | Unverändert: HTTPS zu `config.edge.skype.com` (2 Anfragen beim Start) und `edge.microsoft.com` (8 Anfragen des Komponenten-Updaters in 280 s), Auflösung von `wpad`; Shell und Core ohne Verbindung. Mit den Schaltern keine Anfrage nach außen, App arbeitsbereit, mit fünf Schaltern ein Verarbeitungslauf abgeschlossen. Kein Bestandteil des Repositorys. R-031. |
 | `git diff --check`, Endstand | `git diff --check e92d5b12 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
 | Headless, Stand der dritten Übergabe | `node tests/run-product-suite.js headless` auf `283e6ed9` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 23:19–00:13. Parallel liefen zeitweise der Differenzlauf, `cargo test`, Clippy und die Zufallsläufe der fünften Gegenprüfung, dazu durchgehend ein hängengebliebener Python-Prozess aus dieser Sitzung (gestartet 18:49, vermutlich von einer früheren Gegenprüfung; belegt einen von 16 Kernen und läuft noch, weil mir das Beenden nicht erlaubt wurde). `ebe526ec` kam danach und ändert nur ein Dokument; die Dokumenttests liefen darauf erneut. |
 | Headless, Stand der zweiten Übergabe | derselbe Befehl auf `ffab4fa7` | Windows x64 | `PASS`, 0 | 364 Dateien; 20:25–21:19, parallel lief der Differenzlauf |
@@ -547,7 +558,7 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 | Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist einmal nativ durchlaufen; ihre Zähltexte haben keine Einzahl. | R-008, R-009, R-020, R-025 | 0 / 235 / 46. Quelltext plus Windows-Läufe; kein Screenreader, kein Zoom, kein WKWebView. |
 | Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Fünf Befunde der Rust-Shell behoben oder eingegrenzt, zuletzt die Startverweigerung bei belegter Ordnerkette. | R-011 bis R-014, R-022, R-028 | 15 / 753 / 538. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
 | Implementierung und Wartbarkeit | `main.rs` (rund 4 400 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, zwei ungenutzte Commands). Die zweite Runde hat `main.rs` um rund 280 Zeilen vergrößert. | — (Verbesserungen, nicht als Befund geführt) | 1 / 205 / 675. Kein systematischer Durchgang. |
-| Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. | R-010, R-012 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
+| Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. Shell und Core bauen keine Verbindungen auf; die WebView2-Komponente meldet sich aber regelmäßig bei Microsoft, entgegen der Beschreibung im Sicherheitsmodell. | R-010, R-012, R-031 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
 | Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. Verwaiste Vorbereitungen werden bereinigt; eine laufende Veröffentlichung schützt allein ihr Alter. | R-007, R-010, R-022 (Hypothese) | 0 / 157 / 450. Wiederaufnahme, Absturzpfade, voller Datenträger nicht untersucht. |
 | Leistung und Ressourcen | Nur ein Vorher-nachher-Vergleich des Datenschutzkerns: 109 KB Prosa 0,86 s zu 0,89 s, 328 KB 5,9 s zu 5,7 s. Der Kern skaliert schon in RC178 überlinear. | — | Dazu Startzeit und Suite-Laufzeiten. BL-047.5 bleibt ohne Zielhostmessung. |
 | Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. Die Windows-Startprobe konnte einen WebView2-Endpunkt nicht zuordnen, ihr Abbau wartete auf keinen Prozess, und ihr Messskript lief auf diesem Host nicht durch, ohne dass ein Test es zeigte; behoben. | R-019, R-029, R-030 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
@@ -724,10 +735,16 @@ Für Codex zuerst prüfen:
 5. R-029 und R-030, Commits dbf98cbf, b11a6131, 0b99529c: Die Startprobe verglich den WebView2-
    Profilordner ohne den Unterordner EBWebView; ihr Abbau hat deshalb nie auf WebView2 gewartet und
    tut es jetzt. Im Release-Workflow und in scripts/run-pkg-04.ps1 läuft das zum ersten Mal wirklich.
-   Der WebView2-Netzwerkdienst hält beim Start gelegentlich kurz einen UDP-Endpunkt; ob ein Paket
-   gesendet wird, ist nicht gemessen.
+   Der UDP-Endpunkt, an dem die alte Probe scheiterte, gehört zum Verkehr aus Punkt 6.
+6. R-031, kein Commit: Die WebView2-Komponente fragt beim Start config.edge.skype.com ab und meldet
+   sich danach alle 20 bis 40 Sekunden bei edge.microsoft.com/componentupdater; dazu eine Proxy-Suche
+   (wpad). Shell und Core haben keine Verbindung. Im Versuch stellen die Startschalter
+   --disable-background-networking --disable-component-update --no-proxy-server --disable-quic und
+   --host-resolver-rules den Verkehr ab (additionalBrowserArgs in tauri.conf.json, zusammen mit den
+   Standardschaltern von Tauri). Zu entscheiden: umsetzen, und die Startprobe um ausgehende
+   Verbindungen erweitern.
 Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
-R-015, R-022; R-028 bei langer Belegung; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
+R-015, R-022, R-031; R-028 bei langer Belegung; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
 Überschriften, Tabellen und Links); geführte Prüfung nur einmal nativ bedient; rund 62 % der
 Einheiten im Register offen.
 ```
