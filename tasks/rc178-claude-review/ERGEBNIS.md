@@ -1,8 +1,8 @@
 # RC178-Review · Ergebnis und Übergabe an Codex
 
 Gehört zum [Arbeitsauftrag](../AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md).
-Stand 23.11.2026, nach der zweiten Runde, einer dritten Prüfung und der
-Bearbeitung von R-027. Befunde
+Stand 24.11.2026, nach der zweiten Runde, einer dritten Prüfung, der
+Bearbeitung von R-027 und der Behebung von R-028 bis R-030. Befunde
 und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das Einzelregister in
 [ABDECKUNG.tsv](ABDECKUNG.tsv).
 
@@ -14,7 +14,11 @@ diesem Stand eigene Fehler gefunden; sieben weitere Commits bis `ffab4fa7`
 beheben sie. Dieser Stand wurde als `3908a921` übergeben. Danach hat der
 Anwender beauftragt, den dabei offen gebliebenen Befund R-027 zu beheben; das
 ist der Codecommit `283e6ed9`; `ebe526ec` ergänzt danach die Beschreibung im
-Sicherheitsmodell. Dieser Bericht beschreibt den Endstand `ebe526ec`.
+Sicherheitsmodell. Dieser Stand wurde als `e92d5b12` übergeben. Am 24.11.
+hat der Anwender beauftragt, die beiden dabei gemeldeten Beobachtungen R-028
+und R-029 zu beheben und erneut zu prüfen; das sind die vier Commits
+`dbf98cbf` bis `0b99529c`. Dieser Bericht beschreibt den Endstand
+`0b99529c`.
 
 ## Identität und Umfang
 
@@ -24,14 +28,14 @@ Sicherheitsmodell. Dieser Bericht beschreibt den Endstand `ebe526ec`.
 | GitHub-Arbeitsbranch | [`claude/rc178-standalone-review`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review) |
 | Eingefrorener Einstieg | `e88f1b8d100421017fb3909d77e338fd25c1b421` (`origin/codex/rc178-claude-review-handoff`) |
 | RC178-Produktbaseline | `v3.2.0-rc178` → `13ed39ff979a5f5d9bb076d35021164de380b9dd`, Fingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655` (nachgerechnet, 400 Quellinputs) |
-| Geprüfter Produktstand | `ebe526ecd2fdf40fbf3d32563877f3d3025d3abe`. Code zuletzt geändert in `283e6ed918eb67be78521b1da5b817462cfa03c9`, Fingerprint `043e3b81bb33f8f6f13678f5034bf5141877462bbc759faa7806613fe05189b8`; `ebe526ec` ändert danach einen Absatz in `docs/canonical/STANDALONE_SECURITY_MODEL.md` und den Fingerprint nicht. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der zweiten Übergabe: `ffab4fa7`, Fingerprint `1803bce7…`; Stand der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
+| Geprüfter Produktstand | `0b99529cff549a02947898ad54d08620451a268f`. Produktcode zuletzt geändert in `b71439b20a91ba682135a577c2c17fec3f360d50`, Fingerprint `b4466f2a305324a502db87f2d877a3dabd2356d92dd86313bb8515ff1ce19940`; `b11a6131` und `0b99529c` ändern danach nur ein Prüfskript und einen Test und den Fingerprint nicht. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der dritten Übergabe: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
 | Prüfumgebung | Claude Fable 5.2 (`claude-fable-5-2`) in Claude Code; Windows 11 Pro 10.0.26300 x64; Node 22.23.2 für alle Tests (Host-Node 24.18.0), npm 11.16.0, cargo/rustc 1.98.1, MSVC mit SDK 10.0.26100.0, WebView2 158.0.4370.33, Claude CLI 2.1.280 |
 | Verfügbare Zielplattformen | Nur Windows x64. Kein Mac, kein Xcode, kein iOS-Simulator. |
-| Abdeckung | 5 123 erfasste Einheiten in 346 Dateien: 28 `GEPRÜFT`, 1 944 `TEILGEPRÜFT`, 3 151 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
+| Abdeckung | 5 135 erfasste Einheiten in 346 Dateien: 32 `GEPRÜFT`, 1 944 `TEILGEPRÜFT`, 3 159 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
 
 Die Versionskennung `3.2.0-rc178` wurde nicht geändert. Der Stand ist kein
 Release; ein daraus gebautes Paket trägt dieselbe Versionsnummer wie RC178,
-aber den Build-Fingerprint `043e3b81…`.
+aber den Build-Fingerprint `b4466f2a…`.
 
 ## Ergebnis auf einen Blick
 
@@ -82,6 +86,21 @@ aber den Build-Fingerprint `043e3b81…`.
      …“, „Admin PIN: …“, „…, Passwort: …“). Jetzt wird das Wort hinter dem
      Label ersetzt (R-027, Teil). Die App selbst verlangt weiterhin keine
      Zugangsdaten; es geht um Inhalte der verarbeiteten Dokumente.
+   - Am 24.11., auf Auftrag: Hält ein anderes Programm einen Ordner über
+     dem Datenordner offen, nennt die App jetzt diese Ursache und den Weg
+     zurück („kurz warten, dann Verbindung und Laufstatus prüfen“) statt
+     „nicht sicher, Installation mit der IT prüfen“. Eine Belegung bis rund
+     zwei Sekunden wartet sie ab. Die Schutzgrenze ist unverändert: Ohne
+     gehaltene Ordnerkette startet weiterhin kein Core (R-028).
+   - Die Windows-Startprobe scheiterte nicht zufällig, sondern immer dann,
+     wenn sie einen UDP-Endpunkt des WebView2-Netzwerkdienstes sah: Sie
+     verglich dessen Profilordner ohne den Unterordner `EBWebView`. Aus
+     demselben Grund hat ihr Abbau nie auf WebView2 gewartet. Beides ist
+     korrigiert; die Ursache eines Abbruchs geht nicht mehr verloren
+     (R-029).
+   - Das Messskript für Startzeit und Netzwerkbeobachtung brach in der
+     ersten Wiederholung ab; in der Gegenprüfung gefunden und behoben
+     (R-030).
 3. **Eigene Fehler, gefunden und behoben vor der Übergabe**
    - Der vorgesehene Endstand der zweiten Runde (`a0d3e340`, nie gepusht)
      enthielt zwei Lecks aus meinen eigenen Änderungen: In „Anna Müller,
@@ -122,11 +141,23 @@ aber den Build-Fingerprint `043e3b81…`.
      Vergleich mit dem alten Kern über viele Satzformen hat die Fehler
      gezeigt (A-015 bis A-017).
 5. **Verbleibende Grenzen**
-   - Offen bleiben R-006 (Listen), R-015 und R-022 (Hypothesen für macOS)
-     sowie zwei Beobachtungen aus dem letzten nativen Lauf: Die App startet
-     nicht, solange ein fremder Prozess einen Ordner über ihrem Datenordner
-     mit Löschzugriff offen hält (R-028), und die Startprobe ist instabil
-     und verliert dabei ihre Diagnosezeile (R-029).
+   - Offen bleiben R-006 (Listen), R-015 und R-022 (Hypothesen für macOS).
+   - R-028 ist kein Schutz vor einer langen Belegung: Hält ein Programm
+     einen Ordner der Kette länger als rund zwei Sekunden, startet der Core
+     weiterhin nicht, bis der Anwender nach der Freigabe erneut prüft. Wer
+     den Temp-Ordner am 24.11. sieben Minuten lang hielt, ist unbekannt; ob
+     das auf Zielhosts für `AppData\Local` vorkommt, ist nicht belegt.
+   - R-029 hat eine Beobachtung sichtbar gemacht, die vorher als Fehler der
+     Probe unterging: Der WebView2-Netzwerkdienst hält beim Start in manchen
+     Läufen kurz einen UDP-Endpunkt (Adresse `::`, flüchtiger Port). Die App
+     setzt für WebView2 keine Netzwerkargumente. Ob darüber ein Paket
+     gesendet wird, habe ich nicht gemessen.
+   - Der Abbau der Startprobe wartet jetzt erstmals wirklich auf WebView2
+     (hier 0,1 bis 0,3 s von 20 s). Im Release-Workflow und in
+     `scripts/run-pkg-04.ps1` ist das nicht ausgeführt worden.
+   - Im nativen Lauf zu R-028 hat sich das App-Fenster einmal geordnet
+     beendet, ohne dass das Prüfskript es geschlossen hat. Die Wiederholung
+     mit 20 Prüfungen lief durch; der Auslöser ist nicht zugeordnet.
    - Nur teilweise behoben sind R-004, R-011, R-012, R-013, R-017, R-019,
      R-020, R-023, R-025 und R-027. Die Gründe stehen unten und in
      BEFUNDE.md.
@@ -221,12 +252,22 @@ Gegenprüfungen“):
 
 | `ebe526ec` | R-027 | `docs/canonical/STANDALONE_SECURITY_MODEL.md`: drei Folgen der Regel, die die fünfte Gegenprüfung gezeigt hat (das Wort reicht bis zum nächsten Leerraum; einzelne bisher gestoppte Dokumente laufen durch; die Prüfung läuft für solche Dokumente zweimal). Kein Code. | `npm run test:docs` und die beiden Dokumenttests | — |
 
+Am 24.11. auf Auftrag (Einzelheiten in BEFUNDE.md, „R-028 bis R-030 ·
+Umsetzung, Gegenprüfung und nativer Nachweis“):
+
+| Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
+| --- | --- | --- | --- | --- |
+| `dbf98cbf` | R-029, A-021, A-022 | `tests/manual/standalone-native-windows-launch.ps1`: eine Profilregel (Ordner oder genau sein Unterordner `EBWebView`) für Netzwerkbeobachtung und Abbau; die Ursache eines nicht zuordenbaren Endpunkts wird festgehalten und im `finally` ausgegeben; `udp_processes` immer als Liste; der Abbau nennt seine Wartezeit. `docs/TESTING.md` beschreibt Regel und Zeilen. Kein Produktcode. | `tests/test-native-smoke-integrity.js` (drei neue oder erweiterte Fälle), Vertragsmodus 55 Gruppen; 14 von 14 Läufen gegen das Paket | Nur Windows. Der Abbau ist dadurch auch im Release-Workflow und in `scripts/run-pkg-04.ps1` erstmals wirksam; dort nicht ausgeführt. |
+| `b11a6131`, `0b99529c` | R-030 | `tests/manual/measure-standalone-native-windows.ps1`: wertet nur die JSON-Zeile aus; eine Zeile der App auf dem Fehlerkanal beendet die Messung nicht mehr; `observed_udp_processes` immer als Liste. Kein Produktcode. | ein Fall in `tests/test-native-smoke-integrity.js` mit echter Zeilenfolge und Fehlerkanal; Messung über zehn Starts | Nur Windows. |
+| `b71439b2` | R-028, A-023, A-024 | `tauri-contract/src/private_namespace.rs`: Freigabekonflikt gilt als Belegung; begrenztes Warten vor dem Anlegen. `tauri-contract/src/main.rs`: `STANDALONE_DATA_ROOT_BUSY` an den vier Stellen vor dem Start des Core; ein solcher Versuch zählt nicht gegen die 16 Startversuche. `frontend/workspace.js`: Meldung und Statustext. `docs/canonical/STANDALONE_SECURITY_MODEL.md`: neuer Abschnitt. Freigabe und Zugriffsrechte der Ordnerkette sind unverändert. | sieben Rust-Tests, `tests/test-standalone-desktop-contract.js` (ein Fall), `tests/test-standalone-workspace.js` (drei Fälle); Mutationsprobe; nativer Lauf mit Halterprozess | Nur Windows: `private_namespace` gibt es nur dort. Der neue Code steht in der gemeinsamen Oberfläche, entsteht auf macOS aber nicht. macOS nicht übersetzt. |
+
 Nicht umgesetzt und begründet (Einzelheiten in BEFUNDE.md, „Entscheidungen je
 Befund“):
 
-- **R-028, R-029, Rest von R-025** – im letzten nativen Lauf beobachtet und
-  nur festgehalten. R-028 berührt die Schutzgrenze des Datenordners, R-029
-  ein Prüfwerkzeug.
+- **Rest von R-025** – weitere Zähltexte ohne Einzahl in der geführten
+  Prüfung; im nativen Lauf beobachtet und nur festgehalten.
+- **R-028, lange Belegung** – nicht behebbar, ohne die Schutzgrenze zu
+  ändern; die App nennt jetzt Ursache und Ausweg.
 - **R-027, Rest** – mehrwortige Geheimnisse hinter einem Label mitten in der
   Zeile, Labels in Überschriften, Tabellen und Links, `PW`/`Pwd`, Wert in der
   Folgezeile. Jede breitere Fassung hat in der Gegenprüfung Namen freigegeben
@@ -255,12 +296,26 @@ Befund“):
 ## Tests und Nachweise
 
 Alle Läufe auf Windows 11 x64 mit Node 22.23.2. Logs liegen lokal. Die
-obere Hälfte gilt dem Endstand (Code `283e6ed9`, Dokument `ebe526ec`), die
-untere hält die früheren Stände fest.
+ersten Zeilen gelten dem Endstand `0b99529c` (Produktcode `b71439b2`), die
+folgenden halten die früheren Stände fest.
 
 | Bereich | Exakter Befehl und Teststand | Umgebung und Architektur | Ergebnis und Exitcode | Beobachtung |
 | --- | --- | --- | --- | --- |
-| Headless, Endstand | `node tests/run-product-suite.js headless` auf `283e6ed9` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 23:19–00:13. Parallel liefen zeitweise der Differenzlauf, `cargo test`, Clippy und die Zufallsläufe der fünften Gegenprüfung, dazu durchgehend ein hängengebliebener Python-Prozess aus dieser Sitzung (gestartet 18:49, vermutlich von einer früheren Gegenprüfung; belegt einen von 16 Kernen und läuft noch, weil mir das Beenden nicht erlaubt wurde). `ebe526ec` kam danach und ändert nur ein Dokument; die Dokumenttests liefen darauf erneut. |
+| Headless, Endstand | `node tests/run-product-suite.js headless` auf `0b99529c` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 09:33–10:30 am 24.11. Parallel liefen der native Lauf zu R-028, ein Verarbeitungslauf in der App und `npm run test:docs`, dazu weiter der hängengebliebene Python-Prozess. |
+| Rust / Clippy, Endstand | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract`, Rust-Quellen von `b71439b2` | Windows x64 | je `PASS`, 0 | 333 bestanden, 0 fehlgeschlagen, 3 ignoriert (sieben neue Tests). Nur das Windows-Ziel. |
+| Mutationsprobe R-028 | Scratch-Skript: acht gezielte Verfälschungen von `private_namespace.rs` und `main.rs`, je `cargo test --locked <Filter>`, danach Dateien zurückgesetzt und verglichen | Windows x64 | alle acht erkannt | Kein Bestandteil des Repositorys. Nicht erfasst: die Zahl der Wiederholungen um eins, und ob die vier Aufrufstellen in `spawn_sidecar` einzeln zurückgedreht werden (dafür der Quelltextvertrag). |
+| Gezielt, Endstand | `tests/test-native-smoke-integrity.js` (81), `tests/test-standalone-desktop-contract.js` (40), `tests/test-standalone-workspace.js` (518), `tests/test-standalone-frontend.js` (52) | Windows x64 | je `PASS`, 0 | Neu oder erweitert: vier Fälle zur Startprobe und zum Messskript, ein Quelltextvertrag der Shell, drei Fälle der Oberfläche. |
+| Gegenprüfung R-028 bis R-030 | zwei unabhängige Read-only-Läufe (Datenschutz- und Laufzeit-Prüfer) auf dem Arbeitsstand vor den Commits, mit eigenen Skripten und einzelnen Node-Tests | Windows x64 | keine Aufweichung der Schutzgrenze, nichts durchgelassen; neun Einwände | Beide am Schrittlimit beendet, Berichte auf Nachfrage. Einwände und ihr Ergebnis in BEFUNDE.md. Die danach eingearbeiteten Änderungen sind nicht erneut gegengeprüft. |
+| Dokumentation, Endstand | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `0b99529c` | Windows x64 | je `PASS`, 0 | — |
+| Konverter, Endstand | `npm run test:standalone:conversion` auf `0b99529c` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt Ordner `.tmp-standalone-package-*` im Repository-Root, von mir entfernt |
+| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs` auf `b71439b2`; `node tests/test-standalone-package-smoke.mjs` auf `0b99529c` gegen dasselbe Paket | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `cec20d6e528dec4e039f8dac058b036a2e5fa5e1c574ad363e4b94d8d38b2346`, 113 627 095 Bytes, 1 203 Einträge, Build `b4466f2a`. Das Paket des Vorstands (`b30c5511…`) wurde vorher aus `dist/` verschoben. |
+| Windows x64 Start, alte Probe | instrumentierte Kopie von `tests/manual/standalone-native-windows-launch.ps1` am Stand `e92d5b12`, `-Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence`, 11 Läufe gegen das Paket `b30c5511…` | Windows x64 | 8 `FAIL` (`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`), 3 `PASS` | In allen acht Fällen dieselben Merkmale: WebView2-Netzwerkdienst, gültige Microsoft-Signatur, `own_profile: false` wegen `…\webview\main\EBWebView` (R-029). Die Kopie liegt außerhalb des Repositorys. |
+| Windows x64 Start, Endstand | dieselbe Probe am Stand `0b99529c`, 14 Läufe gegen das Paket `cec20d6e…`; davor 12 Läufe einer Vorfassung gegen `b30c5511…` | Windows x64 | 14 von 14 `PASS`, 0; Vorfassung 12 von 12 | Kein TCP-Listener (er hätte die Probe abgebrochen); in 4 der 14 Läufe ein zugeordneter UDP-Endpunkt (`["msedgewebview2.exe"]`), sonst keiner. Abbau-Wartezeit 138 bis 273 ms von 20 000 ms. |
+| Windows x64 Messung | `tests/manual/measure-standalone-native-windows.ps1 -Archive … -ExpectedSha256 cec20d6e… -Iterations 10 -AssertNoListeners` am Stand `0b99529c` | Windows x64 | `PASS`, 0; am Stand `b11a6131` `FAIL` in Wiederholung 1 | p50 1 993 ms, p95 2 015 ms, 0 TCP-Listener, kein UDP-Endpunkt in dieser Serie. Der Fehlschlag davor ist der zweite Teil von R-030 (Zeile der App auf dem Fehlerkanal). Die Messung mit 30 Starts habe ich nicht ausgeführt. |
+| Windows x64 Oberfläche, R-028 | eigenes Startskript nach dem Muster von `tests/manual/standalone-native-workspace-gui.ps1` mit einem Halterprozess (Löschzugriff auf einen Ordner des Testprofils), Bedienung per Windows-UI-Automation, Pakete `b30c5511…` und `cec20d6e…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Nach R-028 bis R-030“ |
+| Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | ausstehend | Der Bau verlangt einen sauberen Arbeitsbaum und läuft deshalb nach diesem Berichtscommit; das Ergebnis steht im folgenden Commit. Die Änderungen dieser Runde berühren das Plugin nicht (Rust-Shell, Standalone-Oberfläche, Prüfskripte). |
+| `git diff --check`, Endstand | `git diff --check e92d5b12 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Headless, Stand der dritten Übergabe | `node tests/run-product-suite.js headless` auf `283e6ed9` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 23:19–00:13. Parallel liefen zeitweise der Differenzlauf, `cargo test`, Clippy und die Zufallsläufe der fünften Gegenprüfung, dazu durchgehend ein hängengebliebener Python-Prozess aus dieser Sitzung (gestartet 18:49, vermutlich von einer früheren Gegenprüfung; belegt einen von 16 Kernen und läuft noch, weil mir das Beenden nicht erlaubt wurde). `ebe526ec` kam danach und ändert nur ein Dokument; die Dokumenttests liefen darauf erneut. |
 | Headless, Stand der zweiten Übergabe | derselbe Befehl auf `ffab4fa7` | Windows x64 | `PASS`, 0 | 364 Dateien; 20:25–21:19, parallel lief der Differenzlauf |
 | Headless auf `d5992265` | derselbe Befehl auf `d5992265` | Windows x64 | `PASS`, 0 | 364 Dateien. Die Suite meldete den Fehler der Zuordnung nicht, den `ffab4fa7` behebt. |
 | Headless auf `a0d3e340` | derselbe Befehl | Windows x64 | abgebrochen, kein Ergebnis | Von mir nach rund elf Minuten gestoppt, als die Regressionen sichtbar wurden. Für diesen Stand gibt es keinen vollständigen Lauf. |
@@ -270,11 +325,11 @@ untere hält die früheren Stände fest.
 | Fünfte Gegenprüfung zu R-027 | unabhängiger Read-only-Lauf mit eigenen Skripten auf `283e6ed9`: 3 915 handgeschriebene Fälle, 66 000 Zufallsläufe, 1 050 gezielte Fälle | Windows x64 | kein zusätzlich sichtbarer Klartext, kein neuer Stopp, keine Ausnahme | Am Schrittlimit beendet, Bericht auf Nachfrage. Drei Beobachtungen und die nicht mehr geprüften Punkte in BEFUNDE.md; vier davon habe ich selbst nachgeprüft (1 500, 400 und 400 Fälle, Laufzeit). |
 | Dokumentation | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `ebe526ec` | Windows x64 | je `PASS`, 0 | — |
 | Konverter | `npm run test:standalone:conversion` auf `ebe526ec` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt zwei `.tmp-standalone-package-*`-Ordner im Repository-Root, von mir entfernt |
-| Rust / Clippy | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf `283e6ed9` | Windows x64 | je `PASS`, 0 | 326 bestanden, 0 fehlgeschlagen, 3 ignoriert. Nur das Windows-Ziel. R-027 ändert keinen Rust-Code. |
+| Rust / Clippy, Stand der dritten Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf `283e6ed9` | Windows x64 | je `PASS`, 0 | 326 bestanden, 0 fehlgeschlagen, 3 ignoriert. Nur das Windows-Ziel. R-027 ändert keinen Rust-Code. |
 | macOS-Typcheck | `cargo check --locked --all-targets --target aarch64-apple-darwin` auf `a0d3e340` | Windows x64 als Host | `BLOCKED` | 42 Abhängigkeiten geprüft; das Build-Skript des Projekts verlangt den freigegebenen statischen macOS-Core, der hier fehlt. Nicht umgangen. |
 | Cowork-Plugin | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `85fdecf2` (Produktstand `ebe526ec`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `6d9bc082…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. |
 | Windows x64 Paket | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `ebe526ec` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `b30c5511405bfc05fc09b2f14a04f5ff7155f3d54f281411853cc17cb5e37ffc`, 113 625 220 Bytes, 1 203 Einträge, Build `043e3b81`. Der Paketbau überschreibt nie; das Paket des Vorstands (`bddfe85a…`) wurde vorher aus `dist/` verschoben. |
-| Windows x64 Start | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence`, sieben Versuche am 24.11. zwischen 00:24 und 00:37 | Windows x64 | Versuche 1 und 2 `FAIL` (`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`), 3 `FAIL` (Entpacken: Pfad nicht gefunden), 4 und 5 `FAIL` (`STANDALONE_NATIVE_WEBVIEW_INITIALIZATION_TIMEOUT`), 6 und 7 `PASS`, 0 | Versuche 1 und 2: R-029, ohne Parallelbetrieb. Versuche 3 bis 5: In dieser Zeit hielt ein fremder Prozess den Temp-Ordner mit Löschzugriff offen; auch das Paket vom Vortag startete dann nicht (R-028). Versuche 6 und 7 nach Ende der Sperre: Start 1,9 s und 1,8 s, 9 Prozesse, 0 TCP-Listener, 0 UDP-Endpunkte. Am Vortag: `d5992265` im ersten Versuch bestanden, `ffab4fa7` im zweiten. |
+| Windows x64 Start, Stand der dritten Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence`, sieben Versuche am 24.11. zwischen 00:24 und 00:37 | Windows x64 | Versuche 1 und 2 `FAIL` (`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`), 3 `FAIL` (Entpacken: Pfad nicht gefunden), 4 und 5 `FAIL` (`STANDALONE_NATIVE_WEBVIEW_INITIALIZATION_TIMEOUT`), 6 und 7 `PASS`, 0 | Versuche 1 und 2: R-029, ohne Parallelbetrieb; die Ursache ist seit `dbf98cbf` bekannt und behoben. Versuche 3 bis 5: In dieser Zeit hielt ein fremder Prozess den Temp-Ordner mit Löschzugriff offen; auch das Paket vom Vortag startete dann nicht (R-028). Versuche 6 und 7 nach Ende der Sperre: Start 1,9 s und 1,8 s, 9 Prozesse, 0 TCP-Listener, 0 UDP-Endpunkte. Am Vortag: `d5992265` im ersten Versuch bestanden, `ffab4fa7` im zweiten. |
 | Windows x64 Oberfläche | `tests/manual/standalone-native-workspace-gui.ps1 -Archive …`, Bedienung per Windows-UI-Automation, Builds `0dac7e18`, `1803bce7` und `043e3b81` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“ |
 | macOS Apple Silicon | — | — | `BLOCKED` (kein Mac) | Baseline-Beleg RC178: [Lauf 44744144419](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/44744144419), Runner `macos-15`, Commit `13ed39ff` |
 | macOS Intel | — | — | `BLOCKED` (kein Mac) | derselbe Lauf, Runner `macos-15-intel` |
@@ -432,9 +487,56 @@ erfundenen Zugangsdaten; danach eine Textdatei im geführten Lauf)
 - **Nicht beobachtet** – PDF, Scan und Bild, ein Exportfehler, Abbruch
   während eines Laufs, mehr als ein Fenster, der Hinweis aus R-008.
 
+**Nach R-028 bis R-030** (Build `b4466f2a` aus `b71439b2`, Paket
+`cec20d6e…`, 24.11.2026 zwischen 09:27 und 09:38; Vergleich mit dem Paket
+`b30c5511…` des Vorstands)
+
+- **Sperre nachgestellt** – Ein eigener Hilfsprozess öffnet einen Ordner des
+  Testprofils mit Löschzugriff und voller Freigabe und hält ihn, bis eine
+  Freigabedatei erscheint. Der echte Temp-Ordner und echte Profilordner
+  wurden nicht gehalten.
+- **Vorstand, Ordner über dem Datenordner gehalten** – Meldung wie am 24.11.
+  beobachtet: „Der interne App-Datenordner konnte nicht sicher geöffnet oder
+  neu angelegt werden … Installation mit der IT prüfen
+  (STANDALONE_DATA_ROOT_UNSAFE)“. Nach Freigabe und **Verbindung und
+  Laufstatus prüfen**: „Lokale Verbindung wiederhergestellt“.
+- **Endstand, Ordner über dem Datenordner gehalten** – „Ein anderes Programm
+  hält gerade den internen App-Datenordner oder einen Ordner darüber
+  geöffnet … Das ist meist vorübergehend: bitte kurz warten und dann
+  ‚Verbindung und Laufstatus prüfen‘ wählen … (STANDALONE_DATA_ROOT_BUSY)“;
+  darunter der Statustext mit „ein Neustart der App ist dafür nicht nötig“.
+  Dateiauswahl gesperrt, Datenordner nicht angelegt.
+- **20 erneute Prüfungen bei gehaltenem Ordner** – jedes Mal dieselbe
+  Meldung, keine Erschöpfung der Startversuche, nichts angelegt. Die
+  Diagnose zählt 21-mal `STANDALONE_DATA_ROOT_BUSY`, ohne Pfad und ohne
+  Betriebssystemtext.
+- **Freigabe, dann eine Prüfung** – „Lokale Verbindung wiederhergestellt“;
+  Datenordner und Arbeitsbereich angelegt.
+- **Vorhandener Datenordner selbst gehalten** (zweiter Start im selben
+  Profil) – dieselbe Meldung; nach Freigabe und Prüfung wiederhergestellt.
+- **Sperre von rund einer Sekunde** – die App startet ohne Meldung.
+- **Ohne Sperre, automatische Maskierung einer erfundenen Datei** –
+  „Anonymisierungslauf abgeschlossen. 1 technisch geprüftes anonymisiertes
+  Ergebnis verfügbar.“ Ergebnis, Dateizuordnung und Pseudonym-Zuordnung
+  liegen im Ergebnisordner, das Original ist unverändert, die Diagnose
+  enthält weder Dateinamen noch Passwörter noch Pfade.
+- **Einmal, nicht zugeordnet** – Im ersten Durchgang der 20 Prüfungen hat
+  sich das Fenster nach der elften geordnet beendet (`sidecar_shutdown
+  ready`). Das Prüfskript sendet keine Schließanforderung; der Anwender saß
+  zu der Zeit am Rechner. Die Wiederholung lief ohne Beenden durch.
+- **Startprobe und Messung** – 14 von 14 Läufen der korrigierten Probe
+  bestehen, 4 davon mit einem zugeordneten WebView2-Endpunkt; Abbau-Wartezeit
+  138 bis 273 ms. Messung über zehn Starts: p50 1 993 ms, p95 2 015 ms,
+  0 TCP-Listener, kein UDP-Endpunkt in dieser Serie. Die unkorrigierte Probe
+  scheiterte zuvor in 8 von 11 Läufen gegen das Paket des Vorstands.
+- **Nicht beobachtet** – eine Belegung durch ein echtes Sicherungs- oder
+  Schutzprogramm; eine Belegung während eines laufenden Stapels oder einer
+  Ergebnisbereitstellung; mehr als ein Fenster; „Selbst entscheiden“ in
+  diesem Paket.
+
 ## Urteil je Prüfdimension
 
-Zahlen aus ABDECKUNG.tsv am Stand `ebe526ec`, nur Einzeleinheiten. Das
+Zahlen aus ABDECKUNG.tsv am Stand `0b99529c`, nur Einzeleinheiten. Das
 Register zählte in der ersten Runde Produktivcode hinter einem
 `#[cfg(test)]` irrtümlich als Rust-Testmodul und damit als offen. Die
 Erkennung ist korrigiert; dadurch gelten rund 460 Rust-Einheiten jetzt als
@@ -445,14 +547,14 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 | --- | --- | --- | --- |
 | Fachlichkeit und Formatqualität | Text und CSV solide; die belegten stillen Verluste in DOCX, XLSX und CSV sind behoben oder als Hinweis sichtbar, bis auf den Zustand alter Formular-Kontrollkästchen. Listen bleiben Tabellen. Ein Lebenslauf mit Namenslink ist jetzt automatisch verarbeitbar. | R-003 bis R-006, R-018, R-026 | 5 / 277 / 603. PDF, Scan-PDF, Bild-OCR und Office-OCR im Review nicht ausgeführt; Diagramme, SmartArt, Formeln nur über die Suite. |
 | Anonymisierung und Zuordnungen | Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung außer den zehn gewollten Fällen von R-024. Zugangsdaten mitten in der Zeile werden für ein Wort ersetzt (R-027, Teil). Offen: die dokumentierten Grenzen von R-027 und der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027 | 11 / 235 / 455. Eine geführte Entscheidung nativ ausgeführt, sonst keine; `privacy/entities.js`, `credentials.js`, `person-ambiguities.js` nicht gelesen. |
-| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist einmal nativ durchlaufen; ihre Zähltexte haben keine Einzahl. | R-008, R-009, R-020, R-025 | 0 / 234 / 46. Quelltext plus Windows-Läufe; kein Screenreader, kein Zoom, kein WKWebView. |
-| Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Vier Befunde der Rust-Shell behoben oder eingegrenzt. | R-011 bis R-014, R-022, R-028 | 11 / 752 / 530. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
+| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist einmal nativ durchlaufen; ihre Zähltexte haben keine Einzahl. | R-008, R-009, R-020, R-025 | 0 / 235 / 46. Quelltext plus Windows-Läufe; kein Screenreader, kein Zoom, kein WKWebView. |
+| Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Fünf Befunde der Rust-Shell behoben oder eingegrenzt, zuletzt die Startverweigerung bei belegter Ordnerkette. | R-011 bis R-014, R-022, R-028 | 15 / 753 / 538. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
 | Implementierung und Wartbarkeit | `main.rs` (rund 4 400 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, zwei ungenutzte Commands). Die zweite Runde hat `main.rs` um rund 280 Zeilen vergrößert. | — (Verbesserungen, nicht als Befund geführt) | 1 / 205 / 675. Kein systematischer Durchgang. |
 | Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. | R-010, R-012 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
 | Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. Verwaiste Vorbereitungen werden bereinigt; eine laufende Veröffentlichung schützt allein ihr Alter. | R-007, R-010, R-022 (Hypothese) | 0 / 157 / 450. Wiederaufnahme, Absturzpfade, voller Datenträger nicht untersucht. |
 | Leistung und Ressourcen | Nur ein Vorher-nachher-Vergleich des Datenschutzkerns: 109 KB Prosa 0,86 s zu 0,89 s, 328 KB 5,9 s zu 5,7 s. Der Kern skaliert schon in RC178 überlinear. | — | Dazu Startzeit und Suite-Laufzeiten. BL-047.5 bleibt ohne Zielhostmessung. |
-| Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. | R-019, R-029 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
-| Abhängigkeiten, CI und Lieferkette | Locks, Pins und Rechte sauber; paketierte JavaScript-Abhängigkeiten lokal ohne bekannten Befund. Nachweis für Windows und Schutz von Tag und Release fehlen. | R-015, R-016, R-023 | 0 / 71 / 217. Paketinhalte der Release-Assets nicht geprüft; kein `cargo audit`. |
+| Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. Die Windows-Startprobe konnte einen WebView2-Endpunkt nicht zuordnen, ihr Abbau wartete auf keinen Prozess, und ihr Messskript lief auf diesem Host nicht durch, ohne dass ein Test es zeigte; behoben. | R-019, R-029, R-030 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
+| Abhängigkeiten, CI und Lieferkette | Locks, Pins und Rechte sauber; paketierte JavaScript-Abhängigkeiten lokal ohne bekannten Befund. Nachweis für Windows und Schutz von Tag und Release fehlen. | R-015, R-016, R-023 | 0 / 73 / 219. Paketinhalte der Release-Assets nicht geprüft; kein `cargo audit`. |
 | Dokumentation und Nachvollziehbarkeit | Mehrere Drifts korrigiert, darunter Testvoraussetzungen, Formatverhalten und Release-Herkunft. | R-007, R-015, R-016, R-021 | Gruppe `TEILGEPRÜFT`. BACKLOG, CURRENT_STATE und TRACEABILITY nur über Suche. |
 
 ## Bewertung der Testsuite
@@ -596,10 +698,10 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 ## Übergabenachricht zum Weiterreichen
 
 ```text
-Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung und Bearbeitung von R-027, abgeschlossen.
+Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, R-027 und R-028 bis R-030, abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
-Geprüfter Produktstand: ebe526ecd2fdf40fbf3d32563877f3d3025d3abe (Code zuletzt in 283e6ed9; spätere Commits nur tasks/rc178-claude-review/)
+Geprüfter Produktstand: 0b99529cff549a02947898ad54d08620451a268f (Produktcode zuletzt in b71439b2; spätere Commits nur tasks/rc178-claude-review/)
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
 Für Codex zuerst prüfen:
@@ -616,10 +718,19 @@ Für Codex zuerst prüfen:
    wäre der beste Gegenbeleg.
 3. Rust-Shell (5f8bf47b bis 22688d75, d5992265): nur für Windows übersetzt und getestet. Auf einem
    Mac-Runner zuerst cargo test und clippy; 8c0dd30b und b30a6dbc übersetzen für sich nicht.
-4. R-028 und R-029 aus dem nativen Lauf: Start scheitert, solange ein fremder Prozess einen Ordner
-   über dem Datenordner mit Löschzugriff hält (export_directory.rs:1144); die Startprobe verliert
-   ihre Diagnosezeile (standalone-native-windows-launch.ps1:458 und 546).
+4. R-028, Commit b71439b2: private_namespace.rs (is_contention, open_waiting) und main.rs
+   (namespace_bootstrap_code, release_unspawned_generation). Die Freigabe der Ordnerkette ist
+   unverändert; neu sind die Ursache STANDALONE_DATA_ROOT_BUSY, ein Warten von höchstens rund zwei
+   Sekunden vor dem Anlegen und dass ein solcher Versuch nicht gegen die 16 Startversuche zählt.
+   Zu prüfen: ob ein Rückgeben der Generation an anderer Stelle der Wiederanlauf-Logik stört, und
+   der Mac-Build (der Code ist cfg(windows), übersetzt wurde nur Windows).
+5. R-029 und R-030, Commits dbf98cbf, b11a6131, 0b99529c: Die Startprobe verglich den WebView2-
+   Profilordner ohne den Unterordner EBWebView; ihr Abbau hat deshalb nie auf WebView2 gewartet und
+   tut es jetzt. Im Release-Workflow und in scripts/run-pkg-04.ps1 läuft das zum ersten Mal wirklich.
+   Der WebView2-Netzwerkdienst hält beim Start gelegentlich kurz einen UDP-Endpunkt; ob ein Paket
+   gesendet wird, ist nicht gemessen.
 Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
-R-015, R-022, R-028, R-029; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in Überschriften,
-Tabellen und Links); geführte Prüfung nur einmal nativ bedient; 62 % der Einheiten im Register offen.
+R-015, R-022; R-028 bei langer Belegung; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
+Überschriften, Tabellen und Links); geführte Prüfung nur einmal nativ bedient; rund 62 % der
+Einheiten im Register offen.
 ```

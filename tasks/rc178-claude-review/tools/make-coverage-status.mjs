@@ -231,6 +231,37 @@ sym(`${rs}main.rs`, 'document_review_rpc', { status: 'TEILGEPRÜFT',
   purpose: 'Nachbearbeitungs-Commands an den Sidecar reichen',
   trust: 'Argumente aus der WebView, jetzt nativ vorgeprüft', evidence: 'Rust-Test wie validate_document_review_request; ' + win,
   findings: ['R-014'], remark: 'geändert in aef66f19; nur der Prüfaufruf beurteilt' });
+const held = 'nativer Lauf mit einem Halterprozess (Löschzugriff) am Paket cec20d6e; ' + win;
+sym(`${rs}private_namespace.rs`, 'is_contention', {
+  purpose: 'Freigabekonflikt (Betriebssystemfehler 32) als Belegung erkennen; Aufrufer open_waiting und main.rs namespace_bootstrap_code',
+  trust: 'io::Error; nur der Fehlercode', invariant: 'kein anderer Fehler gilt als Belegung',
+  evidence: 'Rust-Test only_a_sharing_violation_is_contention; Mutationsprobe; ' + held, findings: ['R-028'], remark: 'neu in b71439b2' });
+sym(`${rs}private_namespace.rs`, 'open_waiting', {
+  purpose: 'erstes Öffnen der Elternkette und eines vorhandenen Datenordners bei Belegung begrenzt wiederholen; Aufrufer prepare_impl',
+  invariant: 'ein gemeinsames Budget von 19 Wiederholungen; legt nichts an; nach einem Anlegen nicht mehr aufgerufen',
+  evidence: 'vier Rust-Tests zu anhaltender und kurzer Belegung; Mutationsprobe; ' + held, findings: ['R-028'],
+  remark: 'neu in b71439b2; Gegenprüfung (read-only) hat die erste Fassung auf die Elternkette beschränkt gefunden' });
+sym(`${rs}private_namespace.rs`, 'prepare_impl', { status: 'TEILGEPRÜFT',
+  purpose: 'Datenordner unter gehaltener Elternkette öffnen oder exklusiv anlegen; Aufrufer prepare',
+  trust: 'fester Pfad des Datenordners', invariant: 'Freigabe ohne Löschen unverändert; Wiederholung nur vor dem Anlegen',
+  evidence: 'Rust-Tests des Moduls; ' + held, findings: ['R-028'],
+  remark: 'geändert in b71439b2; beurteilt sind die beiden wartenden Öffnungen, die übrigen Schritte über das Lesen der Datei' });
+sym(`${rs}main.rs`, 'namespace_bootstrap_code', {
+  purpose: 'Fehler der Namespace-Vorbereitung auf STANDALONE_DATA_ROOT_BUSY oder _UNSAFE abbilden; Aufrufer spawn_sidecar (vier Stellen)',
+  trust: 'io::Error; nur die Fehlerklasse', evidence: 'Rust-Test a_held_namespace_chain_is_reported_as_busy_and_everything_else_stays_unsafe; Quelltextvertrag in tests/test-standalone-desktop-contract.js; ' + held,
+  findings: ['R-028'], remark: 'neu in b71439b2' });
+sym(`${rs}main.rs`, 'release_unspawned_generation', {
+  purpose: 'Startgeneration eines Versuchs zurückgeben, der an einer Belegung endete; Aufrufer rpc im Fehlerzweig des Starts',
+  invariant: 'nur bei STANDALONE_DATA_ROOT_BUSY; dieser Code entsteht nur vor dem Start eines Core-Prozesses',
+  evidence: 'Rust-Test only_a_busy_namespace_attempt_gives_its_recovery_generation_back; nativ 20 erneute Prüfungen ohne Erschöpfung; ' + win,
+  findings: ['R-028'], remark: 'neu in b71439b2 (Einwand der Gegenprüfung)' });
+sym(`${rs}main.rs`, 'spawn_sidecar', { status: 'TEILGEPRÜFT',
+  purpose: 'Core-Prozess mit gehaltenem Datenordner starten', evidence: 'Quelltextvertrag der vier Stellen; ' + held,
+  findings: ['R-028'], remark: 'geändert in b71439b2; nur die Zuordnung der Namespace-Fehler beurteilt' });
+sym(`${app}frontend/workspace.js`, 'renderBootstrapFailure', { status: 'TEILGEPRÜFT',
+  purpose: 'gehaltene Startverweigerung mit Ursache und Statustext anzeigen',
+  evidence: 'tests/test-standalone-workspace.js (drei Fälle für STANDALONE_DATA_ROOT_BUSY); nativer Lauf',
+  findings: ['R-028'], remark: 'geändert in b71439b2; nur der neue Zweig beurteilt' });
 
 for (const name of ['linkNamePattern', 'linkIdentityHits']) {
   sym(`${privacy}engine.js`, name, {

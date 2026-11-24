@@ -123,8 +123,9 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | teilweise behoben (`2726675a`); die Zähltexte der geführten Prüfung sind offen |
 | R-026 | hoch | Fachlichkeit; Anonymisierung; alle Ziele | In den Profilen Personalprofil, Bewerbung und Kunde stoppt ein Dokument mit `RESIDUAL_PII`, sobald ein Link den Namen der Person enthält. Ein Lebenslauf mit LinkedIn-Adresse lässt sich nicht automatisch anonymisieren. Gefunden im Differenzlauf gegen den RC178-Kern. | BL-050.6 | behoben (`d91462b9`) |
 | R-027 | hoch | Anonymisierung; alle Ziele | Zugangsdaten werden nur als Feld am Zeilenanfang erkannt. „Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711“ bleibt vollständig stehen. Gefunden im Differenzlauf; in RC178 und am Stand `ffab4fa7` gleich. | BL-050.6 | teilweise behoben (`283e6ed9`): ein Wort hinter einem Label mitten in der Zeile wird ersetzt; mehrwortige Geheimnisse und weitere Formen bleiben dokumentierte Grenze |
-| R-028 | niedrig | Architektur und Betrieb; Windows | Die App startet nicht, solange ein fremder Prozess einen Ordner oberhalb ihres Datenordners mit Löschzugriff geöffnet hält. Die Meldung nennt keinen vorübergehenden Zustand. Im isolierten Testprofil beobachtet, rund sieben Minuten lang. | BL-010.11, BL-010.21 | offen (Beobachtung; Ursache der Sperre nicht zugeordnet) |
-| R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert gelegentlich an einem UDP-Endpunkt eines WebView-Prozesses und verwirft dabei ihre eigene Diagnosezeile. Dreimal beobachtet, je mit Erfolg in einer späteren Wiederholung. | BL-010.21 | offen (Beobachtung) |
+| R-028 | niedrig | Architektur und Betrieb; Windows | Die App startet nicht, solange ein fremder Prozess einen Ordner oberhalb ihres Datenordners mit Löschzugriff geöffnet hält. Die Meldung nennt keinen vorübergehenden Zustand. Im isolierten Testprofil beobachtet, rund sieben Minuten lang. | BL-010.11, BL-010.21 | behoben (`b71439b2`): eigene Ursache „belegt“, kurzes Warten, Wiederanlauf im selben Fenster; die Schutzgrenze ist unverändert, eine lange Belegung verhindert den Start weiterhin |
+| R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert an jedem beobachteten UDP-Endpunkt des WebView2-Netzwerkdienstes, weil sie dessen Profilordner ohne den Unterordner `EBWebView` vergleicht; aus demselben Grund wartet ihr Abbau nie auf WebView2. Die Diagnosezeile geht beim Abbruch verloren. | BL-010.21 | behoben (`dbf98cbf`) |
+| R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
 
 ## Einzelbefunde
 
@@ -423,8 +424,8 @@ steht in der Übersicht oben und im Abschnitt „Zweite Runde“.
     darüber so geöffnet hält. Ob das auf Zielhosts vorkommt, ist nicht
     belegt. Für Testläufe mit isoliertem Profil kommt der Temp-Ordner als
     Vorfahre hinzu, und der wird häufiger angefasst.
-  - **Status** – Offen, nicht geändert. Eine Änderung der Freigabe wäre eine
-    Entscheidung über die Schutzgrenze und nichts für eine Randkorrektur.
+  - **Status** – Behoben in `b71439b2`, ohne die Freigabe zu ändern; siehe
+    „R-028 bis R-030 · Umsetzung, Gegenprüfung und nativer Nachweis“.
 - **R-029, Startprobe**
   - **Ort** – `tests/manual/standalone-native-windows-launch.ps1:401-462`
     (`Get-NativeNetworkObservation`), Aufruf in Zeile 546.
@@ -440,7 +441,10 @@ steht in der Übersicht oben und im Abschnitt „Zweite Runde“.
     Welches Merkmal fehlte, ist deshalb in keinem der drei Fälle bekannt.
   - **Auswirkung** – Ein Zielhostnachweis kann ohne Produktfehler rot
     werden, und die Probe liefert dann nicht, was sie zur Klärung verspricht.
-  - **Status** – Offen, nicht geändert (Prüfwerkzeug; eigene Entscheidung).
+  - **Status** – Behoben in `dbf98cbf`. Die Ursache war kein Zeitverhalten,
+    sondern ein fester Vergleichsfehler; siehe „R-028 bis R-030 ·
+    Umsetzung, Gegenprüfung und nativer Nachweis“. Die Angabe „dreimal
+    beobachtet“ oben ist der Stand vor der Ursachensuche.
 - **R-025, Rest** – In der geführten Prüfung stehen weitere Zähltexte ohne
   Einzahl: „1 Zeilen vorgemerkt“, „Noch 1 Fundstellen offen“, „Alle 1
   Fundstellen sind vorgemerkt“, „Nur diese Seite auswählen (1 Zeilen)“
@@ -748,6 +752,207 @@ hat die umgesetzte Fassung nach dem Commit geprüft und nicht widerlegt.
   ersetzt; ein Passwort hinter „Login x, Passwort: …“ in einer Zeile, die mit
   einem Namensfeld beginnt, geht in `[FIELD_REDACTED]` auf.
 
+## R-028 bis R-030 · Umsetzung, Gegenprüfung und nativer Nachweis
+
+Auftrag des Anwenders vom 24.11.2026: R-028 und R-029 beheben und
+revalidieren. R-030 hat die Gegenprüfung von R-029 gefunden; es betrifft das
+dokumentierte Werkzeug für genau diese Messung und ist deshalb mit behoben.
+Die Hauptsession hat alle Änderungen selbst vorgenommen; zwei unabhängige
+Read-only-Prüfer hatten den Auftrag, sie zu widerlegen.
+
+### R-029 · Ursache und Korrektur
+
+- **Ursache** – Eine instrumentierte Kopie der Probe hat bei jedem Abbruch
+  dieselben Merkmale festgehalten: Besitzer des UDP-Endpunkts ist der
+  Netzwerkdienst von WebView2 (`--type=utility`,
+  `network.mojom.NetworkService`), gültig von Microsoft signiert, mit
+  `--user-data-dir=<Testprofil>\webview\main\EBWebView`. Die Probe verglich
+  dieses Argument auf exakte Gleichheit mit `<Testprofil>\webview\main`, dem
+  Wert von `WEBVIEW2_USER_DATA_FOLDER`. WebView2 arbeitet aber immer im
+  Unterordner `EBWebView`. Die Zuordnung konnte deshalb nie gelingen; die
+  Probe scheiterte genau dann, wenn eine ihrer Stichproben den Endpunkt
+  erwischte. Mit der alten Probe waren das 8 von 11 Läufen, alle mit
+  demselben Merkmal `own_profile: false`.
+- **Zweite Folge derselben Ursache** – `Wait-NativeWebViewProfileExit`
+  nutzte denselben Vergleich und fand deshalb nie einen Prozess. Der Abbau
+  hat also nie auf WebView2 gewartet; die in
+  `docs/canonical/TRACEABILITY.md` genannte „exakte Profilquieszenz vor
+  Cleanup“ war nicht wirksam.
+- **Verlorene Diagnosezeile** – wie gemeldet: Ausgabe einer Funktion, deren
+  Ergebnis der Aufrufer zuweist, geht beim `throw` verloren.
+- **Korrektur** (`dbf98cbf`, `tests/manual/standalone-native-windows-launch.ps1`)
+  - Eine Regel `Test-NativeWebViewOwnProfile` für Beobachtung und Abbau:
+    eigenes Profil ist genau der vorgegebene Ordner oder sein Unterordner
+    `EBWebView`. Geschwister, tiefere Pfade und fremde Profile gelten nicht.
+  - Die Ursache eines nicht zuordenbaren Endpunkts wird an allen drei
+    Abbruchstellen festgehalten (`owner_changed`, `owner_rejected`,
+    `classification`) und im äußeren `finally` ausgegeben. Sie enthält nur
+    Wahrheitswerte und den Signaturstatus.
+  - `udp_processes` im Evidenzsatz ist immer eine Liste. Vorher war es `{}`
+    ohne und eine bloße Zeichenkette mit einem Prozess.
+  - Der Abbau gibt seine tatsächliche Wartezeit gegen das feste Budget von
+    20 Sekunden aus.
+  - Tests: zehn weitere Gruppen im Vertragsmodus (jetzt 55), ein
+    Quelltextvertrag, die Ausgabe der Ursache im echten `finally`-Block und
+    ein Verhaltenstest des Abbaus mit sechs erfundenen Prozesslisten.
+    `docs/TESTING.md` nennt Regel und neue Zeilen.
+- **Nachweis** – 14 von 14 Läufen der Endfassung gegen das Paket
+  `cec20d6e…` bestehen, 4 davon mit einem zugeordneten Endpunkt
+  (`udp_endpoints: 1`, `["msedgewebview2.exe"]`). Die Abbau-Wartezeit lag
+  zwischen 138 und 273 ms. Die Messung über zehn Starts (R-030) besteht mit
+  0 TCP-Listenern.
+- **Was die Beobachtung sagt und was nicht** – Gemessen ist: Der
+  WebView2-Netzwerkdienst hält während des Starts kurz einen UDP-Endpunkt an
+  der Adresse `::` mit einem flüchtigen Port. Er trat je Serie in 0 von 10
+  bis 7 von 10 Läufen auf. Ob darüber ein Paket gesendet wird, ist nicht
+  gemessen. Das Repository setzt für WebView2 keine Browserargumente und
+  keinen Proxy (`tauri-contract/tauri.conf.json`, das Prüffenster in
+  `main.rs`); die CSP begrenzt nur Seitenanfragen, `network-deny.cjs` gilt
+  nur für den Node-Core. Die Probe wertet den Endpunkt wie vorgesehen als
+  Plattformbefund, nicht als DataSecure-Zugriff.
+- **Ältere Einträge** – `docs/canonical/CURRENT_STATE.md` und
+  `docs/canonical/BACKLOG_EVIDENCE_MATRIX.md` nennen für RC158 einen Lauf mit
+  demselben Abbruchcode und „keine UDP-Endpunkte im Messfenster“. Diese
+  Sätze beschreiben damalige Läufe und sind nicht geändert. Wahrscheinlich
+  hatte der damalige Abbruch dieselbe Ursache; rückwirkend belegen lässt
+  sich das nicht.
+
+### R-030 · Das Messskript konnte seine eigene Probe nicht auswerten
+
+- **Ort** – `tests/manual/measure-standalone-native-windows.ps1:29-33`
+  (Stand `e92d5b12`).
+- **Ist** – Zwei Fehler, jeder für sich bricht die Messung in der ersten
+  Wiederholung ab:
+  1. Der Filter `'STANDALONE NATIVE EVIDENCE *'` trifft auch die Zeile
+     `STANDALONE NATIVE EVIDENCE RETAINED: <Pfad>`, die die Probe seit RC177
+     danach ausgibt. `Select-Object -Last 1` wählt also diese Zeile, und sie
+     ist kein JSON.
+  2. Die gestartete App erbt den Fehlerkanal. Unter `ErrorActionPreference
+     Stop` macht Windows PowerShell aus jeder dort erscheinenden Zeile einen
+     abbrechenden Fehler. WebView2 schreibt beim Schließen „Failed to
+     unregister class Chrome_WidgetWin_0“.
+- **Reproduktion** – Fehler 1 mit den drei Ausgabezeilen der Probe als
+  Eingabe des Filters (alter Filter liefert die RETAINED-Zeile). Fehler 2 im
+  echten Lauf gegen das Paket `cec20d6e…`: Abbruch in Wiederholung 1 mit
+  `NativeCommandError`, obwohl die Probe bestanden hatte.
+- **Soll** – Die in `docs/TESTING.md` beschriebene Messung läuft durch.
+- **Auswirkung** – Die dokumentierten Evidenzläufe (30 Starts, 10 Starts
+  mit Netzwerkbeobachtung) ließen sich auf diesem Host nicht erzeugen. Ob
+  Fehler 2 auf jedem Host auftritt, ist nicht belegt.
+- **Korrektur** – `b11a6131` (nur die JSON-Zeile; `observed_udp_processes`
+  immer als Liste) und `0b99529c` (Ausgabe als Text bei für diesen einen
+  Aufruf gesenkter Fehlerbehandlung; der Exitcode bleibt das Urteil). Ein
+  Node-Test führt Filter und Aufruf des Skripts unter Windows PowerShell mit
+  der echten Zeilenfolge und einem Kind aus, das auf den Fehlerkanal
+  schreibt.
+- **Nachweis** – Zehn von zehn Starts, p50 1 993 ms, p95 2 015 ms,
+  0 TCP-Listener, in dieser Serie kein UDP-Endpunkt.
+
+### R-028 · Umsetzung
+
+- **Ursache jetzt gezielt nachgestellt** – Ein Hilfsprozess öffnet einen
+  Ordner der Kette mit Löschzugriff und voller Freigabe, so wie es ein
+  Sicherungs- oder Aufräumprogramm tut. Das Paket `b30c5511…` (Stand
+  `ebe526ec`) zeigt dann genau die am 24.11. beobachtete Meldung
+  `STANDALONE_DATA_ROOT_UNSAFE`; der Datenordner wird nicht angelegt. Nach
+  Freigabe genügt dort schon **Verbindung und Laufstatus prüfen**. Der
+  Wiederanlauf im selben Fenster war also vorhanden; falsch war die genannte
+  Ursache und der Rat, die Installation mit der IT zu prüfen.
+- **Korrektur** (`b71439b2`)
+  - `private_namespace.rs`: Ein Freigabekonflikt (Betriebssystemfehler 32)
+    gilt als Belegung. Das erste Öffnen der Kette bis zum Ordner über dem
+    Datenordner und das Öffnen eines schon vorhandenen Datenordners werden
+    zusammen höchstens 19-mal im Abstand von 100 ms wiederholt. Nach dem
+    Anlegen eines neuen Datenordners wird nichts wiederholt. Freigabe und
+    Zugriffsrechte sind unverändert.
+  - `main.rs`: Die vier Stellen vor dem Start des Core melden eine Belegung
+    als `STANDALONE_DATA_ROOT_BUSY`, alles andere weiter als
+    `STANDALONE_DATA_ROOT_UNSAFE`. Ein solcher Versuch gibt seine
+    Startgeneration zurück und zählt nicht gegen die Grenze von 16.
+  - `frontend/workspace.js`: eigener Meldungstext und eigener Statustext;
+    der Code wird wie jede Startverweigerung gehalten, es gibt keine
+    automatischen Wiederholungen.
+  - `docs/canonical/STANDALONE_SECURITY_MODEL.md`: neuer Abschnitt.
+- **Tests** – sieben Rust-Tests (anhaltende Belegung von Elternordner und
+  Vorfahr, kurze Belegung vor dem Anlegen, anhaltende und kurze Belegung
+  eines vorhandenen Datenordners, Abgrenzung zu Verknüpfung und fehlendem
+  Ordner, Zuordnung der Codes, Rückgabe der Generation), ein
+  Quelltextvertrag für die vier Stellen, drei Oberflächentests.
+  Mutationsprobe am Endstand: acht gezielte Verfälschungen der Rust-Änderung, jede
+  wird von mindestens einem der neuen Tests erkannt.
+- **Nativer Nachweis** mit Paket `cec20d6e…`, Build `b4466f2a`
+  - Ordner `profile` (Vorfahr des Datenordners) gehalten: Meldung
+    `STANDALONE_DATA_ROOT_BUSY` mit dem neuen Text; Datenordner nicht
+    angelegt.
+  - 20 erneute Prüfungen bei weiter gehaltenem Ordner: jedes Mal dieselbe
+    Meldung, kein `STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED`, weiterhin nichts
+    angelegt. Die Diagnose zählt 21-mal `DATA_ROOT_BUSY` und enthält keinen
+    Pfad und keinen Betriebssystemtext.
+  - Nach Freigabe und einer weiteren Prüfung: „Lokale Verbindung
+    wiederhergestellt“, Datenordner neu angelegt
+    (`STANDALONE_NAMESPACE_CREATED`).
+  - Vorhandener Datenordner selbst gehalten: `STANDALONE_DATA_ROOT_BUSY`;
+    nach Freigabe und Prüfung wiederhergestellt
+    (`STANDALONE_NAMESPACE_EXISTING_CANDIDATE`).
+  - Sperre von rund einer Sekunde auf `profile\Local`: Die App startet ohne
+    Meldung; zwischen Startbeginn des Core und gehaltenem Datenordner
+    liegen 0,5 s.
+  - Ohne Sperre: automatische Maskierung einer erfundenen Datei, ein
+    Ergebnis mit Zuordnung, Original unverändert.
+- **Einmalige Beobachtung, nicht zugeordnet** – In einem ersten Durchgang
+  der 20 Prüfungen hat sich das Fenster nach der elften geordnet beendet
+  (`sidecar_shutdown ready`, kein Absturzeintrag). Die Shell beendet sich
+  nur auf eine Schließanforderung an das Fenster; das Prüfskript sendet
+  keine. Der Anwender saß zu dieser Zeit am Rechner. Die Wiederholung mit
+  20 Prüfungen lief ohne Beenden durch.
+
+### Einwände der Gegenprüfung zu R-028 bis R-030
+
+| Einwand | Ergebnis |
+| --- | --- |
+| Jeder Versuch bei belegtem Ordner verbraucht eine der 16 Startgenerationen. Nach 16 Prüfungen meldet die Shell „Versuche erschöpft“, die Oberfläche zeigt aber weiter den neuen Text, der einen Neustart für unnötig erklärt. | Berechtigt. Ein solcher Versuch gibt seine Generation zurück; nativ mit 20 Prüfungen belegt. |
+| Gewartet wird nur beim Öffnen der Elternkette, nicht beim Öffnen eines vorhandenen Datenordners; das Dokument liest sich anders. | Berechtigt. Beide Öffnungen teilen sich jetzt ein Wartebudget; Dokument angepasst. |
+| „Es wurde nichts verändert“ gilt streng nur für eine Belegung beim ersten Öffnen. | Text geändert in „keine Daten verändert oder gelöscht“. Solange die Shell die Kette hält, kann ein fremder Prozess sie nicht mehr mit Löschzugriff öffnen; ein Konflikt nach dem Anlegen ist deshalb nicht zu erwarten, aber nicht ausgeschlossen. |
+| Die Meldungszeile in der alten Oberfläche (`app.js`) ist nicht erreichbar. | Zurückgenommen. |
+| Drei der vier geänderten Stellen in `main.rs` könnten unbemerkt zurückgedreht werden. | Quelltextvertrag ergänzt. |
+| Der Abbau der Probe wartet jetzt erstmals wirklich und kann die Probe an seinem 20-Sekunden-Budget scheitern lassen; die Reserve ist unbekannt. | Wartezeit wird ausgegeben; hier 0,1 bis 0,3 s. Auf langsameren Hosts und im Runner nicht gemessen. |
+| Die Stufe `owner_unreadable` gilt auch für einen Besitzer, der gar kein WebView2-Prozess ist. | Umbenannt in `owner_rejected`. |
+| Das Messskript wählt die falsche Zeile; seine Zusammenfassung hat dieselbe uneinheitliche Listenform. | R-030, behoben. |
+| Die Zahl der Vertragsgruppen ist nicht festgeschrieben; der Abbau hat keinen Verhaltenstest. | Untergrenze 55 und Verhaltenstest ergänzt. |
+
+Nicht widerlegt haben die Prüfer: dass der Wiederholungsversuch nichts
+anlegt, übernimmt oder einen selbst angelegten Ordner erneut betrachtet;
+dass der Fehlercode 32 auf jedem Weg bis zur Zuordnung erhalten bleibt; dass
+kein Prüfer und keine geschlossene Codeliste den neuen Code verwirft; dass
+keine Pfade oder Betriebssystemtexte in Diagnose oder IPC gelangen; dass die
+erweiterte Profilregel nichts durchlässt, was scheitern muss (geprüft mit
+Präfix-, Geschwister- und tieferen Pfaden, `..`, 8.3-Namen, Schreibweisen,
+mehrfachem Argument).
+
+### Grenzen der Korrekturen
+
+- R-028 wartet höchstens rund zwei Sekunden. Eine längere Belegung, wie die
+  am 24.11. beobachtete von rund sieben Minuten, führt weiter zur
+  Startverweigerung, jetzt mit zutreffender Ursache und dem Weg zurück.
+- Welcher Prozess den Temp-Ordner am 24.11. hielt, ist weiter unbekannt. Ob
+  Sicherungs- oder Schutzprogramme auf Zielhosts
+  `C:\Users\<Name>\AppData\Local` so öffnen, ist nicht belegt.
+- Die Ergebnisbereitstellung meldet eine Belegung weiterhin als
+  `STANDALONE_DATA_ROOT_UNSAFE`. Solange die Shell die Kette hält, kann dort
+  kein neuer Halter mit Löschzugriff hinzukommen; nachgestellt wurde das
+  nicht.
+- Neben dem Freigabekonflikt bildet Windows zwei seltene weitere Zustände
+  auf denselben Fehlercode ab (laut Gegenprüfung `0xC0000467` und
+  `0xC0010020`). Sie würden ebenfalls als Belegung gemeldet; die App startet
+  in keinem dieser Fälle.
+- Der macOS-Zweig ist nicht betroffen (`private_namespace` gibt es nur für
+  Windows) und nicht übersetzt worden.
+- R-029: Die Probe prüft weiter nur Stichproben im Abstand von rund 100 ms.
+  Ein Lauf ohne beobachteten Endpunkt belegt nicht, dass es keinen gab.
+- R-029: Der Abbau ist jetzt wirksam. In `release-evidence.yml` und
+  `scripts/run-pkg-04.ps1` läuft er damit ebenfalls zum ersten Mal wirklich;
+  dort ist er nicht ausgeführt worden.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -771,6 +976,10 @@ hat die umgesetzte Fassung nach dem Commit geprüft und nicht widerlegt.
 | A-018 | Hinter einem Zugangsdaten-Label darf der Wert bis zum Zeilen- oder Satzende reichen. | So arbeitet die Regel am Zeilenanfang. | Mitten in der Zeile folgt oft gewöhnlicher Text mit Namen und Titeln; ein Wert darüber verdrängt andere Treffer und verdeckt Hinweise für die Personenerkennung. | erste und zweite Gegenprüfung (read-only) | Widerlegt; der Wert ist ein Wort. |
 | A-019 | Am Ende des Kerndurchlaufs sind alle Personen ersetzt. | Der Kern ersetzt bekannte und erkannte Namen. | Noch unbekannte Namen werden erst im gemeinsamen Prüfablauf über offene Personenhinweise ersetzt. | dritte Gegenprüfung (read-only) | Widerlegt; die Regel sitzt jetzt hinter dem Kern und lässt offene Befunde unberührt. |
 | A-020 | Ein zusätzlicher Platzhalter an einer Stelle ohne Befund stört nichts. | Er ersetzt nur Klartext. | Die Rückführung offener Personenhinweise auf den Ursprungstext vergleicht Textstücke zwischen Platzhaltern; ein Platzhalter mehr kann ein Stück mehrdeutig machen. | vierte Gegenprüfung (read-only) | Widerlegt; die Ersetzung bleibt nur bei unveränderter Prüfung. |
+| A-021 | Die Startprobe scheitert an einem flüchtigen Endpunkt, also am Zeitverhalten (so in R-029 zuerst gemeldet). | Der Fehler trat nur in manchen Läufen auf, eine Wiederholung bestand. | Die Probe besteht nur, wenn keine Stichprobe den Endpunkt erwischt; wird er gesehen, scheitert die Zuordnung immer. | instrumentierte Kopie der Probe, 11 Läufe; Gegenprüfung (read-only) | Widerlegt. Fester Vergleichsfehler beim Profilordner; `dbf98cbf`. |
+| A-022 | Der Abbau der Probe wartet auf die WebView2-Prozesse des Testprofils (`docs/canonical/TRACEABILITY.md`: „exakte Profilquieszenz vor Cleanup“). | Die Funktion ist vorhanden und wird aufgerufen. | Sie vergleicht denselben falschen Ordner und findet nie einen Prozess. | eigene Lektüre nach dem Befund der Ursache; Gegenprüfung | Widerlegt für alle bisherigen Läufe. Jetzt wirksam; gemessene Wartezeit 0,1 bis 0,3 s. |
+| A-023 | R-028 lässt sich nur beheben, indem die Freigabe der Ordnerkette gelockert wird (so in der ersten Meldung von R-028). | Der Start scheitert an der Freigabe. | Der Wiederanlauf im selben Fenster ging schon vorher; falsch war nur die genannte Ursache. | Nachstellung mit einem Halterprozess am alten Paket | Widerlegt. Die Korrektur benennt die Ursache und wartet kurz; Freigabe und Rechte sind unverändert. |
+| A-024 | Ein Startversuch bei belegtem Ordner darf wie jeder andere gegen die Grenze von 16 Versuchen zählen. | So zählt die Shell jeden Startversuch. | Die neue Meldung verspricht den Wiederanlauf ohne Neustart; nach 16 Prüfungen wäre das falsch gewesen, und die Oberfläche hätte es nicht gezeigt. | Gegenprüfung (read-only) | Widerlegt; ein solcher Versuch gibt seine Generation zurück. Nativ mit 20 Prüfungen belegt. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung
