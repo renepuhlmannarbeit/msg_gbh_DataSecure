@@ -172,7 +172,9 @@
     setControlDisabled($('details-open-documents'), !receipt || reconnecting || contextRequired);
     if (!receipt) return;
     $('details-receipt-title').textContent = receipt.processing_mode === 'markdown-only' ? 'Zusätzliche Markdown-Kopie abgeschlossen' : 'Export mit Abschlussbeleg';
-    $('details-receipt-text').textContent = `${receipt.exported_count} ausgewählte Dokumentstände wurden lokal kopiert und ihr Empfang bestätigt. Für diese Kopie ist kein weiterer Export nötig. Ordner: ${receipt.folder_name}.`;
+    $('details-receipt-text').textContent = `${receipt.exported_count === 1
+      ? '1 ausgewählter Dokumentstand wurde lokal kopiert und sein Empfang bestätigt.'
+      : `${receipt.exported_count} ausgewählte Dokumentstände wurden lokal kopiert und ihr Empfang bestätigt.`} Für diese Kopie ist kein weiterer Export nötig. Ordner: ${receipt.folder_name}.`;
   }
   function boundRunReview(state) {
     const saved = runReviewSnapshot;
@@ -833,7 +835,7 @@
     });
     const ocrImages = chosen.filter(item => item.ocr_required === true).length;
     const withinLimit = chosen.length <= 200 && chosen.reduce((total, item) => total + count(item.bytes), 0) <= 500 * 1024 * 1024;
-    const summary = [element('span', withinLimit && chosen.length ? `✓ ${chosen.length} zur Verarbeitung` : `${chosen.length} Dateien ausgewählt`)];
+    const summary = [element('span', withinLimit && chosen.length ? `✓ ${chosen.length} zur Verarbeitung` : `${chosen.length} ${chosen.length === 1 ? 'Datei' : 'Dateien'} ausgewählt`)];
     const unavailable = catalogue.filter(item => !item.selectable).length;
     if (unavailable) summary.push(element('span', `${unavailable} nicht verfügbar`));
     if (ocrImages) summary.push(element('span', mode && !$('text-ocr').checked
@@ -1038,7 +1040,7 @@
     $('result-abandon-check').checked = false;
     $('result-abandon-accept').disabled = true;
     const total = count(entry.result_count) || count(entry.exported_count) + count(entry.export_pending_count);
-    $('result-abandon-counts').textContent = `Lauf ${entry.batch_id.slice(0, 8)} · ${total} technisch erstellte Ergebnisse, ${count(entry.failed_count)} nicht verarbeitete Dateien. ${count(entry.exported_count)} Ergebnisse wurden sichtbar kopiert, ${count(entry.export_pending_count)} fehlen noch. Dies ist keine Freigabe.`;
+    $('result-abandon-counts').textContent = `Lauf ${entry.batch_id.slice(0, 8)} · ${counted(total, 'technisch erstelltes Ergebnis', 'technisch erstellte Ergebnisse')}, ${counted(entry.failed_count, 'nicht verarbeitete Datei', 'nicht verarbeitete Dateien')}. ${count(entry.exported_count) === 1 ? '1 Ergebnis wurde' : `${count(entry.exported_count)} Ergebnisse wurden`} sichtbar kopiert, ${count(entry.export_pending_count) === 1 ? '1 fehlt' : `${count(entry.export_pending_count)} fehlen`} noch. Dies ist keine Freigabe.`;
     $('result-abandon-dialog').showModal();
     $('result-abandon-check').focus();
   }
@@ -1078,7 +1080,7 @@
         'Die Inhaltshinweise sind für diesen gespeicherten Stand nicht vollständig verfügbar. Das ist keine Bestätigung fehlerfreier Texterkennung. Der abgeschlossene Lauf wird dadurch nicht erneut geöffnet.', 'run-notice'));
       if (noticeCount) {
         const details = element('details', undefined, 'content-notices');
-        details.append(element('summary', `${noticeCount} erstellte Dateien mit Inhaltshinweisen`),
+        details.append(element('summary', `${noticeCount} ${noticeCount === 1 ? 'erstellte Datei' : 'erstellte Dateien'} mit Inhaltshinweisen`),
           element('p', 'Diese Markdown-Dateien wurden erstellt. Hinweise auf ausgelassene Bildinhalte oder nicht bestätigte Vollständigkeit sind keine weiteren fehlgeschlagenen Dateien. Bei Bedarf mit dem Original vergleichen.', 'meta'));
         const descriptions = { SOURCE_COVERAGE_UNVERIFIED: 'Vollständigkeit der Textübernahme nicht unabhängig bestätigt',
           OFFICE_TABLE_CONTEXT_UNVERIFIED: 'Office-Tabelleninhalt lesbar, Kontext nur teilweise übernommen; sichere Feldzuordnung für Anonymisierung nicht vollständig modelliert',
@@ -1117,7 +1119,7 @@
       }
       for (const file of (result.pending_files || []).slice(0, 200)) if (safeLabel(file.name)) target.append(element('p', `${file.name} – noch nicht gestartet, kein nachgewiesener Dokumentfehler.`, 'meta'));
       if (result.available === false && target.children.length && Number.isSafeInteger(result.total) && result.total > result.files.length)
-        target.append(element('p', `Für ${result.total - result.files.length} weitere Dateien sind die lokalen Dateidetails nicht mehr verfügbar. Keine vollständige Fehlerliste ableitbar.`, 'meta'));
+        target.append(element('p', `Für ${result.total - result.files.length} ${result.total - result.files.length === 1 ? 'weitere Datei' : 'weitere Dateien'} sind die lokalen Dateidetails nicht mehr verfügbar. Keine vollständige Fehlerliste ableitbar.`, 'meta'));
       if (!target.children.length) target.append(element('p', 'Keine Dateidetails mehr verfügbar. Die technischen Protokolle enthalten bewusst keine Originalnamen.', 'meta'));
     } catch { if (!isCurrent()) return; target.replaceChildren(element('p', 'Die Dateiliste konnte nicht geladen werden. Der Lauf wird nicht erneut gestartet.', 'meta'),
       button('Dateiliste erneut laden', () => problems(target, batchId))); }
@@ -1249,7 +1251,7 @@
       : 'Der aktuelle Ergebnisordner ist nicht bestätigt. Den gespeicherten Stand in der Nachbearbeitung prüfen; keine Änderung blind wiederholen.') : summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
       ? `${reviews} Datei${reviews === 1 ? ' wartet' : 'en warten'} auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
-      : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.' : `${done} von ${total} Dateien abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
+      : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.' : `${done} von ${total} ${total === 1 ? 'Datei' : 'Dateien'} abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
       : state.state === 'results_available' ? `${count(state.result_count)} ${count(state.result_count) === 1 ? rawResults ? 'Markdown-Ergebnis (nicht anonymisiert)' : anonymousResults ? 'technisch geprüftes anonymisiertes Ergebnis' : 'Ergebnis mit unbestätigtem Verarbeitungszweck' : rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
       : state.state === 'stopped' ? 'Der lokale Zwischenstand ist gespeichert. Fortsetzen verarbeitet nur noch offene Schritte.'
       : state.state === 'paused' ? 'Der Lauf ist pausiert. Fortsetzen verarbeitet nur offene Dateien. Die privaten Arbeitskopien unterliegen weiterhin der eingestellten Aufbewahrung.'
@@ -1308,9 +1310,9 @@
     }
     $('file-problems').hidden = !failed && !summary?.content_notice_count && !(completedAnonymous && contentNotices?.attention) && state.state !== 'stopped';
     $('file-problems-summary').textContent = summary
-      ? `Hinweise zu diesem Lauf · ${summary.ocr_omitted_count} ohne OCR nicht umgewandelt · ${summary.content_notice_count} Inhaltshinweise${summary.error_count ? ` · ${summary.error_count} technische Fehler` : ''}`
+      ? `Hinweise zu diesem Lauf · ${summary.ocr_omitted_count} ohne OCR nicht umgewandelt · ${summary.content_notice_count} ${summary.content_notice_count === 1 ? 'Inhaltshinweis' : 'Inhaltshinweise'}${summary.error_count ? ` · ${summary.error_count} ${summary.error_count === 1 ? 'technischer Fehler' : 'technische Fehler'}` : ''}`
       : completedAnonymous && contentNotices?.attention
-        ? `Hinweise zu diesem Lauf · ${contentNotices.count} erstellte Dateien mit Inhaltshinweisen${contentNotices.complete ? '' : ' · Hinweisstatus unvollständig'}`
+        ? `Hinweise zu diesem Lauf · ${contentNotices.count} ${contentNotices.count === 1 ? 'erstellte Datei' : 'erstellte Dateien'} mit Inhaltshinweisen${contentNotices.complete ? '' : ' · Hinweisstatus unvollständig'}`
         : `Dateien mit Hinweisen${failed ? ` (${failed})` : ''}`;
     const key = `${job.batchId}:${failed}:${state.state}:${summary?.content_notice_count || 0}:${contentNotices?.count}:${contentNotices?.complete}`;
     if (!$('file-problems').hidden && problemSignature !== key) { problemSignature = key; problems($('problem-list'), job.batchId); }
@@ -1387,7 +1389,7 @@
             data.result_publication.count !== undefined && data.result_publication.count !== data.reviewable_count))
           throw Error('DOCUMENT_REVIEW_INVALID');
         contents.append(element('p', data.result_publication?.state === 'repair_required'
-          ? `${data.reviewable_count} private Dokumentstände. Vor neuen Ergebnisdateien ist eine sichere Nachbearbeitung nötig. Es wird nichts automatisch geändert.`
+          ? `${data.reviewable_count === 1 ? '1 privater Dokumentstand' : `${data.reviewable_count} private Dokumentstände`}. Vor neuen Ergebnisdateien ist eine sichere Nachbearbeitung nötig. Es wird nichts automatisch geändert.`
           : `${data.reviewable_count} gespeicherte Ergebnisstände. Nachbearbeitung ist freiwillig; keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig.`, 'history-meta'));
         if (data.review_policy) contents.append(element('p',
           'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.', 'history-meta'));
@@ -1406,7 +1408,7 @@
                 !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(last.recorded_at) || Number.isNaN(Date.parse(last.recorded_at))))
             throw Error('DOCUMENT_REVIEW_INVALID');
           const when = last.recorded_at ? new Date(last.recorded_at).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : 'Zeitpunkt nicht erfasst';
-          contents.append(element('p', `${last.recorded_at ? 'Neuester datierter Exportbeleg' : 'Exportbeleg ohne erfassten Zeitpunkt'}: ${last.document_count} Dateien · ${when}${last.processing_mode === 'markdown-only' ? ' · nicht anonymisiert' : ''}.`, 'history-meta'));
+          contents.append(element('p', `${last.recorded_at ? 'Neuester datierter Exportbeleg' : 'Exportbeleg ohne erfassten Zeitpunkt'}: ${last.document_count} ${last.document_count === 1 ? 'Datei' : 'Dateien'} · ${when}${last.processing_mode === 'markdown-only' ? ' · nicht anonymisiert' : ''}.`, 'history-meta'));
         }
         if (data.pending_incomplete_count || data.pending_confirmation_count) contents.append(element('p',
           `${data.pending_incomplete_count} unvollständige Exportaufträge · ${data.pending_confirmation_count} fertige Kopien mit offener Empfangsbestätigung. In der Dokumentansicht abgleichen, nicht neu exportieren.`, 'history-meta'));
@@ -1587,7 +1589,7 @@
       historySummaryRetirements.clear();
       $('history-list').replaceChildren(); $('run-history-detail').replaceChildren();
       $('history-visibility-status').textContent = (Number.isSafeInteger(data.hidden_count) && data.hidden_count > 0
-        ? `${data.hidden_count} abgeschlossene Läufe ausgeblendet. ` : '') +
+        ? `${data.hidden_count === 1 ? '1 abgeschlossener Lauf' : `${data.hidden_count} abgeschlossene Läufe`} ausgeblendet. ` : '') +
         'Der Verlauf berücksichtigt nur die letzten 5 Läufe. Ältere Läufe rücken beim Ausblenden nicht nach. Dateien und gespeicherte Entscheidungen bleiben erhalten.';
       const targetedSummary = requestedHistorySummaryBatchId;
       for (const entry of data.entries.slice(0, 5)) {
@@ -1620,7 +1622,7 @@
         stateLabel.id = `history-${entry.batch_id}-state`;
         detail.append(element('p', `${raw ? 'Markdown-Konvertierung' : anonymous ? 'Anonymisierung' : 'Verarbeitungszweck nicht bestätigt'} · ${dateLabel}`, 'history-title'),
           element('p', conversion?.counts || (anonymous && reasonBreakdownValid
-            ? `${counted(entry.selected_count, 'Datei', 'Dateien')} · ${counted(entry.result_count, 'Ergebnis', 'Ergebnisse')} · ${expectedOcr} ohne OCR nicht umgewandelt${privacyStops ? ` · ${privacyStops} aus Datenschutzgründen angehalten` : ''} · ${technicalProblems} technische Fehler`
+            ? `${counted(entry.selected_count, 'Datei', 'Dateien')} · ${counted(entry.result_count, 'Ergebnis', 'Ergebnisse')} · ${expectedOcr} ohne OCR nicht umgewandelt${privacyStops ? ` · ${privacyStops} aus Datenschutzgründen angehalten` : ''} · ${technicalProblems} ${technicalProblems === 1 ? 'technischer Fehler' : 'technische Fehler'}`
             : anonymous && unknownStops
               ? `${counted(entry.selected_count, 'Datei', 'Dateien')} · ${counted(entry.result_count, 'Ergebnis', 'Ergebnisse')} · ${unknownStops} nicht verarbeitet (Gründe im Verlauf nicht mehr klassifiziert)`
             : `${counted(entry.selected_count, 'Datei', 'Dateien')} · ${counted(entry.result_count, 'Ergebnis', 'Ergebnisse')} · ${count(entry.failed_count)} ${anonymous ? count(entry.failed_count) === 1 ? 'Datei nicht verarbeitet' : 'Dateien nicht verarbeitet' : count(entry.failed_count) === 1 ? 'Problem' : 'Probleme'}`), 'history-meta'),
@@ -1633,12 +1635,12 @@
         if (conversion) {
           detail.append(element('p', conversion.description, 'history-next'));
           if (conversion.content_notice_count) detail.append(element('p',
-            `${conversion.content_notice_count} erstellte Dateien mit Inhaltshinweisen. Bei Bedarf Original und Markdown vergleichen.`, 'history-meta'));
+            `${conversion.content_notice_count} ${conversion.content_notice_count === 1 ? 'erstellte Datei' : 'erstellte Dateien'} mit Inhaltshinweisen. Bei Bedarf Original und Markdown vergleichen.`, 'history-meta'));
           row.dataset.outcome = conversion.error_count && !conversion.result_count ? 'error'
             : conversion.error_count || conversion.ocr_omitted_count || conversion.content_notice_count ? 'partial' : 'complete';
         }
         if (entry.status === 'export_abandoned') detail.append(element('p',
-          `${count(entry.exported_count)} Dateien wurden zuvor sichtbar kopiert; ${count(entry.export_pending_count)} fehlende Dateien werden nicht mehr automatisch ergänzt. Teilkopien bleiben unverändert. Keine vollständige Freigabe zur Weitergabe.`, 'history-next'));
+          `${count(entry.exported_count) === 1 ? '1 Datei wurde' : `${count(entry.exported_count)} Dateien wurden`} zuvor sichtbar kopiert; ${count(entry.export_pending_count) === 1 ? '1 fehlende Datei wird' : `${count(entry.export_pending_count)} fehlende Dateien werden`} nicht mehr automatisch ergänzt. Teilkopien bleiben unverändert. Keine vollständige Freigabe zur Weitergabe.`, 'history-next'));
         if (entry.status === 'export_pending') detail.append(element('p',
           '„Bereitstellung erneut prüfen“ kann fehlende Ergebnisdateien dieses Laufs lokal ergänzen. Es startet keinen neuen Verarbeitungslauf und erstellt keinen Export.', 'history-next'));
         const runIdentity = element('p', `Lauf ${entry.batch_id.slice(0, 8)}`, 'history-run-id path');
@@ -1673,7 +1675,9 @@
               ? 'Verarbeitung beendet – keine Ergebnisse, mit Dateifehlern'
               : 'Verarbeitung beendet – keine Ergebnisse erstellt'));
             completion.append(title, element('p',
-              `0 von ${count(entry.selected_count)} Dateien wurden als anonymisierte Markdown-Entwürfe erstellt. ` +
+              (count(entry.selected_count) === 1
+                ? 'Die Datei wurde nicht als anonymisierter Markdown-Entwurf erstellt. '
+                : `0 von ${count(entry.selected_count)} Dateien wurden als anonymisierte Markdown-Entwürfe erstellt. `) +
               (unknownStops ? 'Die Gründe der nicht verarbeiteten Dateien sind im kompakten Verlauf nicht mehr klassifiziert. '
                 : technicalProblems ? 'Mindestens eine Datei hatte einen technischen Fehler. '
                   : 'Die Dateien wurden angehalten oder ohne OCR nicht umgewandelt. ') +
@@ -1704,7 +1708,9 @@
             ? 'Anonymisierungslauf abgeschlossen – mit Dateifehlern'
             : unknownStops ? 'Anonymisierungslauf abgeschlossen – mit ungeklärten Ausnahmen'
               : failedFiles || contentNotices?.attention ? 'Anonymisierungslauf abgeschlossen – mit Hinweisen' : 'Anonymisierungslauf abgeschlossen');
-          finishedProcessingText = `${count(entry.result_count)} von ${count(entry.selected_count)} Dateien wurden als anonymisierte Markdown-Entwürfe erstellt. ${expectedOcr ? `${expectedOcr} wurden ohne OCR nicht umgewandelt. ` : ''}${privacyStops ? `${privacyStops} wurden aus Datenschutzgründen angehalten. ` : ''}${technicalProblems ? `${technicalProblems} ${technicalProblems === 1 ? 'Datei hat einen technischen Fehler' : 'Dateien haben technische Fehler'}. ` : ''}${unknownStops ? `${unknownStops} ${unknownStops === 1 ? 'Datei wurde' : 'Dateien wurden'} nicht verarbeitet; die Gründe sind im kompakten Verlauf nicht mehr klassifiziert. ` : ''}Der Lauf verarbeitet keine weiteren Dateien.`;
+          finishedProcessingText = `${count(entry.selected_count) === 1
+            ? `Die Datei wurde ${count(entry.result_count) === 1 ? '' : 'nicht '}als anonymisierter Markdown-Entwurf erstellt.`
+            : `${count(entry.result_count)} von ${count(entry.selected_count)} Dateien wurden als anonymisierte Markdown-Entwürfe erstellt.`} ${expectedOcr ? `${expectedOcr} ${expectedOcr === 1 ? 'wurde' : 'wurden'} ohne OCR nicht umgewandelt. ` : ''}${privacyStops ? `${privacyStops} ${privacyStops === 1 ? 'wurde' : 'wurden'} aus Datenschutzgründen angehalten. ` : ''}${technicalProblems ? `${technicalProblems} ${technicalProblems === 1 ? 'Datei hat einen technischen Fehler' : 'Dateien haben technische Fehler'}. ` : ''}${unknownStops ? `${unknownStops} ${unknownStops === 1 ? 'Datei wurde' : 'Dateien wurden'} nicht verarbeitet; die Gründe sind im kompakten Verlauf nicht mehr klassifiziert. ` : ''}Der Lauf verarbeitet keine weiteren Dateien.`;
           if (contentNotices?.description) finishedProcessingText += ` ${contentNotices.description}`;
           finishDetail = element('p', finishedProcessingText, 'history-completion-detail');
           const next = finishNext = element('p', unconfirmedReviewText, 'history-completion-next');
@@ -1757,7 +1763,7 @@
           const activity = element('p', undefined, 'history-activity');
           const icon = element('span', connected ? '⚙' : '!', 'history-work-icon'); icon.setAttribute('aria-hidden', 'true');
           activity.append(icon, element('strong', connected
-            ? `${active ? 'Aktueller Lauf · ' : ''}${entry.status === 'preparing' ? 'Wird vorbereitet' : 'Wird verarbeitet'} · ${count(entry.completed_count)} von ${count(entry.selected_count)} Dateien abgeschlossen`
+            ? `${active ? 'Aktueller Lauf · ' : ''}${entry.status === 'preparing' ? 'Wird vorbereitet' : 'Wird verarbeitet'} · ${count(entry.completed_count)} von ${counted(entry.selected_count, 'Datei', 'Dateien')} abgeschlossen`
             : 'Verbindung wird wiederhergestellt · Verarbeitungsstatus noch unbestätigt'));
           detail.append(activity);
         }

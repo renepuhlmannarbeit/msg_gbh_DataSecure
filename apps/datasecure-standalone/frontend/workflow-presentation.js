@@ -39,7 +39,7 @@
         value.not_converted_count !== Math.max(owner.failed_count || 0, owner.problem_count || 0)) return null;
     return { ...value, heading: value.error_count ? 'Lauf abgeschlossen mit Fehlern'
       : value.ocr_omitted_count || value.content_notice_count ? 'Lauf abgeschlossen mit Hinweisen' : 'Lauf abgeschlossen',
-      counts: `${value.selected_count} ${value.selected_count === 1 ? 'Datei' : 'Dateien'} · ${value.result_count} ${value.result_count === 1 ? 'Markdown-Datei' : 'Markdown-Dateien'} · ${value.ocr_omitted_count} ohne OCR nicht umgewandelt · ${value.error_count} technische Fehler`,
+      counts: `${value.selected_count} ${value.selected_count === 1 ? 'Datei' : 'Dateien'} · ${value.result_count} ${value.result_count === 1 ? 'Markdown-Datei' : 'Markdown-Dateien'} · ${value.ocr_omitted_count} ohne OCR nicht umgewandelt · ${value.error_count} ${value.error_count === 1 ? 'technischer Fehler' : 'technische Fehler'}`,
       description: `${value.result_count} Markdown-Datei${value.result_count === 1 ? '' : 'en'} erstellt. ` +
         (value.ocr_omitted_count ? `OCR war ausgeschaltet; ${value.ocr_omitted_count} Bild- oder Scan-Datei${value.ocr_omitted_count === 1 ? ' wurde' : 'en wurden'} nicht umgewandelt. ` : '') +
         (value.error_count ? `${value.error_count} Datei${value.error_count === 1 ? '' : 'en'} mit technischen Fehlern: Gründe ansehen. ` : '') +
@@ -139,7 +139,7 @@
         output.phase = 'copy_confirmed';
         output.heading = raw ? 'Markdown-Kopie abgeschlossen' : 'Export abgeschlossen';
         output.stages[raw ? 2 : 3].status = 'done';
-        output.counts = `${value.confirmed_copy_count} ausgewählte Dateien bestätigt kopiert`;
+        output.counts = `${value.confirmed_copy_count} ${value.confirmed_copy_count === 1 ? 'ausgewählte Datei' : 'ausgewählte Dateien'} bestätigt kopiert`;
         output.next = 'Diese Kopie ist abgeschlossen. Den Verlauf kannst du öffnen; der heutige Dokumentstatus wird getrennt geprüft. Bis dahin bleiben Änderungen und neue Kopien gesperrt.';
         return output;
       }
@@ -174,10 +174,14 @@
         else set('documents', -1, 'Verfügbare Ergebnisse ansehen (optional)', 'Der Laufabschluss ist noch nicht bestätigt. Bereits verfügbare Dateien sind nicht der gesamte Stapel.');
       }
       output.stages[review].status = output.phase === 'result_repair_required' || value.dirty === true ? 'current' : 'optional';
-      output.counts = output.phase === 'result_repair_required' ? `${value.document_count} private Dokumentstände · sichere Nachbearbeitung nötig` : `${value.document_count} Ergebnisdateien · Nachbearbeitung freiwillig`;
+      output.counts = output.phase === 'result_repair_required'
+        ? `${value.document_count} ${value.document_count === 1 ? 'privater Dokumentstand' : 'private Dokumentstände'} · sichere Nachbearbeitung nötig`
+        : `${value.document_count} ${value.document_count === 1 ? 'Ergebnisdatei' : 'Ergebnisdateien'} · Nachbearbeitung freiwillig`;
       if (fast) output.next += ' Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.';
       if (!wholeRun) output.next += ' Der Laufabschluss ist noch nicht bestätigt; verfügbare Dokumente sind nicht der gesamte Stapel.';
-      if (value.problem_count) output.next += ` ${value.problem_count} Dateien sind nicht vollständig verfügbar; betroffene Dateien ansehen.`;
+      if (value.problem_count) output.next += value.problem_count === 1
+        ? ' 1 Datei ist nicht vollständig verfügbar; betroffene Datei ansehen.'
+        : ` ${value.problem_count} Dateien sind nicht vollständig verfügbar; betroffene Dateien ansehen.`;
       if (integer(value.expected_omission_count) && value.expected_omission_count > 0)
         output.next += ` OCR war ausgeschaltet; ${value.expected_omission_count} Bild- oder Scan-Datei${value.expected_omission_count === 1 ? ' wurde' : 'en wurden'} deshalb nicht umgewandelt. Das ist kein technischer Fehler.`;
       if (!raw && wholeRun) {
@@ -194,7 +198,7 @@
         value[key] !== undefined && !integer(value[key])) || total && done > total || failed > done) return output;
     // completed_count already includes terminal stops, not just successes.
     const complete = total > 0 && done === total;
-    output.counts = total ? `${done} von ${total} Dateien abgeschlossen${failed ? ` · ${failed} nicht umgewandelt` : ''}` : 'Dateifortschritt wird abgeglichen';
+    output.counts = total ? `${done} von ${total} ${total === 1 ? 'Datei' : 'Dateien'} abgeschlossen${failed ? ` · ${failed} nicht umgewandelt` : ''}` : 'Dateifortschritt wird abgeglichen';
     const summary = value.source === 'processor' && conversionSummary(value);
     if (summary && (value.result_publication === undefined || resultPublication(value.result_publication) &&
         ['initial', 'current'].includes(value.result_publication.state) &&

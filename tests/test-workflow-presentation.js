@@ -145,6 +145,19 @@ test('a past export flag is not the normal completion condition', () => {
   assert.equal(documents({ approved_count: 3, export_complete: true }).phase, 'results_ready');
   assert.notEqual(documents({ approved_count: 3, export_complete: true, problem_count: 1 }).phase, 'exported');
 });
+test('count texts keep their singular for one file, one result and one unavailable file', () => {
+  assert.match(processor({ selected_count: 1, state: 'processing' }).counts, /^0 von 1 Datei abgeschlossen$/u);
+  assert.match(processor({ selected_count: 1, completed_count: 1, state: 'processing' }).counts, /^1 von 1 Datei abgeschlossen/u);
+  assert.match(processor({ selected_count: 3, completed_count: 1, state: 'processing' }).counts, /^1 von 3 Dateien abgeschlossen$/u);
+  assert.match(documents({ document_count: 1 }).counts, /^1 Ergebnisdatei · /u);
+  assert.match(documents({ document_count: 2 }).counts, /^2 Ergebnisdateien · /u);
+  assert.match(documents({ approved_count: 3, export_complete: true, problem_count: 1 }).next, / 1 Datei ist nicht vollständig verfügbar; betroffene Datei ansehen\./u);
+  assert.match(documents({ approved_count: 3, export_complete: true, problem_count: 2 }).next, / 2 Dateien sind nicht vollständig verfügbar; betroffene Dateien ansehen\./u);
+  for (const result of [processor({ selected_count: 1, state: 'processing' }), documents({ document_count: 1 }),
+    documents({ approved_count: 3, export_complete: true, problem_count: 1 })]) {
+    assert.doesNotMatch(`${result.counts} ${result.next}`, /\b1 (?:Dateien|Ergebnisdateien|Dokumentstände)\b/u);
+  }
+});
 test('invalid counters and unknown totals do not manufacture progress', () => {
   for (const extra of [{ completed_count: 201 }, { failed_count: -1 }, { completed_count: 3, failed_count: 4 }]) assert.equal(processor({ state: 'processing', ...extra }).phase, 'unknown');
   assert.match(processor({ selected_count: 0, state: 'processing' }).counts, /wird abgeglichen/u);

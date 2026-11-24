@@ -93,7 +93,7 @@
   }
   function exportProgressText(progress) {
     if (!progress) return 'Ein verlässlicher Dateifortschritt ist momentan nicht verfügbar.';
-    if (progress.phase === 'copying') return `${progress.staged_count} von ${progress.total_count} Dateien sind im geschützten Zwischenbereich gespeichert. Danach wird die vollständige Kopie geprüft.`;
+    if (progress.phase === 'copying') return `${progress.staged_count} von ${progress.total_count} ${progress.total_count === 1 ? 'Datei' : 'Dateien'} ${progress.staged_count === 1 ? 'ist' : 'sind'} im geschützten Zwischenbereich gespeichert. Danach wird die vollständige Kopie geprüft.`;
     if (progress.phase === 'preparing') return 'Die ausgewählten Textstände werden für die Kopie geprüft und vorbereitet.';
     if (progress.phase === 'verifying') return 'DataSecure prüft die kopierten Dateien und stellt den Exportordner fertig.';
     return 'DataSecure gleicht die Kopie mit dem gespeicherten Abschlussbeleg ab.';
@@ -376,8 +376,8 @@
         : unsettled ? resultPublication.state === 'conflict' ? 'Ergebnisbereitstellung nicht bestätigt' : 'Ergebnisstand wird abgeglichen'
         : raw() ? 'Umwandlung abgeschlossen' : 'Anonymisierungslauf abgeschlossen';
       if (hasHints) completionTitle += ' · mit Hinweisen';
-      completionText = needsRepair ? `${documents.length} private Dokumentstände bleiben zum Vergleichen lesbar. ${repairInstructions}` : directoryUnavailable
-        ? `Der Lauf verarbeitet keine weiteren Dateien. ${documents.length} private Dokumentstände bleiben lesbar. Der ursprüngliche Ergebnisordner ist nicht verfügbar; öffentliche Ergebnisdateien werden hier nicht als erreichbar bestätigt. Änderungen und neue Bereitstellungen bleiben gesperrt. Es wird kein Ersatzordner übernommen oder neu angelegt. Es erfolgte kein Upload.`
+      completionText = needsRepair ? `${documents.length === 1 ? '1 privater Dokumentstand bleibt' : `${documents.length} private Dokumentstände bleiben`} zum Vergleichen lesbar. ${repairInstructions}` : directoryUnavailable
+        ? `Der Lauf verarbeitet keine weiteren Dateien. ${documents.length === 1 ? '1 privater Dokumentstand bleibt' : `${documents.length} private Dokumentstände bleiben`} lesbar. Der ursprüngliche Ergebnisordner ist nicht verfügbar; öffentliche Ergebnisdateien werden hier nicht als erreichbar bestätigt. Änderungen und neue Bereitstellungen bleiben gesperrt. Es wird kein Ersatzordner übernommen oder neu angelegt. Es erfolgte kein Upload.`
         : `Der Lauf verarbeitet keine weiteren Dateien. ${documents.length} ${documents.length === 1 ? 'Ergebnis ist' : 'Ergebnisse sind'} verfügbar. ` +
         (unsettled ? 'Der aktuelle Nachbearbeitungsstand ist noch nicht als Ergebnisdateien bestätigt. Bereitstellung erneut prüfen; frühere Ergebnisordner bleiben unverändert. '
           : 'Den Ergebnisordner öffnen und Markdown-Dateien dort auswählen oder weiterverwenden. Keine zusätzliche Freigabe oder Exportbestätigung nötig. Zusätzliche Betriebssystem-Metadaten sind nicht geprüft oder anonymisiert; nicht mit weitergeben. ') +
@@ -410,7 +410,7 @@
     $('documents-bulk-progress').hidden = !bulkReviewProgress;
     if (bulkReviewProgress) {
       $('documents-bulk-title').textContent = bulkReviewProgress.action === 'approve' ? 'Freigaben werden gespeichert' : 'Freigaben werden widerrufen';
-      $('documents-bulk-count').textContent = `${bulkReviewProgress.done} von ${bulkReviewProgress.total} Entscheidungen bestätigt. Noch kein Export erstellt.`;
+      $('documents-bulk-count').textContent = `${bulkReviewProgress.done} von ${bulkReviewProgress.total} ${bulkReviewProgress.total === 1 ? 'Entscheidung' : 'Entscheidungen'} bestätigt. Noch kein Export erstellt.`;
       $('documents-bulk-meter').max = bulkReviewProgress.total;
       $('documents-bulk-meter').value = bulkReviewProgress.done;
     }
@@ -500,7 +500,7 @@
     $('document-draft-controls').hidden = !prepared();
     $('document-discard-draft').disabled = busy;
     quietText('document-draft-reason', pendingDocumentChange ? 'Basis-Wiederherstellung vorbereitet, noch nicht gespeichert. Bestätigen oder abbrechen; Dateiwechsel und Neuladen halten diesen Entwurf fest.'
-      : `${entitySelected.size} erkannte Werte ausgewählt, noch nicht gespeichert. Behandlung wählen und speichern oder die Auswahl bewusst verwerfen. Die Auswahl bleibt beim Fundstellenseitenwechsel erhalten.`);
+      : `${entitySelected.size === 1 ? '1 erkannter Wert' : `${entitySelected.size} erkannte Werte`} ausgewählt, noch nicht gespeichert. Behandlung wählen und speichern oder die Auswahl bewusst verwerfen. Die Auswahl bleibt beim Fundstellenseitenwechsel erhalten.`);
     $('document-navigation-reason').hidden = !hasDraft;
     quietText('document-navigation-reason', hasDraft ? 'Ungespeicherter Entwurf: zuerst speichern oder ausdrücklich verwerfen, bevor du die Datei wechselst, neu lädst oder die Ansicht verlässt.' : '');
     $('document-export-confirm').disabled = blocked || directoryUnavailable || needsRepair || exportPreparationPending;
@@ -510,7 +510,7 @@
     $('document-recovery-label').textContent = recoveryDraft ? `${recoveryDraft.name}: nicht bestätigter Korrekturentwurf (Ausgangsstand ${recoveryDraft.revision}). Der Text bleibt hier erhalten; bei abweichendem gespeicherten Stand bitte vergleichen und benötigte Änderungen kopieren.` : '';
     $('document-recovery-discard').disabled = busy;
     const position = shown.findIndex(row => row.document_id === detail?.document_id);
-    $('document-position').textContent = position < 0 ? '' : `${position + 1} von ${shown.length} angezeigten Dateien`;
+    $('document-position').textContent = position < 0 ? '' : `${position + 1} von ${shown.length} angezeigten ${shown.length === 1 ? 'Datei' : 'Dateien'}`;
     $('document-previous').disabled = blocked || hasDraft || position <= 0;
     $('document-next').disabled = blocked || hasDraft || position < 0 || position >= shown.length - 1;
     for (const node of documentControls) node.disabled = blocked || hasDraft;
@@ -524,7 +524,7 @@
     $('entities-scope').disabled = mutationBlocked || Boolean(exportRequest) || Boolean(pendingDocumentChange);
     const runOption = $('entities-scope').children[1];
     if (runOption) runOption.disabled = !detail?.run_entity_review_available || [...entitySelected].some(id => entitySelectionFacts.get(id)?.run_eligible !== true);
-    $('entities-count').textContent = `${entitySelected.size} ausgewählt (über alle Fundstellenseiten, höchstens 500) · ${detail?.entity_count || 0} unterschiedliche Werte in dieser Datei`;
+    $('entities-count').textContent = `${entitySelected.size} ausgewählt (über alle Fundstellenseiten, höchstens 500) · ${detail?.entity_count === 1 ? '1 unterschiedlicher Wert' : `${detail?.entity_count || 0} unterschiedliche Werte`} in dieser Datei`;
     quietText('entities-reason', treatmentReason || ($('entities-scope').value === 'run'
       ? 'Die gewählte Behandlung gilt für belegte gleiche Identitäten auch in anderen Dateien dieses Laufs. „Originalwert beibehalten“ kann echte personenbezogene Angaben sichtbar machen.'
       : 'Die gewählte Behandlung gilt nur für diese Datei. „Originalwert beibehalten“ kann echte personenbezogene Angaben sichtbar machen.') +
@@ -937,7 +937,7 @@
     if (connection !== connectionGeneration) return;
     if (updated && expected === batchId) { await loadDetail(documents.find(value => value.document_id === row.document_id));
       if (expected !== batchId || connection !== connectionGeneration) return;
-      status(furtherRepair ? repairRemaining : scope === 'run' ? `Behandlung für ${updated.affected_count} Dateien gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.` :
+      status(furtherRepair ? repairRemaining : scope === 'run' ? `Behandlung für ${updated.affected_count} ${updated.affected_count === 1 ? 'Datei' : 'Dateien'} gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.` :
         'Behandlung gespeichert und aktueller Ergebnisstand bereitgestellt. Ergebnisordner öffnen; keine weitere Freigabe oder Exportbestätigung nötig.'); }
     else if (failure && expected === batchId) {
       if (stateFresh) await loadDetail(documents.find(value => value.document_id === row.document_id));
@@ -998,7 +998,7 @@
       clearText(); await reload().catch(() => {}); showError(failed?.error || error, failed?.name || rows.map(row => row.name).join(', '), publicationAttempted);
       status(['approve', 'revoke'].includes(action) && rows.length > 1
         ? `Die gemeinsame Speicherbestätigung ist unklar. ${$('documents-status').textContent} Der gespeicherte Stand wurde erneut angefordert. Bitte vor einer weiteren Entscheidung den aktuellen Freigabestatus prüfen.`
-        : `${confirmed} Entscheidung${confirmed === 1 ? '' : 'en'} bestätigt. ${$('documents-status').textContent} ${Math.max(0, rows.length - confirmed - 1)} weitere Dateien wurden noch nicht bearbeitet.`, true);
+        : `${confirmed} Entscheidung${confirmed === 1 ? '' : 'en'} bestätigt. ${$('documents-status').textContent} ${(rest => rest === 1 ? '1 weitere Datei wurde' : `${rest} weitere Dateien wurden`)(Math.max(0, rows.length - confirmed - 1))} noch nicht bearbeitet.`, true);
       if (draft) $('documents-status').textContent += ' Dein Korrekturentwurf bleibt erhalten; den gespeicherten Stand neu laden, bevor du weiterarbeitest.';
       if (!stateFresh) $('documents-status').textContent += ' Der aktuelle Stand konnte nicht abgefragt werden. Änderungen bleiben bis zum Neuladen gesperrt.';
     } }
@@ -1383,7 +1383,7 @@
     if (!['notices', 'edited', 'all', 'without'].includes(next) || next === filterMode) return;
     filterMode = next; selected.clear();
     if (detail && !visibleDocuments().some(row => row.document_id === detail.document_id)) clearText();
-    render(); status(`${visibleDocuments().length} von ${documents.length} Markdown-Dateien angezeigt. „Vorherige/Nächste Datei“ gilt nur für diese Ansicht. Die Ergebnisdateien werden dadurch nicht geändert.`);
+    render(); status(`${visibleDocuments().length} von ${documents.length} ${documents.length === 1 ? 'Markdown-Datei' : 'Markdown-Dateien'} angezeigt. „Vorherige/Nächste Datei“ gilt nur für diese Ansicht. Die Ergebnisdateien werden dadurch nicht geändert.`);
   });
   $('documents-all').addEventListener('change', () => { if (busy || !stateFresh || exportRequest) return;
     const shown = visibleDocuments(); selected = new Set($('documents-all').checked ? shown.map(row => row.document_id) : []); render(); });

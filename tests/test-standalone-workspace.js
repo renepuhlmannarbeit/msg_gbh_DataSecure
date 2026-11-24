@@ -2084,7 +2084,7 @@ testAsync('incomplete anonymization export needs explicit consent and never beco
   await h.act(`history-${B}-more`);
   await h.act(`history-${B}-abandon-export`);
   assert.equal(h.el('result-abandon-dialog').open, true);
-  assert.match(h.el('result-abandon-counts').textContent, new RegExp(`Lauf ${B.slice(0, 8)}.*3 technisch erstellte Ergebnisse.*1 Ergebnisse wurden sichtbar kopiert.*2 fehlen noch`, 'u'));
+  assert.match(h.el('result-abandon-counts').textContent, new RegExp(`Lauf ${B.slice(0, 8)}.*3 technisch erstellte Ergebnisse, 0 nicht verarbeitete Dateien\\. 1 Ergebnis wurde sichtbar kopiert, 2 fehlen noch\\.`, 'u'));
   assert.equal(h.el('result-abandon-accept').disabled, true);
   await h.act('result-abandon-accept');
   assert.equal(h.calls.some(call => call.command === 'abandon_result_export'), false);
@@ -5799,6 +5799,31 @@ testAsync('epoch92V2 receipt for an older retry never completes the later failur
   assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
   assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
   noEpochMutation(h);
+});
+
+// German count texts: an interpolated number is never followed by a bare plural. Each such place
+// decides on the value 1 right before it, goes through `counted`, or is the plural branch of one
+// of four sentences whose singular is a sentence of its own on the line above.
+testAsync('count texts of the standalone surface never put a bare plural after an interpolated number', async () => {
+  const nouns = 'Dateien|Zeilen|Werte|Werten|Fundstellen|Dokumente|Dokumenten|Ergebnisse|Ergebnissen|Ergebnisdateien|Einträge|' +
+    'Entscheidungen|Läufe|Seiten|Kontaktwerte|Kontaktwerten|OCR-Kontaktwerten|Prüfzeilen|Markdown-Dateien|Inhaltshinweise|Fehler|Dokumentstände';
+  const pattern = new RegExp(`\\$\\{[^{}]+\\}\`? (?:[a-zäöüß-]+ ){0,3}(?:${nouns})(?![\\wäöüß-])`, 'gu');
+  const ownSentence = ['Die Datei wurde nicht als anonymisierter Markdown-Entwurf erstellt. ',
+    "'nicht '}als anonymisierter Markdown-Entwurf erstellt.`", "' 1 Datei ist nicht vollständig verfügbar; betroffene Datei ansehen.'",
+    "'1 ausgewählter Dokumentstand wurde lokal kopiert und sein Empfang bestätigt.'"];
+  let seen = 0;
+  for (const name of ['workspace.js', 'review.js', 'document-review.js', 'workflow-presentation.js']) {
+    const text = fs.readFileSync(path.join(base, name), 'utf8');
+    for (const match of text.matchAll(pattern)) {
+      seen += 1;
+      const near = text.slice(Math.max(0, match.index - 60), match.index + match[0].length);
+      const line = text.slice(0, match.index).split('\n').length;
+      const previous = text.split('\n')[line - 2] || '';
+      assert.ok(/=== 1\b|> 1\b|counted\(/u.test(near) || ownSentence.some(sentence => previous.includes(sentence)),
+        `${name}:${line} ${match[0]}`);
+    }
+  }
+  assert.ok(seen >= 12, `the guard still finds count texts to check (${seen})`);
 });
 
 done();

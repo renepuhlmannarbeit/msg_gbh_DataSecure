@@ -250,7 +250,7 @@ function prepareDocumentFilter() {
   for (let index = 1; index <= count; index++) {
     const option = document.createElement('option'); option.value = String(index);
     const candidates = state.draft.ambiguities.filter(row => state.documentPositions.get(row.ambiguity_id) === index).length;
-    option.textContent = `${documents[index - 1]?.source_label || `Dokument ${index}`} (${candidates} Werte)`;
+    option.textContent = `${documents[index - 1]?.source_label || `Dokument ${index}`} (${counted(candidates, 'Wert', 'Werte')})`;
     filter.append(option);
   }
   filter.value = 'all';
@@ -470,10 +470,10 @@ function render(table = true) {
     ? 'Du hast diese zusätzliche Prüfung beim Start gewählt. Auch plausibel aussehende OCR-Werte zählen. Bestätige oder korrigiere sie nach dem Bildvergleich; andere OCR-Zeilen oder Markdown-Inhalte sind dadurch nicht geprüft. Eine eingegebene Korrektur kannst du für exakt gleiche OCR-Lesarten als Vorschlag in weitere offene Zeilen einsetzen. Dort musst du das Original dennoch einzeln vergleichen und die Entscheidung ausdrücklich vormerken. Anwenden merkt Entscheidungen nur vor. Erst der Abschlussknopf übergibt sie und setzt den Lauf fort.'
     : 'Vorgemerkte Zeilen verschwinden aus „Noch offen“ und können unter „Vorgemerkt“ erneut betrachtet werden. Anwenden speichert noch nichts. Erst der Abschlussknopf übergibt alle Entscheidungen dieser Prüfgruppe.';
   el('summary').textContent = contact
-    ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} Dokument${affectedDocuments === 1 ? '' : 'e'} betroffen. Beim Start freiwillig gewählt; zum Abschluss dieses Laufs jetzt erforderlich.`
+    ? `${state.choices.size} von ${counted(items.length, 'OCR-Kontaktwert', 'OCR-Kontaktwerten')} vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} Dokument${affectedDocuments === 1 ? '' : 'e'} betroffen. Beim Start freiwillig gewählt; zum Abschluss dieses Laufs jetzt erforderlich.`
     : `${state.choices.size} von ${counted(items.length, 'Stelle', 'Stellen')} vorgemerkt · ${items.length - state.choices.size} offen · ${counted(state.rows.length, 'Prüfzeile', 'Prüfzeilen')} in dieser Gruppe. Noch nicht übergeben.`;
   el('matrix-progress').textContent = contact
-    ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} ${affectedDocuments === 1 ? 'betroffenes Dokument' : 'betroffene Dokumente'}`
+    ? `${state.choices.size} von ${counted(items.length, 'OCR-Kontaktwert', 'OCR-Kontaktwerten')} vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} ${affectedDocuments === 1 ? 'betroffenes Dokument' : 'betroffene Dokumente'}`
     : `${state.choices.size} von ${counted(items.length, 'Fundstelle', 'Fundstellen')} vorgemerkt · ${items.length - state.choices.size} offen`;
   el('document-position').textContent = `${documentName(candidate.ambiguity_id)} · Dokument ${state.documentPositions.get(candidate.ambiguity_id)} von ${draft.contact_batch?.documents.length || draft.batch_review?.document_count || 1}`;
   el('finding-position').textContent = `Fundstelle ${state.cursor + 1} von ${items.length}`;

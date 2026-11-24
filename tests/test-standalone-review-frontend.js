@@ -1160,6 +1160,15 @@ testAsync('a group with one finding speaks of one row and one finding, never of 
   assert.match(h.element('matrix-empty').textContent, /^Die Fundstelle ist vorgemerkt\. Jetzt „/u);
   assert.match(h.element('matrix-progress').textContent, /^1 von 1 Fundstelle vorgemerkt · 0 offen$/u);
   assert.doesNotMatch(shown(), /\b1 (?:Zeilen|Fundstellen|Prüfzeilen)\b|Alle 1 /u);
+  // The three texts written by other handlers: select all filtered rows, change the page, undo.
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../apps/datasecure-standalone/frontend/review.js'), 'utf8');
+  assert.match(source, /\$\{counted\(state\.selected\.size, 'Zeile', 'Zeilen'\)\} über alle Seiten dieses Filters ausgewählt\./u);
+  assert.match(source, /\$\{state\.selected\.size === 1 \? '1 Zeile bleibt' : `\$\{state\.selected\.size\} Zeilen bleiben`\} über die Seiten hinweg angehakt\./u);
+  assert.match(source, /Letzte Aktion rückgängig gemacht\. \$\{counted\(state\.choices\.size, 'Fundstelle', 'Fundstellen'\)\} vorgemerkt/u);
+  assert.match(source, /\(\$\{counted\(candidates, 'Wert', 'Werte'\)\}\)/u);
+  assert.equal(source.split("von ${counted(items.length, 'OCR-Kontaktwert', 'OCR-Kontaktwerten')} vorgemerkt").length - 1, 2);
+  assert.doesNotMatch(source, /\} (?:Zeilen|Fundstellen|Prüfzeilen|Werte|OCR-Kontaktwerten) (?:vorgemerkt|ausgewählt|im Filter|noch offen|über alle)|\(\$\{[a-z.]+\} (?:Zeilen|Werte)\)/u,
+    'no count text of the review writes a bare plural after an interpolated number');
 });
 
 function twoContactHarness() {
@@ -1192,8 +1201,8 @@ testAsync('OCR contact review filters by affected document without submitting or
   const filter = h.element('matrix-document');
   assert.equal(h.element('matrix-document-label').hidden, false);
   assert.equal(filter.children.length, 3);
-  assert.match(filter.children[1].textContent, /one\.png \(1 Werte\)/u);
-  assert.match(filter.children[2].textContent, /two\.png \(1 Werte\)/u);
+  assert.match(filter.children[1].textContent, /one\.png \(1 Wert\)$/u);
+  assert.match(filter.children[2].textContent, /two\.png \(1 Wert\)$/u);
   filter.value = '1'; h.callbacks.get('matrix-document:change')();
   assert.equal(h.element('matrix-body').children.length, 1);
   assert.match(h.element('matrix-count').textContent, /^1 von 2 Zeilen/u);
