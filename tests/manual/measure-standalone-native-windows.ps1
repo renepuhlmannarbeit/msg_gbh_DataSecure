@@ -4,6 +4,10 @@ param(
     [ValidateRange(3, 50)]
     [int] $Iterations = 30,
     [switch] $AssertNoListeners,
+    [switch] $AssertNoOutbound,
+    [ValidateRange(0, 600)]
+    [int] $OutboundSeconds = 75,
+    [switch] $AssertReviewWindow,
     [string] $ExpectedSha256 = ''
 )
 
@@ -19,12 +23,16 @@ $launcher = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'standalone-nati
 $samples = [System.Collections.Generic.List[double]]::new()
 $lastEvidence = $null
 $maxUdpEndpoints = 0
+$maxLoopbackAttempts = 0
 $udpProcesses = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
 for ($iteration = 1; $iteration -le $Iterations; $iteration += 1) {
     $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $launcher,
         '-Archive', $archivePath, '-EmitEvidence')
     if ($AssertNoListeners) { $arguments += '-AssertNoListeners' }
+    if ($AssertNoOutbound) { $arguments += @('-AssertNoOutbound', '-OutboundSeconds', [string] $OutboundSeconds) }
+    # The review window is a second WebView2 window with its own copy of the switches.
+    if ($AssertReviewWindow) { $arguments += '-AssertReviewWindow' }
     if ($ExpectedSha256) { $arguments += @('-ExpectedSha256', $ExpectedSha256) }
     # The started app inherits stderr. Under 'Stop', Windows PowerShell turns
     # any such line into a terminating error; the exit code is the verdict.
@@ -50,6 +58,12 @@ for ($iteration = 1; $iteration -le $Iterations; $iteration += 1) {
         foreach ($name in @($evidence.udp_processes)) {
             if ($name) { $udpProcesses.Add([string] $name) | Out-Null }
         }
+    }
+    if ($AssertNoOutbound) {
+        if ($evidence.outbound_observed -ne $true -or [int] $evidence.outbound_connections -ne 0) {
+            throw "STANDALONE_NATIVE_OUTBOUND_EVIDENCE_MISSING:$iteration"
+        }
+        $maxLoopbackAttempts = [Math]::Max($maxLoopbackAttempts, [int] $evidence.loopback_attempts)
     }
     $lastEvidence = $evidence
     Write-Output "STANDALONE NATIVE SAMPLE $iteration/$Iterations $($evidence.startup_ms) ms"
@@ -78,6 +92,10 @@ $summary = [ordered]@{
     tcp_listeners = if ($AssertNoListeners) { [int] $lastEvidence.tcp_listeners } else { $null }
     observed_udp_endpoints_max = if ($AssertNoListeners) { $maxUdpEndpoints } else { $null }
     observed_udp_processes = $observedUdpProcesses
+    outbound_observed = [bool] $AssertNoOutbound
+    outbound_window_ms = if ($AssertNoOutbound) { [int] $lastEvidence.outbound_window_ms } else { $null }
+    outbound_connections = if ($AssertNoOutbound) { 0 } else { $null }
+    loopback_attempts_max = if ($AssertNoOutbound) { $maxLoopbackAttempts } else { $null }
     os_build = [string] $lastEvidence.os_build
     process_architecture = [string] $lastEvidence.process_architecture
     webview2_version = [string] $lastEvidence.webview2_version

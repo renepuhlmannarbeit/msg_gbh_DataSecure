@@ -1376,8 +1376,9 @@ if (process.platform === 'win32') test('actual PowerShell readiness rejects fail
     '-File', script, '-ValidateReadinessOnly'], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /READINESS CONTRACT PASS \([0-9]+ groups; no native app launch\)/u);
-  // 45 readiness/parser groups plus ten own-profile groups for the EBWebView rule.
-  assert.ok(Number(result.stdout.match(/PASS \(([0-9]+) groups/u)[1]) >= 55, result.stdout);
+  // 45 readiness/parser groups, ten own-profile groups for the EBWebView rule
+  // and eleven groups for the outbound verdict.
+  assert.ok(Number(result.stdout.match(/PASS \(([0-9]+) groups/u)[1]) >= 66, result.stdout);
 });
 else process.stdout.write('SKIP actual PowerShell readiness contract (Windows host required; not counted passed)\n');
 
@@ -1584,7 +1585,8 @@ test('the Windows launcher binds WebView2 to its real EBWebView profile and keep
   const wait = launcher.slice(launcher.indexOf('function Wait-NativeWebViewProfileExit('), launcher.indexOf('if ($ValidateReadinessOnly)'));
   assert.match(wait, /Test-NativeWebViewOwnProfile \(\[string\] \$_\.CommandLine\) \$ExpectedProfile/u,
     'teardown waits for the same processes the observation attributes');
-  const own = launcher.slice(launcher.indexOf('function Test-NativeWebViewOwnProfile('), launcher.indexOf('function Wait-NativeWebViewProfileExit('));
+  const own = launcher.slice(launcher.indexOf('function Test-NativeWebViewOwnProfile('), launcher.indexOf('function Test-NativeLoopbackAddress('));
+  assert.ok(own.length > 200 && own.length < 1200, 'the own-profile rule must remain structurally discoverable');
   assert.match(own, /-ieq \$profile -or \$argument\.TrimEnd\('\\'\) -ieq \(Join-Path \$profile 'EBWebView'\)/u);
   assert.doesNotMatch(own, /-like|-match|StartsWith|Contains/u, 'no prefix or pattern match may widen the own profile');
   assert.match(launcher.slice(launcher.lastIndexOf('} finally {')), /STANDALONE NATIVE ENDPOINT CLASSIFICATION/u);
@@ -1636,6 +1638,51 @@ foreach ($case in $cases) {
   assert.match(result.stdout, /ACTUAL LAUNCHER WEBVIEW WAIT PASS/u);
 });
 else console.log('SKIP Windows launcher WebView teardown wait on this host; not counted as a passed case');
+
+if (process.platform === 'win32') test('actual Windows launcher outbound observer compiles, sees its own loopback connection and samples in the background', () => {
+  const script = path.join(__dirname, 'manual/standalone-native-windows-launch.ps1');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', script, '-ValidateOutboundOnly'], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.match(result.stdout, /OUTBOUND OBSERVER PASS \([0-9]+ samples, [0-9]+ own connections; IPv4, IPv6 and child control; no native app launch\)/u);
+  // The control must exercise both table layouts and the process tree, and
+  // an observer that cannot read its tables must not pass as silence.
+  const source = fs.readFileSync(script, 'utf8');
+  const control = source.slice(source.indexOf('    # Positive control before an empty observation counts as evidence'),
+    source.indexOf('function Wait-NativeWebViewProfileExit('));
+  assert.match(control, /-like "\*\|ipv4\|127\.0\.0\.1\|\$port" \}\)\.Count -ne 1 -or\s+@\(\$rows \| Where-Object \{ \$_ -like "\*\|ipv6\|::1\|\$port6" \}\)\.Count -ne 1/u);
+  assert.match(control, /if \(-not \$childSeen\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_TREE_INVALID' \}/u);
+  assert.match(control, /if \(\[DataSecureOutboundWatch\]::Failures -ne 0\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_INVALID' \}/u);
+  assert.match(control, /\$child\.Kill\(\)/u, 'the control child never outlives the control');
+  assert.equal(source.split('failures++').length - 1, 4, 'the size query, the table read, the process snapshot and the sampling pass count their failures');
+  assert.match(source, /if \(\$outboundFailures \* 20 -gt \$outboundSamples\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_DEGRADED' \}/u);
+});
+else console.log('SKIP Windows launcher outbound observer on this host; not counted as a passed case');
+
+test('the Windows launcher observes outbound connections from process start and reports them without addresses', () => {
+  const launcher = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
+  assert.match(launcher, /\$process = \[System\.Diagnostics\.Process\]::Start\(\$startInfo\)\r?\n    if \(\$AssertNoOutbound\) \{ \[DataSecureOutboundWatch\]::Start\(\$process\.Id\) \}/u,
+    'the first configuration request leaves within the first second; sampling starts with the process');
+  const prepared = launcher.indexOf('if ($AssertNoOutbound) { Initialize-NativeOutboundObserver }');
+  assert.ok(prepared >= 0 && prepared < launcher.indexOf('$process = [System.Diagnostics.Process]::Start($startInfo)'),
+    'compiling the observer must not delay the first sample');
+  const window = launcher.slice(launcher.indexOf('    if ($AssertNoOutbound) {\n        # An unrestricted WebView2'),
+    launcher.indexOf('    if ($EmitEvidence) {'));
+  assert.match(window, /\$outboundDeadline = \[DateTimeOffset\]::UtcNow\.AddSeconds\(\$OutboundSeconds\)/u);
+  assert.match(window, /Assert-NativeProcessRunning \$process/u, 'an app that exits early must not pass as silent');
+  assert.match(window, /if \(\$outboundSamples -lt 10\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_STALLED' \}/u);
+  assert.match(window, /throw \('STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED:' \+/u);
+  assert.match(launcher, /\[int\] \$OutboundSeconds = 75/u, 'the component updater first reports about a minute after start');
+  const verdict = launcher.slice(launcher.indexOf('function Get-NativeOutboundVerdict('), launcher.indexOf('function Initialize-NativeOutboundObserver'));
+  assert.match(verdict, /if \(\$loopback -and \$parts\[0\] -ieq 'msedgewebview2\.exe' -and \$parts\[3\] -ceq '80'\) \{ \$loopbackAttempts\+\+; continue \}/u);
+  assert.doesNotMatch(verdict.slice(verdict.indexOf('$violations.Add(')), /\$parts\[2\]/u, 'a violation never carries the remote address');
+  assert.match(launcher, /outbound_observed = \[bool\] \$AssertNoOutbound/u);
+  assert.match(launcher, /outbound_connections = if \(\$null -ne \$outboundEvidence\) \{ 0 \} else \{ \$null \}/u);
+  assert.match(launcher.slice(launcher.lastIndexOf('} finally {')), /\[DataSecureOutboundWatch\]::Stop\(\)/u);
+  const measure = fs.readFileSync(path.join(__dirname, 'manual/measure-standalone-native-windows.ps1'), 'utf8');
+  assert.match(measure, /if \(\$AssertNoOutbound\) \{ \$arguments \+= @\('-AssertNoOutbound', '-OutboundSeconds', \[string\] \$OutboundSeconds\) \}/u);
+  assert.match(measure, /\$evidence\.outbound_observed -ne \$true -or \[int\] \$evidence\.outbound_connections -ne 0/u);
+});
 
 if (process.platform === 'win32') test('the Windows start measurement selects the JSON evidence line, not the later retention notice', () => {
   const measure = fs.readFileSync(path.join(__dirname, 'manual/measure-standalone-native-windows.ps1'), 'utf8');

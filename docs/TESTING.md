@@ -358,6 +358,8 @@ commitgebundene Archiv:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/manual/measure-standalone-native-windows.ps1 -Archive <RC-ZIP> -ExpectedSha256 <64-stellige-SHA-256> -Iterations 30
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/manual/measure-standalone-native-windows.ps1 -Archive <RC-ZIP> -ExpectedSha256 <64-stellige-SHA-256> -Iterations 10 -AssertNoListeners
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/manual/measure-standalone-native-windows.ps1 -Archive <RC-ZIP> -ExpectedSha256 <64-stellige-SHA-256> -Iterations 3 -AssertNoListeners -AssertNoOutbound
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/manual/measure-standalone-native-windows.ps1 -Archive <RC-ZIP> -ExpectedSha256 <64-stellige-SHA-256> -Iterations 3 -AssertReviewWindow -AssertNoOutbound
 node tests/manual/standalone-package-corpus.mjs <RC-ZIP> <64-stellige-SHA-256>
 npm run benchmark:result-overlap
 ```
@@ -383,8 +385,22 @@ Zeile `STANDALONE NATIVE ENDPOINT CLASSIFICATION` die fehlende Stufe ohne Pfad,
 Befehlszeile oder Port. Dieselbe Profilregel bestimmt, auf welche
 WebView2-Prozesse der Abbau vor dem Ende der Probe wartet; die Zeile
 `STANDALONE NATIVE WEBVIEW EXIT WAIT` nennt die tatsächliche Wartezeit
-gegenüber dem festen Budget von 20 Sekunden. Das 100-Dateien-Paketgate
-verwendet den wirklichen entpackten Sidecar,
+gegenüber dem festen Budget von 20 Sekunden. Mit `-AssertNoOutbound` liest
+ein Hintergrundthread ab dem Prozessstart alle 10 bis 30 ms die TCP-Tabellen
+des Betriebssystems für den Prozessbaum, bis `-OutboundSeconds` (Vorgabe 75)
+nach der Bereitschaft. Eine Positivkontrolle geht voraus: je eine eigene
+Verbindung über IPv4 und IPv6 und eine eines Kindprozesses. Jede beobachtete
+Verbindung außer dem Versuch von WebView2 zum eigenen lokalen Hostnamen
+(Loopback, Port 80) endet mit `STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`.
+Die Meldung nennt Prozessklasse, Adressfamilie und Port, keine Adresse.
+Grenzen: Der Lauf belegt nur auf einem Host mit Netzzugang etwas. Eine
+Verbindung, die zwischen zwei Stichproben entsteht und endet, sieht er nicht;
+UDP und fehlgeschlagene Namensauflösungen ebenfalls nicht. Deshalb schützt
+er die Schalter nur gemeinsam, nicht einzeln. Das Prüffenster ist ein
+zweites WebView2-Fenster mit eigener Kopie der Schalter und braucht
+`-AssertReviewWindow -AssertNoOutbound` zusammen. Die Probe entfernt
+`WEBVIEW2_*`-Vorgaben des Hosts und misst deshalb nur den Wert des Produkts. Das
+100-Dateien-Paketgate verwendet den wirklichen entpackten Sidecar,
 verlangt Strukturtreue, unveränderte Quellhashes und im reinen Modus exakt
 100 Ergebnisse ohne Zuordnungsdatei. Es weist Verarbeitungs- und gesamte
 Harnessdauer getrennt aus. Der Korpus belegt weder native UI-Interaktionen noch

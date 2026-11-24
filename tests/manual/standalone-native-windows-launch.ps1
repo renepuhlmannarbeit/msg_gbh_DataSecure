@@ -5,6 +5,10 @@ param(
     [switch] $LegacyProfileContract,
     [switch] $EmitEvidence,
     [switch] $AssertNoListeners,
+    [switch] $AssertNoOutbound,
+    [ValidateRange(0, 600)]
+    [int] $OutboundSeconds = 75,
+    [switch] $ValidateOutboundOnly,
     [switch] $AssertReviewWindow,
     [switch] $AssertWorkspace,
     [string] $ExpectedSha256 = ''
@@ -113,6 +117,176 @@ function Test-NativeWebViewOwnProfile([string] $CommandLine, [string] $ExpectedP
     return ($argument.TrimEnd('\') -ieq $profile -or $argument.TrimEnd('\') -ieq (Join-Path $profile 'EBWebView'))
 }
 
+function Test-NativeLoopbackAddress([string] $Address) {
+    $parsed = $null
+    if (-not [System.Net.IPAddress]::TryParse($Address, [ref] $parsed)) { return $false }
+    if ($parsed.IsIPv4MappedToIPv6) { $parsed = $parsed.MapToIPv4() }
+    return [System.Net.IPAddress]::IsLoopback($parsed)
+}
+
+function Get-NativeOutboundVerdict($Rows) {
+    # Rows are 'image|family|remote address|remote port' of TCP connections
+    # owned by the app's process tree, listeners excluded. The embedded pages
+    # are served from the custom protocol; WebView2 still tries its local
+    # host name once (loopback, port 80). Nothing else may connect anywhere.
+    $loopbackAttempts = 0
+    $violations = [System.Collections.Generic.List[object]]::new()
+    foreach ($row in @($Rows)) {
+        $parts = ([string] $row).Split('|')
+        if ($parts.Count -ne 4) { throw 'STANDALONE_NATIVE_OUTBOUND_ROW_INVALID' }
+        $loopback = Test-NativeLoopbackAddress $parts[2]
+        if ($loopback -and $parts[0] -ieq 'msedgewebview2.exe' -and $parts[3] -ceq '80') { $loopbackAttempts++; continue }
+        # Content-free: fixed image classes, address family, port. No address.
+        $image = if ($parts[0] -ieq 'msedgewebview2.exe') { 'webview2' }
+            elseif ($parts[0] -ieq 'DataSecure Standalone.exe') { 'shell' }
+            elseif ($parts[0] -like 'datasecure-core*') { 'core' } else { 'other' }
+        $violations.Add([ordered]@{ process = $image; family = [string] $parts[1]; port = [int] $parts[3]; loopback = [bool] $loopback })
+    }
+    return [ordered]@{ loopback_attempts = $loopbackAttempts; violations = @($violations) }
+}
+
+function Initialize-NativeOutboundObserver {
+    # Get-NetTCPConnection needs 100 ms and more per call; a connection to the
+    # Edge configuration service lives for a few tens of milliseconds. A
+    # background thread reads the operating-system tables about every 10 ms.
+    try {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Runtime.InteropServices;
+using System.Threading;
+public static class DataSecureOutboundWatch {
+    [DllImport("iphlpapi.dll")] static extern uint GetExtendedTcpTable(IntPtr table, ref int size, bool order, int family, int kind, int reserved);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32FirstW(IntPtr snapshot, ref Entry entry);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool Process32NextW(IntPtr snapshot, ref Entry entry);
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct Entry {
+        public uint Size; public uint Usage; public uint ProcessId; public IntPtr Heap; public uint Module; public uint Threads;
+        public uint ParentId; public int Priority; public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Image;
+    }
+    static readonly object Gate = new object();
+    static readonly HashSet<int> Tree = new HashSet<int>();
+    static readonly Dictionary<int, string> Images = new Dictionary<int, string>();
+    static readonly HashSet<string> Rows = new HashSet<string>();
+    static Thread worker; static volatile bool stop; static int samples; static int failures;
+    static void RefreshTree(int root) {
+        Tree.Add(root);
+        IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
+        if (snapshot == new IntPtr(-1)) { failures++; return; }
+        try {
+            var pairs = new List<KeyValuePair<int, int>>();
+            var entry = new Entry(); entry.Size = (uint) Marshal.SizeOf(typeof(Entry));
+            if (Process32FirstW(snapshot, ref entry)) {
+                do {
+                    pairs.Add(new KeyValuePair<int, int>((int) entry.ProcessId, (int) entry.ParentId));
+                    if (!Images.ContainsKey((int) entry.ProcessId)) Images[(int) entry.ProcessId] = entry.Image;
+                } while (Process32NextW(snapshot, ref entry));
+            }
+            bool changed = true;
+            while (changed) { changed = false; foreach (var pair in pairs) if (Tree.Contains(pair.Value) && Tree.Add(pair.Key)) changed = true; }
+        } finally { CloseHandle(snapshot); }
+    }
+    static byte[] Table(int family) {
+        int size = 0; GetExtendedTcpTable(IntPtr.Zero, ref size, false, family, 5, 0);
+        if (size <= 0) { failures++; return new byte[0]; }
+        size += 4096; IntPtr memory = Marshal.AllocHGlobal(size);
+        try {
+            if (GetExtendedTcpTable(memory, ref size, false, family, 5, 0) != 0) { failures++; return new byte[0]; }
+            var bytes = new byte[size]; Marshal.Copy(memory, bytes, 0, size); return bytes;
+        } finally { Marshal.FreeHGlobal(memory); }
+    }
+    static int Port(byte[] bytes, int offset) { return (bytes[offset] << 8) | bytes[offset + 1]; }
+    static void Add(int processId, string family, IPAddress remote, int port) {
+        string image; if (!Images.TryGetValue(processId, out image)) image = "unknown";
+        Rows.Add(image + "|" + family + "|" + remote + "|" + port);
+    }
+    // One pass over both tables. State 2 is a listener, which the listener
+    // assertion owns; every other state is a connection or an attempt.
+    static void Sample(int root) {
+        lock (Gate) {
+            RefreshTree(root);
+            byte[] v4 = Table(2);
+            if (v4.Length >= 4) { int count = BitConverter.ToInt32(v4, 0);
+                for (int i = 0; i < count; i++) { int o = 4 + i * 24; if (o + 24 > v4.Length) break;
+                    int owner = BitConverter.ToInt32(v4, o + 20);
+                    if (!Tree.Contains(owner) || BitConverter.ToInt32(v4, o) == 2) continue;
+                    Add(owner, "ipv4", new IPAddress((long) BitConverter.ToUInt32(v4, o + 12)), Port(v4, o + 16)); } }
+            byte[] v6 = Table(23);
+            if (v6.Length >= 4) { int count = BitConverter.ToInt32(v6, 0);
+                for (int i = 0; i < count; i++) { int o = 4 + i * 56; if (o + 56 > v6.Length) break;
+                    int owner = BitConverter.ToInt32(v6, o + 52);
+                    if (!Tree.Contains(owner) || BitConverter.ToInt32(v6, o + 48) == 2) continue;
+                    var remote = new byte[16]; Array.Copy(v6, o + 24, remote, 0, 16);
+                    Add(owner, "ipv6", new IPAddress(remote), Port(v6, o + 44)); } }
+            samples++;
+        }
+    }
+    public static string[] Once(int root) { Reset(); Sample(root); return Snapshot(); }
+    public static void Reset() { lock (Gate) { Tree.Clear(); Images.Clear(); Rows.Clear(); samples = 0; failures = 0; } }
+    public static string[] Snapshot() { lock (Gate) { var copy = new string[Rows.Count]; Rows.CopyTo(copy); return copy; } }
+    public static int Samples { get { lock (Gate) { return samples; } } }
+    // A table or process snapshot that could not be read, or a sampling pass that threw.
+    public static int Failures { get { lock (Gate) { return failures; } } }
+    public static void Start(int root) {
+        Reset(); stop = false;
+        worker = new Thread(delegate() { while (!stop) { try { Sample(root); } catch { lock (Gate) { failures++; } } Thread.Sleep(10); } });
+        worker.IsBackground = true; worker.Start();
+    }
+    public static string[] Stop() { stop = true; if (worker != null) { worker.Join(2000); worker = null; } return Snapshot(); }
+}
+'@ -ErrorAction Stop
+    } catch {
+        if (-not ('DataSecureOutboundWatch' -as [type])) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_UNAVAILABLE' }
+    }
+    # Positive control before an empty observation counts as evidence: a real
+    # connection of this very process over IPv4 and over IPv6, and one of a
+    # child process. The three exercise both table layouts and the process tree.
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $listener6 = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::IPv6Loopback, 0)
+    $childListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $client = [System.Net.Sockets.TcpClient]::new()
+    $client6 = [System.Net.Sockets.TcpClient]::new([System.Net.Sockets.AddressFamily]::InterNetworkV6)
+    $child = $null
+    try {
+        $listener.Start(); $listener6.Start(); $childListener.Start()
+        $port = ([System.Net.IPEndPoint] $listener.LocalEndpoint).Port
+        $port6 = ([System.Net.IPEndPoint] $listener6.LocalEndpoint).Port
+        $childPort = ([System.Net.IPEndPoint] $childListener.LocalEndpoint).Port
+        $client.Connect([System.Net.IPAddress]::Loopback, $port)
+        $client6.Connect([System.Net.IPAddress]::IPv6Loopback, $port6)
+        $rows = @([DataSecureOutboundWatch]::Once($PID))
+        if (@($rows | Where-Object { $_ -like "*|ipv4|127.0.0.1|$port" }).Count -ne 1 -or
+            @($rows | Where-Object { $_ -like "*|ipv6|::1|$port6" }).Count -ne 1) {
+            throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_INVALID'
+        }
+        $childInfo = [System.Diagnostics.ProcessStartInfo]::new()
+        $childInfo.FileName = 'powershell.exe'
+        $childInfo.Arguments = '-NoProfile -NonInteractive -Command "$c = New-Object System.Net.Sockets.TcpClient(''127.0.0.1'', ' +
+            $childPort + '); Start-Sleep -Seconds 20"'
+        $childInfo.UseShellExecute = $false; $childInfo.CreateNoWindow = $true
+        $child = [System.Diagnostics.Process]::Start($childInfo)
+        $childSeen = $false
+        $childDeadline = [DateTimeOffset]::UtcNow.AddSeconds(15)
+        do {
+            Start-Sleep -Milliseconds 100
+            $childSeen = @([DataSecureOutboundWatch]::Once($PID) | Where-Object { $_ -like "*|ipv4|127.0.0.1|$childPort" }).Count -eq 1
+        } while (-not $childSeen -and -not $child.HasExited -and [DateTimeOffset]::UtcNow -lt $childDeadline)
+        if (-not $childSeen) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_TREE_INVALID' }
+        if ([DataSecureOutboundWatch]::Failures -ne 0) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_INVALID' }
+    } finally {
+        if ($null -ne $child) {
+            try { if (-not $child.HasExited) { $child.Kill() }; [void] $child.WaitForExit(5000) } catch { }
+            $child.Dispose()
+        }
+        $client.Dispose(); $client6.Dispose(); $listener.Stop(); $listener6.Stop(); $childListener.Stop()
+        [DataSecureOutboundWatch]::Reset()
+    }
+}
+
 function Wait-NativeWebViewProfileExit([string] $ExpectedProfile, [DateTime] $NotBeforeUtc) {
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(20)
     do {
@@ -172,6 +346,35 @@ if ($ValidateReadinessOnly) {
         if (Test-NativeWebViewOwnProfile $line $profile) { throw 'STANDALONE_NATIVE_WEBVIEW_OWN_PROFILE_FALSE_POSITIVE' }
         $groups++
     }
+    # Only WebView2's attempt at its own local host name is tolerated.
+    $tolerated = Get-NativeOutboundVerdict @('msedgewebview2.exe|ipv4|127.0.0.1|80', 'msedgewebview2.exe|ipv6|::1|80',
+        'MSEDGEWEBVIEW2.EXE|ipv6|::ffff:127.0.0.1|80')
+    if ($tolerated.loopback_attempts -ne 3 -or @($tolerated.violations).Count -ne 0) { throw 'STANDALONE_NATIVE_OUTBOUND_LOOPBACK_REFUSED' }
+    $groups++
+    if ((Get-NativeOutboundVerdict @()).loopback_attempts -ne 0 -or @((Get-NativeOutboundVerdict @()).violations).Count -ne 0) {
+        throw 'STANDALONE_NATIVE_OUTBOUND_EMPTY_INVALID'
+    }
+    $groups++
+    foreach ($case in @(
+        @{ row = 'msedgewebview2.exe|ipv6|2620:1ec:50::17|443'; process = 'webview2'; loopback = $false },
+        @{ row = 'msedgewebview2.exe|ipv4|203.0.113.7|443'; process = 'webview2'; loopback = $false },
+        @{ row = 'msedgewebview2.exe|ipv4|127.0.0.1|8080'; process = 'webview2'; loopback = $true },
+        @{ row = 'msedgewebview2.exe|ipv4|192.168.0.1|80'; process = 'webview2'; loopback = $false },
+        @{ row = 'DataSecure Standalone.exe|ipv4|127.0.0.1|80'; process = 'shell'; loopback = $true },
+        @{ row = 'datasecure-core-x86_64-pc-windows-msvc.exe|ipv6|::1|80'; process = 'core'; loopback = $true },
+        @{ row = 'conhost.exe|ipv4|198.51.100.9|53'; process = 'other'; loopback = $false },
+        @{ row = 'msedgewebview2.exe|ipv4|not-an-address|80'; process = 'webview2'; loopback = $false })) {
+        $verdict = Get-NativeOutboundVerdict @($case.row)
+        $found = @($verdict.violations)
+        if ($verdict.loopback_attempts -ne 0 -or $found.Count -ne 1 -or $found[0].process -cne $case.process -or
+            $found[0].loopback -ne $case.loopback) { throw 'STANDALONE_NATIVE_OUTBOUND_FALSE_NEGATIVE' }
+        if (($found[0] | ConvertTo-Json -Compress) -match '\d+\.\d+\.\d+\.\d+|[0-9a-f]*:[0-9a-f:]+:') { throw 'STANDALONE_NATIVE_OUTBOUND_ADDRESS_DISCLOSED' }
+        $groups++
+    }
+    $invalidRow = $null
+    try { Get-NativeOutboundVerdict @('msedgewebview2.exe|ipv4|127.0.0.1') | Out-Null } catch { $invalidRow = $_.Exception.Message }
+    if ($invalidRow -cne 'STANDALONE_NATIVE_OUTBOUND_ROW_INVALID') { throw 'STANDALONE_NATIVE_OUTBOUND_ROW_ACCEPTED' }
+    $groups++
     $requestA = 'a' * 35
     $requestB = 'b' * 35
     $page = [pscustomobject]@{ event = 'review_page_loaded' }
@@ -275,6 +478,22 @@ if ($env:OS -ne 'Windows_NT') {
     exit 77
 }
 
+if ($ValidateOutboundOnly) {
+    # Compiles the observer and proves it on this process's own loopback
+    # connection. No app is launched and no network is used.
+    Initialize-NativeOutboundObserver
+    [DataSecureOutboundWatch]::Start($PID)
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+    while ([DataSecureOutboundWatch]::Samples -lt 5 -and [DateTimeOffset]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 20 }
+    $observedSamples = [DataSecureOutboundWatch]::Samples
+    $observedFailures = [DataSecureOutboundWatch]::Failures
+    $idleRows = @([DataSecureOutboundWatch]::Stop())
+    if ($observedSamples -lt 5) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_STALLED' }
+    if ($observedFailures -ne 0) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_DEGRADED' }
+    Write-Output "STANDALONE NATIVE OUTBOUND OBSERVER PASS ($observedSamples samples, $($idleRows.Count) own connections; IPv4, IPv6 and child control; no native app launch)"
+    exit 0
+}
+
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
 . (Join-Path $PSScriptRoot 'standalone-native-cleanup.ps1')
 . (Join-Path $PSScriptRoot 'standalone-native-host.ps1')
@@ -313,6 +532,7 @@ $passed = $false
 $startupStopwatch = $null
 $startupMilliseconds = $null
 $networkEvidence = $null
+$outboundEvidence = $null
 $nativeEndpointClassification = $null
 
 function Get-CheckedTree([string] $Root) {
@@ -561,8 +781,10 @@ try {
     # hidden or minimized. A native acceptance smoke must therefore exercise
     # the same visible launch lifecycle as the end-user product.
     if ($AssertNoListeners) { Assert-NativeNetworkObserver }
+    if ($AssertNoOutbound) { Initialize-NativeOutboundObserver }
     $startupStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $process = [System.Diagnostics.Process]::Start($startInfo)
+    if ($AssertNoOutbound) { [DataSecureOutboundWatch]::Start($process.Id) }
     $rootStartedUtc = $process.StartTime.ToUniversalTime()
     $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
     do {
@@ -626,6 +848,29 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'profile\Local\SecureDataMsg-Standalone\workspace') -PathType Container)) {
         throw 'STANDALONE_NATIVE_ISOLATED_WORKSPACE_MISSING'
     }
+    if ($AssertNoOutbound) {
+        # An unrestricted WebView2 queries its configuration service within the
+        # first second and first reports to the component updater about a
+        # minute after start. Readiness alone ends long before that.
+        $outboundDeadline = [DateTimeOffset]::UtcNow.AddSeconds($OutboundSeconds)
+        while ([DateTimeOffset]::UtcNow -lt $outboundDeadline) {
+            Assert-NativeProcessRunning $process
+            Start-Sleep -Milliseconds 200
+        }
+        $outboundWindow = [int] ([DateTime]::UtcNow - $rootStartedUtc).TotalMilliseconds
+        $outboundSamples = [DataSecureOutboundWatch]::Samples
+        $outboundFailures = [DataSecureOutboundWatch]::Failures
+        $outboundVerdict = Get-NativeOutboundVerdict @([DataSecureOutboundWatch]::Stop())
+        if ($outboundSamples -lt 10) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_STALLED' }
+        # An unreadable table or snapshot is a pass that saw nothing.
+        if ($outboundFailures * 20 -gt $outboundSamples) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_DEGRADED' }
+        if (@($outboundVerdict.violations).Count -gt 0) {
+            throw ('STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED:' +
+                (ConvertTo-Json -InputObject @($outboundVerdict.violations) -Compress))
+        }
+        $outboundEvidence = [ordered]@{ window_ms = $outboundWindow; samples = $outboundSamples; failures = $outboundFailures;
+            loopback_attempts = [int] $outboundVerdict.loopback_attempts }
+    }
     if ($EmitEvidence) {
         $facts = Get-StandaloneWebViewHostFacts
         # A typed array keeps one shape: an untyped list serializes as {} when
@@ -643,6 +888,12 @@ try {
             tcp_listeners = if ($null -ne $networkEvidence) { $networkEvidence.tcp_listeners } else { $null }
             udp_endpoints = if ($null -ne $networkEvidence) { $networkEvidence.udp_endpoints } else { $null }
             udp_processes = $udpProcessEvidence
+            outbound_observed = [bool] $AssertNoOutbound
+            outbound_window_ms = if ($null -ne $outboundEvidence) { $outboundEvidence.window_ms } else { $null }
+            outbound_samples = if ($null -ne $outboundEvidence) { $outboundEvidence.samples } else { $null }
+            outbound_sample_failures = if ($null -ne $outboundEvidence) { $outboundEvidence.failures } else { $null }
+            outbound_connections = if ($null -ne $outboundEvidence) { 0 } else { $null }
+            loopback_attempts = if ($null -ne $outboundEvidence) { $outboundEvidence.loopback_attempts } else { $null }
             os_build = $facts.os_build
             process_architecture = $facts.process_architecture
             webview2_version = $facts.webview2_version
@@ -664,6 +915,11 @@ try {
         Write-Output ('STANDALONE NATIVE EVIDENCE RETAINED: ' + $testRoot)
     } catch {
         $nativeTeardownFailures.Add([pscustomobject]@{ Stage = 'RETENTION_NOTICE'; ErrorRecord = $_ })
+    }
+    if ('DataSecureOutboundWatch' -as [type]) {
+        # A body failure may leave the sampling thread running. It is a
+        # background thread; stopping it here only ends its table reads early.
+        try { [void] [DataSecureOutboundWatch]::Stop() } catch { }
     }
     if ($null -ne $nativeEndpointClassification) {
         # Content-free cause of an unattributed endpoint: fixed stage label,
