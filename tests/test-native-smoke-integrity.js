@@ -1657,6 +1657,25 @@ if ([double] $evidence.startup_ms -ne 1900.5 -or @($evidence.udp_processes).Coun
     { encoding: 'utf8', windowsHide: true, timeout: 30000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /MEASUREMENT EVIDENCE LINE PASS/u);
+  // A stderr line of the started app must not abort the measurement under 'Stop'.
+  const start = measure.indexOf('    $nativeErrorPreference = $ErrorActionPreference');
+  const end = measure.indexOf('    finally { $ErrorActionPreference = $nativeErrorPreference }');
+  assert.ok(start >= 0 && end > start, 'the launcher invocation must remain structurally discoverable');
+  const invocation = measure.slice(start, end + '    finally { $ErrorActionPreference = $nativeErrorPreference }'.length);
+  const stderrScript = `
+$ErrorActionPreference = 'Stop'
+$arguments = @('-NoProfile', '-NonInteractive', '-Command', "[Console]::Error.WriteLine('synthetic stderr line'); 'STANDALONE NATIVE EVIDENCE {}'; exit 0")
+${invocation}
+if ($LASTEXITCODE -ne 0) { throw 'CHILD_EXIT_CHANGED' }
+if ($ErrorActionPreference -ne 'Stop') { throw 'PREFERENCE_NOT_RESTORED' }
+if (@($output | Where-Object { $_ -isnot [string] }).Count -ne 0) { throw 'OUTPUT_NOT_TEXT' }
+if (@($output | Where-Object { ${filter} }).Count -ne 1) { throw 'EVIDENCE_LINE_LOST' }
+[Console]::WriteLine('MEASUREMENT STDERR PASS')
+`;
+  const stderrResult = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', stderrScript],
+    { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+  assert.equal(stderrResult.status, 0, `${stderrResult.stdout}\n${stderrResult.stderr}`);
+  assert.match(stderrResult.stdout, /MEASUREMENT STDERR PASS/u);
   assert.match(measure, /\$observedUdpProcesses = \[string\[\]\] @\(\$udpProcesses \| Sort-Object\)/u);
   assert.match(measure, /observed_udp_processes = \$observedUdpProcesses\r?\n/u);
 });

@@ -26,7 +26,12 @@ for ($iteration = 1; $iteration -le $Iterations; $iteration += 1) {
         '-Archive', $archivePath, '-EmitEvidence')
     if ($AssertNoListeners) { $arguments += '-AssertNoListeners' }
     if ($ExpectedSha256) { $arguments += @('-ExpectedSha256', $ExpectedSha256) }
-    $output = @(& powershell.exe @arguments 2>&1)
+    # The started app inherits stderr. Under 'Stop', Windows PowerShell turns
+    # any such line into a terminating error; the exit code is the verdict.
+    $nativeErrorPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $output = @(& powershell.exe @arguments 2>&1 | ForEach-Object { [string] $_ }) }
+    finally { $ErrorActionPreference = $nativeErrorPreference }
     if ($LASTEXITCODE -ne 0) {
         throw "STANDALONE_NATIVE_MEASUREMENT_FAILED:$iteration`n$($output -join [Environment]::NewLine)"
     }
