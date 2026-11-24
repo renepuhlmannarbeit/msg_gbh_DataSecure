@@ -88,7 +88,9 @@ flowchart LR
   prüft mit `-AssertNoOutbound` je Paket und Laufzeitversion, dass sie im
   Prozessbaum keine TCP-Verbindung nach außen beobachtet. Es bleiben ein
   Verbindungsversuch von WebView2 zum eigenen lokalen Hostnamen und ein
-  UDP-Socket, über den kein Paket gesendet wird.
+  UDP-Socket von WebView2. Dass darüber kein Paket gesendet wird, stammt
+  aus einer einmaligen Messung mit dem Netzwerkprotokoll der Laufzeit
+  158.0.4370.33; die Startprobe prüft UDP-Verkehr nicht.
   Grenzen: WebView2 hängt eine Vorgabe des Hosts in der Umgebungsvariablen
   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` an diese Schalter an; DataSecure
   entfernt sie nicht, die Startprobe schon. Richtlinien des Hosts für
@@ -325,8 +327,10 @@ mit `STANDALONE_DATA_ROOT_UNSAFE`. Nach dem Anlegen eines neuen Datenroots
 wird nichts mehr wiederholt.
 
 Freigabe und Schutzgrenze sind unverändert: Ohne gehaltene Kette startet kein
-Core, und solange die Kette nicht gehalten ist, wird nichts angelegt oder
-verändert. Die Oberfläche nennt den Zustand als meist vorübergehend;
+Core, und solange die Kette bis zum Ordner über dem Datenroot nicht gehalten
+ist, wird nichts angelegt oder verändert. Scheitert der Start erst, nachdem
+die Hülle einen neuen Datenroot angelegt hat, bleibt dieser als leerer Ordner
+zurück. Die Oberfläche nennt den Zustand als meist vorübergehend;
 **Verbindung und Laufstatus prüfen** versucht den Start im selben Fenster
 erneut. Ein solcher Versuch zählt nicht zu den höchstens 16 Startversuchen je
 laufender App, weil dabei kein Core entstanden ist. Verknüpfung, abweichende
