@@ -120,13 +120,14 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
 | R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | teilweise behoben (`6a90ed16`): lokale Prüfung der paketierten JavaScript-Abhängigkeiten; Rust-Crates und Repository-Einstellungen offen |
 | R-024 | mittel | Anonymisierung, alle | „im Zeitraum 2019-2024“ wird als Ort maskiert; mit geschütztem Bindestrich bleibt „‑2024“ stehen. Gefunden im nativen Windows-Lauf, am unveränderten RC178-Kern bestätigt. | BL-050.6 | behoben (`7b078d75`, Gegenfall im Test seit `7693e162`) |
-| R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | teilweise behoben (`2726675a`); die Zähltexte der geführten Prüfung sind offen |
+| R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | behoben (`2726675a`, `907efc14`, `8c452ac4`, `1126dc36`, `e66bab8f`) für die geladene Oberfläche, soweit drei Gegenprüfungen und ein Wächtertest Zähltexte gefunden haben. Die nicht mehr geladene alte Oberfläche `app.js` ist unverändert |
 | R-026 | hoch | Fachlichkeit; Anonymisierung; alle Ziele | In den Profilen Personalprofil, Bewerbung und Kunde stoppt ein Dokument mit `RESIDUAL_PII`, sobald ein Link den Namen der Person enthält. Ein Lebenslauf mit LinkedIn-Adresse lässt sich nicht automatisch anonymisieren. Gefunden im Differenzlauf gegen den RC178-Kern. | BL-050.6 | behoben (`d91462b9`) |
 | R-027 | hoch | Anonymisierung; alle Ziele | Zugangsdaten werden nur als Feld am Zeilenanfang erkannt. „Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711“ bleibt vollständig stehen. Gefunden im Differenzlauf; in RC178 und am Stand `ffab4fa7` gleich. | BL-050.6 | teilweise behoben (`283e6ed9`): ein Wort hinter einem Label mitten in der Zeile wird ersetzt; mehrwortige Geheimnisse und weitere Formen bleiben dokumentierte Grenze |
 | R-028 | niedrig | Architektur und Betrieb; Windows | Die App startet nicht, solange ein fremder Prozess einen Ordner oberhalb ihres Datenordners mit Löschzugriff geöffnet hält. Die Meldung nennt keinen vorübergehenden Zustand. Im isolierten Testprofil beobachtet, rund sieben Minuten lang. | BL-010.11, BL-010.21 | behoben (`b71439b2`): eigene Ursache „belegt“, kurzes Warten, Wiederanlauf im selben Fenster; die Schutzgrenze ist unverändert, eine lange Belegung verhindert den Start weiterhin |
 | R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert an jedem beobachteten UDP-Endpunkt des WebView2-Netzwerkdienstes, weil sie dessen Profilordner ohne den Unterordner `EBWebView` vergleicht; aus demselben Grund wartet ihr Abbau nie auf WebView2. Die Diagnosezeile geht beim Abbruch verloren. | BL-010.21 | behoben (`dbf98cbf`) |
 | R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
 | R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | behoben für das beobachtete Verhalten (`56d7c744`, Probe `1c3f36af`); die Schalter sind keine zugesicherte Schnittstelle von WebView2 |
+| R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | offen; ob der Stapel stoppt oder mit Hinweis weiterläuft, ist eine Produktentscheidung |
 
 ## Einzelbefunde
 
@@ -352,7 +353,9 @@ steht in der Übersicht oben und im Abschnitt „Zweite Runde“.
   Strichvarianten.
 - **R-025** – `app/frontend/workspace.js` (Jobtext und Verlaufszeile) und
   `workflow-presentation.js`; in der laufenden App beobachtet, in der zweiten
-  Runde an den Zähltexten behoben.
+  Runde an den Zähltexten der Ergebnisübersicht behoben. Die übrigen
+  Zähltexte der geladenen Oberfläche folgten in der Nacharbeit (Abschnitt
+  „R-025 · Abschluss“).
 
 ### R-026 · Link mit Personenname stoppt die strengen Profile
 
@@ -450,7 +453,8 @@ steht in der Übersicht oben und im Abschnitt „Zweite Runde“.
   Einzahl: „1 Zeilen vorgemerkt“, „Noch 1 Fundstellen offen“, „Alle 1
   Fundstellen sind vorgemerkt“, „Nur diese Seite auswählen (1 Zeilen)“
   (`frontend/review.js:293, 313, 473, 506-507, 551`). Im nativen Lauf mit
-  einer Fundstelle beobachtet; nicht geändert.
+  einer Fundstelle beobachtet; damals nicht geändert, behoben in der
+  Nacharbeit (`907efc14`, `8c452ac4`).
 
 ## Zweite Runde · Behebung der offenen Befunde und Gegenprüfung
 
@@ -1123,7 +1127,8 @@ Auf Auftrag des Anwenders vom 24.11.2026 umgesetzt.
     an, sofern sie mit `-AssertNoOutbound` läuft. Der Release-Workflow ruft
     sie seit `0f35696e` so auf; ausgeführt wurde er nicht, auf dem gehosteten
     Runner ist der Schritt also unbelegt. `scripts/run-pkg-04.ps1` ruft die
-    Probe weiter ohne den Schalter auf.
+    Probe seit `cebc39a0` ebenfalls mit dem Schalter auf; auch dieses Skript
+    habe ich nicht ausgeführt.
   - Gemessen mit einer WebView2-Version auf einem Host. Was die Laufzeit
     außerhalb des Prozessbaums der App tut (eigener Aktualisierungsdienst),
     ist nicht untersucht.
@@ -1135,7 +1140,333 @@ Auf Auftrag des Anwenders vom 24.11.2026 umgesetzt.
   - Rechtschreibwörterbücher und andere nachladbare Bestandteile von
     WebView2 werden nicht mehr geholt. Eine Auswirkung auf die Oberfläche
     habe ich nicht gesehen, aber nicht gezielt gesucht.
-  - Die Änderungen nach den Einwänden sind nicht erneut gegengeprüft.
+  - Die Änderungen nach den Einwänden sind in der Gegenprüfung des
+    Endstands erneut gelesen worden (nächster Abschnitt).
+
+## Nacharbeit nach R-031 · Zähltexte, Startprobe, Schließen im Lauf
+
+Am 24.11. hat der Anwender nach der Übergabe von `a1e4bc9b` beauftragt, mit
+den offenen Punkten weiterzumachen, die sich hier erledigen lassen. Das sind
+zehn Commits von `cebc39a0` bis `e66bab8f`. Drei unabhängige Gegenprüfungen
+liefen dazwischen, auf `907efc14`, `7eefdcd4` und `4c98d621`; ihre Einwände
+stehen am Ende des Abschnitts.
+
+### R-025 · Abschluss
+
+- **Vorher** – `2726675a` hatte die Ergebnisübersicht korrigiert. Die
+  geführte Prüfung schrieb weiter „1 Zeilen vorgemerkt“, „Alle 1 Fundstellen
+  sind vorgemerkt“ und „1 Prüfzeilen noch offen“.
+- **Erster Teil, `907efc14`** – elf Texte in
+  `apps/datasecure-standalone/frontend/review.js` über eine Hilfsfunktion
+  `counted(wert, einzahl, mehrzahl)`.
+- **Einwand der Gegenprüfung** – Außerhalb der geführten Prüfung gibt es
+  weitere Texte derselben Art, und zwei Tests schreiben die falsche Form
+  fest.
+- **Zweiter Teil, `8c452ac4`** – alle Zähltexte in `workspace.js`,
+  `document-review.js`, `workflow-presentation.js` und die übrigen in
+  `review.js`. Beispiele vorher: „1 Dateien ausgewählt“, „0 von 1 Dateien
+  abgeschlossen“, „1 Ergebnisse wurden sichtbar kopiert“, „one.png (1
+  Werte)“, „1 technische Fehler“, „1 private Dokumentstände“, „1 Ergebnisdateien
+  · Nachbearbeitung freiwillig“. Wo die Einzahl einen anderen Satzbau
+  braucht, steht ein eigener Satz („Die Datei wurde als anonymisierter
+  Markdown-Entwurf erstellt.“).
+- **Einwand der zweiten Gegenprüfung** – Der zweite Teil hat selbst einen
+  Fehler erzeugt und rund fünfzehn Texte übersehen:
+  - Aus „0 von 1 Dateien sind im geschützten Zwischenbereich gespeichert“
+    wurde „0 von 1 Datei sind …“ (`document-review.js`, Fortschritt des
+    Exports). Erreichbar beim Export einer einzelnen Datei.
+  - Übersehen: „1 Quelldateien“, „1 Dokumentprüfstände nicht verfügbar“,
+    „1 gespeicherte Ergebnisstände“, „1 frühere zusätzliche Kopien mit
+    Beleg“, „1 unvollständige Exportaufträge“, „seit 1 Sekunden“, „1 von 1
+    ausgewählten Dokumentständen wurden …“, „Nur 1 ausgewählte
+    Markdown-Textstände werden …“, „1 erkannte E-Mail-/Telefonwerte …,
+    keine 1 Konvertierungsfehler“.
+  - Mein Wächter kannte diese Hauptwörter nicht und ließ jede Stelle
+    durch, in deren Nähe irgendeine Entscheidung über die Zahl 1 stand.
+- **Dritter Teil, `1126dc36`** – die Verbform folgt der einzelnen Datei; die
+  genannten Texte haben ihre Einzahl, wo nötig als eigener Satz („Der
+  ausgewählte Dokumentstand wurde in dieser Sitzung nicht zum Vergleich
+  geöffnet. … Öffne ihn zuerst“).
+- **Einwand der dritten Gegenprüfung** – zwei weitere Stellen:
+  - Über der Dokumentliste steht bei jedem Lauf mit einer Datei „1
+    angezeigt · 1 Ergebnisdateien verfügbar“ (`document-review.js`). Das
+    Hauptwort wählt dort eine zweite Einsetzung nach einer anderen
+    Bedingung; weder meine Suchen noch der Wächter sahen diese Form an.
+  - Die Verlaufszeile „… von 1 Quellen als Ergebnis verfügbar“
+    (`workflow-presentation.js`), mit `+` zusammengesetzt. Nach meiner
+    Nachprüfung heute nicht erreichbar: Eine einzelne Quelle ohne Ergebnis
+    erzeugt diese Zeile nicht.
+- **Vierter Teil, `e66bab8f`** – beide Stellen korrigiert; der einzelne
+  Kontaktwert übernimmt die übergebene Dokumentzahl statt fest „1
+  Dokument“. Danach habe ich die vier Dateien gezielt nach den drei Formen
+  durchsucht, die den früheren Suchen entgangen waren (zweite Einsetzung,
+  Verkettung mit `+`, Wortketten mit Großschreibung), ohne weiteren Fund.
+- **Nachweis**
+  - Der Wächtertest in `tests/test-standalone-workspace.js` geht die vier
+    Dateien durch. Er verlangt jetzt, dass die Mehrzahl hinter einer
+    eingesetzten Zahl der Zweig einer Entscheidung über genau diesen
+    Ausdruck ist (`x === 1`, `x > 1`) oder über `counted` läuft. Dieselbe
+    Regel meldet am Stand vor R-025 (`cebc39a0`) 71 Stellen, nach dem
+    ersten Teil 56, am Stand `7eefdcd4` noch 15, jetzt keine. Seit
+    `e66bab8f` prüft er außerdem ein Hauptwort, das eine zweite Einsetzung
+    wählt, und Zähltexte, die mit `+` zusammengesetzt sind. Vier einzeln
+    zurückgedrehte Korrekturen, je eine pro Form, meldet er alle.
+  - `tests/test-standalone-document-review-frontend.js` wertet die
+    Zählsätze der Dokumentnachbearbeitung aus dem Quelltext der Oberfläche
+    mit 0, 1 und 2 aus (Fortschritt, Freigabedialog, Umfang des Laufs,
+    Sekunden).
+  - Die im dritten Teil geänderten Sätze des Verlaufs habe ich mit einem
+    Scratch-Skript für 0, 1 und 2 ausgewertet und gelesen.
+  - Zehn Testfälle hielten falsche Formen fest und sind berichtigt: einer
+    im vierten Teil („1 angezeigt · 1 Ergebnisdateien verfügbar“), zwei
+    im zweiten Teil („(1 Werte)“, „1 Ergebnisse wurden sichtbar kopiert“),
+    sieben im dritten („1 Quelldateien“, „1 Dokumentprüfstände“, „1 fertige
+    Kopien“, „1 frühere zusätzliche Kopien“), darunter verneinte Prüfungen,
+    die sonst leer gelaufen wären. Die Nachricht von `1126dc36` nennt
+    fünf.
+  - `tests/test-workflow-presentation.js` prüft Einzahl und Mehrzahl für
+    Fortschritt, Ergebnisdateien und nicht verfügbare Dateien am Ergebnis
+    der Funktion.
+  - Nativ gesehen am Paket `30bdd541…` (Stand `907efc14`): ein Lauf mit
+    einer einzigen Fundstelle zeigt in der geführten Prüfung durchgehend
+    die Einzahl. Die Texte des zweiten Teils sind am Paket des Endstands
+    nativ nachgesehen, soweit der Lauf sie anzeigt (siehe ERGEBNIS.md); die
+    übrigen nur über die Tests.
+- **Grenzen**
+  - Der Wächter kennt eine feste Liste von Hauptwörtern. Ein neuer Zähltext
+    mit einem anderen Hauptwort fällt nicht auf. Steht dieselbe Zahl in
+    einem Nachbarzweig schon in einer Entscheidung, lässt er eine bloße
+    Mehrzahl durch (so „gespeicherte Ergebnisstände“ am Stand `7eefdcd4`).
+    Verbformen, Kasus und zusammengesetzte Zeichenketten prüft er nicht.
+  - Drei Durchgänge haben jeweils weitere Stellen gefunden. Dass jetzt
+    keine mehr fehlt, ist damit nicht belegt.
+  - Rückgängig, Seitenwechsel und „alle gefilterten Zeilen auswählen“ sind
+    am Quelltext festgehalten, nicht durch Bedienung im Test ausgelöst.
+  - Die alte Oberfläche `app.js` enthält dieselbe Art von Texten und ist
+    nicht angefasst; sie wird nicht mehr geladen (R-019).
+  - Die Nachricht von `907efc14` nennt BL-050.6. Richtig ist BL-010.53.
+
+### Startprobe · Kontrolle des Beobachtungswegs
+
+- **Wo** – `tests/manual/standalone-native-windows-launch.ps1`, Funktion
+  `Initialize-NativeOutboundObserver`.
+- **Ist vor `1db8c744`** – Die Positivkontrolle las die Tabellen über einen
+  einzelnen Aufruf (`Once`). Die Beobachtung selbst läuft über `Start`, einen
+  Hintergrundthread und `Stop`. Dieser Weg war nicht kontrolliert: Ein
+  Thread, der nie abtastet, ein `Stop`, das nichts zurückgibt, oder ein
+  Thread mit falscher Wurzel im Prozessbaum hätten die Kontrolle bestanden.
+  Im echten Lauf hätte nur der erste Fall über die Stichprobenzahl zum
+  Abbruch geführt.
+- **Jetzt** – Die beiden IPv4-Kontrollverbindungen (eigener Prozess,
+  Kindprozess) müssen danach auch über `Start`, mindestens drei Stichproben
+  und `Stop` erscheinen, ohne Lesefehler. Sonst endet die Probe mit
+  `STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID`. Seit `98b426dd` muss
+  nach `Stop` außerdem die Zahl der Stichproben stehen bleiben.
+- **Nachweis** – Neun verfälschte Kopien der Probe, je mit
+  `-ValidateOutboundOnly` (Scratch-Skript, kein Bestandteil des
+  Repositorys). Die letzten drei stammen aus der zweiten Gegenprüfung:
+
+| Verfälschung | Ergebnis |
+| --- | --- |
+| `Stop` gibt nichts zurück | abgelehnt, `…_WORKER_INVALID` |
+| Thread tastet nie ab | abgelehnt, `…_WORKER_INVALID` |
+| Thread beobachtet eine fremde Wurzel | abgelehnt, `…_WORKER_INVALID` |
+| `Start` lässt das Stoppsignal gesetzt | abgelehnt, `…_WORKER_INVALID` |
+| IPv6-Tabelle abgeschaltet | abgelehnt, `…_IPV6_INVALID` |
+| Abtastung wirft immer, Fehler nicht gezählt | abgelehnt, `…_WORKER_INVALID` |
+| `Stop` setzt das Stoppsignal nicht | abgelehnt seit `98b426dd`, `…_WORKER_INVALID`; vorher bestanden |
+| `Stop` wartet nicht auf den Thread | besteht |
+| `Start` setzt den Zustand nicht zurück | besteht |
+
+  Die beiden bestehenden Verfälschungen ändern in diesem Skript kein
+  Prüfergebnis: Der Thread endet nach höchstens einer weiteren Stichprobe,
+  und der Abbau der Kontrolle setzt den Zustand zurück, bevor die echte
+  Beobachtung beginnt.
+
+- **Host ohne IPv6** – Bisher las der Beobachter die IPv6-Tabelle auch
+  dort; nach Lektüre hätte jeder Durchgang als Lesefehler gezählt und die
+  Probe mit `…_OBSERVER_DEGRADED` beendet. Jetzt bleibt die Tabelle
+  ungelesen, wo der Host kein IPv6 hat und die Tabelle nicht lesbar ist;
+  überall sonst wird sie gelesen. Diesen Zweig konnte ich nicht ausführen:
+  Der Prüfhost hat IPv6.
+- **Messskript** – Die Zusammenfassung nennt jetzt, ob das Prüffenster Teil
+  der Messung war (`review_window_asserted`); das Durchreichen von
+  `-AssertReviewWindow` ist im Test festgehalten.
+- **Grenzen**
+  - Dass ein einzelner Fehler der Abtastung gezählt wird, ist nicht
+    kontrolliert; die letzte Verfälschung fällt über die fehlenden
+    Stichproben auf, nicht über den Zähler.
+  - Der Prozessbaum des Beobachters wächst nur. Eine Prozessnummer, die nach
+    dem Ende eines Kindes neu vergeben wird, würde dem Baum zugerechnet. Das
+    führt zu einem falschen Alarm, nicht zu übersehenem Verkehr; nicht
+    geändert.
+  - Die Kontrolle bricht bei einem einzigen Lesefehler ab, die
+    Beobachtung erst ab fünf Prozent. Auf einem Host mit sehr vielen
+    Verbindungen kann die Kontrolle deshalb scheitern, obwohl die
+    Beobachtung liefe. Das wirkt in die sichere Richtung; nicht geändert.
+  - Der Evidenzsatz nennt, ob die IPv6-Kontrolle lief, nicht, ob die
+    IPv6-Tabelle gelesen wurde. Beides fällt nur auseinander, wenn die
+    Laufzeit IPv6 verneint und die Tabelle trotzdem lesbar ist.
+  - Die Nachricht von `1db8c744` nennt BL-047.2. Richtig ist BL-010.21.
+
+### R-028 und R-031 · Nachträge
+
+- `05efbad8` hält im Quelltextvertrag fest, dass Ordnerkette und vorhandener
+  Datenroot ein gemeinsames Wartebudget teilen, dass nach dem Anlegen nichts
+  wiederholt wird und dass die zurückgegebene Generation die dieses
+  Startversuchs ist. Vorher hätte eine Änderung an diesen drei Stellen
+  keinen Node-Test berührt; die Rust-Tests decken das Zeitverhalten.
+- `7eefdcd4` berichtigt zwei Sätze im Sicherheitsmodell:
+  - Dass über den verbleibenden UDP-Socket von WebView2 kein Paket gesendet
+    wird, stammt aus einer einzelnen Messung mit dem Netzprotokoll der
+    Laufzeit; die Startprobe prüft UDP nicht.
+  - „Es wird nichts angelegt“ gilt, solange die Ordnerkette nicht gehalten
+    ist. Scheitert der Start danach, bleibt ein frisch angelegter, leerer
+    Datenroot zurück. Das hält der vorhandene Rust-Test
+    `failed_bootstrap_handoff_preserves_the_fresh_private_root_without_cleanup`
+    schon fest.
+- Die Nachrichten beider Commits nennen BL-047.2. Richtig ist BL-010.11 und
+  BL-010.21.
+- `4c98d621` begrenzt den Ausschnitt dieses Vertragstests auf den Rumpf von
+  `prepare_impl`; vorher reichte er bis zum Dateiende.
+- `cebc39a0` trägt `-AssertNoOutbound` in `scripts/run-pkg-04.ps1` ein. Das
+  Skript ist nicht ausgeführt worden.
+
+### R-032 · Schließen des Fensters beendet einen laufenden Stapel nicht
+
+- **Wo**
+  - `apps/datasecure-standalone/tauri-contract/src/main.rs:3222` – Schließen
+    des Hauptfensters ruft `begin_native_exit`.
+  - `main.rs:3141` – `begin_native_exit` stoppt den Sidecar und beendet die
+    App.
+  - `plugins/data-secure/server/core/background-process-launcher.js:86`,
+    `:117`, `:147` – Arbeitsprozesse werden mit `detached: true` gestartet.
+  - Den Zusammenhang dieser Stellen habe ich gelesen, nicht durch eine
+    Änderung belegt.
+- **Reproduktion** – Paket `30bdd541…` (Stand `907efc14`), isoliertes
+  Profil. Zweck „Automatisch maskieren“, sechs erfundene Dateien (DOCX, XLSX,
+  PPTX, Text-PDF, Scan-PDF, PNG), **Starten**. Rund 14 s später das Fenster
+  schließen. Prozessliste und Ergebnisordner beobachten, danach die App neu
+  starten.
+- **Ist**
+  - Das Fenster schließt ohne Rückfrage; die Hülle endet ordentlich
+    (Diagnose `sidecar_shutdown`, Ergebnis `ready`).
+  - Ein Core-Prozess mit Sandbox- und Node-Kind arbeitet rund 75 s weiter
+    und legt alle sechs Ergebnisse im Ergebnisordner ab.
+  - Nach dem Neustart steht der Lauf im Verlauf als abgeschlossen.
+  - Die Originale sind unverändert (Hashvergleich).
+- **Soll**
+  - BL-010.14 beschreibt für den Abbruch fortsetzbare Stapel („vorhandene
+    fortsetzbare Stapel als `stopped`/`resumable`“).
+  - Die alte Oberfläche sagt zum Schließen: „Offene Läufe können nach einem
+    Neustart im Verlauf fortgesetzt werden“
+    (`apps/datasecure-standalone/frontend/app.js:46`).
+  - Zum Weiterlaufen nach dem Schließen habe ich im Kanon keine Aussage
+    gefunden. Entweder endet die Verarbeitung mit dem Fenster, oder die App
+    sagt vor dem Schließen, dass sie zu Ende läuft.
+- **Auswirkung** – Wer schließt, um abzubrechen, bricht nicht ab. Prozesse
+  der App laufen ohne Fenster weiter, und im Ergebnisordner erscheinen
+  Dateien, nachdem die App geschlossen ist. Klartext gelangt dadurch nicht
+  nach außen: Es sind dieselben geprüften Ergebnisse wie bei offenem
+  Fenster; in den sechs Dateien stand weder Name noch Firma noch IBAN der
+  Vorlage.
+- **Zuordnung** – BL-010.14 (Abbruch und Fortsetzung), BL-010.11
+  (Lebenszyklus des Sidecars).
+- **Status** – offen, nicht geändert. Ob der Stapel beim Schließen stoppt
+  oder mit einem Hinweis zu Ende läuft, ist eine Produktentscheidung; der
+  losgelöste Start gehört zum gemeinsamen Core, den auch Cowork nutzt.
+- **Nicht geprüft**
+  - macOS.
+  - Schließen während einer geführten Prüfung und während „Nur in Markdown
+    umwandeln“.
+  - Ob dabei auch die lokale Zuordnung geschrieben wird.
+  - Ein zweiter Start, während der Stapel noch läuft.
+  - Absturz statt Schließen (BL-010.14, UAT offen).
+
+### Native Läufe am Paket `30bdd541…` (Stand `907efc14`)
+
+Isoliertes Testprofil, Bedienung per Windows-UI-Automation, nur erfundene
+Dateien. Beobachtung, keine Abnahme.
+
+| Lauf | Beobachtung |
+| --- | --- |
+| Geführte Prüfung, vier Fundstellen | Eine Entscheidung vorgemerkt: „1 Zeile vorgemerkt. 3 Prüfzeilen noch offen.“ **Später entscheiden** führt zu „Fundstellenprüfung vertagt“ und zurück zu „Prüfung erforderlich“. Beim Wiederaufnehmen stehen 0 von 4 vorgemerkt; die vorgemerkte Entscheidung ist verworfen, wie der Dialog es ankündigt. Danach alle vier belassen, Lauf abgeschlossen. |
+| Geführte Prüfung, eine Fundstelle | Alle Zähltexte in der Einzahl. |
+| Sechs Formate mit OCR (DOCX, XLSX, PPTX, Text-PDF, Scan-PDF, PNG) | „6 technisch geprüfte anonymisierte Ergebnisse“ nach 76 s. Name, Firma und IBAN der Vorlagen stehen in keinem Ergebnis; Originale unverändert. „Max Mustermann Nordstern GmbH“ wird als Ganzes zu einem Platzhalter `[UNTERNEHMEN_001]`. |
+| Fenster rund 14 s nach dem Start schließen | R-032. |
+
+Zwei Beobachtungen ohne eigene Nummer:
+
+- Die Dateien unter `tests/fixtures/synthetic_*` sind Minimaldateien für
+  Einzeltests. Die App lehnt mehrere davon als beschädigt ab. Für native
+  Läufe taugen die Generatoren in `tests/helpers/conversion-fixtures.mjs`.
+- `tests/manual/standalone-ui-browser.mjs` prüft die alte Oberfläche
+  (`index.html`, `app.js`) in einem Browser und gehört nicht zur Suite. Ein
+  Aufruf am Endstand endete nach 30 s an Zeile 54: Das Skript wartet auf 20
+  Zeilen im Verlauf, die Oberfläche zeigt seit DS-086 höchstens fünf
+  (`app.js:434`). Meine Änderungen berühren beide Dateien nicht.
+  `tests/test-native-smoke-integrity.js` prüft nur den Quelltext dieses
+  Skripts, nicht seinen Lauf. Nicht geändert; das Skript gehört zur alten
+  Oberfläche (R-019).
+
+### Gegenprüfungen der Nacharbeit
+
+Erste: ein unabhängiger Read-only-Lauf auf `907efc14`, mit eigenen Skripten
+und Mutationen. Kein Einwand betrifft das Verhalten des Produkts außer den
+Zähltexten.
+
+| Einwand | Ergebnis |
+| --- | --- |
+| Der Weg der Beobachtung über den Hintergrundthread ist nicht positiv kontrolliert; drei Verfälschungen bestehen. | Berechtigt. `1db8c744`, siehe oben. |
+| Auf einem Host ohne IPv6 liest der Beobachter weiter die IPv6-Tabelle und wertet jeden Durchgang als Lesefehler. | Nach Lektüre berechtigt, hier nicht ausführbar. `1db8c744`; der Zweig bleibt unausgeführt. |
+| Eine wiederverwendete Prozessnummer kann dem Prozessbaum zugerechnet werden. | Zutreffend, nicht geändert; wirkt als falscher Alarm. |
+| Weitere Zähltexte ohne Einzahl außerhalb der geführten Prüfung; zwei Tests halten die falsche Form fest. | Berechtigt. `8c452ac4`. |
+| Der Einzahl-Test löst Rückgängig, Seitenwechsel und „alle gefilterten auswählen“ nicht aus. | Am Quelltext festgehalten und vom Wächter erfasst; nicht durch Bedienung im Test. |
+| Gemeinsames Wartebudget und Bindung der zurückgegebenen Generation sind in keinem Node-Test festgehalten. | `05efbad8`. |
+| Das Messskript hält das Durchreichen von `-AssertReviewWindow` nicht fest und nennt es nicht in der Zusammenfassung. | `1db8c744`. |
+| Das Sicherheitsmodell stützt „kein Paket über den UDP-Socket“ auf eine einzelne Messung und sagt „nichts angelegt“ zu allgemein. | `7eefdcd4`. |
+| Mein Test der Abbauwartezeit verlangt PowerShell 7 unter einem festen Pfad. | `1db8c744`: läuft unter Windows PowerShell. Der ältere Test daneben (`8b7a0aab`) nutzt den festen Pfad weiter. |
+
+Zweite: ein unabhängiger Read-only-Lauf auf `7eefdcd4` über die Commits
+`907efc14`, `8c452ac4`, `1db8c744`, `05efbad8` und `7eefdcd4`. Er hat die
+Zählsätze nachgebaut und mit 0, 1 und 2 ausgewertet und drei verfälschte
+Kopien der Probe ausgeführt; die Testdateien selbst hat er nicht
+ausgeführt.
+
+| Einwand | Ergebnis |
+| --- | --- |
+| „0 von 1 Datei sind …“: falsche Verbform, von `8c452ac4` erzeugt. | Berechtigt. `1126dc36`, mit Test für 0, 1 und 2. |
+| Rund fünfzehn übersehene Zähltexte in `document-review.js` und `workspace.js`. | Berechtigt. `1126dc36`; dazu ein weiterer in `review.js`, den meine eigene Suche danach fand. |
+| Der Wächtertest hat eine zu kurze Wortliste, lässt fremde Entscheidungen in der Nähe gelten und prüft weder Verben noch den Wert 0. | Wortliste ergänzt, Bindung an denselben Ausdruck; Verben und 0 über einen eigenen Test der Dokumentnachbearbeitung. Die übrigen Schwächen stehen oben als Grenze. |
+| Drei Verfälschungen der Probe bestehen: `Stop` ohne Warten, `Start` ohne Zurücksetzen, `Stop` ohne Stoppsignal. | Die dritte wird seit `98b426dd` abgelehnt. Die ersten beiden bestehen weiter und ändern kein Prüfergebnis. |
+| Die Kontrolle ist strenger als die Beobachtung (ein Lesefehler gegen fünf Prozent). | Zutreffend, nicht geändert; als Grenze genannt. |
+| Der Evidenzsatz unterscheidet nicht, ob die IPv6-Tabelle gelesen wurde. | Zutreffend, nicht geändert; als Grenze genannt. |
+| Der Ausschnitt `prepare` im Vertragstest reicht bis zum Dateiende. | Berechtigt. `4c98d621`. |
+| Der im Commit genannte Rust-Test zum leeren Datenroot sei nicht zu finden; offen sei, ob der nächste Start den leeren Ordner annimmt. | Der Test steht in `private_namespace.rs:1381` und prüft genau das: Der Ordner bleibt leer zurück, und der nächste Aufruf nimmt ihn als vorhandenen Datenroot an. |
+
+Ohne Fund geprüft hat er die Texte in `review.js`, die Nahtstellen und
+Verbformen der übrigen geänderten Sätze, den Zustand des Beobachters nach
+der Kontrolle und die Übereinstimmung der neuen Testbindungen und
+Dokumentsätze mit dem Code.
+
+Dritte: ein unabhängiger Read-only-Lauf auf `4c98d621`, nur zu den
+Zähltexten der vier Oberflächendateien. Er hat alle in `1126dc36`
+geänderten Ausdrücke aus dem Quelltext geschnitten und mit 0, 1 und 2
+ausgewertet und beide Testdateien ausgeführt.
+
+| Einwand | Ergebnis |
+| --- | --- |
+| „1 angezeigt · 1 Ergebnisdateien verfügbar“ und „1 private Dokumentstände lesbar“ über der Dokumentliste. | Berechtigt. `e66bab8f`. |
+| „0 von 1 Quellen als Ergebnis verfügbar“ in der Verlaufszeile. | Text korrigiert in `e66bab8f`. Der Fall ist nach meiner Nachprüfung nicht erreichbar; der Test hält das fest. |
+| Der Einzahlsatz des Kontaktwerts nennt fest „1 Dokument“. | `e66bab8f`: übernimmt die übergebene Zahl. Ob sie bei einem Wert größer als 1 sein kann, ist nicht geklärt. |
+| Der Wächter sieht eine zweite Einsetzung, `+`-Verkettungen, Wortketten mit Großschreibung und Verbformen nicht. | Die ersten beiden prüft er seit `e66bab8f`. Wortketten mit Großschreibung und Verbformen bleiben unbewacht; dort stehen heute Entscheidungen im Code. |
+
+Ohne Fund geprüft hat er alle in `1126dc36` geänderten Sätze (Leerzeichen,
+Satzzeichen, Grammatik, Sinn) und in einer Rastersuche die übrigen
+Zähltexte der vier Dateien.
+
+Die Änderung nach der dritten Gegenprüfung (`e66bab8f`) ist nicht erneut
+gegengeprüft.
 
 ## Annahmen und Revalidierung
 
@@ -1167,6 +1498,10 @@ Auf Auftrag des Anwenders vom 24.11.2026 umgesetzt.
 | A-025 | Der UDP-Endpunkt des WebView2-Netzwerkdienstes ist ein Plattformbefund ohne weitere Bedeutung (so wertet ihn die Startprobe, so stand es in R-029). | Besitzer ist ein signierter WebView2-Prozess des eigenen Profils; der Endpunkt ist kurzlebig. | Er gehört zu DNS-Anfragen und einer Erreichbarkeitsprüfung für regelmäßigen HTTPS-Verkehr zu Microsoft, den die Probe nicht ansieht. | Messung der Betriebssystemtabellen je Prozess und Netzprotokoll von Chromium | Eingegrenzt: kein DataSecure-Zugriff, aber Außenverkehr des Prozessbaums. R-031. |
 | A-026 | Die Schalter des Produkts gelten unabhängig von der Umgebung des Hosts. | Sie stehen fest in Konfiguration und Code. | WebView2 hängt den Inhalt von `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` an; die Startprobe entfernt die Variable und sieht das nicht. | Gegenprüfung (read-only); eigener Versuch am Paket | Eingegrenzt: Die Variable wird angehängt (gemessen). Ob ein späterer gleichnamiger Schalter gewinnt, ist nicht geprüft. Im Sicherheitsmodell als Grenze genannt. |
 | A-027 | Eine Probe, die ihre Tabellen liest und nichts findet, hat nichts übersehen. | Die Positivkontrolle sah die eigene Verbindung. | Die Kontrolle prüfte nur IPv4 und den eigenen Prozess; Lesefehler wurden verschluckt. | Gegenprüfung (read-only) mit Mutationen | Widerlegt für die erste Fassung; Kontrolle um IPv6 und einen Kindprozess erweitert, Lesefehler lassen den Lauf scheitern. Kurze Verbindungen zwischen zwei Stichproben bleiben unsichtbar. |
+| A-028 | Die Positivkontrolle der Außenverbindungsprüfung deckt den Weg ab, den die Beobachtung nimmt. | Die Kontrolle sah die eigenen Verbindungen über IPv4, IPv6 und einen Kindprozess. | Sie las die Tabellen über einen einzelnen Aufruf; die Beobachtung läuft über einen Hintergrundthread mit Start und Stopp. Ein Thread, der nie abtastet, oder ein Stopp ohne Ergebnis hätte bestanden. | Gegenprüfung des Endstands (read-only) mit Mutationen; eigene Mutationen danach | Widerlegt; seit `1db8c744` müssen die Kontrollen auch über diesen Weg erscheinen. Dass ein einzelner Fehler der Abtastung gezählt wird, ist weiter nur gelesen. |
+| A-029 | Schließen des Fensters beendet die Verarbeitung; ein offener Lauf lässt sich danach fortsetzen (so lesen sich BL-010.14 und der Text der alten Oberfläche). | Die Hülle stoppt beim Schließen den Sidecar und endet ordentlich. | Die Arbeitsprozesse des Core sind losgelöst gestartet und hängen nicht am Sidecar. | nativer Lauf mit sechs Dateien; Lektüre des Schließpfads | Widerlegt für die automatische Maskierung auf Windows: Der Stapel läuft zu Ende. R-032. |
+| A-030 | Ein Test, der einen Text der Oberfläche festhält, hält den richtigen Text fest. | Die Tests bestanden. | Zwei Tests schrieben die falsche Form fest („(1 Werte)“, „1 Ergebnisse wurden sichtbar kopiert“). | Gegenprüfung des Endstands; eigene Suche über die vier Oberflächendateien | Widerlegt; `8c452ac4`, `1126dc36` und `e66bab8f` berichtigen zusammen zehn Testfälle und prüfen die Textklasse statt einzelner Sätze. |
+| A-031 | Nach dem zweiten Teil von R-025 hat jeder Zähltext der geladenen Oberfläche seine Einzahl (so die Nachricht von `8c452ac4`). | Der Wächtertest meldete keine Stelle mehr. | Der Wächter kannte nur die Hauptwörter, nach denen ich gesucht hatte; und die Änderung selbst hatte eine Verbform verdorben. | zweite Gegenprüfung (read-only) mit nachgebauten Sätzen für 0, 1 und 2 | Widerlegt; `1126dc36`. Die dritte Gegenprüfung fand danach noch zwei Stellen (`e66bab8f`). Belegt ist nur, dass die bekannten Wörter und Formen keine Stelle mehr treffen. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

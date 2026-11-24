@@ -266,6 +266,16 @@ sym(`${app}frontend/workspace.js`, 'renderBootstrapFailure', { status: 'TEILGEPR
   purpose: 'gehaltene Startverweigerung mit Ursache und Statustext anzeigen',
   evidence: 'tests/test-standalone-workspace.js (drei Fälle für STANDALONE_DATA_ROOT_BUSY); nativer Lauf',
   findings: ['R-028'], remark: 'geändert in b71439b2; nur der neue Zweig beurteilt' });
+sym(`${app}frontend/review.js`, 'counted', {
+  purpose: 'Zahl mit Einzahl- oder Mehrzahlform eines Hauptworts; Aufrufer die Zähltexte der geführten Prüfung',
+  trust: 'Zahl aus dem Zustand der Prüfung; feste Wortformen', invariant: 'bei genau 1 die Einzahl, sonst die Mehrzahl',
+  evidence: 'tests/test-standalone-review-frontend.js (Fall mit einer Fundstelle); Wächter in tests/test-standalone-workspace.js; nativer Lauf mit einer Fundstelle am Paket 30bdd541',
+  findings: ['R-025'], remark: 'neu in 907efc14' });
+sym(`${app}frontend/workspace.js`, 'counted', {
+  purpose: 'Zahl mit Einzahl- oder Mehrzahlform eines Hauptworts; Aufrufer die Zähltexte von Verlauf und Ergebnisdialog',
+  trust: 'Zähler aus dem öffentlichen Zustand; keine sichere Ganzzahl gilt als 0', invariant: 'bei genau 1 die Einzahl, sonst die Mehrzahl',
+  evidence: 'tests/test-standalone-workspace.js (Ergebnisdialog, Verlauf, Wächter über die vier Oberflächendateien)',
+  findings: ['R-025'], remark: 'vorhanden seit 2726675a; in 8c452ac4 an weiteren Stellen verwendet' });
 
 for (const name of ['linkNamePattern', 'linkIdentityHits']) {
   sym(`${privacy}engine.js`, name, {
