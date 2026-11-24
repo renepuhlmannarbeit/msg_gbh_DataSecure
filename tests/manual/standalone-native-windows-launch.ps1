@@ -245,23 +245,33 @@ public static class DataSecureOutboundWatch {
     # Positive control before an empty observation counts as evidence: a real
     # connection of this very process over IPv4 and over IPv6, and one of a
     # child process. The three exercise both table layouts and the process tree.
+    # A host without an IPv6 stack has no IPv6 table to read and no IPv6
+    # connection to miss; only there the IPv6 control is left out, and the
+    # evidence says so.
+    $script:nativeOutboundIpv6Control = [bool] [System.Net.Sockets.Socket]::OSSupportsIPv6
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-    $listener6 = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::IPv6Loopback, 0)
+    $listener6 = $null; $client6 = $null
     $childListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
     $client = [System.Net.Sockets.TcpClient]::new()
-    $client6 = [System.Net.Sockets.TcpClient]::new([System.Net.Sockets.AddressFamily]::InterNetworkV6)
     $child = $null
     try {
-        $listener.Start(); $listener6.Start(); $childListener.Start()
+        $listener.Start(); $childListener.Start()
         $port = ([System.Net.IPEndPoint] $listener.LocalEndpoint).Port
-        $port6 = ([System.Net.IPEndPoint] $listener6.LocalEndpoint).Port
         $childPort = ([System.Net.IPEndPoint] $childListener.LocalEndpoint).Port
         $client.Connect([System.Net.IPAddress]::Loopback, $port)
-        $client6.Connect([System.Net.IPAddress]::IPv6Loopback, $port6)
+        if ($script:nativeOutboundIpv6Control) {
+            $listener6 = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::IPv6Loopback, 0)
+            $client6 = [System.Net.Sockets.TcpClient]::new([System.Net.Sockets.AddressFamily]::InterNetworkV6)
+            $listener6.Start()
+            $port6 = ([System.Net.IPEndPoint] $listener6.LocalEndpoint).Port
+            $client6.Connect([System.Net.IPAddress]::IPv6Loopback, $port6)
+        }
         $rows = @([DataSecureOutboundWatch]::Once($PID))
-        if (@($rows | Where-Object { $_ -like "*|ipv4|127.0.0.1|$port" }).Count -ne 1 -or
-            @($rows | Where-Object { $_ -like "*|ipv6|::1|$port6" }).Count -ne 1) {
+        if (@($rows | Where-Object { $_ -like "*|ipv4|127.0.0.1|$port" }).Count -ne 1) {
             throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_INVALID'
+        }
+        if ($script:nativeOutboundIpv6Control -and @($rows | Where-Object { $_ -like "*|ipv6|::1|$port6" }).Count -ne 1) {
+            throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_IPV6_INVALID'
         }
         $childInfo = [System.Diagnostics.ProcessStartInfo]::new()
         $childInfo.FileName = 'powershell.exe'
@@ -282,7 +292,9 @@ public static class DataSecureOutboundWatch {
             try { if (-not $child.HasExited) { $child.Kill() }; [void] $child.WaitForExit(5000) } catch { }
             $child.Dispose()
         }
-        $client.Dispose(); $client6.Dispose(); $listener.Stop(); $listener6.Stop(); $childListener.Stop()
+        $client.Dispose(); $listener.Stop(); $childListener.Stop()
+        if ($null -ne $client6) { $client6.Dispose() }
+        if ($null -ne $listener6) { $listener6.Stop() }
         [DataSecureOutboundWatch]::Reset()
     }
 }
@@ -490,7 +502,8 @@ if ($ValidateOutboundOnly) {
     $idleRows = @([DataSecureOutboundWatch]::Stop())
     if ($observedSamples -lt 5) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_STALLED' }
     if ($observedFailures -ne 0) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_DEGRADED' }
-    Write-Output "STANDALONE NATIVE OUTBOUND OBSERVER PASS ($observedSamples samples, $($idleRows.Count) own connections; IPv4, IPv6 and child control; no native app launch)"
+    $controls = if ($nativeOutboundIpv6Control) { 'IPv4, IPv6 and child control' } else { 'IPv4 and child control, host without IPv6' }
+    Write-Output "STANDALONE NATIVE OUTBOUND OBSERVER PASS ($observedSamples samples, $($idleRows.Count) own connections; $controls; no native app launch)"
     exit 0
 }
 
@@ -533,6 +546,7 @@ $startupStopwatch = $null
 $startupMilliseconds = $null
 $networkEvidence = $null
 $outboundEvidence = $null
+$nativeOutboundIpv6Control = $false
 $nativeEndpointClassification = $null
 
 function Get-CheckedTree([string] $Root) {
@@ -869,6 +883,7 @@ try {
                 (ConvertTo-Json -InputObject @($outboundVerdict.violations) -Compress))
         }
         $outboundEvidence = [ordered]@{ window_ms = $outboundWindow; samples = $outboundSamples; failures = $outboundFailures;
+            ipv6_control = [bool] $nativeOutboundIpv6Control;
             loopback_attempts = [int] $outboundVerdict.loopback_attempts }
     }
     if ($EmitEvidence) {
@@ -892,6 +907,7 @@ try {
             outbound_window_ms = if ($null -ne $outboundEvidence) { $outboundEvidence.window_ms } else { $null }
             outbound_samples = if ($null -ne $outboundEvidence) { $outboundEvidence.samples } else { $null }
             outbound_sample_failures = if ($null -ne $outboundEvidence) { $outboundEvidence.failures } else { $null }
+            outbound_ipv6_control = if ($null -ne $outboundEvidence) { $outboundEvidence.ipv6_control } else { $null }
             outbound_connections = if ($null -ne $outboundEvidence) { 0 } else { $null }
             loopback_attempts = if ($null -ne $outboundEvidence) { $outboundEvidence.loopback_attempts } else { $null }
             os_build = $facts.os_build

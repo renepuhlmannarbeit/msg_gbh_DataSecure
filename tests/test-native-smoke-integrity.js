@@ -1644,13 +1644,17 @@ if (process.platform === 'win32') test('actual Windows launcher outbound observe
   const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
     '-File', script, '-ValidateOutboundOnly'], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  assert.match(result.stdout, /OUTBOUND OBSERVER PASS \([0-9]+ samples, [0-9]+ own connections; IPv4, IPv6 and child control; no native app launch\)/u);
+  assert.match(result.stdout, /OUTBOUND OBSERVER PASS \([0-9]+ samples, [0-9]+ own connections; (?:IPv4, IPv6 and child control|IPv4 and child control, host without IPv6); no native app launch\)/u);
   // The control must exercise both table layouts and the process tree, and
   // an observer that cannot read its tables must not pass as silence.
   const source = fs.readFileSync(script, 'utf8');
   const control = source.slice(source.indexOf('    # Positive control before an empty observation counts as evidence'),
     source.indexOf('function Wait-NativeWebViewProfileExit('));
-  assert.match(control, /-like "\*\|ipv4\|127\.0\.0\.1\|\$port" \}\)\.Count -ne 1 -or\s+@\(\$rows \| Where-Object \{ \$_ -like "\*\|ipv6\|::1\|\$port6" \}\)\.Count -ne 1/u);
+  assert.match(control, /if \(@\(\$rows \| Where-Object \{ \$_ -like "\*\|ipv4\|127\.0\.0\.1\|\$port" \}\)\.Count -ne 1\) \{/u);
+  assert.match(control, /if \(\$script:nativeOutboundIpv6Control -and @\(\$rows \| Where-Object \{ \$_ -like "\*\|ipv6\|::1\|\$port6" \}\)\.Count -ne 1\) \{\s+throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_IPV6_INVALID'/u);
+  assert.match(control, /\$script:nativeOutboundIpv6Control = \[bool\] \[System\.Net\.Sockets\.Socket\]::OSSupportsIPv6/u,
+    'the IPv6 control is left out only where the host has no IPv6 stack');
+  assert.match(source, /outbound_ipv6_control = if \(\$null -ne \$outboundEvidence\) \{ \$outboundEvidence\.ipv6_control \} else \{ \$null \}/u);
   assert.match(control, /if \(-not \$childSeen\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_TREE_INVALID' \}/u);
   assert.match(control, /if \(\[DataSecureOutboundWatch\]::Failures -ne 0\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_INVALID' \}/u);
   assert.match(control, /\$child\.Kill\(\)/u, 'the control child never outlives the control');
