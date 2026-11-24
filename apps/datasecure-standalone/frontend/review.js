@@ -9,6 +9,8 @@ function elAfterLoad() {
   document.getElementById('close-review').textContent = 'Zur Verarbeitung';
 }
 const el = (id) => document.getElementById(id);
+// German count phrases need their singular: "1 Zeile", not "1 Zeilen".
+const counted = (value, one, many) => `${value} ${value === 1 ? one : many}`;
 const state = { draft: null, reviewId: null, cursor: 0, choices: new Map(), history: [],
   rows: [], rowById: new Map(), candidateIndex: new Map(), groups: new Map(), selected: new Set(), inputs: new Map(), page: 0,
   waiting: false, waitingViewActive: false, handoffAccepted: false, closed: false, disconnected: false, continuing: false, continuationAvailable: false,
@@ -290,10 +292,12 @@ function updateBulk() {
   el('select-visible').checked = visible.length > 0 && visible.every(row => state.selected.has(row.id));
   el('select-visible').indeterminate = visible.some(row => state.selected.has(row.id)) && !el('select-visible').checked;
   el('select-visible').disabled = !visible.length;
-  el('select-visible').setAttribute('aria-label', `Nur diese Seite auswählen (${visible.length} Zeilen)`);
-  el('select-filtered').textContent = `Alle ${filtered.length} gefilterten Zeilen auswählen (alle Seiten)`;
+  el('select-visible').setAttribute('aria-label', `Nur diese Seite auswählen (${counted(visible.length, 'Zeile', 'Zeilen')})`);
+  el('select-filtered').textContent = filtered.length === 1
+    ? 'Die gefilterte Zeile auswählen'
+    : `Alle ${filtered.length} gefilterten Zeilen auswählen (alle Seiten)`;
   el('select-filtered').disabled = !filtered.length || filtered.every(row => state.selected.has(row.id));
-  el('matrix-count').textContent = `${filtered.length} von ${state.rows.length} Zeilen im Filter · ${rows.length} angehakt`;
+  el('matrix-count').textContent = `${filtered.length} von ${counted(state.rows.length, 'Zeile', 'Zeilen')} im Filter · ${rows.length} angehakt`;
   el('bulk-hint').textContent = !rows.length
     ? contact ? 'Werte zuerst mit dem Original vergleichen und auswählen. Häkchen allein bestätigen nichts.'
       : 'Zuerst Werte auswählen. Häkchen allein bestätigen nichts.'
@@ -310,7 +314,7 @@ function renderTable() {
   for (const id of state.selected) if (!filteredIds.has(id)) state.selected.delete(id);
   el('matrix-empty').hidden = filtered.length > 0;
   el('matrix-empty').textContent = state.choices.size === state.draft.ambiguities.length
-    ? `Alle ${state.draft.ambiguities.length} Fundstellen sind vorgemerkt. Jetzt „${handoffLabel()}“ wählen. Unter „Vorgemerkt“ kannst du die Entscheidungen vorher ansehen und ändern.`
+    ? `${state.draft.ambiguities.length === 1 ? 'Die Fundstelle ist' : `Alle ${state.draft.ambiguities.length} Fundstellen sind`} vorgemerkt. Jetzt „${handoffLabel()}“ wählen. Unter „Vorgemerkt“ kannst du die Entscheidungen vorher ansehen und ändern.`
     : 'Keine Zeilen für diesen Filter. Es gibt noch offene Fundstellen in dieser Gruppe; Suche oder Filter ändern.';
   el('matrix-body').replaceChildren();
   for (const row of visible) {
@@ -354,7 +358,7 @@ function renderTable() {
     tr.append(selection, value, action);
     el('matrix-body').append(tr);
   }
-  el('matrix-count').textContent = `${filtered.length} von ${state.rows.length} Zeilen · ${state.selected.size} ausgewählt`;
+  el('matrix-count').textContent = `${filtered.length} von ${counted(state.rows.length, 'Zeile', 'Zeilen')} · ${state.selected.size} ausgewählt`;
   el('matrix-page').textContent = `Seite ${state.page + 1} von ${Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}`;
   el('matrix-prev').disabled = state.page === 0;
   el('matrix-next').disabled = (state.page + 1) * PAGE_SIZE >= filtered.length;
@@ -415,7 +419,7 @@ function bulkDecision(value) {
   el('bulk-treatment').value = '';
   state.selected.clear(); state.page = 0; render();
   const remaining = state.rows.filter(row => !row.ids.every(id => state.choices.has(id))).length;
-  el('matrix-message').textContent = `${rows.length} Zeilen ${value === 'reset' ? 'wieder offen' : 'vorgemerkt'}. ${remaining} Prüfzeilen noch offen. Noch nicht gespeichert – erst „${handoffLabel()}“ sendet die Entscheidungen.`;
+  el('matrix-message').textContent = `${counted(rows.length, 'Zeile', 'Zeilen')} ${value === 'reset' ? 'wieder offen' : 'vorgemerkt'}. ${counted(remaining, 'Prüfzeile', 'Prüfzeilen')} noch offen. Noch nicht gespeichert – erst „${handoffLabel()}“ sendet die Entscheidungen.`;
   (state.choices.size === state.draft.ambiguities.length ? el('release') : visibleRows().length ? el('exact-text') : el('matrix-filter')).focus();
 }
 function previewContext(candidate) {
@@ -467,10 +471,10 @@ function render(table = true) {
     : 'Vorgemerkte Zeilen verschwinden aus „Noch offen“ und können unter „Vorgemerkt“ erneut betrachtet werden. Anwenden speichert noch nichts. Erst der Abschlussknopf übergibt alle Entscheidungen dieser Prüfgruppe.';
   el('summary').textContent = contact
     ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} Dokument${affectedDocuments === 1 ? '' : 'e'} betroffen. Beim Start freiwillig gewählt; zum Abschluss dieses Laufs jetzt erforderlich.`
-    : `${state.choices.size} von ${items.length} Stellen vorgemerkt · ${items.length - state.choices.size} offen · ${state.rows.length} Prüfzeilen in dieser Gruppe. Noch nicht übergeben.`;
+    : `${state.choices.size} von ${counted(items.length, 'Stelle', 'Stellen')} vorgemerkt · ${items.length - state.choices.size} offen · ${counted(state.rows.length, 'Prüfzeile', 'Prüfzeilen')} in dieser Gruppe. Noch nicht übergeben.`;
   el('matrix-progress').textContent = contact
     ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} ${affectedDocuments === 1 ? 'betroffenes Dokument' : 'betroffene Dokumente'}`
-    : `${state.choices.size} von ${items.length} Fundstellen vorgemerkt · ${items.length - state.choices.size} offen`;
+    : `${state.choices.size} von ${counted(items.length, 'Fundstelle', 'Fundstellen')} vorgemerkt · ${items.length - state.choices.size} offen`;
   el('document-position').textContent = `${documentName(candidate.ambiguity_id)} · Dokument ${state.documentPositions.get(candidate.ambiguity_id)} von ${draft.contact_batch?.documents.length || draft.batch_review?.document_count || 1}`;
   el('finding-position').textContent = `Fundstelle ${state.cursor + 1} von ${items.length}`;
   el('finding-title').textContent = contact ? 'Wurde dieser Kontaktwert richtig erkannt?' : credential ? 'Muss diese Angabe ersetzt werden?' : 'Wie soll diese Fundstelle behandelt werden?';
@@ -503,8 +507,8 @@ function render(table = true) {
   el('release').disabled = state.choices.size !== items.length;
   el('release').textContent = handoffLabel();
   el('release-hint').textContent = state.choices.size === items.length
-    ? `3. Abschließen: Alle ${items.length} Fundstellen vorgemerkt. Speichern setzt den Lauf fort.`
-    : `3. Abschließen: Noch ${items.length - state.choices.size} Fundstellen offen. Erst alle behandeln, dann speichern.`;
+    ? `3. Abschließen: ${items.length === 1 ? 'Die Fundstelle ist' : `Alle ${items.length} Fundstellen`} vorgemerkt. Speichern setzt den Lauf fort.`
+    : `3. Abschließen: Noch ${counted(items.length - state.choices.size, 'Fundstelle', 'Fundstellen')} offen. Erst alle behandeln, dann speichern.`;
   el('undo').disabled = state.history.length === 0;
   el('waiting').hidden = true;
   el('review').hidden = false;
@@ -548,7 +552,7 @@ function undo() {
   state.selected.clear();
   state.page = Math.max(0, Math.floor(filteredRows().findIndex(row => row.ids.includes(previous[0][0])) / PAGE_SIZE));
   render();
-  el('matrix-message').textContent = `Letzte Aktion rückgängig gemacht. ${state.choices.size} Fundstellen vorgemerkt · ${state.draft.ambiguities.length - state.choices.size} offen. Noch nicht übergeben.`;
+  el('matrix-message').textContent = `Letzte Aktion rückgängig gemacht. ${counted(state.choices.size, 'Fundstelle', 'Fundstellen')} vorgemerkt · ${state.draft.ambiguities.length - state.choices.size} offen. Noch nicht übergeben.`;
   (visibleRows().length ? el('exact-text') : el('matrix-filter')).focus();
 }
 
@@ -832,12 +836,12 @@ el('select-visible').addEventListener('change', event => {
 el('select-filtered').addEventListener('click', () => {
   if (!state.draft || state.waiting || state.closed || state.disconnected) return;
   state.selected = new Set(filteredRows().map(row => row.id)); renderTable();
-  el('matrix-message').textContent = `${state.selected.size} Zeilen über alle Seiten dieses Filters ausgewählt. Noch nichts vorgemerkt oder übergeben; bitte Behandlung wählen und anwenden.`;
+  el('matrix-message').textContent = `${counted(state.selected.size, 'Zeile', 'Zeilen')} über alle Seiten dieses Filters ausgewählt. Noch nichts vorgemerkt oder übergeben; bitte Behandlung wählen und anwenden.`;
 });
 el('clear-selection').addEventListener('click', () => { state.selected.clear(); renderTable(); });
 for (const [id, delta] of [['matrix-prev', -1], ['matrix-next', 1]]) el(id).addEventListener('click', () => {
   state.page += delta; render();
-  el('matrix-message').textContent = `Seite gewechselt. ${state.selected.size} Zeilen bleiben über die Seiten hinweg angehakt. Eingaben und vorgemerkte Entscheidungen bleiben erhalten.`;
+  el('matrix-message').textContent = `Seite gewechselt. ${state.selected.size === 1 ? '1 Zeile bleibt' : `${state.selected.size} Zeilen bleiben`} über die Seiten hinweg angehakt. Eingaben und vorgemerkte Entscheidungen bleiben erhalten.`;
 });
 el('bulk-treatment').addEventListener('change', updateBulk);
 el('bulk-apply').addEventListener('click', () => bulkDecision(el('bulk-treatment').value));

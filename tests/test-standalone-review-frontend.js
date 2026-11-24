@@ -1141,6 +1141,27 @@ testAsync('checkboxes and treatment changes only prepare an action; Apply is the
   assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
 });
 
+testAsync('a group with one finding speaks of one row and one finding, never of "1 Zeilen"', async () => {
+  const h = harness(null, true, true);
+  await new Promise(resolve => setImmediate(resolve));
+  const shown = () => ['matrix-count', 'matrix-progress', 'release-hint', 'matrix-message', 'matrix-empty', 'select-filtered', 'summary']
+    .map(id => h.element(id).textContent).concat(h.element('select-visible')['aria-label']).join('\n');
+  assert.equal(h.element('select-visible')['aria-label'], 'Nur diese Seite auswählen (1 Zeile)');
+  assert.equal(h.element('select-filtered').textContent, 'Die gefilterte Zeile auswählen');
+  assert.match(h.element('matrix-count').textContent, /^1 von 1 Zeile im Filter · 0 angehakt$/u);
+  assert.match(h.element('matrix-progress').textContent, /^0 von 1 Fundstelle vorgemerkt · 1 offen$/u);
+  assert.match(h.element('release-hint').textContent, /Noch 1 Fundstelle offen\./u);
+  assert.doesNotMatch(shown(), /\b1 (?:Zeilen|Fundstellen|Prüfzeilen)\b|Alle 1 /u);
+  selectAll(h);
+  h.element('bulk-treatment').value = 'keep'; h.callbacks.get('bulk-treatment:change')();
+  h.callbacks.get('bulk-apply')();
+  assert.match(h.element('matrix-message').textContent, /^1 Zeile vorgemerkt\. 0 Prüfzeilen noch offen\./u);
+  assert.match(h.element('release-hint').textContent, /Die Fundstelle ist vorgemerkt\. Speichern setzt den Lauf fort\./u);
+  assert.match(h.element('matrix-empty').textContent, /^Die Fundstelle ist vorgemerkt\. Jetzt „/u);
+  assert.match(h.element('matrix-progress').textContent, /^1 von 1 Fundstelle vorgemerkt · 0 offen$/u);
+  assert.doesNotMatch(shown(), /\b1 (?:Zeilen|Fundstellen|Prüfzeilen)\b|Alle 1 /u);
+});
+
 function twoContactHarness() {
   const { buildContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
   return harness(null, false, true, { modifyDraft(draft) {
