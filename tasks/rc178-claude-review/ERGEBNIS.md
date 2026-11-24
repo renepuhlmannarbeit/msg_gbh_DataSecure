@@ -2,8 +2,7 @@
 
 Gehört zum [Arbeitsauftrag](../AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md).
 Stand 24.11.2026, nach der zweiten Runde, einer dritten Prüfung, der
-Bearbeitung von R-027, der Behebung von R-028 bis R-030 und der Messung zu
-R-031. Befunde
+Bearbeitung von R-027 und der Behebung von R-028 bis R-031. Befunde
 und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das Einzelregister in
 [ABDECKUNG.tsv](ABDECKUNG.tsv).
 
@@ -18,8 +17,10 @@ ist der Codecommit `283e6ed9`; `ebe526ec` ergänzt danach die Beschreibung im
 Sicherheitsmodell. Dieser Stand wurde als `e92d5b12` übergeben. Am 24.11.
 hat der Anwender beauftragt, die beiden dabei gemeldeten Beobachtungen R-028
 und R-029 zu beheben und erneut zu prüfen; das sind die vier Commits
-`dbf98cbf` bis `0b99529c`. Dieser Bericht beschreibt den Endstand
-`0b99529c`.
+`dbf98cbf` bis `0b99529c`. Eine anschließende Messung hat gezeigt, dass die
+eingebettete WebView2-Komponente regelmäßig Verbindungen zu Microsoft
+aufbaut (R-031); auf Auftrag behoben in `1c3f36af` und `56d7c744`. Dieser
+Bericht beschreibt den Endstand `56d7c744`.
 
 ## Identität und Umfang
 
@@ -29,14 +30,14 @@ und R-029 zu beheben und erneut zu prüfen; das sind die vier Commits
 | GitHub-Arbeitsbranch | [`claude/rc178-standalone-review`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review) |
 | Eingefrorener Einstieg | `e88f1b8d100421017fb3909d77e338fd25c1b421` (`origin/codex/rc178-claude-review-handoff`) |
 | RC178-Produktbaseline | `v3.2.0-rc178` → `13ed39ff979a5f5d9bb076d35021164de380b9dd`, Fingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655` (nachgerechnet, 400 Quellinputs) |
-| Geprüfter Produktstand | `0b99529cff549a02947898ad54d08620451a268f`. Produktcode zuletzt geändert in `b71439b20a91ba682135a577c2c17fec3f360d50`, Fingerprint `b4466f2a305324a502db87f2d877a3dabd2356d92dd86313bb8515ff1ce19940`; `b11a6131` und `0b99529c` ändern danach nur ein Prüfskript und einen Test und den Fingerprint nicht. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der dritten Übergabe: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
+| Geprüfter Produktstand | `56d7c744ea34492dbb6bad61322cf5d7657c6ea5`, Fingerprint `9fe7076ef6634d83aeee67fb82dd90e924247c0180d1b2befedb359c6917000b`. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der vierten Übergabe: `0b99529c`, Fingerprint `b4466f2a…`; der dritten: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
 | Prüfumgebung | Claude Fable 5.2 (`claude-fable-5-2`) in Claude Code; Windows 11 Pro 10.0.26300 x64; Node 22.23.2 für alle Tests (Host-Node 24.18.0), npm 11.16.0, cargo/rustc 1.98.1, MSVC mit SDK 10.0.26100.0, WebView2 158.0.4370.33, Claude CLI 2.1.280 |
 | Verfügbare Zielplattformen | Nur Windows x64. Kein Mac, kein Xcode, kein iOS-Simulator. |
 | Abdeckung | 5 135 erfasste Einheiten in 346 Dateien: 32 `GEPRÜFT`, 1 944 `TEILGEPRÜFT`, 3 159 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
 
 Die Versionskennung `3.2.0-rc178` wurde nicht geändert. Der Stand ist kein
 Release; ein daraus gebautes Paket trägt dieselbe Versionsnummer wie RC178,
-aber den Build-Fingerprint `b4466f2a…`.
+aber den Build-Fingerprint `9fe7076e…`.
 
 ## Ergebnis auf einen Blick
 
@@ -102,6 +103,11 @@ aber den Build-Fingerprint `b4466f2a…`.
    - Das Messskript für Startzeit und Netzwerkbeobachtung brach in der
      ersten Wiederholung ab; in der Gegenprüfung gefunden und behoben
      (R-030).
+   - Die eingebettete WebView2-Komponente baute regelmäßig Verbindungen zu
+     Microsoft auf, entgegen der Beschreibung „kein Internet, kein
+     Auto-Updater“. Gemessen, dann auf Auftrag abgestellt: Die App startet
+     WebView2 jetzt ohne Hintergrundverkehr, und die Startprobe prüft auf
+     ausgehende Verbindungen (R-031).
 3. **Eigene Fehler, gefunden und behoben vor der Übergabe**
    - Der vorgesehene Endstand der zweiten Runde (`a0d3e340`, nie gepusht)
      enthielt zwei Lecks aus meinen eigenen Änderungen: In „Anna Müller,
@@ -142,26 +148,29 @@ aber den Build-Fingerprint `b4466f2a…`.
      Vergleich mit dem alten Kern über viele Satzformen hat die Fehler
      gezeigt (A-015 bis A-017).
 5. **Verbleibende Grenzen**
-   - Offen bleiben R-006 (Listen), R-015 und R-022 (Hypothesen für macOS)
-     sowie R-031.
-   - **R-031, nach der vierten Übergabe gemessen:** Die App selbst und ihr
-     Core bauen keine Verbindungen auf, die eingebettete WebView2-Komponente
-     aber schon. Beim Start fragt sie den Konfigurationsdienst von Edge ab,
-     danach meldet sie sich alle 20 bis 40 Sekunden beim Komponenten-Updater
-     von Microsoft; dazu kommt eine automatische Proxy-Suche im lokalen
-     Netz. Dokumentinhalte habe ich darin nicht gefunden; die Anfragekörper
-     sind nicht geprüft. Das steht im Widerspruch zu „kein Internet“ und
-     „kein Auto-Updater“ im Sicherheitsmodell und gilt unverändert seit
-     RC178. Fünf Startschalter stellen den Verkehr im Versuch ab, die App
-     bleibt arbeitsfähig. Umgesetzt ist das nicht.
+   - Offen bleiben R-006 (Listen), R-015 und R-022 (Hypothesen für macOS).
+   - **R-031, behoben für das beobachtete Verhalten:** Bis einschließlich
+     des vierten Übergabestands, also auch in RC178, baute die eingebettete
+     WebView2-Komponente Verbindungen zu Microsoft auf: beim Start zum
+     Konfigurationsdienst von Edge, danach alle 20 bis 40 Sekunden zum
+     Komponenten-Updater, dazu eine automatische Proxy-Suche. Shell und Core
+     hatten keine Verbindung; Dokumentinhalte habe ich im Verkehr nicht
+     gefunden, die Anfragekörper sind nicht geprüft. Jetzt startet die App
+     WebView2 mit Schaltern, die das abstellen; in zehn Minuten Beobachtung
+     gab es keinen Endpunkt mehr. Die Schalter sind keine zugesicherte
+     Schnittstelle von WebView2: Eine neue Laufzeitversion kann ihre Wirkung
+     ändern, und eine Umgebungsvariable des Hosts wird angehängt. Die
+     Startprobe prüft deshalb jetzt auf ausgehende Verbindungen; im
+     Release-Workflow ist dieser Schalter noch nicht eingetragen.
    - R-028 ist kein Schutz vor einer langen Belegung: Hält ein Programm
      einen Ordner der Kette länger als rund zwei Sekunden, startet der Core
      weiterhin nicht, bis der Anwender nach der Freigabe erneut prüft. Wer
      den Temp-Ordner am 24.11. sieben Minuten lang hielt, ist unbekannt; ob
      das auf Zielhosts für `AppData\Local` vorkommt, ist nicht belegt.
-   - Der UDP-Endpunkt, den R-029 sichtbar gemacht hat, ist inzwischen
-     zugeordnet: DNS-Anfragen und eine Erreichbarkeitsprüfung des
-     WebView2-Netzwerkdienstes (R-031).
+   - Der UDP-Endpunkt, den R-029 sichtbar gemacht hat, gehörte zu
+     DNS-Anfragen und einer Erreichbarkeitsprüfung des
+     WebView2-Netzwerkdienstes (R-031). Am Endstand tritt er in der
+     Beobachtung nicht mehr auf.
    - Der Abbau der Startprobe wartet jetzt erstmals wirklich auf WebView2
      (hier 0,1 bis 0,3 s von 20 s). Im Release-Workflow und in
      `scripts/run-pkg-04.ps1` ist das nicht ausgeführt worden.
@@ -268,9 +277,20 @@ Umsetzung, Gegenprüfung und nativer Nachweis“):
 | `b11a6131`, `0b99529c` | R-030 | `tests/manual/measure-standalone-native-windows.ps1`: wertet nur die JSON-Zeile aus; eine Zeile der App auf dem Fehlerkanal beendet die Messung nicht mehr; `observed_udp_processes` immer als Liste. Kein Produktcode. | ein Fall in `tests/test-native-smoke-integrity.js` mit echter Zeilenfolge und Fehlerkanal; Messung über zehn Starts | Nur Windows. |
 | `b71439b2` | R-028, A-023, A-024 | `tauri-contract/src/private_namespace.rs`: Freigabekonflikt gilt als Belegung; begrenztes Warten vor dem Anlegen. `tauri-contract/src/main.rs`: `STANDALONE_DATA_ROOT_BUSY` an den vier Stellen vor dem Start des Core; ein solcher Versuch zählt nicht gegen die 16 Startversuche. `frontend/workspace.js`: Meldung und Statustext. `docs/canonical/STANDALONE_SECURITY_MODEL.md`: neuer Abschnitt. Freigabe und Zugriffsrechte der Ordnerkette sind unverändert. | sieben Rust-Tests, `tests/test-standalone-desktop-contract.js` (ein Fall), `tests/test-standalone-workspace.js` (drei Fälle); Mutationsprobe; nativer Lauf mit Halterprozess | Nur Windows: `private_namespace` gibt es nur dort. Der neue Code steht in der gemeinsamen Oberfläche, entsteht auf macOS aber nicht. macOS nicht übersetzt. |
 
+Danach, ebenfalls am 24.11. auf Auftrag (BEFUNDE.md, „R-031 · Umsetzung und
+Gegenprüfung“):
+
+| Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
+| --- | --- | --- | --- | --- |
+| `1c3f36af` | R-031, A-027 | `tests/manual/standalone-native-windows-launch.ps1`: `-AssertNoOutbound` beobachtet ab dem Prozessstart die TCP-Tabellen des Betriebssystems für den Prozessbaum, mit Positivkontrolle über IPv4, IPv6 und einen Kindprozess. `tests/manual/measure-standalone-native-windows.ps1` reicht den Schalter und `-AssertReviewWindow` durch. `docs/TESTING.md`. Kein Produktcode. | `tests/test-native-smoke-integrity.js` (zwei neue Fälle, einer erweitert); Vertragsmodi mit 66 Gruppen und `-ValidateOutboundOnly`; Probe gegen neues und bisheriges Paket | Nur Windows. |
+| `56d7c744` | R-031, A-025, A-026 | `tauri-contract/tauri.conf.json` (`additionalBrowserArgs` des Hauptfensters) und `tauri-contract/src/main.rs` (`WEBVIEW2_BROWSER_ARGS` für das Prüffenster): WebView2 startet ohne Hintergrundverkehr, Komponenten-Update, Proxy, QUIC und fremde Namensauflösung. `docs/canonical/STANDALONE_SECURITY_MODEL.md` beschreibt Schalter, Rest und Grenzen. | `tests/test-standalone-desktop-contract.js` (ein Fall, hält die genaue Zeichenkette für beide Fenster fest); Rust-Tests und Clippy; zehn Minuten Messung, Probe, Bedienung | Der Wert steht in der gemeinsamen Konfiguration, wirkt aber nur unter Windows; macOS nutzt WKWebView und ist nicht gemessen. Build-Fingerprint ändert sich. |
+
 Nicht umgesetzt und begründet (Einzelheiten in BEFUNDE.md, „Entscheidungen je
 Befund“):
 
+- **R-031, Vorgaben des Hosts** – das Produkt entfernt
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` nicht aus seiner Umgebung. Das
+  wäre eine eigene Härtung und betrifft auch andere Schalter.
 - **Rest von R-025** – weitere Zähltexte ohne Einzahl in der geführten
   Prüfung; im nativen Lauf beobachtet und nur festgehalten.
 - **R-028, lange Belegung** – nicht behebbar, ohne die Schutzgrenze zu
@@ -303,26 +323,39 @@ Befund“):
 ## Tests und Nachweise
 
 Alle Läufe auf Windows 11 x64 mit Node 22.23.2. Logs liegen lokal. Die
-ersten Zeilen gelten dem Endstand `0b99529c` (Produktcode `b71439b2`), die
-folgenden halten die früheren Stände fest.
+ersten Zeilen gelten dem Endstand `56d7c744`, die folgenden halten die
+früheren Stände fest.
 
 | Bereich | Exakter Befehl und Teststand | Umgebung und Architektur | Ergebnis und Exitcode | Beobachtung |
 | --- | --- | --- | --- | --- |
-| Headless, Endstand | `node tests/run-product-suite.js headless` auf `0b99529c` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 09:33–10:30 am 24.11. Parallel liefen der native Lauf zu R-028, ein Verarbeitungslauf in der App und `npm run test:docs`, dazu weiter der hängengebliebene Python-Prozess. |
-| Rust / Clippy, Endstand | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract`, Rust-Quellen von `b71439b2` | Windows x64 | je `PASS`, 0 | 333 bestanden, 0 fehlgeschlagen, 3 ignoriert (sieben neue Tests). Nur das Windows-Ziel. |
+| Headless, Endstand | `node tests/run-product-suite.js headless` auf `56d7c744` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 14:05–14:57 am 24.11. Parallel liefen die Startproben, die Messungen und der Verarbeitungslauf am neuen Paket. |
+| Rust / Clippy, Endstand | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf `56d7c744` | Windows x64 | je `PASS`, 0 | 333 bestanden, 0 fehlgeschlagen, 3 ignoriert. Nur das Windows-Ziel. |
+| Gezielt, Endstand | `tests/test-native-smoke-integrity.js` (83), `tests/test-standalone-desktop-contract.js` (41), Vertragsmodi der Startprobe: `-ValidateReadinessOnly` (66 Gruppen), `-ValidateOutboundOnly` | Windows x64 | je `PASS`, 0 | Neu: drei Fälle zur Außenverbindungsprüfung, ein Fall zur genauen Schalterzeichenkette beider Fenster. |
+| Gegenprüfung R-031 | ein unabhängiger Read-only-Lauf (Datenschutz-Prüfer) auf dem Arbeitsstand vor den Commits, mit eigenen Skripten und Mutationen des Beobachters | Windows x64 | Schalter und Verdrahtung nicht widerlegt; sechs Einwände | Einwände und ihr Ergebnis in BEFUNDE.md. Die danach eingearbeiteten Änderungen sind nicht erneut gegengeprüft. |
+| Dokumentation, Endstand | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `56d7c744` | Windows x64 | je `PASS`, 0 | — |
+| Konverter, Endstand | `npm run test:standalone:conversion` auf `56d7c744` | Windows x64 | `PASS`, 0 | hinterlässt Ordner `.tmp-standalone-package-*` im Repository-Root, von mir entfernt |
+| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `56d7c744` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `1c672ef4be13f55858a580d2b73782b0b627bfbcfcac31761ded7ec0f86c4495`, 113 628 275 Bytes, 1 203 Einträge, Build `9fe7076e`. Das Paket des Vorstands (`cec20d6e…`) wurde vorher aus `dist/` verschoben. |
+| Windows x64 Start mit Außenverbindungsprüfung | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence`; dasselbe mit `-AssertReviewWindow`; dasselbe gegen das Paket `cec20d6e…` | Windows x64, online mit IPv6 | neues Paket `PASS`, 0 (Haupt- und Prüffenster); bisheriges Paket `FAIL` wie verlangt (`STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`) | Neues Paket: Fenster 77 s, 3 165 und 2 477 Stichproben, kein Lesefehler, keine Verbindung, 0 TCP-Listener, 0 UDP-Endpunkte. Bisheriges Paket: WebView2, IPv6, Port 443. |
+| Windows x64 Messung, Endstand | `tests/manual/measure-standalone-native-windows.ps1 -Archive … -ExpectedSha256 1c672ef4… -Iterations 3 -AssertNoListeners -AssertNoOutbound` | Windows x64 | `PASS`, 0 | p50 1 948 ms, 0 TCP-Listener, kein UDP-Endpunkt, keine Verbindung nach außen in drei Starts mit je 77 s Beobachtung. |
+| Netzverkehr, Endstand | Scratch-Skript wie beim Vorstand: Paket `1c672ef4…`, 600 s Betriebssystemtabellen mit einem Verarbeitungslauf; 100 s mit Netzprotokoll von Chromium | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | 20 814 Stichproben, kein TCP- und kein UDP-Endpunkt. Netzprotokoll: keine Anfrage nach außen; aufgelöst nur `tauri.localhost`; ein UDP-Socket ohne gesendetes Paket; ein Versuch zu `localhost:80`. Kein Bestandteil des Repositorys. |
+| Windows x64 Oberfläche, R-031 | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `1c672ef4…` und ein Paket gleichen Schalterstands davor | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Nach R-031“ |
+| Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | ausstehend | Der Bau verlangt einen sauberen Arbeitsbaum und läuft deshalb nach diesem Berichtscommit; das Ergebnis steht im folgenden Commit. Die Änderung berührt das Plugin nicht (Fensterkonfiguration der Standalone-App, Prüfskripte). |
+| `git diff --check`, Endstand | `git diff --check af0a1d52 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Headless, Stand der vierten Übergabe | `node tests/run-product-suite.js headless` auf `0b99529c` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 09:33–10:30 am 24.11. Parallel liefen der native Lauf zu R-028, ein Verarbeitungslauf in der App und `npm run test:docs`, dazu weiter der hängengebliebene Python-Prozess. |
+| Rust / Clippy, Stand der vierten Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract`, Rust-Quellen von `b71439b2` | Windows x64 | je `PASS`, 0 | 333 bestanden, 0 fehlgeschlagen, 3 ignoriert (sieben neue Tests). Nur das Windows-Ziel. |
 | Mutationsprobe R-028 | Scratch-Skript: acht gezielte Verfälschungen von `private_namespace.rs` und `main.rs`, je `cargo test --locked <Filter>`, danach Dateien zurückgesetzt und verglichen | Windows x64 | alle acht erkannt | Kein Bestandteil des Repositorys. Nicht erfasst: die Zahl der Wiederholungen um eins, und ob die vier Aufrufstellen in `spawn_sidecar` einzeln zurückgedreht werden (dafür der Quelltextvertrag). |
-| Gezielt, Endstand | `tests/test-native-smoke-integrity.js` (81), `tests/test-standalone-desktop-contract.js` (40), `tests/test-standalone-workspace.js` (518), `tests/test-standalone-frontend.js` (52) | Windows x64 | je `PASS`, 0 | Neu oder erweitert: vier Fälle zur Startprobe und zum Messskript, ein Quelltextvertrag der Shell, drei Fälle der Oberfläche. |
+| Gezielt, Stand der vierten Übergabe | `tests/test-native-smoke-integrity.js` (81), `tests/test-standalone-desktop-contract.js` (40), `tests/test-standalone-workspace.js` (518), `tests/test-standalone-frontend.js` (52) | Windows x64 | je `PASS`, 0 | Neu oder erweitert: vier Fälle zur Startprobe und zum Messskript, ein Quelltextvertrag der Shell, drei Fälle der Oberfläche. |
 | Gegenprüfung R-028 bis R-030 | zwei unabhängige Read-only-Läufe (Datenschutz- und Laufzeit-Prüfer) auf dem Arbeitsstand vor den Commits, mit eigenen Skripten und einzelnen Node-Tests | Windows x64 | keine Aufweichung der Schutzgrenze, nichts durchgelassen; neun Einwände | Beide am Schrittlimit beendet, Berichte auf Nachfrage. Einwände und ihr Ergebnis in BEFUNDE.md. Die danach eingearbeiteten Änderungen sind nicht erneut gegengeprüft. |
-| Dokumentation, Endstand | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `0b99529c` | Windows x64 | je `PASS`, 0 | — |
-| Konverter, Endstand | `npm run test:standalone:conversion` auf `0b99529c` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt Ordner `.tmp-standalone-package-*` im Repository-Root, von mir entfernt |
-| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs` auf `b71439b2`; `node tests/test-standalone-package-smoke.mjs` auf `0b99529c` gegen dasselbe Paket | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `cec20d6e528dec4e039f8dac058b036a2e5fa5e1c574ad363e4b94d8d38b2346`, 113 627 095 Bytes, 1 203 Einträge, Build `b4466f2a`. Das Paket des Vorstands (`b30c5511…`) wurde vorher aus `dist/` verschoben. |
+| Dokumentation, Stand der vierten Übergabe | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `0b99529c` | Windows x64 | je `PASS`, 0 | — |
+| Konverter, Stand der vierten Übergabe | `npm run test:standalone:conversion` auf `0b99529c` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt Ordner `.tmp-standalone-package-*` im Repository-Root, von mir entfernt |
+| Windows x64 Paket, Stand der vierten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs` auf `b71439b2`; `node tests/test-standalone-package-smoke.mjs` auf `0b99529c` gegen dasselbe Paket | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `cec20d6e528dec4e039f8dac058b036a2e5fa5e1c574ad363e4b94d8d38b2346`, 113 627 095 Bytes, 1 203 Einträge, Build `b4466f2a`. Das Paket des Vorstands (`b30c5511…`) wurde vorher aus `dist/` verschoben. |
 | Windows x64 Start, alte Probe | instrumentierte Kopie von `tests/manual/standalone-native-windows-launch.ps1` am Stand `e92d5b12`, `-Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence`, 11 Läufe gegen das Paket `b30c5511…` | Windows x64 | 8 `FAIL` (`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`), 3 `PASS` | In allen acht Fällen dieselben Merkmale: WebView2-Netzwerkdienst, gültige Microsoft-Signatur, `own_profile: false` wegen `…\webview\main\EBWebView` (R-029). Die Kopie liegt außerhalb des Repositorys. |
-| Windows x64 Start, Endstand | dieselbe Probe am Stand `0b99529c`, 14 Läufe gegen das Paket `cec20d6e…`; davor 12 Läufe einer Vorfassung gegen `b30c5511…` | Windows x64 | 14 von 14 `PASS`, 0; Vorfassung 12 von 12 | Kein TCP-Listener (er hätte die Probe abgebrochen); in 4 der 14 Läufe ein zugeordneter UDP-Endpunkt (`["msedgewebview2.exe"]`), sonst keiner. Abbau-Wartezeit 138 bis 273 ms von 20 000 ms. |
+| Windows x64 Start, Stand der vierten Übergabe | dieselbe Probe am Stand `0b99529c`, 14 Läufe gegen das Paket `cec20d6e…`; davor 12 Läufe einer Vorfassung gegen `b30c5511…` | Windows x64 | 14 von 14 `PASS`, 0; Vorfassung 12 von 12 | Kein TCP-Listener (er hätte die Probe abgebrochen); in 4 der 14 Läufe ein zugeordneter UDP-Endpunkt (`["msedgewebview2.exe"]`), sonst keiner. Abbau-Wartezeit 138 bis 273 ms von 20 000 ms. |
 | Windows x64 Messung | `tests/manual/measure-standalone-native-windows.ps1 -Archive … -ExpectedSha256 cec20d6e… -Iterations 10 -AssertNoListeners` am Stand `0b99529c` | Windows x64 | `PASS`, 0; am Stand `b11a6131` `FAIL` in Wiederholung 1 | p50 1 993 ms, p95 2 015 ms, 0 TCP-Listener, kein UDP-Endpunkt in dieser Serie. Der Fehlschlag davor ist der zweite Teil von R-030 (Zeile der App auf dem Fehlerkanal). Die Messung mit 30 Starts habe ich nicht ausgeführt. |
 | Windows x64 Oberfläche, R-028 | eigenes Startskript nach dem Muster von `tests/manual/standalone-native-workspace-gui.ps1` mit einem Halterprozess (Löschzugriff auf einen Ordner des Testprofils), Bedienung per Windows-UI-Automation, Pakete `b30c5511…` und `cec20d6e…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Nach R-028 bis R-030“ |
-| Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `14e3d87b` (Produktstand `0b99529c`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `5c669b7c…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderungen dieser Runde berühren das Plugin nicht (Rust-Shell, Standalone-Oberfläche, Prüfskripte). |
-| Netzverkehr, Endstand | Scratch-Skript: Paket `cec20d6e…` im isolierten Profil, Betriebssystemtabellen für TCP und UDP je Prozess rund alle 23 ms, Positivkontrolle je Lauf; 600 s unverändert, 280 s mit Netzprotokoll von Chromium, je ein Versuch mit zwei und mit fünf zusätzlichen Startschaltern (100 s und 150 s) | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | Unverändert: HTTPS zu `config.edge.skype.com` (2 Anfragen beim Start) und `edge.microsoft.com` (8 Anfragen des Komponenten-Updaters in 280 s), Auflösung von `wpad`; Shell und Core ohne Verbindung. Mit den Schaltern keine Anfrage nach außen, App arbeitsbereit, mit fünf Schaltern ein Verarbeitungslauf abgeschlossen. Kein Bestandteil des Repositorys. R-031. |
-| `git diff --check`, Endstand | `git diff --check e92d5b12 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Cowork-Plugin, Stand der vierten Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `14e3d87b` (Produktstand `0b99529c`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `5c669b7c…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderungen dieser Runde berühren das Plugin nicht (Rust-Shell, Standalone-Oberfläche, Prüfskripte). |
+| Netzverkehr, Stand der vierten Übergabe | Scratch-Skript: Paket `cec20d6e…` im isolierten Profil, Betriebssystemtabellen für TCP und UDP je Prozess rund alle 23 ms, Positivkontrolle je Lauf; 600 s unverändert, 280 s mit Netzprotokoll von Chromium, je ein Versuch mit zwei und mit fünf zusätzlichen Startschaltern (100 s und 150 s) | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | Unverändert: HTTPS zu `config.edge.skype.com` (2 Anfragen beim Start) und `edge.microsoft.com` (8 Anfragen des Komponenten-Updaters in 280 s), Auflösung von `wpad`; Shell und Core ohne Verbindung. Mit den Schaltern keine Anfrage nach außen, App arbeitsbereit, mit fünf Schaltern ein Verarbeitungslauf abgeschlossen. Kein Bestandteil des Repositorys. R-031. |
+| `git diff --check`, Stand der vierten Übergabe | `git diff --check e92d5b12 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
 | Headless, Stand der dritten Übergabe | `node tests/run-product-suite.js headless` auf `283e6ed9` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 23:19–00:13. Parallel liefen zeitweise der Differenzlauf, `cargo test`, Clippy und die Zufallsläufe der fünften Gegenprüfung, dazu durchgehend ein hängengebliebener Python-Prozess aus dieser Sitzung (gestartet 18:49, vermutlich von einer früheren Gegenprüfung; belegt einen von 16 Kernen und läuft noch, weil mir das Beenden nicht erlaubt wurde). `ebe526ec` kam danach und ändert nur ein Dokument; die Dokumenttests liefen darauf erneut. |
 | Headless, Stand der zweiten Übergabe | derselbe Befehl auf `ffab4fa7` | Windows x64 | `PASS`, 0 | 364 Dateien; 20:25–21:19, parallel lief der Differenzlauf |
 | Headless auf `d5992265` | derselbe Befehl auf `d5992265` | Windows x64 | `PASS`, 0 | 364 Dateien. Die Suite meldete den Fehler der Zuordnung nicht, den `ffab4fa7` behebt. |
@@ -542,9 +575,40 @@ erfundenen Zugangsdaten; danach eine Textdatei im geführten Lauf)
   Ergebnisbereitstellung; mehr als ein Fenster; „Selbst entscheiden“ in
   diesem Paket.
 
+**Nach R-031** (Paket `1c672ef4…`, Build `9fe7076e` aus `56d7c744`,
+24.11.2026 zwischen 14:00 und 14:30; Vergleich mit dem Paket `cec20d6e…` des
+Vorstands)
+
+- **Vorstand, zehn Minuten** – Nur der Netzwerkdienst von WebView2 hat
+  Verbindungen: HTTPS zu Microsoft-Adressen bei 0,3 s, 1,3 s, 60 s, 150 s
+  und 220 s. Das Netzprotokoll von Chromium nennt `config.edge.skype.com`
+  (zwei Anfragen beim Start) und `edge.microsoft.com/componentupdater`
+  (acht Anfragen in 280 s), dazu die Auflösung von `wpad`.
+- **Endstand, zehn Minuten** – 20 814 Stichproben der
+  Betriebssystemtabellen, kein TCP- und kein UDP-Endpunkt im Prozessbaum.
+  Fußzeile „Version 3.2.0-rc178 · Build 9fe7076e“.
+- **Endstand, Schalter** – Der Browserprozess von WebView2 trägt alle
+  fünf Schalter und die Standardliste von wry.
+- **Endstand, Bedienung** – automatische Maskierung einer erfundenen
+  Datei: ein Ergebnis mit Zuordnung, Original unverändert. Geführter Lauf
+  (am Paket gleichen Schalterstands vor der Gegenprüfung): „Prüfung
+  erforderlich“, eingebettete Prüfung geladen, Entscheidung „Als Person /
+  sensible Angabe ersetzen“ angewendet und gespeichert, „Anonymisierungslauf
+  abgeschlossen“. Damit ist nach „Beibehalten“ auch „Ersetzen“ einmal nativ
+  bedient.
+- **Startprobe mit `-AssertNoOutbound`** – Endstand besteht mit Haupt- und
+  mit Prüffenster; der Vorstand scheitert mit
+  `STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED` (WebView2, IPv6, Port 443).
+- **Umgebungsvariable** – Mit gesetztem
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` trägt der Browserprozess die
+  Schalter des Produkts und die der Variablen.
+- **Nicht beobachtet** – ein Lauf über Stunden, ein tatsächliches
+  Komponenten-Update, eine andere WebView2-Version, ein Host ohne IPv6,
+  PDF, Scan und Bild in diesem Paket.
+
 ## Urteil je Prüfdimension
 
-Zahlen aus ABDECKUNG.tsv am Stand `0b99529c`, nur Einzeleinheiten. Das
+Zahlen aus ABDECKUNG.tsv am Stand `56d7c744`, nur Einzeleinheiten. Das
 Register zählte in der ersten Runde Produktivcode hinter einem
 `#[cfg(test)]` irrtümlich als Rust-Testmodul und damit als offen. Die
 Erkennung ist korrigiert; dadurch gelten rund 460 Rust-Einheiten jetzt als
@@ -558,7 +622,7 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 | Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist einmal nativ durchlaufen; ihre Zähltexte haben keine Einzahl. | R-008, R-009, R-020, R-025 | 0 / 235 / 46. Quelltext plus Windows-Läufe; kein Screenreader, kein Zoom, kein WKWebView. |
 | Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Fünf Befunde der Rust-Shell behoben oder eingegrenzt, zuletzt die Startverweigerung bei belegter Ordnerkette. | R-011 bis R-014, R-022, R-028 | 15 / 753 / 538. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
 | Implementierung und Wartbarkeit | `main.rs` (rund 4 400 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, zwei ungenutzte Commands). Die zweite Runde hat `main.rs` um rund 280 Zeilen vergrößert. | — (Verbesserungen, nicht als Befund geführt) | 1 / 205 / 675. Kein systematischer Durchgang. |
-| Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. Shell und Core bauen keine Verbindungen auf; die WebView2-Komponente meldet sich aber regelmäßig bei Microsoft, entgegen der Beschreibung im Sicherheitsmodell. | R-010, R-012, R-031 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
+| Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. Shell und Core bauen keine Verbindungen auf. Die WebView2-Komponente meldete sich bis zum vierten Übergabestand regelmäßig bei Microsoft; am Endstand ist in zehn Minuten keine Verbindung mehr zu beobachten. | R-010, R-012, R-031 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
 | Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. Verwaiste Vorbereitungen werden bereinigt; eine laufende Veröffentlichung schützt allein ihr Alter. | R-007, R-010, R-022 (Hypothese) | 0 / 157 / 450. Wiederaufnahme, Absturzpfade, voller Datenträger nicht untersucht. |
 | Leistung und Ressourcen | Nur ein Vorher-nachher-Vergleich des Datenschutzkerns: 109 KB Prosa 0,86 s zu 0,89 s, 328 KB 5,9 s zu 5,7 s. Der Kern skaliert schon in RC178 überlinear. | — | Dazu Startzeit und Suite-Laufzeiten. BL-047.5 bleibt ohne Zielhostmessung. |
 | Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. Die Windows-Startprobe konnte einen WebView2-Endpunkt nicht zuordnen, ihr Abbau wartete auf keinen Prozess, und ihr Messskript lief auf diesem Host nicht durch, ohne dass ein Test es zeigte; behoben. | R-019, R-029, R-030 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
@@ -706,10 +770,10 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 ## Übergabenachricht zum Weiterreichen
 
 ```text
-Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, R-027 und R-028 bis R-030, abgeschlossen.
+Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, R-027 und R-028 bis R-031, abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
-Geprüfter Produktstand: 0b99529cff549a02947898ad54d08620451a268f (Produktcode zuletzt in b71439b2; spätere Commits nur tasks/rc178-claude-review/)
+Geprüfter Produktstand: 56d7c744ea34492dbb6bad61322cf5d7657c6ea5 (spätere Commits nur tasks/rc178-claude-review/)
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
 Für Codex zuerst prüfen:
@@ -736,15 +800,16 @@ Für Codex zuerst prüfen:
    Profilordner ohne den Unterordner EBWebView; ihr Abbau hat deshalb nie auf WebView2 gewartet und
    tut es jetzt. Im Release-Workflow und in scripts/run-pkg-04.ps1 läuft das zum ersten Mal wirklich.
    Der UDP-Endpunkt, an dem die alte Probe scheiterte, gehört zum Verkehr aus Punkt 6.
-6. R-031, kein Commit: Die WebView2-Komponente fragt beim Start config.edge.skype.com ab und meldet
-   sich danach alle 20 bis 40 Sekunden bei edge.microsoft.com/componentupdater; dazu eine Proxy-Suche
-   (wpad). Shell und Core haben keine Verbindung. Im Versuch stellen die Startschalter
-   --disable-background-networking --disable-component-update --no-proxy-server --disable-quic und
-   --host-resolver-rules den Verkehr ab (additionalBrowserArgs in tauri.conf.json, zusammen mit den
-   Standardschaltern von Tauri). Zu entscheiden: umsetzen, und die Startprobe um ausgehende
-   Verbindungen erweitern.
+6. R-031, Commits 1c3f36af und 56d7c744: Bis 0b99529c (also auch in RC178) fragte die WebView2-
+   Komponente beim Start config.edge.skype.com ab und meldete sich danach alle 20 bis 40 Sekunden bei
+   edge.microsoft.com/componentupdater, dazu eine Proxy-Suche (wpad). Jetzt starten beide Fenster
+   WebView2 mit --disable-background-networking --disable-component-update --no-proxy-server
+   --disable-quic und einer --host-resolver-rules-Regel (tauri.conf.json und WEBVIEW2_BROWSER_ARGS in
+   main.rs, gleichlautend). Die Startprobe prüft mit -AssertNoOutbound. Zu prüfen: der Mac-Build
+   (der Wert steht in der gemeinsamen Konfiguration), der Eintrag des Schalters im Release-Workflow
+   und ob das Produkt WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS aus seiner Umgebung entfernen soll.
 Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
-R-015, R-022, R-031; R-028 bei langer Belegung; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
+R-015, R-022; R-028 bei langer Belegung; R-031 hängt an nicht zugesicherten WebView2-Schaltern; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
 Überschriften, Tabellen und Links); geführte Prüfung nur einmal nativ bedient; rund 62 % der
 Einheiten im Register offen.
 ```

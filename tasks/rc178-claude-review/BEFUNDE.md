@@ -126,7 +126,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-028 | niedrig | Architektur und Betrieb; Windows | Die App startet nicht, solange ein fremder Prozess einen Ordner oberhalb ihres Datenordners mit Löschzugriff geöffnet hält. Die Meldung nennt keinen vorübergehenden Zustand. Im isolierten Testprofil beobachtet, rund sieben Minuten lang. | BL-010.11, BL-010.21 | behoben (`b71439b2`): eigene Ursache „belegt“, kurzes Warten, Wiederanlauf im selben Fenster; die Schutzgrenze ist unverändert, eine lange Belegung verhindert den Start weiterhin |
 | R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert an jedem beobachteten UDP-Endpunkt des WebView2-Netzwerkdienstes, weil sie dessen Profilordner ohne den Unterordner `EBWebView` vergleicht; aus demselben Grund wartet ihr Abbau nie auf WebView2. Die Diagnosezeile geht beim Abbruch verloren. | BL-010.21 | behoben (`dbf98cbf`) |
 | R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
-| R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | offen (gemessen; Abhilfe über Startschalter geprüft, nicht umgesetzt) |
+| R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | behoben für das beobachtete Verhalten (`56d7c744`, Probe `1c3f36af`); die Schalter sind keine zugesicherte Schnittstelle von WebView2 |
 
 ## Einzelbefunde
 
@@ -958,8 +958,9 @@ mehrfachem Argument).
 ## R-031 · WebView2 baut im laufenden Betrieb Verbindungen zu Microsoft auf
 
 Gemessen am 24.11.2026 auf Bitte des Anwenders, nachdem R-029 einen
-UDP-Endpunkt des WebView2-Netzwerkdienstes sichtbar gemacht hatte. Nichts am
-Produkt geändert; die Abhilfe ist geprüft, aber nicht umgesetzt.
+UDP-Endpunkt des WebView2-Netzwerkdienstes sichtbar gemacht hatte. Dieser
+Abschnitt beschreibt die Messung am unveränderten Paket; die Umsetzung
+folgt darunter.
 
 - **Ort**
   - `apps/datasecure-standalone/tauri-contract/tauri.conf.json`: Die Fenster
@@ -1019,7 +1020,7 @@ Produkt geändert; die Abhilfe ist geprüft, aber nicht umgesetzt.
     nachladen. In der Messung gab es nur Abfragen, keinen Download.
   - Die Proxy-Suche kann in einem fremden Netz beantwortet werden; betroffen
     wäre der oben genannte Verkehr.
-- **Geprüfte Abhilfe, nicht umgesetzt** – nur über die Umgebungsvariable:
+- **Vorversuch zur Abhilfe** – nur über die Umgebungsvariable:
   - `--disable-background-networking --disable-component-update`: 100 s
     ohne eine Anfrage nach außen, App arbeitsbereit. Die Auflösung von
     `wpad` bleibt.
@@ -1047,8 +1048,90 @@ Produkt geändert; die Abhilfe ist geprüft, aber nicht umgesetzt.
   - macOS nutzt WKWebView und ist nicht untersucht.
 - **Zuordnung** – BL-010.11 (Hülle und ihre Grenzen), BL-010.21
   (Zielhostnachweis der Startprobe).
-- **Status** – offen. Die Umsetzung ändert die Fensterkonfiguration des
-  Produkts und braucht eine Entscheidung.
+- **Status** – umgesetzt, siehe folgender Abschnitt.
+
+### R-031 · Umsetzung und Gegenprüfung
+
+Auf Auftrag des Anwenders vom 24.11.2026 umgesetzt.
+
+- **Produkt** (`56d7c744`)
+  - Beide Fenster starten WebView2 mit denselben Schaltern:
+    `--disable-background-networking --disable-component-update
+    --no-proxy-server --disable-quic --host-resolver-rules="MAP * ~NOTFOUND,
+    EXCLUDE tauri.localhost, EXCLUDE ipc.localhost"`, davor die
+    Standardliste von wry (`--disable-features=…`), die ein eigener Wert
+    sonst ersetzt.
+  - Das Hauptfenster trägt die Zeichenkette in `tauri.conf.json`
+    (`additionalBrowserArgs`), das Prüffenster die gleichlautende Konstante
+    `WEBVIEW2_BROWSER_ARGS` in `main.rs`. Ein Test hält beide auf einem
+    genauen Wert fest.
+  - Der Autoplay-Schalter von wry entfällt dabei; die App spielt keine
+    Medien ab.
+  - `docs/canonical/STANDALONE_SECURITY_MODEL.md` beschreibt Schalter, Rest
+    und Grenzen.
+- **Startprobe** (`1c3f36af`)
+  - `-AssertNoOutbound`: Ein Hintergrundthread liest ab dem Prozessstart die
+    TCP-Tabellen des Betriebssystems für den Prozessbaum, bis 75 s nach der
+    Bereitschaft. Der Komponenten-Updater einer uneingeschränkten WebView2
+    meldet sich erstmals nach rund einer Minute.
+  - Positivkontrolle vor jedem Lauf: eine eigene Verbindung über IPv4, eine
+    über IPv6 und eine eines Kindprozesses. Nicht lesbare Tabellen werden
+    gezählt und lassen den Lauf scheitern.
+  - Jede beobachtete Verbindung außer dem Versuch von WebView2 zum eigenen
+    lokalen Hostnamen endet mit
+    `STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`, ohne Adresse in der
+    Meldung.
+  - Das Messskript reicht den Schalter und `-AssertReviewWindow` durch.
+- **Nachweis am Paket `1c672ef4…`, Build `9fe7076e`**
+  - Messung mit drei Starts und `-AssertNoOutbound`: besteht, keine
+    Verbindung.
+  - Probe mit `-AssertNoOutbound`: Hauptfenster besteht (77 s, 3 165
+    Stichproben, keine Verbindung), Prüffenster besteht (77 s, 2 477
+    Stichproben, keine Verbindung).
+  - Dieselbe Probe gegen das Paket des Vorstands (`cec20d6e…`) scheitert
+    wie verlangt: WebView2, IPv6, Port 443.
+  - Zehn Minuten Beobachtung der Betriebssystemtabellen mit einem
+    Verarbeitungslauf: 20 814 Stichproben in 600 s, kein TCP- und kein UDP-Endpunkt im Prozessbaum.
+  - Netzprotokoll von Chromium über 100 s: keine Anfrage nach außen; aufgelöst wird nur
+    `tauri.localhost`; ein UDP-Socket ohne gesendetes Paket; ein Versuch zu
+    `localhost:80`.
+  - Bedienung: automatische Maskierung und eine geführte Prüfung mit der
+    Entscheidung „Als Person ersetzen“ laufen durch; das Prüffenster
+    öffnet sich.
+- **Einwände der Gegenprüfung** (ein unabhängiger Read-only-Lauf vor dem
+  Commit)
+
+| Einwand | Ergebnis |
+| --- | --- |
+| Die Positivkontrolle prüft nur IPv4 am eigenen Prozess; ein Fehler im IPv6-Pfad oder im Prozessbaum bliebe ein stilles Bestehen. Fehler beim Lesen der Tabellen werden verschluckt. | Berechtigt. Kontrolle um IPv6 und einen Kindprozess erweitert; Lesefehler werden gezählt und lassen den Lauf scheitern. |
+| Eine Umgebungsvariable des Hosts kann die Schalter verändern; die Probe entfernt sie und sieht das nicht. | Geprüft: WebView2 hängt `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` an die Schalter an. Im Sicherheitsmodell als Grenze genannt; das Produkt entfernt die Variable nicht. Bestand schon vor der Änderung. |
+| Das dokumentierte Messkommando deckt das Prüffenster nicht ab. | Messskript reicht `-AssertReviewWindow` durch; Dokument nennt die Kombination; nativ ausgeführt. |
+| Kurze Verbindungen zwischen zwei Stichproben entgehen der Probe; der Dokumenttext versprach „jede Verbindung“. | Text geändert in „jede beobachtete“, Grenze genannt. Die Verbindungen des Vorstands dauerten 30 bis 60 ms und länger und wurden erfasst. |
+| Die Probe kann die Schalter nicht einzeln schützen, weil die Regel zur Namensauflösung allein den Dienst verstummen lässt. | Der Test hält die genaue Zeichenkette fest; im Dokument als Grenze genannt. |
+| Der Kommentar nannte die Standardschalter von wry unvollständig (Autoplay). | Kommentar berichtigt. |
+
+  Nicht widerlegt hat der Prüfer: Schreibweise und Wirkung der Schalter, dass
+  ein eigener Wert die Standardschalter von wry ersetzt, Schema und Hosts
+  (`tauri.localhost`, `ipc.localhost`), dass es kein weiteres Fenster gibt,
+  die Tabellenlayouts und Offsets des Beobachters, und dass die Meldung
+  keine Adresse trägt.
+- **Grenzen**
+  - Die Schalter sind keine zugesicherte Schnittstelle von WebView2. Eine
+    neue Laufzeitversion kann ihre Wirkung ändern; dann schlägt die Probe
+    an, sofern sie mit `-AssertNoOutbound` läuft. Im Release-Workflow ist
+    der Schalter nicht eingetragen.
+  - Gemessen mit einer WebView2-Version auf einem Host. Was die Laufzeit
+    außerhalb des Prozessbaums der App tut (eigener Aktualisierungsdienst),
+    ist nicht untersucht.
+  - UDP und fehlgeschlagene Namensauflösungen sieht die Probe nicht; dafür
+    steht nur das einmalige Netzprotokoll.
+  - Der Verbindungsversuch zu `localhost:80` bleibt. Lauscht dort ein
+    fremdes Programm, kommt eine Verbindung zustande; ob darüber etwas
+    gesendet wird, ist nicht geprüft.
+  - Rechtschreibwörterbücher und andere nachladbare Bestandteile von
+    WebView2 werden nicht mehr geholt. Eine Auswirkung auf die Oberfläche
+    habe ich nicht gesehen, aber nicht gezielt gesucht.
+  - Die Änderungen nach den Einwänden sind nicht erneut gegengeprüft.
 
 ## Annahmen und Revalidierung
 
@@ -1078,6 +1161,8 @@ Produkt geändert; die Abhilfe ist geprüft, aber nicht umgesetzt.
 | A-023 | R-028 lässt sich nur beheben, indem die Freigabe der Ordnerkette gelockert wird (so in der ersten Meldung von R-028). | Der Start scheitert an der Freigabe. | Der Wiederanlauf im selben Fenster ging schon vorher; falsch war nur die genannte Ursache. | Nachstellung mit einem Halterprozess am alten Paket | Widerlegt. Die Korrektur benennt die Ursache und wartet kurz; Freigabe und Rechte sind unverändert. |
 | A-024 | Ein Startversuch bei belegtem Ordner darf wie jeder andere gegen die Grenze von 16 Versuchen zählen. | So zählt die Shell jeden Startversuch. | Die neue Meldung verspricht den Wiederanlauf ohne Neustart; nach 16 Prüfungen wäre das falsch gewesen, und die Oberfläche hätte es nicht gezeigt. | Gegenprüfung (read-only) | Widerlegt; ein solcher Versuch gibt seine Generation zurück. Nativ mit 20 Prüfungen belegt. |
 | A-025 | Der UDP-Endpunkt des WebView2-Netzwerkdienstes ist ein Plattformbefund ohne weitere Bedeutung (so wertet ihn die Startprobe, so stand es in R-029). | Besitzer ist ein signierter WebView2-Prozess des eigenen Profils; der Endpunkt ist kurzlebig. | Er gehört zu DNS-Anfragen und einer Erreichbarkeitsprüfung für regelmäßigen HTTPS-Verkehr zu Microsoft, den die Probe nicht ansieht. | Messung der Betriebssystemtabellen je Prozess und Netzprotokoll von Chromium | Eingegrenzt: kein DataSecure-Zugriff, aber Außenverkehr des Prozessbaums. R-031. |
+| A-026 | Die Schalter des Produkts gelten unabhängig von der Umgebung des Hosts. | Sie stehen fest in Konfiguration und Code. | WebView2 hängt den Inhalt von `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` an; die Startprobe entfernt die Variable und sieht das nicht. | Gegenprüfung (read-only); eigener Versuch am Paket | Eingegrenzt: Die Variable wird angehängt (gemessen). Ob ein späterer gleichnamiger Schalter gewinnt, ist nicht geprüft. Im Sicherheitsmodell als Grenze genannt. |
+| A-027 | Eine Probe, die ihre Tabellen liest und nichts findet, hat nichts übersehen. | Die Positivkontrolle sah die eigene Verbindung. | Die Kontrolle prüfte nur IPv4 und den eigenen Prozess; Lesefehler wurden verschluckt. | Gegenprüfung (read-only) mit Mutationen | Widerlegt für die erste Fassung; Kontrolle um IPv6 und einen Kindprozess erweitert, Lesefehler lassen den Lauf scheitern. Kurze Verbindungen zwischen zwei Stichproben bleiben unsichtbar. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

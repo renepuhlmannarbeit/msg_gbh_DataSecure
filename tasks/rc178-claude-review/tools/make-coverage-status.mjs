@@ -258,6 +258,10 @@ sym(`${rs}main.rs`, 'release_unspawned_generation', {
 sym(`${rs}main.rs`, 'spawn_sidecar', { status: 'TEILGEPRÜFT',
   purpose: 'Core-Prozess mit gehaltenem Datenordner starten', evidence: 'Quelltextvertrag der vier Stellen; ' + held,
   findings: ['R-028'], remark: 'geändert in b71439b2; nur die Zuordnung der Namespace-Fehler beurteilt' });
+sym(`${rs}main.rs`, 'open_review_window', { status: 'TEILGEPRÜFT',
+  purpose: 'Prüffenster als zweites WebView2-Fenster öffnen', invariant: 'dieselben WebView2-Schalter wie das Hauptfenster (WEBVIEW2_BROWSER_ARGS)',
+  evidence: 'tests/test-standalone-desktop-contract.js (genaue Zeichenkette für beide Fenster); Startprobe mit -AssertReviewWindow -AssertNoOutbound am Paket 1c672ef4',
+  findings: ['R-031'], remark: 'geändert in 56d7c744; nur der neue Schalteraufruf beurteilt' });
 sym(`${app}frontend/workspace.js`, 'renderBootstrapFailure', { status: 'TEILGEPRÜFT',
   purpose: 'gehaltene Startverweigerung mit Ursache und Statustext anzeigen',
   evidence: 'tests/test-standalone-workspace.js (drei Fälle für STANDALONE_DATA_ROOT_BUSY); nativer Lauf',
