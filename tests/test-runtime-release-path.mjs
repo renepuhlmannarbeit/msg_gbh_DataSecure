@@ -50,7 +50,7 @@ assert.match(standaloneWindows, /inputs\.scope == 'standalone_windows' && inputs
 for (const required of ['runs-on: windows-latest', 'test:standalone', 'test:standalone:conversion',
   'cargo clippy --all-targets --locked -- -D warnings', 'npm run build:standalone:windows',
   'verify-standalone-package.mjs', 'test-standalone-package-smoke.mjs',
-  '-AssertReviewWindow -AssertWorkspace -EmitEvidence', 'STANDALONE_PACKAGE_NOT_DETERMINISTIC', 'retention-days: 1']) {
+  '-AssertReviewWindow -AssertWorkspace -EmitEvidence', '-EmitEvidence -AssertNoOutbound\n', 'STANDALONE_PACKAGE_NOT_DETERMINISTIC', 'retention-days: 1']) {
   assert.ok(standaloneWindows.includes(required), required);
 }
 assert.doesNotMatch(standaloneWindows, /build:cowork|build:plugin/u);

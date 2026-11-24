@@ -195,7 +195,7 @@ jobs:
           $version = node -p "require('./package.json').version"
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           powershell -NoProfile -ExecutionPolicy Bypass -File tests/manual/standalone-native-windows-launch.ps1 `
-            -Archive "dist/DataSecure-Standalone-$version-windows-x64.zip" -AssertReviewWindow -AssertWorkspace -EmitEvidence
+            -Archive "dist/DataSecure-Standalone-$version-windows-x64.zip" -AssertReviewWindow -AssertWorkspace -EmitEvidence -AssertNoOutbound
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

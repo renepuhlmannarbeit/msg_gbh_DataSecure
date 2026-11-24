@@ -389,7 +389,10 @@ gegenüber dem festen Budget von 20 Sekunden. Mit `-AssertNoOutbound` liest
 ein Hintergrundthread ab dem Prozessstart alle 10 bis 30 ms die TCP-Tabellen
 des Betriebssystems für den Prozessbaum, bis `-OutboundSeconds` (Vorgabe 75)
 nach der Bereitschaft. Eine Positivkontrolle geht voraus: je eine eigene
-Verbindung über IPv4 und IPv6 und eine eines Kindprozesses. Jede beobachtete
+Verbindung über IPv4 und IPv6 und eine eines Kindprozesses; die über IPv6
+entfällt nur auf einem Host ohne IPv6, und der Evidenzsatz nennt das
+(`outbound_ipv6_control`). Der Release-Workflow ruft die Probe mit diesem
+Schalter auf. Jede beobachtete
 Verbindung außer dem Versuch von WebView2 zum eigenen lokalen Hostnamen
 (Loopback, Port 80) endet mit `STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`.
 Die Meldung nennt Prozessklasse, Adressfamilie und Port, keine Adresse.
