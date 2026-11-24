@@ -684,6 +684,18 @@ test('every namespace failure before the Core starts is classified, and only a b
   assert.doesNotMatch(rust.slice(rust.indexOf('fn release_unspawned_generation(') - 16, rust.indexOf('fn release_unspawned_generation(')),
     /#\[cfg\(/u, 'the release is part of every build, not a test-only item');
   assert.match(rust, /Err\(code\) => \{\s+release_unspawned_generation\(&state\.retired_owner_generations, &reserved_generation, &code\);/u);
+  assert.match(rust, /let reserved_generation = owner_generation\.clone\(\);\s+let \(sender, receiver\) = mpsc::channel\(\);[\s\S]{0,260}spawn_sidecar\(&app, &lifecycle, spawn_guard, bootstrap_deadline, owner_generation, retired_generations\)/u,
+    'the generation given back is the one this very attempt reserved');
+  assert.equal(rust.split('let reserved_generation =').length - 1, 1);
+  // Parent chain and existing root wait on one budget; nothing after a create waits.
+  const namespace = fs.readFileSync(path.join(root, 'tauri-contract/src/private_namespace.rs'), 'utf8');
+  const prepare = namespace.slice(namespace.indexOf('fn prepare_impl('), namespace.indexOf('\nfn ', namespace.indexOf('fn prepare_impl(') + 1));
+  assert.equal(prepare.split('let mut repetitions = CONTENTION_ATTEMPTS - 1;').length - 1, 1, 'one shared budget per start');
+  assert.equal(prepare.split('open_waiting(').length - 1, 2);
+  assert.ok(prepare.includes('let parent = open_waiting(parent_path, &mut repetitions)?;'));
+  assert.ok(prepare.includes('let root = open_waiting(path, &mut repetitions)?;'));
+  const created = prepare.slice(prepare.indexOf('create_bootstrap_root('), prepare.indexOf('} else {'));
+  assert.ok(created.length > 0); assert.doesNotMatch(created, /open_waiting|repetitions/u, 'after a create nothing is repeated');
   const publication = rust.slice(rust.indexOf('fn publication_data_root('), rust.indexOf('async fn blocking_rpc('));
   assert.doesNotMatch(publication, /namespace_bootstrap_code|STANDALONE_DATA_ROOT_BUSY/u,
     'publication keeps its existing refusal; the busy wording describes a start');
