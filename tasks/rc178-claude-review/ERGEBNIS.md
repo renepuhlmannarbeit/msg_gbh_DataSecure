@@ -19,8 +19,10 @@ hat der Anwender beauftragt, die beiden dabei gemeldeten Beobachtungen R-028
 und R-029 zu beheben und erneut zu prüfen; das sind die vier Commits
 `dbf98cbf` bis `0b99529c`. Eine anschließende Messung hat gezeigt, dass die
 eingebettete WebView2-Komponente regelmäßig Verbindungen zu Microsoft
-aufbaut (R-031); auf Auftrag behoben in `1c3f36af` und `56d7c744`. Dieser
-Bericht beschreibt den Endstand `56d7c744`.
+aufbaut (R-031); auf Auftrag behoben in `1c3f36af` und `56d7c744`. Zwei
+weitere Commits tragen die neue Prüfung in den Release-Workflow ein
+(`e881cc9c`, `0f35696e`). Dieser Bericht beschreibt den Endstand `0f35696e`;
+der Produktcode ist seit `56d7c744` unverändert.
 
 ## Identität und Umfang
 
@@ -30,7 +32,7 @@ Bericht beschreibt den Endstand `56d7c744`.
 | GitHub-Arbeitsbranch | [`claude/rc178-standalone-review`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review) |
 | Eingefrorener Einstieg | `e88f1b8d100421017fb3909d77e338fd25c1b421` (`origin/codex/rc178-claude-review-handoff`) |
 | RC178-Produktbaseline | `v3.2.0-rc178` → `13ed39ff979a5f5d9bb076d35021164de380b9dd`, Fingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655` (nachgerechnet, 400 Quellinputs) |
-| Geprüfter Produktstand | `56d7c744ea34492dbb6bad61322cf5d7657c6ea5`, Fingerprint `9fe7076ef6634d83aeee67fb82dd90e924247c0180d1b2befedb359c6917000b`. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der vierten Übergabe: `0b99529c`, Fingerprint `b4466f2a…`; der dritten: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
+| Geprüfter Produktstand | `0f35696e5b7520ee52d87901859d423e33bcb420`. Produktcode zuletzt geändert in `56d7c744ea34492dbb6bad61322cf5d7657c6ea5`, Fingerprint `9fe7076ef6634d83aeee67fb82dd90e924247c0180d1b2befedb359c6917000b`; `e881cc9c` und `0f35696e` ändern danach nur die Startprobe, einen Workflow und Tests und den Fingerprint nicht. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der vierten Übergabe: `0b99529c`, Fingerprint `b4466f2a…`; der dritten: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
 | Prüfumgebung | Claude Fable 5.2 (`claude-fable-5-2`) in Claude Code; Windows 11 Pro 10.0.26300 x64; Node 22.23.2 für alle Tests (Host-Node 24.18.0), npm 11.16.0, cargo/rustc 1.98.1, MSVC mit SDK 10.0.26100.0, WebView2 158.0.4370.33, Claude CLI 2.1.280 |
 | Verfügbare Zielplattformen | Nur Windows x64. Kein Mac, kein Xcode, kein iOS-Simulator. |
 | Abdeckung | 5 135 erfasste Einheiten in 346 Dateien: 32 `GEPRÜFT`, 1 944 `TEILGEPRÜFT`, 3 159 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
@@ -160,8 +162,9 @@ aber den Build-Fingerprint `9fe7076e…`.
      gab es keinen Endpunkt mehr. Die Schalter sind keine zugesicherte
      Schnittstelle von WebView2: Eine neue Laufzeitversion kann ihre Wirkung
      ändern, und eine Umgebungsvariable des Hosts wird angehängt. Die
-     Startprobe prüft deshalb jetzt auf ausgehende Verbindungen; im
-     Release-Workflow ist dieser Schalter noch nicht eingetragen.
+     Startprobe prüft deshalb jetzt auf ausgehende Verbindungen, und der
+     Release-Workflow ruft sie so auf. Ausgeführt habe ich den Workflow
+     nicht; lokal besteht die Probe mit genau seinen Schaltern.
    - R-028 ist kein Schutz vor einer langen Belegung: Hält ein Programm
      einen Ordner der Kette länger als rund zwei Sekunden, startet der Core
      weiterhin nicht, bis der Anwender nach der Freigabe erneut prüft. Wer
@@ -283,6 +286,7 @@ Gegenprüfung“):
 | Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
 | --- | --- | --- | --- | --- |
 | `1c3f36af` | R-031, A-027 | `tests/manual/standalone-native-windows-launch.ps1`: `-AssertNoOutbound` beobachtet ab dem Prozessstart die TCP-Tabellen des Betriebssystems für den Prozessbaum, mit Positivkontrolle über IPv4, IPv6 und einen Kindprozess. `tests/manual/measure-standalone-native-windows.ps1` reicht den Schalter und `-AssertReviewWindow` durch. `docs/TESTING.md`. Kein Produktcode. | `tests/test-native-smoke-integrity.js` (zwei neue Fälle, einer erweitert); Vertragsmodi mit 66 Gruppen und `-ValidateOutboundOnly`; Probe gegen neues und bisheriges Paket | Nur Windows. |
+| `e881cc9c`, `0f35696e` | R-031 | `.github/workflows/release-evidence.yml`: Der Windows-Standalone-Job ruft die Startprobe zusätzlich mit `-AssertNoOutbound` auf. `tests/manual/standalone-native-windows-launch.ps1`: Die IPv6-Positivkontrolle entfällt nur auf einem Host ohne IPv6; der Evidenzsatz nennt das. Kein Produktcode. | `tests/test-runtime-release-path.mjs` hält den Schalter im Workflow fest; `tests/test-native-smoke-integrity.js`; Probe lokal mit den Schaltern des Workflows | Nur Windows. Der Workflow ist nicht ausgeführt worden. `scripts/run-pkg-04.ps1` ruft die Probe weiter ohne den Schalter auf. |
 | `56d7c744` | R-031, A-025, A-026 | `tauri-contract/tauri.conf.json` (`additionalBrowserArgs` des Hauptfensters) und `tauri-contract/src/main.rs` (`WEBVIEW2_BROWSER_ARGS` für das Prüffenster): WebView2 startet ohne Hintergrundverkehr, Komponenten-Update, Proxy, QUIC und fremde Namensauflösung. `docs/canonical/STANDALONE_SECURITY_MODEL.md` beschreibt Schalter, Rest und Grenzen. | `tests/test-standalone-desktop-contract.js` (ein Fall, hält die genaue Zeichenkette für beide Fenster fest); Rust-Tests und Clippy; zehn Minuten Messung, Probe, Bedienung | Der Wert steht in der gemeinsamen Konfiguration, wirkt aber nur unter Windows; macOS nutzt WKWebView und ist nicht gemessen. Build-Fingerprint ändert sich. |
 
 Nicht umgesetzt und begründet (Einzelheiten in BEFUNDE.md, „Entscheidungen je
@@ -340,6 +344,8 @@ früheren Stände fest.
 | Netzverkehr, Endstand | Scratch-Skript wie beim Vorstand: Paket `1c672ef4…`, 600 s Betriebssystemtabellen mit einem Verarbeitungslauf; 100 s mit Netzprotokoll von Chromium | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | 20 814 Stichproben, kein TCP- und kein UDP-Endpunkt. Netzprotokoll: keine Anfrage nach außen; aufgelöst nur `tauri.localhost`; ein UDP-Socket ohne gesendetes Paket; ein Versuch zu `localhost:80`. Kein Bestandteil des Repositorys. |
 | Windows x64 Oberfläche, R-031 | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `1c672ef4…` und ein Paket gleichen Schalterstands davor | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Nach R-031“ |
 | Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `d2da4689` (Produktstand `56d7c744`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `832397b1…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderung berührt das Plugin nicht (Fensterkonfiguration der Standalone-App, Prüfskripte). |
+| Headless nach dem Workflow-Eintrag | `node tests/run-product-suite.js headless` auf `0f35696e` | Windows x64 | `PASS`, 0 | 365 Dateien; 15:44–16:34 am 24.11. Geändert sind gegenüber `56d7c744` nur Startprobe, Workflow, zwei Tests und ein Dokument. |
+| Release-Workflow, Probenaufruf | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -EmitEvidence -AssertNoOutbound` lokal gegen das Paket `1c672ef4…`; dazu `tests/test-runtime-release-path.mjs`, `tests/test-test-path-separation.js`, `tests/test-windows-native-contract.mjs`, `tests/test-native-smoke-integrity.js` (83) | Windows x64 | je `PASS`, 0 | Fenster 77 s, 4 246 Stichproben, IPv6-Kontrolle ausgeführt, keine Verbindung. Der Workflow `release-evidence.yml` selbst ist nicht gestartet worden (Projektregel); auf dem gehosteten Runner ist der Schritt damit unbelegt. |
 | `git diff --check`, Endstand | `git diff --check af0a1d52 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
 | Headless, Stand der vierten Übergabe | `node tests/run-product-suite.js headless` auf `0b99529c` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 09:33–10:30 am 24.11. Parallel liefen der native Lauf zu R-028, ein Verarbeitungslauf in der App und `npm run test:docs`, dazu weiter der hängengebliebene Python-Prozess. |
 | Rust / Clippy, Stand der vierten Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract`, Rust-Quellen von `b71439b2` | Windows x64 | je `PASS`, 0 | 333 bestanden, 0 fehlgeschlagen, 3 ignoriert (sieben neue Tests). Nur das Windows-Ziel. |
@@ -773,7 +779,7 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, R-027 und R-028 bis R-031, abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
-Geprüfter Produktstand: 56d7c744ea34492dbb6bad61322cf5d7657c6ea5 (spätere Commits nur tasks/rc178-claude-review/)
+Geprüfter Produktstand: 0f35696e5b7520ee52d87901859d423e33bcb420 (Produktcode zuletzt in 56d7c744; spätere Commits nur tasks/rc178-claude-review/)
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
 Für Codex zuerst prüfen:
@@ -805,9 +811,11 @@ Für Codex zuerst prüfen:
    edge.microsoft.com/componentupdater, dazu eine Proxy-Suche (wpad). Jetzt starten beide Fenster
    WebView2 mit --disable-background-networking --disable-component-update --no-proxy-server
    --disable-quic und einer --host-resolver-rules-Regel (tauri.conf.json und WEBVIEW2_BROWSER_ARGS in
-   main.rs, gleichlautend). Die Startprobe prüft mit -AssertNoOutbound. Zu prüfen: der Mac-Build
-   (der Wert steht in der gemeinsamen Konfiguration), der Eintrag des Schalters im Release-Workflow
-   und ob das Produkt WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS aus seiner Umgebung entfernen soll.
+   main.rs, gleichlautend). Die Startprobe prüft mit -AssertNoOutbound; der Release-Workflow ruft sie
+   seit 0f35696e so auf, ist aber nicht ausgeführt worden. Zu prüfen: der Mac-Build (der Wert steht in
+   der gemeinsamen Konfiguration), ein Lauf des Windows-Jobs von release-evidence.yml, derselbe
+   Schalter in scripts/run-pkg-04.ps1 und ob das Produkt WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS aus
+   seiner Umgebung entfernen soll.
 Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
 R-015, R-022; R-028 bei langer Belegung; R-031 hängt an nicht zugesicherten WebView2-Schaltern; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
 Überschriften, Tabellen und Links); geführte Prüfung nur einmal nativ bedient; rund 62 % der

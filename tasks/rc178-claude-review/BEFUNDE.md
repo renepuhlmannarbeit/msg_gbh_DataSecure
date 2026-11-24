@@ -1082,6 +1082,8 @@ Auf Auftrag des Anwenders vom 24.11.2026 umgesetzt.
     `STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`, ohne Adresse in der
     Meldung.
   - Das Messskript reicht den Schalter und `-AssertReviewWindow` durch.
+  - Nachtrag `e881cc9c`: Die IPv6-Kontrolle entfällt nur auf einem Host
+    ohne IPv6; der Evidenzsatz nennt, ob sie lief.
 - **Nachweis am Paket `1c672ef4…`, Build `9fe7076e`**
   - Messung mit drei Starts und `-AssertNoOutbound`: besteht, keine
     Verbindung.
@@ -1118,8 +1120,10 @@ Auf Auftrag des Anwenders vom 24.11.2026 umgesetzt.
 - **Grenzen**
   - Die Schalter sind keine zugesicherte Schnittstelle von WebView2. Eine
     neue Laufzeitversion kann ihre Wirkung ändern; dann schlägt die Probe
-    an, sofern sie mit `-AssertNoOutbound` läuft. Im Release-Workflow ist
-    der Schalter nicht eingetragen.
+    an, sofern sie mit `-AssertNoOutbound` läuft. Der Release-Workflow ruft
+    sie seit `0f35696e` so auf; ausgeführt wurde er nicht, auf dem gehosteten
+    Runner ist der Schritt also unbelegt. `scripts/run-pkg-04.ps1` ruft die
+    Probe weiter ohne den Schalter auf.
   - Gemessen mit einer WebView2-Version auf einem Host. Was die Laufzeit
     außerhalb des Prozessbaums der App tut (eigener Aktualisierungsdienst),
     ist nicht untersucht.
