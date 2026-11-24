@@ -689,7 +689,8 @@ test('every namespace failure before the Core starts is classified, and only a b
   assert.equal(rust.split('let reserved_generation =').length - 1, 1);
   // Parent chain and existing root wait on one budget; nothing after a create waits.
   const namespace = fs.readFileSync(path.join(root, 'tauri-contract/src/private_namespace.rs'), 'utf8');
-  const prepare = namespace.slice(namespace.indexOf('fn prepare_impl('), namespace.indexOf('\nfn ', namespace.indexOf('fn prepare_impl(') + 1));
+  const prepare = namespace.slice(namespace.indexOf('fn prepare_impl('), namespace.indexOf('\n}\n', namespace.indexOf('fn prepare_impl(')));
+  assert.ok(prepare.length > 800 && prepare.length < 4000, 'the slice is the body of prepare_impl, not the rest of the file');
   assert.equal(prepare.split('let mut repetitions = CONTENTION_ATTEMPTS - 1;').length - 1, 1, 'one shared budget per start');
   assert.equal(prepare.split('open_waiting(').length - 1, 2);
   assert.ok(prepare.includes('let parent = open_waiting(parent_path, &mut repetitions)?;'));
