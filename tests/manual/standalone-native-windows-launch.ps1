@@ -312,6 +312,12 @@ public static class DataSecureOutboundWatch {
             @($workerRows | Where-Object { $_ -like "*|ipv4|127.0.0.1|$childPort" }).Count -ne 1) {
             throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID'
         }
+        # After Stop nothing samples any more; a thread that kept running
+        # would sample this launcher's tree next to the app's during the
+        # real observation.
+        $stoppedSamples = [DataSecureOutboundWatch]::Samples
+        Start-Sleep -Milliseconds 150
+        if ([DataSecureOutboundWatch]::Samples -ne $stoppedSamples) { throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID' }
     } finally {
         if ($null -ne $child) {
             try { if (-not $child.HasExited) { $child.Kill() }; [void] $child.WaitForExit(5000) } catch { }

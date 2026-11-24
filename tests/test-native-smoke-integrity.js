@@ -1665,6 +1665,8 @@ if (process.platform === 'win32') test('actual Windows launcher outbound observe
   assert.ok(control.indexOf('[DataSecureOutboundWatch]::Start($PID)') > control.indexOf("throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_TREE_INVALID'"));
   assert.match(worker, /\$workerRows = @\(\[DataSecureOutboundWatch\]::Stop\(\)\)/u);
   assert.match(worker, /if \(\$workerSamples -lt 3 -or \$workerFailures -ne 0 -or\s+@\(\$workerRows \| Where-Object \{ \$_ -like "\*\|ipv4\|127\.0\.0\.1\|\$port" \}\)\.Count -ne 1 -or\s+@\(\$workerRows \| Where-Object \{ \$_ -like "\*\|ipv4\|127\.0\.0\.1\|\$childPort" \}\)\.Count -ne 1\) \{\s+throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID'/u);
+  assert.match(worker, /\$stoppedSamples = \[DataSecureOutboundWatch\]::Samples\s+Start-Sleep -Milliseconds 150\s+if \(\[DataSecureOutboundWatch\]::Samples -ne \$stoppedSamples\) \{ throw 'STANDALONE_NATIVE_OUTBOUND_OBSERVER_WORKER_INVALID' \}/u,
+    'a thread that outlives Stop is refused');
   // The IPv6 table is skipped only where there is neither an IPv6 stack nor a readable table.
   assert.match(control, /\[DataSecureOutboundWatch\]::IncludeIpv6 = \$script:nativeOutboundIpv6Control -or \[DataSecureOutboundWatch\]::Ipv6TableReadable\(\)/u);
   assert.match(source, /byte\[\] v6 = includeIpv6 \? Table\(23\) : new byte\[0\];/u);
