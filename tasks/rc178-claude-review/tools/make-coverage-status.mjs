@@ -91,8 +91,8 @@ open(['content-graph.js', 'word-table-grid.js', 'drawing-table-grid.js', 'xlsx-s
 full('Oberflächen', ['workspace.js', 'review.js', 'text-positions.js', 'workflow-presentation.js'].map((file) => `${app}frontend/${file}`),
   ['R-008', 'R-009', 'R-020', 'R-025']);
 part('Oberflächen', [[`${app}frontend/document-review.js`, 'Z. 1-32, 184-691, 1278-1537', ['R-012', 'R-020']]]);
-open([[`${app}frontend/app.js`,
-  'alte Oberfläche; wird vom Hauptfenster nicht geladen, aber paketiert und von tests/test-standalone-frontend.js geprüft (R-019); nicht gelesen']]);
+// frontend/app.js (die frühere Oberfläche) ist seit 1d908311 entfernt; ihre 46
+// offenen Einheiten sind damit aus dem Register gefallen, nicht geprüft worden.
 
 full('Rust', ['main.rs', 'ipc_transport.rs', 'export_directory.rs', 'export_directory/relative_results.rs', 'native_export_transaction.rs',
   'native_export_channel.rs', 'native_export_broker.rs', 'native_export_workspace.rs', 'private_namespace.rs', 'diagnostic_bundle.rs',
@@ -410,7 +410,7 @@ sym(`${app}frontend/workflow-presentation.js`, 'failureAdvice', { status: 'TEILG
 
 Object.assign(groups, {
   'G-FRONTEND-STATIC': { status: 'TEILGEPRÜFT', findings: ['R-008', 'R-020'],
-    remark: 'workspace.html, review.html, workspace.css, review.css, review-workspace.css und design-tokens.css vollständig gelesen (Oberflächen-Review); index.html und styles.css (alte Oberfläche) nicht' },
+    remark: 'workspace.html, review.html, workspace.css, review.css, review-workspace.css und design-tokens.css vollständig gelesen (Oberflächen-Review); index.html und styles.css (frühere Oberfläche) sind seit 1d908311 entfernt und wurden nie gelesen' },
   'G-TAURI-CONFIG': { status: 'TEILGEPRÜFT',
     remark: 'Cargo.toml, tauri.conf.json, tauri.macos.conf.json, capabilities, Info.plist, Entitlements und .cargo/config.toml gelesen (Rust- und Lieferketten-Review); permissions/commands.toml nur Bezeichner; Cargo.lock per Skript ausgewertet; Icons nicht' },
   'G-PROJECTED-DATA': { status: 'OFFEN', remark: 'native Sandbox-Binärdatei und Prüfsumme nicht inspiziert' },

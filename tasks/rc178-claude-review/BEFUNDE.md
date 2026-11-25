@@ -114,7 +114,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-016 | mittel | Lieferkette | Die paketierten Drittanbieterhinweise nennen `emf-converter` nicht und beschreiben die macOS-Laufzeit unzutreffend. | BL-050.6 | behoben (`03c621a4`, `871daa7f`) |
 | R-017 | mittel | Anonymisierung, alle | Drei weitere Unterredaktionsmuster: Einzelnachname in Folgedokumenten, Name im Linkziel, „Nachname, Vorname“. | BL-050.6, BL-021.1 | teilweise behoben (`cfee417a`, `ac74cf71`, nachgebessert in `3e4a1be1`, `d4740dd6`, `e07ca2e6`); einzelner Nachname ohne Personenkontext im Folgedokument bleibt dokumentierte Grenze |
 | R-018 | mittel | Formatqualität CSV, alle | Eine einzelne Zeile abweichender Breite lässt die Trennzeichenerkennung still auf eine Spalte fallen, mit Abdeckung „vollständig“. | BL-049.2 | behoben (`803acbb9`, Hinweistexte in `2726675a`) |
-| R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | teilweise behoben (`7e9e0530`): Vertrag an die geladene Oberfläche gebunden; Tests der alten Oberfläche bestehen weiter |
+| R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | behoben (`7e9e0530`, `1d908311`): Vertrag an die geladene Oberfläche gebunden; die frühere Oberfläche und ihre Tests sind auf Entscheidung des Anwenders entfernt |
 | R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise behoben (`c62bb1dd`, `2726675a`, `405eb370`): Seitenzoom unter Windows; offen sind Seitenzoom unter macOS und Linux (Entscheidung), versteckte Live-Regionen (nur mit Screenreader prüfbar) und Bidi-Steuerzeichen (bewusst nicht geändert) |
 | R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | behoben (`e1afef0f`, `2e34d532`) |
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
@@ -129,6 +129,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | behoben für das beobachtete Verhalten (`56d7c744`, Probe `1c3f36af`); die Schalter sind keine zugesicherte Schnittstelle von WebView2 |
 | R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`, `d41a042b`, `34de4509`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft. Die Rückfrage „Aufbewahrung 0 Tage“ ist im Standalone-Paket nicht erreichbar |
 | R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`, `0bd5e26f`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Der als Folge häufiger erreichte Stopp bei `Label Name Nummer` ist in `0bd5e26f` behoben |
+| R-034 | niedrig | Oberfläche, alle | Die geladene Oberfläche erklärt vier Fehlercodes nicht, die der Core weiter liefert (`SOURCE_FOLDER_UNSUPPORTED_FILES`, `STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED`, `STANDALONE_RESULT_BINDING_UNAVAILABLE`), und zeigt dafür einen allgemeinen Satz. Erklärt hat sie nur die frühere Oberfläche; der Vertragstest prüfte dort und bestand. Beim Umbinden des Tests gefunden; in RC178 gleich. | BL-050.6 | behoben (`8cf5dd93`) |
 
 ## Einzelbefunde
 
@@ -1681,7 +1682,9 @@ geprüft wurden; ein Zwischenstand wäre ungeprüft gewesen.
 - **R-019, Tests der alten Oberfläche.** Die alte Oberfläche `app.js` wird
   nicht geladen, aber paketiert. Sie zu entfernen ist eine Produktentscheidung
   (`docs/canonical/PRODUCT.md`: die native Paketabnahme ist Voraussetzung der
-  Standardumschaltung).
+  Standardumschaltung). Nachtrag: Der Anwender hat am 25.11. entschieden;
+  entfernt in `1d908311`. Der zitierte Satz war veraltet, siehe die
+  Berichtigung im Abschnitt „R-019 und R-034 · Frühere Oberfläche entfernt“.
 - **R-020, Bidi-Steuerzeichen in Namen.** Eine Anzeigefunktion wäre an rund
   60 Stellen in zwei Dateien nötig; die Alternative, solche Namen abzulehnen,
   träfe auch Dateien mit rechtsläufigen Namen. Der Nutzen ist gering:
@@ -2060,6 +2063,116 @@ solche, die durchliefen:
   5 000 Platzhalter in einer einzigen Zeile; die Korrektur ist nach der
   Gegenprüfung nur noch um einen Test ergänzt worden.
 
+## R-019 und R-034 · Frühere Oberfläche entfernt (25.11. nachts)
+
+Entscheidung des Anwenders vom 25.11.: die frühere Oberfläche entfernen.
+Ergebnis ist der Commit `1d908311`, davor `8cf5dd93` für R-034.
+
+### Was entfernt ist
+
+| Datei | Umfang | Rolle |
+| --- | --- | --- |
+| `apps/datasecure-standalone/frontend/index.html` | 155 Zeilen | frühere Hauptseite; vom Hauptfenster nicht geladen, aber paketiert |
+| `apps/datasecure-standalone/frontend/app.js` | 1 312 Zeilen, 81 KB | ihr Skript |
+| `apps/datasecure-standalone/frontend/styles.css` | 91 Zeilen | ihr Stylesheet |
+| `tests/test-standalone-frontend.js` | 1 777 Zeilen, 52 Tests | prüfte ausschließlich `app.js` und `index.html` |
+| `tests/manual/standalone-ui-browser.mjs` | 112 Zeilen | Browser-Fixture für `index.html` |
+
+Die Suite hat damit 366 statt 367 Dateien. Die Oberfläche ist in die Hülle
+eingebettet; deren Programmdatei ist um rund 25 KB kleiner (5 505 024 auf
+5 479 936 Bytes), die Zahl der Paketeinträge bleibt 1 203. Rust-Quellen sind
+nicht geändert.
+
+### Was umgebunden ist
+
+- **`tests/test-standalone-desktop-contract.js`** las an rund 40 Stellen
+  `app.js` oder `index.html`. Diese Prüfungen lesen jetzt die Skripte, die das
+  ausgelieferte Fenster lädt. Wo die neue Oberfläche dieselbe Eigenschaft
+  anders umsetzt, ist das Muster angepasst (Auswahl über `pick`, Start über
+  `perform('start_admitted_batch', args)`, Quittung des Abschlusses mit
+  `presentationGeneration`, Ergebnisordner als Text, Zweck als zwei nicht
+  vorbelegte Optionsfelder, ein Statusleser mit einem nachgestellten Timer).
+  Entfallen sind sechs Prüfungen, die nur Namen der früheren Oberfläche
+  festhielten (`refreshInFlight`, `resetAdmissionUi`, `action-feedback`,
+  `activeView = 'home'`, die Zahl der Aufrufe von `switchView('results')`, der
+  Knopf `continue`).
+- **`tests/test-standalone.js`**: die Prüfung, dass die Dateizuordnung nur bei
+  vorhandenem Ledger angeboten wird, liest `workspace.js`.
+- **`tests/test-native-smoke-integrity.js`**: die Prüfung der Browser-Fixture
+  liest das Vorschaumodul der neuen Oberfläche.
+- **`tests/test-standalone-loaded-frontend-contract.js`**: neuer Test. Der
+  paketierte Ordner `frontend` enthält genau die Dokumente, Skripte und
+  Stylesheets, die die Fenster laden, dazu die Schrift mit ihrer Lizenz. Eine
+  nicht geladene Seite fällt damit künftig auf.
+
+### R-034 · Vier Fehlercodes ohne Erklärung in der geladenen Oberfläche
+
+- **Ort:** `apps/datasecure-standalone/frontend/workspace.js`, Tabelle
+  `reasons`.
+- **Ist (bis zu diesem Commit, in RC178 gleich):** Der Core liefert
+  `SOURCE_FOLDER_UNSUPPORTED_FILES`, `STANDALONE_NO_ADMISSION`,
+  `BATCH_PSEUDONYM_CAPACITY_EXCEEDED` und
+  `STANDALONE_RESULT_BINDING_UNAVAILABLE`. Die geladene Oberfläche kannte sie
+  nicht und zeigte ihren allgemeinen Satz „Der lokale Vorgang konnte nicht
+  abgeschlossen werden …“ mit dem Code in Klammern. Erklärt hat sie nur die
+  frühere Oberfläche; der Vertragstest prüfte die Erklärungen dort und
+  bestand.
+- **Reproduktion:** Suche nach den vier Codes in den geladenen Skripten vor
+  dem Commit: kein Treffer.
+- **Soll:** eine verständliche Erklärung je Code, wie der Vertragstest sie
+  verlangt.
+- **Auswirkung:** niedrig. Die Meldung war unspezifisch, aber nicht falsch.
+- **Status:** behoben. Vier Texte ergänzt, im Wortlaut an den festen
+  Meldungen des Core ausgerichtet. Gefunden beim Umbinden des Vertragstests;
+  das ist genau der Fall, den R-019 beschrieb. BL-050.6.
+
+### Beobachtungen, nicht behoben
+
+- **Native Befehle ohne Aufrufer.** In der Berechtigung des Hauptfensters
+  stehen vier Befehle, die kein geladenes Skript mehr ruft:
+  `remove_admitted_source` und `open_review_window` (rief nur die frühere
+  Oberfläche), `open_local_ledger` und `shutdown` (rief schon vorher kein
+  Skript). Das getrennte Prüffenster (`open_review_window`, eigene
+  Berechtigungsdatei `capabilities/review.json`) öffnet damit nur noch die
+  Startprobe. Entfernen hieße, die Hülle für drei Betriebssysteme zu ändern;
+  das ist hier nur für Windows übersetzbar und eine eigene Entscheidung.
+- **Einzelnes Entfernen aus der Auswahl** bot nur die frühere Oberfläche. Die
+  neue löst dasselbe über die Häkchen des Quellenkatalogs (so `PRODUCT.md`);
+  das ist kein Verlust, erklärt aber den verwaisten Befehl.
+- **52 Tests entfallen ersatzlos.** Sie prüften Verhalten der früheren
+  Oberfläche. Für die neue gibt es `tests/test-standalone-workspace.js` mit
+  535 Tests; ich habe nicht Test für Test abgeglichen, ob jedes dort geprüfte
+  Verhalten auch für die neue Oberfläche geprüft ist.
+- **`docs/canonical/TRACEABILITY.md`** nennt die entfernten Dateien an 18
+  älteren Stellen. Ein neuer Eintrag am Anfang sagt, dass diese Stellen den
+  damaligen Stand beschreiben; einzeln nachgezogen sind sie nicht.
+
+### Berichtigung
+
+In meiner Antwort an den Anwender vor dieser Änderung stand, der Backlog
+führe die Standardumschaltung als offen. Das war falsch gelesen: Die Zeile
+steht in einer als historisch gekennzeichneten Tabelle vom 08.10.2026. Der
+Backlog nennt `workspace.html` als regulären Einstieg und die
+Standardumschaltung als erledigt. Veraltet war nur ein Satz in
+`docs/canonical/PRODUCT.md`; er ist berichtigt. Entsprechend war auch die
+Begründung im Abschnitt „Was nicht umgesetzt ist“ der Nachmittagsrunde zu
+R-019 nicht tragfähig.
+
+### Nachweise
+
+| Lauf | Ergebnis |
+| --- | --- |
+| 53 Testdateien der Suite, die Oberfläche, Paket oder die geänderten Dokumente berühren | 51 bestanden; die zwei übrigen brauchen Aufrufparameter des Suite-Runners und bestehen in der Suite. |
+| `cargo test --locked`, `cargo clippy --all-targets --locked -- -D warnings` | 339 bestanden, 0 fehlgeschlagen, 3 ignoriert; Clippy ohne Warnung. Rust-Quellen sind unverändert. |
+| Gesamtsuite, Paket, Startprobe, nativer Lauf | siehe ERGEBNIS.md |
+
+### Grenzen
+
+- Nur Windows gebaut und bedient. Für macOS und Linux ändert sich der
+  eingebettete Ordner ebenso; übersetzt ist das hier nicht.
+- Die frühere Oberfläche lässt sich aus der Versionsgeschichte zurückholen;
+  sie enthielte dann keine der Korrekturen dieses Reviews.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -2109,6 +2222,8 @@ solche, die durchliefen:
 | A-044 | Was die Fundstelle eines Personenhinweises schützt, schützt auch jede weitere Stelle des Namens. | Die Fundstelle wird vor dem Kern verborgen und danach entschieden. | Verbergen ändert, was die Regeln um die Stelle sehen. | Dritte Gegenprüfung; Nachstellung am alten und neuen Kern | Widerlegt; weitere Stellen liest der Kern jetzt wie bisher, nur ein danach noch lesbarer Name wird Hinweis. |
 | A-045 | Redaktion und Schlussprüfung lesen denselben Text (so der Kommentar in `privacy/base.js`: beide können sich nicht widersprechen). | Beide nutzen dieselben Muster. | Die Schlussprüfung liest Platzhalter als Leerraum, die Redaktion nicht; ein ersetzter Name zwischen Label und Nummer trennte für die eine, was für die andere zusammenstand. | Nachstellung am RC178-Kern und am Endstand; Lesen von `scanResidual` | Widerlegt; behoben in `0bd5e26f`. In RC178 gleich. |
 | A-046 | Der zweite Blick der Redaktion ändert nur Dokumente, die bisher stoppten. | Er liefert, was die Schlussprüfung ohnehin meldete. | Die Erkennung hat weitere Aufrufer, und nicht jeder Fund der Schlussprüfung führte im Ablauf zum Stopp. | Gegenprüfung (read-only) mit rund 1 800 gezielten und 30 000 Zufallsfällen | Zum Teil widerlegt: mehr Ersetzung auch in Dokumenten, die durchliefen, und eine dadurch geschlossene Lücke; kein Fall mit mehr Klartext, kein neuer Stopp. |
+| A-047 | Der Backlog führt die Standardumschaltung auf die neue Oberfläche als offen (so meine Antwort an den Anwender und der Abschnitt „Was nicht umgesetzt ist“). | Eine Tabellenzeile im Backlog und ein Satz in `PRODUCT.md` sagen es. | Die Tabelle ist als historischer Schnitt vom 08.10.2026 gekennzeichnet; der aktuelle Abschnitt darüber nennt die Umschaltung erledigt. | Lesen des Backlogs im Zusammenhang, beim Berichtigen der Dokumente | Widerlegt; dem Anwender und im Bericht berichtigt. Die Empfehlung, die Oberfläche zu entfernen, hing nicht daran. |
+| A-048 | Die frühere Oberfläche zu entfernen kostet nichts, weil niemand sie lädt. | Das Fenster lädt nur `workspace.html`. | Tests lasen an ihr Eigenschaften ab, die die geladene Oberfläche nicht hatte. | Umbinden des Vertragstests | Zum Teil widerlegt: vier Erklärungen fehlten der geladenen Oberfläche (R-034, behoben); vier native Befehle verlieren ihren Aufrufer (offen). |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

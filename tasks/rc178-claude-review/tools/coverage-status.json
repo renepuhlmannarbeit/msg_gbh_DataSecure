@@ -376,10 +376,6 @@
       ],
       "remark": "im Oberflächen-Review nur teilweise gelesen (Z. 1-32, 184-691, 1278-1537); Einheiten außerhalb sind faktisch offen"
     },
-    "apps/datasecure-standalone/frontend/app.js": {
-      "symbolStatus": "OFFEN",
-      "remark": "alte Oberfläche; wird vom Hauptfenster nicht geladen, aber paketiert und von tests/test-standalone-frontend.js geprüft (R-019); nicht gelesen"
-    },
     "apps/datasecure-standalone/tauri-contract/src/main.rs": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
@@ -1462,7 +1458,7 @@
         "R-008",
         "R-020"
       ],
-      "remark": "workspace.html, review.html, workspace.css, review.css, review-workspace.css und design-tokens.css vollständig gelesen (Oberflächen-Review); index.html und styles.css (alte Oberfläche) nicht"
+      "remark": "workspace.html, review.html, workspace.css, review.css, review-workspace.css und design-tokens.css vollständig gelesen (Oberflächen-Review); index.html und styles.css (frühere Oberfläche) sind seit 1d908311 entfernt und wurden nie gelesen"
     },
     "G-TAURI-CONFIG": {
       "status": "TEILGEPRÜFT",
