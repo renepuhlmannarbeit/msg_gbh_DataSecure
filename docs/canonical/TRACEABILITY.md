@@ -2,6 +2,26 @@
 
 Stand: 16.10.2026 · 3.2.0-rc178 · veröffentlicht Standalone RC178 (Mac- und Windows-Test-Pre-Release, 20.11.2026), Linux RC159 / Cowork RC151
 
+RC178-Review R-019 und R-034 (BL-050.6) → Die frühere Standalone-Oberfläche
+(`frontend/index.html`, `frontend/app.js`, `frontend/styles.css`), ihr Test
+`test-standalone-frontend.js` und die Browser-Fixture
+`tests/manual/standalone-ui-browser.mjs` sind entfernt. Das Hauptfenster lud
+sie seit der Umstellung auf `frontend/workspace.html` nicht mehr, sie wurde
+aber weiter paketiert. Einträge weiter unten, die diese Dateien nennen,
+beschreiben den damaligen Stand und sind nicht nachgezogen. Die geladene
+Oberfläche besteht aus `workspace.html` mit `workspace.js`,
+`workflow-presentation.js`, `document-review.js` und `text-positions.js` sowie
+der eingebetteten `review.html` mit `review.js`.
+`test-standalone-loaded-frontend-contract.js` hält fest, dass der paketierte
+Ordner nichts anderes enthält; `test-standalone-workspace.js` und
+`test-standalone-desktop-contract.js` prüfen Verhalten und Vertrag an diesen
+Dateien. `workspace.js` erklärt jetzt auch `SOURCE_FOLDER_UNSUPPORTED_FILES`,
+`STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED` und
+`STANDALONE_RESULT_BINDING_UNAVAILABLE`, die bisher nur die frühere Oberfläche
+erklärte (R-034). Ohne Aufrufer in der geladenen Oberfläche bleiben die
+nativen Befehle `remove_admitted_source`, `open_review_window`,
+`open_local_ledger` und `shutdown`; sie sind nicht entfernt.
+
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor
 `sidecar_entry`/Ready. Der aktuelle lokale `tauri-contract/src/main.rs`

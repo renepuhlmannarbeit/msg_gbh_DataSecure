@@ -376,7 +376,10 @@ getrennter KI-Export ausgewählter freigegebener Markdown-Dateien implementiert.
 Maskierung/Zurücksetzen widerruft Freigaben. Der Text-Prüfstand ist noch kein
 vollständiger reversibler Entitätenplan. Bestehende Läufe werden nicht
 rückwirkend als menschlich geprüft behandelt. Keine privaten Nebenprodukte
-im KI-Export; native Paketabnahme bleibt Voraussetzung der Standardumschaltung.
+im KI-Export. Die Standardumschaltung ist erfolgt: `workspace.html` ist der
+einzige Einstieg des Hauptfensters, und die frühere Oberfläche (`index.html`,
+`app.js`, `styles.css`) ist im RC178-Review aus Paket und Repository entfernt
+worden. Die bediente native Abnahme bleibt davon getrennt offen (BACKLOG).
 Kein Passwortdialog.
 OCR-Prüfung für reine Konvertierung, Sammelbearbeitung und laufweite exakte
 Entitätsentscheidungen bleiben erhalten. Teil-Exporte lassen offene Dateien offen.

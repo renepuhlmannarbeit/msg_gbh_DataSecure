@@ -1243,6 +1243,9 @@ für Tastatur-/Fokusbedienung und [NN/g Nutzerkontrolle](https://www.nngroup.com
 für bewusst gesteuerte Navigation. Umsetzung und Nachweise: BL-010.29,
 `standalone/ui-contract.json`, `test-standalone-history`, `test-standalone-frontend`
 und private IPC-/Pakettests. Native Anwenderabnahme bleibt getrennt.
+Nachtrag aus dem RC178-Review: `test-standalone-frontend` prüfte die frühere
+Oberfläche und ist mit ihr entfernt; für die geladene Oberfläche gilt
+`test-standalone-workspace`.
 
 ## DS-087 – Breite Quellen einmal extrahieren und als Markdown anonymisieren
 

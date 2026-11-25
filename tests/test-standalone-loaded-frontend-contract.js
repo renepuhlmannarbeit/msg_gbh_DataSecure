@@ -1,11 +1,13 @@
 'use strict';
 
 // RC178 review R-019. The network and DOM-sink assertions of the desktop
-// contract test read frontend/app.js, the earlier interface that the main
-// window no longer loads. This test starts at the window configuration,
-// follows the documents and scripts the shipped windows really load, and
-// applies the closed rules to exactly those files. It is a source contract:
-// it proves the absence of a construct, not behaviour in a WebView.
+// contract test once read frontend/app.js, an earlier interface that the main
+// window no longer loaded; it has since been removed. This test starts at the
+// window configuration, follows the documents and scripts the shipped windows
+// really load, and applies the closed rules to exactly those files. It also
+// holds that nothing else lies in the packaged frontend folder. It is a
+// source contract: it proves the absence of a construct, not behaviour in a
+// WebView.
 const fs = require('node:fs');
 const path = require('node:path');
 const { createSuite } = require('./helpers');
@@ -46,6 +48,18 @@ test('the configured window loads the workspace and, through it, the review docu
   assert.deepEqual([...loadedScripts].sort(),
     ['document-review.js', 'review.js', 'text-positions.js', 'workflow-presentation.js', 'workspace.js']);
   assert.ok(!loadedScripts.has('app.js'), 'assertions about app.js say nothing about the shipped window');
+});
+
+test('the packaged frontend folder holds only what the shipped windows load', () => {
+  // Tauri embeds the whole folder. A page or script that no window loads is
+  // still shipped, keeps its access to the native commands and is tested by
+  // nobody who uses the product; the earlier interface was such a page.
+  const fonts = fs.readdirSync(path.join(frontend, 'fonts')).sort();
+  assert.deepEqual(fonts, ['InterVariable.woff2', 'LICENSE-Inter.txt']);
+  const packaged = fs.readdirSync(frontend, { withFileTypes: true });
+  assert.deepEqual(packaged.filter((entry) => entry.isDirectory()).map((entry) => entry.name), ['fonts']);
+  assert.deepEqual(packaged.filter((entry) => entry.isFile()).map((entry) => entry.name).sort(),
+    [...documents, ...loadedScripts, ...loadedStyles].sort());
 });
 
 test('loaded documents reference only local files and carry no inline script or handler', () => {

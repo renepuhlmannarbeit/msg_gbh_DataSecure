@@ -13,7 +13,14 @@ const capability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/ca
 const cargo = fs.readFileSync(path.join(root, 'tauri-contract/Cargo.toml'), 'utf8');
 const buildScript = fs.readFileSync(path.join(root, 'tauri-contract/build.rs'), 'utf8');
 const rust = fs.readFileSync(path.join(root, 'tauri-contract/src/main.rs'), 'utf8');
-const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
+// RC178 review R-019. The earlier interface (index.html, app.js, styles.css)
+// is removed. The renderer assertions below read the scripts the shipped
+// window loads; tests/test-standalone-loaded-frontend-contract.js derives the
+// same list from the window configuration.
+const workspaceScript = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
+const workspaceHtml = fs.readFileSync(path.join(root, 'frontend/workspace.html'), 'utf8');
+const frontend = ['workspace.js', 'workflow-presentation.js', 'document-review.js', 'review.js', 'text-positions.js']
+  .map(name => fs.readFileSync(path.join(root, 'frontend', name), 'utf8')).join('\n');
 const sidecar = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js'), 'utf8');
 const nativeSmoke = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
 const productVersion = require('../package.json').version;
@@ -453,30 +460,25 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(retirement, /process\.take\(\)/u, 'only the drained exact-owner callback removes the sidecar');
   assert.doesNotMatch(rust, /process_guard\.take\(\)/u, 'request timeout cannot immediately drop a native writer owner');
   assert.doesNotMatch(frontend, /source_path|source_paths|raw_content|fetch\s*\(/u);
-  assert.match(frontend, /choose\('select_files'\)/u);
-  assert.doesNotMatch(frontend, /setInterval\s*\(/u);
-  assert.match(frontend, /refreshInFlight/u);
-  assert.match(frontend, /function resetAdmissionUi\(\)/u);
-  assert.match(frontend, /code === 'STANDALONE_NO_ADMISSION'/u);
-  assert.match(frontend, /code === 'STANDALONE_START_FAILED'/u);
-  assert.match(frontend, /STANDALONE_SELECTION_INVALID/u);
-  assert.match(frontend, /code === 'STANDALONE_IPC_FAILED'/u);
-  assert.match(frontend, /code === 'STANDALONE_IPC_TIMEOUT'/u);
+  assert.match(workspaceScript, /pick\('select_files'\)/u);
+  // The status of the workspace is read by one re-armed timer, never by an
+  // interval, and one read at a time. (The document view keeps a heartbeat
+  // while a native copy runs; that is no status poll.)
+  assert.doesNotMatch(workspaceScript, /setInterval\s*\(/u);
+  assert.match(workspaceScript, /if \(closed \|\| refreshing\) return;/u);
+  assert.match(workspaceScript, /timer = setTimeout\(refresh, delay\)/u);
+  for (const code of ['STANDALONE_NO_ADMISSION', 'STANDALONE_START_FAILED', 'STANDALONE_SELECTION_INVALID',
+    'STANDALONE_IPC_FAILED', 'STANDALONE_IPC_TIMEOUT'])
+    assert.match(workspaceScript, new RegExp(`\\b${code}\\b`, 'u'), `${code} is known to the loaded interface`);
   assert.match(frontend, /configure_results/u);
   assert.match(frontend, /get_ui_context/u);
   assert.match(frontend, /await invoke\('frontend_ready', \{ nativeDropReady \}\)/u);
-  assert.match(frontend, /byId\(id\)\.textContent = label/u,
-    'local paths are rendered as text and never interpreted as markup');
-  assert.match(frontend, /byId\('suggested-result-folder'\)\.textContent = location/u,
-    'the proposed first-run path must also be rendered as text');
+  assert.match(workspaceScript, /\$\('destination'\)\.textContent = destination; \$\('settings-destination'\)\.textContent = destination;/u,
+    'the local result folder is rendered as text and never interpreted as markup');
   assert.doesNotMatch(frontend, /\.innerHTML\s*=/u,
     'frontend must not interpret local paths as markup');
   assert.match(frontend, /open_history_ledger/u);
   assert.match(frontend, /handoff_confirmed/u);
-  assert.match(frontend, /action-feedback/u);
-  assert.match(frontend, /activeView = 'home'/u);
-  assert.strictEqual((frontend.match(/switchView\('results'\)/gu) || []).length, 2,
-    'only explicit completion and resume actions open history; review is not a global navigation button');
   assert.match(sidecar, /local_target_requested/u);
   assert.match(sidecar, /local_target_resolved/u);
   assert.match(sidecar, /local_target_resolution_failed/u);
@@ -493,7 +495,8 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /requestAnimationFrame\(\(\) => requestAnimationFrame/u,
     'terminal visibility is acknowledged only after a paint opportunity');
   assert.match(frontend, /ack_terminal_presented/u);
-  assert.match(frontend, /presentationGeneration: generation/u,
+  assert.match(workspaceScript, /const presentationGeneration = state\.presentation_generation/u);
+  assert.match(workspaceScript, /invoke\('ack_terminal_presented', \{ presentationGeneration \}\)/u,
     'terminal acknowledgement is correlated to the rendered public state');
   assert.ok(capability.permissions.includes('allow-open-local-ledger'));
   assert.ok(capability.permissions.includes('allow-open-diagnostic-folder'));
@@ -538,17 +541,21 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
   assert.doesNotMatch(frontend, /listen\(['"]tauri:\/\/drag-drop/u);
   assert.ok(capability.permissions.includes('core:event:allow-listen'));
   assert.ok(!capability.permissions.includes('core:event:allow-emit'));
-  const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
+  const html = workspaceHtml;
   assert.match(html, /id="drop-zone"[^>]+aria-label="Dateiaufnahme"/u);
-  assert.match(html, /200 Dateien und 500 MB/u);
-  assert.match(frontend, /SOURCE_FOLDER_FILE_LIMIT:[^\n]*mehr als 200/u);
-  assert.match(frontend, /SOURCE_FOLDER_UNSUPPORTED_FILES:[^\n]*nicht unterstützte Datei/u);
-  assert.match(frontend, /Extraktionsstatus wird getrennt ausgewiesen/u);
+  assert.match(html, /bis 200 Dateien \/ 500 MB/u);
+  assert.match(workspaceScript, /SOURCE_FOLDER_FILE_LIMIT:[^\n]*Quellenkatalog ist zu groß/u);
+  assert.match(workspaceScript, /SOURCE_FOLDER_UNSUPPORTED_FILES:[^\n]*nicht unterstützte Datei/u);
+  assert.match(html, /OCR und Extraktion können Auslassungen enthalten/u);
   assert.doesNotMatch(frontend, /nur bei vollständiger Abdeckung freigegeben/u);
   assert.doesNotMatch(html, /nur vollständig extrahierter Inhalt freigegeben/u);
   assert.match(html, /id="select-files"/u);
   assert.match(html, /id="select-folder"/u);
-  assert.match(html, /value="" selected/u, 'purpose is an explicit user choice, not a startup default');
+  for (const id of ['mode-markdown', 'mode-anonymize']) {
+    const input = new RegExp(`<input id="${id}"[^>]*>`, 'u').exec(html)?.[0] || '';
+    assert.match(input, /name="mode" type="radio"/u);
+    assert.doesNotMatch(input, /\bchecked\b/u, 'purpose is an explicit user choice, not a startup default');
+  }
   assert.doesNotMatch(frontend, /invoke\(['"](?:convert|convert_only|start_conversion)/u);
 });
 
@@ -574,8 +581,8 @@ test('diagnostic bundles use a closed native save command independent of Core an
 });
 
 test('processing purpose crosses only the explicit desktop Start and cannot change on resume', () => {
-  assert.match(frontend, /call\('start_admitted_batch', startArguments\)/u);
-  assert.match(frontend, /startArguments\.outputNamingMode = outputNamingMode/u);
+  assert.match(workspaceScript, /perform\('start_admitted_batch', args\)/u);
+  assert.match(workspaceScript, /args\.outputNamingMode = \$\('naming-source'\)\.checked \? 'source-with-suffix' : 'neutral'/u);
   assert.match(rust, /#\[tauri::command\(rename_all = "camelCase"\)\]\s*async fn start_admitted_batch/u);
   assert.match(rust, /processing_mode: Option<String>/u);
   assert.match(rust, /output_naming_mode: Option<String>/u);
@@ -586,12 +593,12 @@ test('processing purpose crosses only the explicit desktop Start and cannot chan
     'MARKDOWN_CONVERSION_NOT_READY'), 'MARKDOWN_CONVERSION_NOT_READY');
   const continuing = rust.slice(rust.indexOf('async fn continue_current_batch'), rust.indexOf('async fn configure_results'));
   assert.doesNotMatch(continuing, /processing_mode/u);
-  assert.match(frontend, /byId\('continue'\)\.addEventListener\('click', \(\) => switchView\('results'\)\)/u);
-  assert.match(frontend, /call\('continue_current_batch'\)/u);
+  assert.match(workspaceScript, /perform\('continue_current_batch'\)/u);
+  assert.match(workspaceScript, /perform\(batchId \? 'continue_history_batch' : 'continue_current_batch', batchId \? \{ batchId \} : undefined\)/u,
+    'resuming carries the exact run and never a processing mode');
   assert.match(sidecar, /service\.continueCurrentBatch\(undefined, \{ requireObserved: true \}\)/u);
-  const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
-  assert.match(html, /value="" selected/u);
-  assert.match(html, /id="processing-mode"[^>]* disabled/u, 'startup cannot choose a mode before status is known');
+  assert.match(workspaceHtml, /<button id="start" class="primary" aria-disabled="true"/u,
+    'Start is unavailable until a purpose and a selection exist');
 });
 
 test('the native Windows smoke exercises the visible WebView lifecycle', () => {
@@ -699,11 +706,12 @@ test('every documented UI command has a narrow native permission and explicit su
   }
   assert.ok(!reviewCapability.permissions.includes('allow-get-run-failures'),
     'the review window does not need access to unrelated source file names');
-  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
-  const mainCommands = new Set([
-    ...[...(frontend + workspace).matchAll(/\b(?:invoke|choose|perform|pick)\('([a-z_]+)'/gu)].map(match => match[1]),
-    ...[...frontend.matchAll(/\bcommand: '([a-z_]+)'/gu)].map(match => match[1])
-  ]);
+  // Calls of the main window only: review.js runs in the embedded review
+  // document under its own capability.
+  const mainScripts = ['workspace.js', 'workflow-presentation.js', 'document-review.js', 'text-positions.js']
+    .map(name => fs.readFileSync(path.join(root, 'frontend', name), 'utf8')).join('\n');
+  const mainCommands = new Set(
+    [...mainScripts.matchAll(/\b(?:invoke|perform|pick)\('([a-z_]+)'/gu)].map(match => match[1]));
   assert.ok(mainCommands.has('get_run_failures'), 'regression must cover the actual renderer call, not only its contract');
   for (const command of mainCommands) {
     const permission = `allow-${command.replaceAll('_', '-')}`;

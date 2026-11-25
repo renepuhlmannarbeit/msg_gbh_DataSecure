@@ -476,7 +476,7 @@ Ergebnisbaum und die exakten CSV-Beziehungen. Der reale Standalone-Paket-Smoke
 nimmt seine vier Eingabeformate als Ordnerbaum auf und liest sämtliche Ergebnisse
 rekursiv; damit kann kein flacher Testadapter den Produktionsfehler verdecken.
 Die direkten Regressionen liegen in
-`test-ui-process-policy`, `test-standalone`, `test-standalone-frontend` und
+`test-ui-process-policy`, `test-standalone`, `test-standalone-workspace` und
 `test-standalone-desktop-contract`. `test-result-folder-export` prüft zusätzlich
 atomare Zuordnungspublikation, RC103-Migration, Manipulationsstopp und die
 harte Produktgrenze: Originalnamen erscheinen nie im Cowork-Ergebnisordner.
@@ -812,7 +812,7 @@ durch; die Suite bricht am ersten Fehler ab. Vorher sind herzustellen
 6. die vorbereitete Standalone-Laufzeit:
    `node scripts/prepare-standalone-runtime.mjs`.
 
-Ein Durchlauf umfasst 367 Dateien und dauert auf einem aktuellen
+Ein Durchlauf umfasst 366 Dateien und dauert auf einem aktuellen
 Windows-Rechner knapp 50 Minuten; rund ein Viertel davon entfällt auf
 `tests/test-result-generations.js`.
 

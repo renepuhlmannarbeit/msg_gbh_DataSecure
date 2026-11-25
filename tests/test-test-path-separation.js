@@ -153,7 +153,7 @@ test('the single automatic job covers standalone-only changes through fail-safe 
   const ci = workflow('ci.yml');
   const { classifyChangePaths } = require('../scripts/classify-ci-scope');
   assert.doesNotMatch(ci, /^    paths(?:-ignore)?:$/m);
-  assert.deepStrictEqual(classifyChangePaths(['apps/datasecure-standalone/frontend/app.js']),
+  assert.deepStrictEqual(classifyChangePaths(['apps/datasecure-standalone/frontend/workspace.js']),
     { profile: 'product', run_docs: false, run_product: true });
   assert.match(ci, /timeout-minutes: 10/u);
   assert.match(runner, /tests\/test-test-harness\.js/u);

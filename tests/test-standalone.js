@@ -917,11 +917,14 @@ test('Standalone UI contract limits source details to the local display', () => 
 });
 
 test('Standalone exposes history ledgers only when the backend marks the anonymized run ledger available', () => {
+  // RC178 review R-019: read from the loaded interface. It offers the mapping
+  // only for a run whose ledger the backend marks available, so a pure
+  // conversion, which has none, shows no such action.
   const source = fs.readFileSync(path.join(__dirname,
-    '../apps/datasecure-standalone/frontend/app.js'), 'utf8');
-  assert.match(source, /command: 'open_history_ledger'[^\n]*available: entry\.ledger_available === true/u);
-  assert.doesNotMatch(source, /command: 'open_history_ledger'[^\n]*available:.*failed_count/u);
-  assert.match(source, /Für reine Konvertierung wird keine Zuordnungsdatei erstellt/u);
+    '../apps/datasecure-standalone/frontend/workspace.js'), 'utf8');
+  assert.match(source, /if \(entry\.ledger_available\) privateGroup\.append\(action\('ledger', 'Dateizuordnung öffnen', \(\) => perform\('open_history_ledger', \{ batchId: entry\.batch_id \}\)\)\);/u);
+  assert.doesNotMatch(source, /open_history_ledger[^\n]*failed_count|failed_count[^\n]*open_history_ledger/u);
+  assert.match(source, /Enthalten echte Identitäten oder Dateinamen\. Nicht weitergeben\./u);
 });
 
 test('private batch-decision transport accepts only exact bounded approve/revoke selections', () => {

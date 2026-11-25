@@ -1463,11 +1463,14 @@ test('a native launcher on the wrong host cannot return a successful exit status
 });
 
 test('UI-only browser fixtures follow the current version without claiming native evidence', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'manual/standalone-ui-browser.mjs'), 'utf8');
-  assert.match(source, /require\(path\.join\(root, 'package\.json'\)\)\.version/u);
-  assert.equal(source.match(/product_version: productVersion/gu)?.length, 2);
+  // RC178 review R-019: the fixture of the earlier interface is removed with
+  // it. The browser fixtures of the loaded workspace take their synthetic
+  // bridge from this preview module.
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/lib/standalone-workspace-preview.mjs'), 'utf8');
+  assert.match(source, /const productVersion = JSON\.parse\(readFileSync\(new URL\('\.\.\/\.\.\/package\.json', import\.meta\.url\), 'utf8'\)\)\.version;/u);
+  assert.match(source, /if \(command === 'frontend_ready'\) return \{ product_version: \$\{JSON\.stringify\(productVersion\)\} \};/u);
   assert.doesNotMatch(source, /product_version: '3\.2\.0-rc\d+'/u);
-  assert.match(source, /UI fixture only/u);
+  assert.match(source, /explicit synthetic review adapter, never a native API/u);
 });
 
 test('Standalone/platform gates contain the actual review and integrity regressions without duplicate entries', () => {
