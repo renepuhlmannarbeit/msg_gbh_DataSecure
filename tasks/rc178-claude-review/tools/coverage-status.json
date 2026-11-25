@@ -596,6 +596,163 @@
     }
   },
   "symbols": {
+    "apps/datasecure-standalone/frontend/workspace.js": {
+      "errorDetails": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Details eines abgelehnten Befehls aus der Fehlerzeichenkette lesen; Aufrufer showError",
+        "trust": "Angaben von Core und Hülle, dort begrenzt und geprüft; hier erneut geprüft",
+        "invariant": "nur Text; höchstens zehn Namen (fünf Begleitdateien); kein Name mit Richtungs- oder Zeilentrennzeichen; nichts davon verlässt das Fenster",
+        "evidence": "tests/test-standalone-workspace.js (fünf Tests am Dateiende); Gegenprüfung mit ausgeführten Fällen; Darstellung in Edge ohne Fenster gesehen",
+        "findings": [
+          "R-035",
+          "R-036"
+        ],
+        "remark": "neu in d474a579; nicht nativ beobachtet; die Korrekturen nach der Gegenprüfung sind nur getestet"
+      },
+      "sourceDetailText": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Namen und Gründe abgelehnter Dateien als begrenzten Text aufbereiten; Aufrufer showError",
+        "trust": "Angaben von Core und Hülle, dort begrenzt und geprüft; hier erneut geprüft",
+        "invariant": "nur Text; höchstens zehn Namen (fünf Begleitdateien); kein Name mit Richtungs- oder Zeilentrennzeichen; nichts davon verlässt das Fenster",
+        "evidence": "tests/test-standalone-workspace.js (fünf Tests am Dateiende); Gegenprüfung mit ausgeführten Fällen; Darstellung in Edge ohne Fenster gesehen",
+        "findings": [
+          "R-035",
+          "R-036"
+        ],
+        "remark": "neu in d474a579; nicht nativ beobachtet; die Korrekturen nach der Gegenprüfung sind nur getestet"
+      },
+      "admissionHints": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "sagen, wie viele Dateien schon enthalten waren und welche Begleitdateien übersprungen wurden; Aufrufer pick und der Drop-Zweig",
+        "trust": "Angaben von Core und Hülle, dort begrenzt und geprüft; hier erneut geprüft",
+        "invariant": "nur Text; höchstens zehn Namen (fünf Begleitdateien); kein Name mit Richtungs- oder Zeilentrennzeichen; nichts davon verlässt das Fenster",
+        "evidence": "tests/test-standalone-workspace.js (fünf Tests am Dateiende); Gegenprüfung mit ausgeführten Fällen; Darstellung in Edge ohne Fenster gesehen",
+        "findings": [
+          "R-035",
+          "R-036"
+        ],
+        "remark": "neu in d474a579; nicht nativ beobachtet; die Korrekturen nach der Gegenprüfung sind nur getestet"
+      },
+      "renderBootstrapFailure": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "gehaltene Startverweigerung mit Ursache und Statustext anzeigen",
+        "evidence": "tests/test-standalone-workspace.js (drei Fälle für STANDALONE_DATA_ROOT_BUSY); nativer Lauf",
+        "findings": [
+          "R-028"
+        ],
+        "remark": "geändert in b71439b2; nur der neue Zweig beurteilt"
+      },
+      "counted": {
+        "status": "GEPRÜFT",
+        "purpose": "Zahl mit Einzahl- oder Mehrzahlform eines Hauptworts; Aufrufer die Zähltexte von Verlauf und Ergebnisdialog",
+        "trust": "Zähler aus dem öffentlichen Zustand; keine sichere Ganzzahl gilt als 0",
+        "invariant": "bei genau 1 die Einzahl, sonst die Mehrzahl",
+        "evidence": "tests/test-standalone-workspace.js (Ergebnisdialog, Verlauf, Wächter über die vier Oberflächendateien)",
+        "findings": [
+          "R-025"
+        ],
+        "remark": "vorhanden seit 2726675a; in 8c452ac4 an weiteren Stellen verwendet"
+      },
+      "closeQuestion": {
+        "status": "GEPRÜFT",
+        "purpose": "aus dem bekannten Stand die Art der Rückfrage bestimmen oder sagen, dass nichts arbeitet",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "presentClose": {
+        "status": "GEPRÜFT",
+        "purpose": "Rückfrage mit Text und Antworten anzeigen",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "receiveCloseRequest": {
+        "status": "GEPRÜFT",
+        "purpose": "Schließanfrage der Hülle beantworten: sofort schließen oder erst fragen, dann quittieren",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "confirmClose": {
+        "status": "GEPRÜFT",
+        "purpose": "Schließen für die letzte Anfrage bestätigen",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "withdrawClose": {
+        "status": "GEPRÜFT",
+        "purpose": "Rückfrage schließen und der Hülle melden, dass der Anwender bleibt",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "settleClose": {
+        "status": "GEPRÜFT",
+        "purpose": "nach jedem gelesenen Status: nach der Pause schließen, überholte Rückfrage zurückziehen oder erneuern",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "stayOpen": {
+        "status": "GEPRÜFT",
+        "purpose": "Antwort „bleiben“ und Esc",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "workBegins": {
+        "status": "GEPRÜFT",
+        "purpose": "einen Befehl, der Arbeit anstößt oder fortsetzt, als laufend zählen",
+        "trust": "eigener Zustand der Oberfläche",
+        "invariant": "kein stilles Schließen, solange ein solcher Befehl läuft oder sein Ergebnis nicht gelesen ist",
+        "evidence": "tests/test-standalone-workspace.js (Antworten der geführten Prüfung, Fortsetzen, unbestätigter Start; 53 von 55 Verfälschungen erkannt); Gegenprüfung ohne Befund",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste"
+      },
+      "workReturns": {
+        "status": "GEPRÜFT",
+        "purpose": "den Befehl abmelden und die Marke erneuern, damit nur ein danach begonnenes Statuslesen sie löst",
+        "trust": "eigener Zustand der Oberfläche",
+        "invariant": "kein stilles Schließen, solange ein solcher Befehl läuft oder sein Ergebnis nicht gelesen ist",
+        "evidence": "tests/test-standalone-workspace.js (Antworten der geführten Prüfung, Fortsetzen, unbestätigter Start; 53 von 55 Verfälschungen erkannt); Gegenprüfung ohne Befund",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste"
+      }
+    },
     "plugins/data-secure/server/privacy/engine.js": {
       "findLiteralSpans": {
         "status": "GEPRÜFT",
@@ -1146,127 +1303,6 @@
           "R-028"
         ],
         "remark": "geändert in b71439b2; beurteilt sind die beiden wartenden Öffnungen, die übrigen Schritte über das Lesen der Datei"
-      }
-    },
-    "apps/datasecure-standalone/frontend/workspace.js": {
-      "renderBootstrapFailure": {
-        "status": "TEILGEPRÜFT",
-        "purpose": "gehaltene Startverweigerung mit Ursache und Statustext anzeigen",
-        "evidence": "tests/test-standalone-workspace.js (drei Fälle für STANDALONE_DATA_ROOT_BUSY); nativer Lauf",
-        "findings": [
-          "R-028"
-        ],
-        "remark": "geändert in b71439b2; nur der neue Zweig beurteilt"
-      },
-      "counted": {
-        "status": "GEPRÜFT",
-        "purpose": "Zahl mit Einzahl- oder Mehrzahlform eines Hauptworts; Aufrufer die Zähltexte von Verlauf und Ergebnisdialog",
-        "trust": "Zähler aus dem öffentlichen Zustand; keine sichere Ganzzahl gilt als 0",
-        "invariant": "bei genau 1 die Einzahl, sonst die Mehrzahl",
-        "evidence": "tests/test-standalone-workspace.js (Ergebnisdialog, Verlauf, Wächter über die vier Oberflächendateien)",
-        "findings": [
-          "R-025"
-        ],
-        "remark": "vorhanden seit 2726675a; in 8c452ac4 an weiteren Stellen verwendet"
-      },
-      "closeQuestion": {
-        "status": "GEPRÜFT",
-        "purpose": "aus dem bekannten Stand die Art der Rückfrage bestimmen oder sagen, dass nichts arbeitet",
-        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
-        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
-        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
-      },
-      "presentClose": {
-        "status": "GEPRÜFT",
-        "purpose": "Rückfrage mit Text und Antworten anzeigen",
-        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
-        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
-        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
-      },
-      "receiveCloseRequest": {
-        "status": "GEPRÜFT",
-        "purpose": "Schließanfrage der Hülle beantworten: sofort schließen oder erst fragen, dann quittieren",
-        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
-        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
-        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
-      },
-      "confirmClose": {
-        "status": "GEPRÜFT",
-        "purpose": "Schließen für die letzte Anfrage bestätigen",
-        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
-        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
-        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
-      },
-      "withdrawClose": {
-        "status": "GEPRÜFT",
-        "purpose": "Rückfrage schließen und der Hülle melden, dass der Anwender bleibt",
-        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
-        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
-        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
-      },
-      "settleClose": {
-        "status": "GEPRÜFT",
-        "purpose": "nach jedem gelesenen Status: nach der Pause schließen, überholte Rückfrage zurückziehen oder erneuern",
-        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
-        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
-        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
-      },
-      "stayOpen": {
-        "status": "GEPRÜFT",
-        "purpose": "Antwort „bleiben“ und Esc",
-        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
-        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
-        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
-      },
-      "workBegins": {
-        "status": "GEPRÜFT",
-        "purpose": "einen Befehl, der Arbeit anstößt oder fortsetzt, als laufend zählen",
-        "trust": "eigener Zustand der Oberfläche",
-        "invariant": "kein stilles Schließen, solange ein solcher Befehl läuft oder sein Ergebnis nicht gelesen ist",
-        "evidence": "tests/test-standalone-workspace.js (Antworten der geführten Prüfung, Fortsetzen, unbestätigter Start; 53 von 55 Verfälschungen erkannt); Gegenprüfung ohne Befund",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste"
-      },
-      "workReturns": {
-        "status": "GEPRÜFT",
-        "purpose": "den Befehl abmelden und die Marke erneuern, damit nur ein danach begonnenes Statuslesen sie löst",
-        "trust": "eigener Zustand der Oberfläche",
-        "invariant": "kein stilles Schließen, solange ein solcher Befehl läuft oder sein Ergebnis nicht gelesen ist",
-        "evidence": "tests/test-standalone-workspace.js (Antworten der geführten Prüfung, Fortsetzen, unbestätigter Start; 53 von 55 Verfälschungen erkannt); Gegenprüfung ohne Befund",
-        "findings": [
-          "R-032"
-        ],
-        "remark": "neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste"
       }
     },
     "apps/datasecure-standalone/tauri-contract/src/close_prompt.rs": {

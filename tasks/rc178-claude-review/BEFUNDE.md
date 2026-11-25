@@ -130,8 +130,8 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`, `d41a042b`, `34de4509`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft. Die Rückfrage „Aufbewahrung 0 Tage“ ist im Standalone-Paket nicht erreichbar |
 | R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`, `0bd5e26f`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Der als Folge häufiger erreichte Stopp bei `Label Name Nummer` ist in `0bd5e26f` behoben |
 | R-034 | niedrig | Oberfläche, alle | Die geladene Oberfläche erklärt vier Fehlercodes nicht, die der Core weiter liefert (`SOURCE_FOLDER_UNSUPPORTED_FILES`, `STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED`, `STANDALONE_RESULT_BINDING_UNAVAILABLE`), und zeigt dafür einen allgemeinen Satz. Erklärt hat sie nur die frühere Oberfläche; der Vertragstest prüfte dort und bestand. Beim Umbinden des Tests gefunden; in RC178 gleich. | BL-050.6 | behoben (`8cf5dd93`) |
-| R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | offen |
-| R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | offen |
+| R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | behoben (`d474a579`) für den Fall, den der Core erkennt; ein zugeordneter Laufwerksbuchstabe und ein Mount unter `/Volumes` gelten dem Core nicht als Netzlaufwerk (vorbestehend, offen) |
+| R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | behoben (`d474a579`); nicht nativ beobachtet |
 
 ## Einzelbefunde
 
@@ -2225,7 +2225,8 @@ nachgesehen.
   ohne Hinweis auf einem Netzlaufwerk. Kein Abfluss an Dritte durch das
   Produkt; der Anwender verliert die Information, die die Entscheidung DS-080
   ihm zusichert.
-- **Status:** offen. Nicht nativ beobachtet (kein Netzlaufwerk im Testprofil).
+- **Status:** behoben in `d474a579`, siehe „R-035 und R-036 · Umsetzung“. Nicht
+  nativ beobachtet (kein Netzlaufwerk im Testprofil).
 
 ### R-036 · Fehlerdetails und Erklärungen des Core erreichen die Oberfläche nicht
 
@@ -2249,7 +2250,8 @@ nachgesehen.
 - **Auswirkung:** niedrig bis mittel. Der Anwender erfährt bei einer
   abgelehnten Auswahl nicht, welche Datei der Grund ist, etwa eine
   Office-Sperrdatei `~$…`. Kein Datenschutzrisiko.
-- **Status:** offen. Vier Codes derselben Art sind als R-034 schon ergänzt;
+- **Status:** behoben in `d474a579`, siehe „R-035 und R-036 · Umsetzung“.
+  Vier Codes derselben Art sind als R-034 schon ergänzt;
   diese fünf und die Details hat erst der Einzelabgleich gezeigt. Welche der
   Codes im Ablauf mit dem Quellenkatalog praktisch noch auftreten, habe ich
   nur für `SOURCE_SELECTION_REJECTED` am Code nachvollzogen.
@@ -2284,6 +2286,78 @@ nachgesehen.
   Umgebung aus. Im Fenster beobachtet ist damit nichts.
 - Ein Durchgang hat sein Kontingent überschritten und alle 13 Tests
   bearbeitet; keiner hat einen Test als „nicht geprüft“ zurückgegeben.
+
+## R-035 und R-036 · Umsetzung
+
+Auftrag des Anwenders nach dem Einzelabgleich: beide Befunde beheben.
+Ergebnis ist der Commit `d474a579`. Geändert sind nur die geladene Oberfläche
+(`workspace.js`, eine Eigenschaft in `workspace.css`) und ihr Test; Core und
+Hülle lieferten die Angaben schon.
+
+### Was sich geändert hat
+
+| Befund | Änderung | Ort |
+| --- | --- | --- |
+| R-035 | Nach der Wahl eines Ergebnisordners auf einem Netzlaufwerk trägt die Bestätigung den Hinweis nach DS-080, ohne Pfad: Ergebnisse und die vertraulichen Zuordnungsdateien können darüber an andere Systeme übertragen werden. | `workspace.js`, `configure` |
+| R-036 | Eine abgelehnte Auswahl nennt bis zu zehn Dateien mit ihrem Grund und zählt den Rest; das gilt für die Auswahl über den Dialog und für das Hineinziehen. | `errorDetails`, `sourceDetailText`, `showError` |
+| R-036 | Fünf Codes haben einen eigenen Satz: `SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `STANDALONE_DROP_MIXED`, `MARKDOWN_CONVERSION_NOT_READY`, `SOURCE_SNAPSHOT_CHANGED`. | Tabelle `reasons` |
+| R-036 | Eine angenommene Auswahl sagt, wie viele Dateien schon enthalten waren und welche bekannten Begleitdateien übersprungen wurden (bis zu fünf Namen). | `admissionHints`, `pick`, Drop-Zweig |
+| beide | Die Meldungszeile stellt Zeilenumbrüche dar. | `workspace.css`, `.notice` |
+
+Namen erscheinen nur als Text in der Meldung. Kein Befehl und kein anderes
+Element der Oberfläche erhält sie; das hält ein Test fest.
+
+### Gegenprüfung
+
+Ein unabhängiger Read-only-Lauf mit dem Auftrag zu widerlegen, vor dem Commit.
+Kein Weg gefunden, auf dem ein Dateiname die Oberfläche verlässt; kein
+Typ- oder Prototypfehler; keine Nebenwirkung auf andere Aufrufer von
+`showError`. Vier Punkte:
+
+| Punkt | Folge |
+| --- | --- |
+| Die Meldung hatte keine Obergrenze: 200 Namen zu je 1 024 Zeichen ergaben einen angesagten Text von rund 210 000 Zeichen. | Behoben: höchstens zehn Namen, bei Begleitdateien fünf, der Rest als Zahl. |
+| Richtungs- und Zeilentrennzeichen in einem Namen (U+202E, U+2028 und verwandte) wurden im Satz ausgegeben. | Behoben für die neuen Sätze: ein solcher Name wird gezählt, nicht gezeigt. Im Dateibaum bleibt es wie bisher (Rest von R-020). |
+| Der Core erkennt ein Netzlaufwerk nur am UNC-Pfad (`\\server\…`). Ein zugeordneter Laufwerksbuchstabe und ein Mount unter `/Volumes` lösen den Hinweis nicht aus. | Nicht behoben; liegt im Core (`gateway/result-folder-config.js`, `isNetworkResultFolder`), war schon vorher so und ist eine Frage an DS-080. Siehe Grenzen. |
+| Es gebe keinen Test, dass der Standalone-Core das Feld liefert. | Trifft nicht zu: `tests/test-standalone.js`, `networkResultFolderNoticeCase`, prüft genau das. |
+
+Die beiden Korrekturen nach der Gegenprüfung sind nicht mehr unabhängig
+gegengeprüft, nur getestet.
+
+### Eigener Fehler dieser Runde
+
+Beim Einbau des Filters für Richtungszeichen hat mein Editierwerkzeug die
+Escape-Schreibweisen als echte, unsichtbare Zeichen in `workspace.js` und in
+die Testdatei geschrieben. Ein wörtliches U+2028 in einem regulären Ausdruck
+ist ein Zeilenende; `workspace.js` war damit nicht mehr lesbar. Aufgefallen ist
+es, weil der Testlauf ohne Ergebniszeile endete. Vor dem Commit behoben; beide
+Dateien sind auf solche Zeichen durchsucht und enthalten keine.
+
+### Nachweise
+
+| Lauf | Ergebnis |
+| --- | --- |
+| `tests/test-standalone-workspace.js` | 540 Tests bestanden, davon fünf neu. An der Oberfläche von `1d908311` schlagen diese fünf fehl. |
+| Nachbartests: Vertragstest der Hülle (43), Vertrag der geladenen Oberfläche (5), `test-standalone.js` (91), Dokumentansicht (308), Prüfansicht (74) | bestanden |
+| Gesamtsuite, Paket, Startprobe, nativer Lauf | siehe ERGEBNIS.md |
+
+### Grenzen
+
+- **Netzlaufwerk nur am UNC-Pfad erkannt.** Wer eine Freigabe als
+  Laufwerksbuchstaben eingebunden hat oder am Mac unter `/Volumes` wählt,
+  bekommt den Hinweis weiterhin nicht. Auf macOS erscheint er damit praktisch
+  nie. R-035 ist für den Fall behoben, den der Core erkennt.
+- **Nicht nativ beobachtet.** Im Testprofil gibt es kein Netzlaufwerk, und eine
+  abgelehnte Auswahl habe ich über die Fensterbedienung nicht ausgelöst. Belegt
+  ist das Verhalten durch Tests in einer nachgebildeten Umgebung; ob der
+  Zeilenumbruch im Fenster so aussieht wie gedacht, ist nicht gesehen.
+- **Höchstens zehn Namen.** Bei einer großen abgelehnten Auswahl sieht der
+  Anwender die ersten zehn und eine Zahl; eine vollständige Liste gibt es an
+  dieser Stelle nicht.
+- **Die drei nicht belegten Punkte des Abgleichs** (Prüfstart-Fehler,
+  Rückmeldung nach erfolgreichem Öffnen, möglicher Wettlauf beim Leeren der
+  Auswahl) und die 38 nicht oder nur zum Teil getesteten Verhalten sind
+  unverändert.
 
 ## Annahmen und Revalidierung
 
@@ -2337,6 +2411,8 @@ nachgesehen.
 | A-047 | Der Backlog führt die Standardumschaltung auf die neue Oberfläche als offen (so meine Antwort an den Anwender und der Abschnitt „Was nicht umgesetzt ist“). | Eine Tabellenzeile im Backlog und ein Satz in `PRODUCT.md` sagen es. | Die Tabelle ist als historischer Schnitt vom 08.10.2026 gekennzeichnet; der aktuelle Abschnitt darüber nennt die Umschaltung erledigt. | Lesen des Backlogs im Zusammenhang, beim Berichtigen der Dokumente | Widerlegt; dem Anwender und im Bericht berichtigt. Die Empfehlung, die Oberfläche zu entfernen, hing nicht daran. |
 | A-048 | Die frühere Oberfläche zu entfernen kostet nichts, weil niemand sie lädt. | Das Fenster lädt nur `workspace.html`. | Tests lasen an ihr Eigenschaften ab, die die geladene Oberfläche nicht hatte. | Umbinden des Vertragstests | Zum Teil widerlegt: vier Erklärungen fehlten der geladenen Oberfläche (R-034, behoben); vier native Befehle verlieren ihren Aufrufer (offen). |
 | A-049 | Was die 52 Tests der früheren Oberfläche prüften, prüfen die 535 Tests der neuen ebenfalls (so meine Einschätzung beim Entfernen). | Die neue Oberfläche hat die größere Testdatei. | Die Tests der neuen Oberfläche sind um ihre eigenen Abläufe gebaut; niemand hat die alten Fälle übertragen. | Einzelabgleich in vier unabhängigen Durchgängen, Lücken selbst nachgeprüft | Widerlegt: 2 von 52 gedeckt, 29 teilweise, 9 ungeprüft; zwei Verhalten fehlen der geladenen Oberfläche (R-035, R-036). |
+| A-050 | Eine Meldung mit den Namen der abgelehnten Dateien ist so groß, wie Core und Hülle sie begrenzen. | Beide begrenzen auf 200 Namen. | 200 Namen zu je 1 024 Zeichen sind eine einzige angesagte Meldung von rund 210 000 Zeichen. | Gegenprüfung (read-only) mit ausgeführtem Fall | Widerlegt; die Oberfläche zeigt höchstens zehn Namen und zählt den Rest. |
+| A-051 | Was ich in eine Quelldatei schreibe, steht dort so, wie ich es geschrieben habe. | Die Werkzeuge melden Erfolg. | Escape-Schreibweisen für unsichtbare Zeichen kamen als die Zeichen selbst an; ein regulärer Ausdruck in `workspace.js` war damit kein gültiges JavaScript mehr. | Testlauf ohne Ergebniszeile; Suche nach den Codepunkten in beiden Dateien | Widerlegt; vor dem Commit behoben. Seitdem Syntaxprüfung und Zeichensuche nach solchen Änderungen. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

@@ -53,6 +53,11 @@ gelten für den Stand `1d908311`. „workspace-Test“ meint
   `clearFiles` leert die Auswahl nach der Antwort auf `cancel_admission`
   ohne zu prüfen, ob inzwischen ein Drop eine neue Auswahl gebracht hat.
 
+**Nachtrag:** R-035 und R-036 sind in `d474a579` behoben. Die Zeilen 9 und 49 beschreiben
+den Stand davor; dasselbe gilt für die Teile der Zeilen 7, 8, 28, 33, 34 und
+48, die fehlende Namen, Texte oder Hinweise nennen. Die Tabelle selbst ist
+nicht nachgezogen.
+
 Die Tabelle beurteilt die Tests, nicht die Bedienbarkeit. Ob ein Verhalten im
 Fenster wirklich so wirkt, zeigt nur ein nativer Lauf.
 

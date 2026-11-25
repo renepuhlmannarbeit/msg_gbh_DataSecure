@@ -91,6 +91,15 @@ open(['content-graph.js', 'word-table-grid.js', 'drawing-table-grid.js', 'xlsx-s
 full('Oberflächen', ['workspace.js', 'review.js', 'text-positions.js', 'workflow-presentation.js'].map((file) => `${app}frontend/${file}`),
   ['R-008', 'R-009', 'R-020', 'R-025']);
 part('Oberflächen', [[`${app}frontend/document-review.js`, 'Z. 1-32, 184-691, 1278-1537', ['R-012', 'R-020']]]);
+for (const [name, purpose] of [
+  ['errorDetails', 'Details eines abgelehnten Befehls aus der Fehlerzeichenkette lesen; Aufrufer showError'],
+  ['sourceDetailText', 'Namen und Gründe abgelehnter Dateien als begrenzten Text aufbereiten; Aufrufer showError'],
+  ['admissionHints', 'sagen, wie viele Dateien schon enthalten waren und welche Begleitdateien übersprungen wurden; Aufrufer pick und der Drop-Zweig']]) {
+  sym(`${app}frontend/workspace.js`, name, { status: 'TEILGEPRÜFT', purpose, trust: 'Angaben von Core und Hülle, dort begrenzt und geprüft; hier erneut geprüft',
+    invariant: 'nur Text; höchstens zehn Namen (fünf Begleitdateien); kein Name mit Richtungs- oder Zeilentrennzeichen; nichts davon verlässt das Fenster',
+    evidence: 'tests/test-standalone-workspace.js (fünf Tests am Dateiende); Gegenprüfung mit ausgeführten Fällen; Darstellung in Edge ohne Fenster gesehen',
+    findings: ['R-035', 'R-036'], remark: 'neu in d474a579; nicht nativ beobachtet; die Korrekturen nach der Gegenprüfung sind nur getestet' });
+}
 // frontend/app.js (die frühere Oberfläche) ist seit 1d908311 entfernt; ihre 46
 // offenen Einheiten sind damit aus dem Register gefallen, nicht geprüft worden.
 
