@@ -817,9 +817,16 @@ Windows-Rechner knapp 50 Minuten; rund ein Viertel davon entfällt auf
 `tests/test-result-generations.js`.
 
 `npm run audit:standalone` fragt für die vier paketierten Pilot-Lockfiles den
-npm-Advisory-Dienst ab und meldet die Entwicklungsabhängigkeiten getrennt. Der
-Befehl braucht Netzzugang, installiert nichts und gehört deshalb nicht zur
-Offline-Suite; Rust-Crates und die gepinnte Node.js-Laufzeit deckt er nicht ab.
+npm-Advisory-Dienst ab und meldet die Entwicklungsabhängigkeiten getrennt. Die
+gesperrten Rust-Crates der Hülle prüft er mit `cargo audit` gegen die
+RustSec-Datenbank; dafür muss `cargo-audit` installiert sein
+(`cargo install cargo-audit --locked`). Fehlt das Werkzeug, gelten die Crates
+als nicht geprüft und der Befehl schlägt fehl; `-- --skip-rust` lässt den Teil
+ausdrücklich aus und nennt das im Ergebnis. Gemeldete Schwachstellen lassen
+den Befehl fehlschlagen, Hinweise auf nicht gepflegte oder als unsound
+gemeldete Crates werden nur aufgeführt. Der Befehl braucht Netzzugang,
+installiert nichts und gehört deshalb nicht zur Offline-Suite; die gepinnte
+Node.js-Laufzeit deckt er nicht ab.
 
 ## Umgang mit Fehlern
 
