@@ -13,6 +13,7 @@
 // and the check fails, unless --skip-rust says so on purpose. The pinned
 // Node.js runtime is outside its scope.
 import childProcess from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,14 +42,20 @@ function auditRust() {
     cwd: root, encoding: 'utf8', shell: process.platform === 'win32', windowsHide: true,
     maxBuffer: 32 * 1024 * 1024, timeout: 300_000
   });
+  if (result.error) return { error: result.error.code === 'ETIMEDOUT' ? 'RUST_AUDIT_TIMEOUT' : 'RUST_AUDIT_NOT_RUN' };
   let report;
   try { report = JSON.parse(result.stdout); } catch {
-    return { error: /no such (?:sub)?command/u.test(String(result.stderr)) || result.error ? 'RUST_AUDIT_TOOL_MISSING' : 'AUDIT_OUTPUT_INVALID' };
+    return { error: /no such (?:sub)?command/u.test(String(result.stderr)) ? 'RUST_AUDIT_TOOL_MISSING' : 'AUDIT_OUTPUT_INVALID' };
   }
+  // The report has to describe this lock file and agree with itself and with
+  // the exit code; a report about nothing is not a clean result.
+  const locked = fs.readFileSync(path.join(root, lock), 'utf8').split(/\r?\n/u).filter((line) => line === '[[package]]').length;
   const found = report.vulnerabilities?.list;
-  if (!Array.isArray(found) || !Number.isSafeInteger(report.lockfile?.['dependency-count'])) return { error: 'AUDIT_OUTPUT_INVALID' };
-  const crate = (entry) => `${entry.package?.name} ${entry.package?.version} (${entry.advisory?.id})`;
-  return { crates: report.lockfile['dependency-count'], advisories: found.map(crate).sort(),
+  if (!Array.isArray(found) || locked < 1 || report.lockfile?.['dependency-count'] !== locked ||
+      report.vulnerabilities.found !== (found.length > 0) || report.vulnerabilities.count !== found.length ||
+      result.status !== (found.length ? 1 : 0) || !(report.database?.['advisory-count'] > 0)) return { error: 'AUDIT_OUTPUT_INVALID' };
+  const crate = (entry) => `${entry.package?.name} ${entry.package?.version} (${entry.advisory?.id ?? entry.kind ?? 'Hinweis'})`;
+  return { crates: locked, database: report.database['advisory-count'], advisories: found.map(crate).sort(),
     warnings: Object.values(report.warnings || {}).flat().map(crate).sort() };
 }
 
@@ -64,7 +71,7 @@ const rust = skipRust ? null : auditRust();
 if (skipRust) console.log('Rust-Crates der Hülle: NICHT GEPRÜFT (--skip-rust)');
 else if (rust.error) console.log(`Rust-Crates der Hülle: ${rust.error}${rust.error === 'RUST_AUDIT_TOOL_MISSING' ? ' – cargo-audit ist nicht installiert; die Crates sind nicht geprüft' : ''}`);
 else {
-  console.log(`Rust-Crates der Hülle: ${rust.crates} Crates, ${rust.advisories.length} Befunde${rust.advisories.length ? ` – ${rust.advisories.join(', ')}` : ''}`);
+  console.log(`Rust-Crates der Hülle: ${rust.crates} Crates gegen ${rust.database} Advisories, ${rust.advisories.length} Befunde${rust.advisories.length ? ` – ${rust.advisories.join(', ')}` : ''}`);
   if (rust.warnings.length) console.log(`Rust-Crates der Hülle: ${rust.warnings.length} Hinweise, keine gemeldete Schwachstelle (nicht gepflegt oder unsound) – ${rust.warnings.join(', ')}`);
 }
 const failed = results.some((result) => result.error || result.total > 0) || Boolean(rust && (rust.error || rust.advisories.length));
