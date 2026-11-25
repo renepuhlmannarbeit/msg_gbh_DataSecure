@@ -102,6 +102,13 @@
     STANDALONE_ADMISSION_TIMEOUT: 'Die Aufnahme konnte innerhalb von fünf Minuten nicht bestätigt werden. Bitte den lokalen Zugriff prüfen.',
     SOURCE_FOLDER_FILE_LIMIT: 'Der sichere Quellenkatalog ist zu groß (höchstens 1.000 Dateien oder zu lange Dateilisten). Bitte einen kleineren Unterordner auswählen. Die bisherige Auswahl bleibt erhalten.',
     SOURCE_FOLDER_SIZE_LIMIT: 'Die aufgenommenen Dateien überschreiten zusammen 500 MB. Bitte einen kleineren Ordner auswählen.',
+    // RC178 review R-034. The Core still reports these four codes; only the
+    // earlier interface explained them, and this one showed its general
+    // sentence. Wording follows the Core's own fixed messages.
+    SOURCE_FOLDER_UNSUPPORTED_FILES: 'Der Ordner enthält mindestens eine nicht unterstützte Datei. Es wurde kein Stapel gestartet; bitte diese Datei entfernen oder einen passenderen Ordner wählen.',
+    STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
+    BATCH_PSEUDONYM_CAPACITY_EXCEEDED: 'Die gemeinsame Pseudonymzuordnung dieses Laufs hat ihre Grenze erreicht. Es wurde kein ungeprüftes Ergebnis veröffentlicht. Bitte die verbleibenden Dateien in einem kleineren neuen Lauf verarbeiten.',
+    STANDALONE_RESULT_BINDING_UNAVAILABLE: 'Die bisherigen Ergebniszuordnungen konnten nicht sicher geprüft werden. Der Ergebnisordner blieb unverändert; bitte den lokalen Verlauf und die Diagnose prüfen.',
     STANDALONE_DOCUMENT_VIEW_UNAVAILABLE: 'Die Ergebnisprüfung konnte nicht geöffnet werden. Bitte das vollständige App-Paket verwenden. Die gespeicherten Entscheidungen bleiben erhalten; kein Lauf wurde neu gestartet.'
   };
   const terminalCoreStartupCodes = new Set([
