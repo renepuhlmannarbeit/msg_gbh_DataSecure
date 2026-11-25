@@ -130,6 +130,8 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`, `d41a042b`, `34de4509`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft. Die Rückfrage „Aufbewahrung 0 Tage“ ist im Standalone-Paket nicht erreichbar |
 | R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`, `0bd5e26f`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Der als Folge häufiger erreichte Stopp bei `Label Name Nummer` ist in `0bd5e26f` behoben |
 | R-034 | niedrig | Oberfläche, alle | Die geladene Oberfläche erklärt vier Fehlercodes nicht, die der Core weiter liefert (`SOURCE_FOLDER_UNSUPPORTED_FILES`, `STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED`, `STANDALONE_RESULT_BINDING_UNAVAILABLE`), und zeigt dafür einen allgemeinen Satz. Erklärt hat sie nur die frühere Oberfläche; der Vertragstest prüfte dort und bestand. Beim Umbinden des Tests gefunden; in RC178 gleich. | BL-050.6 | behoben (`8cf5dd93`) |
+| R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | offen |
+| R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | offen |
 
 ## Einzelbefunde
 
@@ -2142,7 +2144,9 @@ nicht geändert.
 - **52 Tests entfallen ersatzlos.** Sie prüften Verhalten der früheren
   Oberfläche. Für die neue gibt es `tests/test-standalone-workspace.js` mit
   535 Tests; ich habe nicht Test für Test abgeglichen, ob jedes dort geprüfte
-  Verhalten auch für die neue Oberfläche geprüft ist.
+  Verhalten auch für die neue Oberfläche geprüft ist. Nachtrag: Der
+  Einzelabgleich ist nachgeholt, siehe den Abschnitt „R-035 und R-036 ·
+  Abgleich der 52 entfallenen Tests“. Zwei der 52 Verhalten sind dort gedeckt.
 - **`docs/canonical/TRACEABILITY.md`** nennt die entfernten Dateien an 18
   älteren Stellen. Ein neuer Eintrag am Anfang sagt, dass diese Stellen den
   damaligen Stand beschreiben; einzeln nachgezogen sind sie nicht.
@@ -2172,6 +2176,114 @@ R-019 nicht tragfähig.
   eingebettete Ordner ebenso; übersetzt ist das hier nicht.
 - Die frühere Oberfläche lässt sich aus der Versionsgeschichte zurückholen;
   sie enthielte dann keine der Korrekturen dieses Reviews.
+
+## R-035 und R-036 · Abgleich der 52 entfallenen Tests
+
+Auftrag des Anwenders nach dem Entfernen der früheren Oberfläche: die 52
+entfallenen Tests einzeln abgleichen. Die vollständige Tabelle steht in
+[ABGLEICH-ALTE-OBERFLAECHE.md](ABGLEICH-ALTE-OBERFLAECHE.md). Am Produkt ist
+in dieser Runde nichts geändert.
+
+### Ergebnis
+
+| Urteil | Anzahl | Bedeutung |
+| --- | --- | --- |
+| gedeckt | 2 | Verhalten vorhanden und an der geladenen Oberfläche geprüft |
+| teilweise | 29 | ein Teil geprüft; die Tabelle nennt den Rest |
+| ungeprüft | 9 | Verhalten vorhanden, kein Test gefunden |
+| entfällt | 7 | durch ein anderes Bedienkonzept ersetzt |
+| Lücke, am Code bestätigt | 2 | Verhalten fehlt der geladenen Oberfläche (R-035, R-036) |
+| Lücke, nicht belegt | 1 | Prüfstart-Fehler erreicht den Anwender nur als allgemeiner Satz; Ablauf nicht nachgestellt |
+| ohne Rückmeldung | 1 | erfolgreiches Öffnen eines Ordners wird nicht bestätigt; keine dokumentierte Anforderung gefunden |
+| möglicher Wettlauf | 1 | Leeren der Auswahl gegen einen gleichzeitigen Drop; aus dem Code abgeleitet |
+
+Die frühere Oberfläche war also mehr als Ballast: Ihre Tests hielten Verhalten
+fest, das der geladenen Oberfläche zum Teil fehlt und zum größeren Teil dort
+nicht geprüft ist. Das Entfernen hat daran nichts geändert, es hat es sichtbar
+gemacht. Alle hier genannten Lücken bestehen in RC178 genauso, weil RC178
+bereits `workspace.html` lädt; ich habe das am Tag `v3.2.0-rc178`
+nachgesehen.
+
+### R-035 · Hinweis auf einen Ergebnisordner im Netzwerk fehlt
+
+- **Ort:** `apps/datasecure-standalone/frontend/workspace.js`, `configure`
+  (Zeile 2175); Core: `plugins/data-secure/server/standalone/application-service.js:1557`.
+- **Ist:** Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk,
+  liefert der Core `network_folder_notice: true`. Kein geladenes Skript liest
+  dieses Feld; die Oberfläche übernimmt den Ordner ohne Hinweis.
+- **Reproduktion:** Suche nach `network_folder_notice` und `Netzlaufwerk` in
+  den fünf geladenen Skripten und in `workspace.html`: kein Treffer. In
+  `app.js` des Tags `v3.2.0-rc178` zwei Treffer; der entfallene Test
+  „a configured network result folder produces a visible local warning“
+  prüfte den Hinweis dort.
+- **Soll:** `docs/canonical/TRACEABILITY.md` (BL-002, BL-040.5, DS-080):
+  Ein ausdrücklich gewählter Netzwerk-Ergebnisordner bleibt zulässig, erzeugt
+  aber einmalig einen pfadfreien Hinweis in Cowork und Standalone; Standalone
+  sagt zusätzlich, dass seine Zuordnungsdatei über das Netzlaufwerk übertragen
+  werden kann.
+- **Auswirkung:** mittel. Die vertrauliche Zuordnung mit Originalnamen landet
+  ohne Hinweis auf einem Netzlaufwerk. Kein Abfluss an Dritte durch das
+  Produkt; der Anwender verliert die Information, die die Entscheidung DS-080
+  ihm zusichert.
+- **Status:** offen. Nicht nativ beobachtet (kein Netzlaufwerk im Testprofil).
+
+### R-036 · Fehlerdetails und Erklärungen des Core erreichen die Oberfläche nicht
+
+- **Ort:** `workspace.js`, `errorCode` (Zeile 550) und Tabelle `reasons`.
+- **Ist:** Die geladene Oberfläche wertet von einem Fehler nur den Code aus
+  und verwirft die Details. Für diese Codes hat sie außerdem keinen eigenen
+  Text und zeigt den allgemeinen Satz mit dem Code in Klammern:
+  `SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`,
+  `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`,
+  `SOURCE_SNAPSHOT_CHANGED`. Nicht angezeigt werden auch die Hinweise des Core
+  auf übersprungene Begleitdateien (`ignored_artifact_count`) und auf bereits
+  enthaltene Dateien (`already_selected_count`).
+- **Reproduktion:** Suche nach den fünf Codes und den beiden Feldern in den
+  geladenen Skripten: kein Treffer. Im Core und in der Hülle werden alle
+  weiter erzeugt. Beispiel aus dem Core: Bei mehreren gewählten Dateien, von
+  denen eine nicht sicher aufgenommen werden kann, lautet seine Meldung „Die
+  betroffenen Dateien stehen in den Details“
+  (`application-service.js:1059`); die Oberfläche zeigt diese Details nicht.
+- **Soll:** BL-010.46 (konkrete Fehlerdateien lokal anzeigen): Name und Grund
+  der betroffenen Datei, eine Erklärung je Code.
+- **Auswirkung:** niedrig bis mittel. Der Anwender erfährt bei einer
+  abgelehnten Auswahl nicht, welche Datei der Grund ist, etwa eine
+  Office-Sperrdatei `~$…`. Kein Datenschutzrisiko.
+- **Status:** offen. Vier Codes derselben Art sind als R-034 schon ergänzt;
+  diese fünf und die Details hat erst der Einzelabgleich gezeigt. Welche der
+  Codes im Ablauf mit dem Quellenkatalog praktisch noch auftreten, habe ich
+  nur für `SOURCE_SELECTION_REJECTED` am Code nachvollzogen.
+
+### Weitere Beobachtungen aus dem Abgleich
+
+- **Prüfstart-Fehler** (Nr. 6): Scheitert das Fortsetzen vor der Prüfung,
+  öffnet `beginReview` die Prüfung nicht, und es erscheint der allgemeine
+  Satz. Die Erklärungen stehen in `review.js` und sind nur erreichbar, wenn
+  die Prüfung schon offen ist. Nicht nachgestellt.
+- **Zweiter Start bei offener Prüfung** (Nr. 3): Der Zustand
+  `review_required` zählt in der Oberfläche nicht als aktiver Lauf; ob dann
+  ein zweiter Start möglich ist und ob der Core ihn ablehnt, ist nicht
+  geprüft.
+- **Unbestätigte Beendigung** (Nr. 51): `termination_unconfirmed` ist in der
+  Oberfläche nur Schutzbedingung, keine Anzeige.
+- **Erststart-Anleitung zum Ergebnisordner** (Nr. 13) gibt es nicht mehr; ob
+  sie gewünscht ist, ist eine Produktentscheidung.
+- **Tests:** 38 der 52 Verhalten sind an der geladenen Oberfläche gar nicht
+  oder nur zum Teil geprüft, darunter die Tastaturbedienung der Navigation,
+  die Begrenzung des Verlaufs auf fünf Zeilen im Fenster, das Verwerfen
+  später Antworten nach dem Schließen und die Wiederherstellung einer Auswahl
+  nach dem Neuladen.
+
+### Grenzen
+
+- Der Abgleich stammt aus vier unabhängigen Read-only-Durchgängen. Selbst
+  nachgeprüft habe ich die fünf gemeldeten Lücken, die fehlenden Codes und
+  Felder und elf zufällig gewählte Fundstellen (alle zutreffend). Die übrigen
+  Zeilen der Tabelle habe ich nicht ein zweites Mal gelesen.
+- „Gedeckt“ heißt: Ein Test führt das Verhalten in einer nachgebildeten
+  Umgebung aus. Im Fenster beobachtet ist damit nichts.
+- Ein Durchgang hat sein Kontingent überschritten und alle 13 Tests
+  bearbeitet; keiner hat einen Test als „nicht geprüft“ zurückgegeben.
 
 ## Annahmen und Revalidierung
 
@@ -2224,6 +2336,7 @@ R-019 nicht tragfähig.
 | A-046 | Der zweite Blick der Redaktion ändert nur Dokumente, die bisher stoppten. | Er liefert, was die Schlussprüfung ohnehin meldete. | Die Erkennung hat weitere Aufrufer, und nicht jeder Fund der Schlussprüfung führte im Ablauf zum Stopp. | Gegenprüfung (read-only) mit rund 1 800 gezielten und 30 000 Zufallsfällen | Zum Teil widerlegt: mehr Ersetzung auch in Dokumenten, die durchliefen, und eine dadurch geschlossene Lücke; kein Fall mit mehr Klartext, kein neuer Stopp. |
 | A-047 | Der Backlog führt die Standardumschaltung auf die neue Oberfläche als offen (so meine Antwort an den Anwender und der Abschnitt „Was nicht umgesetzt ist“). | Eine Tabellenzeile im Backlog und ein Satz in `PRODUCT.md` sagen es. | Die Tabelle ist als historischer Schnitt vom 08.10.2026 gekennzeichnet; der aktuelle Abschnitt darüber nennt die Umschaltung erledigt. | Lesen des Backlogs im Zusammenhang, beim Berichtigen der Dokumente | Widerlegt; dem Anwender und im Bericht berichtigt. Die Empfehlung, die Oberfläche zu entfernen, hing nicht daran. |
 | A-048 | Die frühere Oberfläche zu entfernen kostet nichts, weil niemand sie lädt. | Das Fenster lädt nur `workspace.html`. | Tests lasen an ihr Eigenschaften ab, die die geladene Oberfläche nicht hatte. | Umbinden des Vertragstests | Zum Teil widerlegt: vier Erklärungen fehlten der geladenen Oberfläche (R-034, behoben); vier native Befehle verlieren ihren Aufrufer (offen). |
+| A-049 | Was die 52 Tests der früheren Oberfläche prüften, prüfen die 535 Tests der neuen ebenfalls (so meine Einschätzung beim Entfernen). | Die neue Oberfläche hat die größere Testdatei. | Die Tests der neuen Oberfläche sind um ihre eigenen Abläufe gebaut; niemand hat die alten Fälle übertragen. | Einzelabgleich in vier unabhängigen Durchgängen, Lücken selbst nachgeprüft | Widerlegt: 2 von 52 gedeckt, 29 teilweise, 9 ungeprüft; zwei Verhalten fehlen der geladenen Oberfläche (R-035, R-036). |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

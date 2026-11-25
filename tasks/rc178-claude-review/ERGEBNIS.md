@@ -53,8 +53,11 @@ erreichten Stopp bei einem Namen zwischen Label und Nummer zu beheben: der
 Commit `0bd5e26f`. Eine Gegenprüfung konnte ihn nicht widerlegen. Dieser
 Stand wurde als `c612b647` übergeben. Danach hat der Anwender entschieden,
 die frühere Oberfläche zu entfernen, die das Fenster nicht mehr lud: die
-Commits `8cf5dd93` und `1d908311`. Dieser Bericht beschreibt den Endstand
-`1d908311`.
+Commits `8cf5dd93` und `1d908311`. Dieser Stand wurde als `80d4823e`
+übergeben. Danach hat der Anwender beauftragt, die 52 entfallenen Tests
+einzeln abzugleichen; das Ergebnis sind zwei neue Befunde (R-035, R-036) und
+die Tabelle in [ABGLEICH-ALTE-OBERFLAECHE.md](ABGLEICH-ALTE-OBERFLAECHE.md).
+Am Produkt ist dabei nichts geändert; der Endstand bleibt `1d908311`.
 
 ## Identität und Umfang
 
@@ -396,7 +399,21 @@ aber den Build-Fingerprint `383aa344…`.
    - **Berichtigung:** Der Backlog führt die Standardumschaltung als erledigt,
      nicht als offen, wie ich dem Anwender zuvor gesagt hatte. Veraltet war
      ein Satz in `PRODUCT.md`; er ist berichtigt.
-10. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
+10. **Einzelabgleich der 52 entfallenen Tests** (Tabelle in
+    ABGLEICH-ALTE-OBERFLAECHE.md, Befunde in BEFUNDE.md)
+    - **Zahlen:** 2 gedeckt, 29 teilweise, 9 ungeprüft, 7 entfallen durch das
+      andere Bedienkonzept, 5 mit fehlendem Verhalten (2 am Code bestätigt, 3
+      nicht belegt oder ohne dokumentierte Anforderung).
+    - **R-035, offen:** Der Hinweis auf einen Ergebnisordner im Netzwerk
+      (DS-080) fehlt in der geladenen Oberfläche. Der Core liefert ihn, die
+      Oberfläche zeigt ihn nicht. In RC178 gleich.
+    - **R-036, offen:** Fehlerdetails des Core (Name und Grund der
+      betroffenen Datei) und fünf Erklärungen erreichen die Oberfläche nicht.
+      In RC178 gleich.
+    - **Einordnung:** Das Entfernen der früheren Oberfläche hat diese Lücken
+      nicht geschaffen, es hat sie sichtbar gemacht. 38 der 52 Verhalten sind
+      an der geladenen Oberfläche nicht oder nur zum Teil geprüft.
+11. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
 
 ## Änderungen je Thema
 
@@ -1245,6 +1262,16 @@ Geprüfter Produktstand: 1d908311c60ab34e423234b8a9aedf35d8ec0f07 (spätere Comm
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
 Für Codex zuerst prüfen:
+00000. R-035 und R-036, offen, aus dem Einzelabgleich der 52 entfallenen Tests
+   (tasks/rc178-claude-review/ABGLEICH-ALTE-OBERFLAECHE.md). R-035: frontend/workspace.js liest
+   network_folder_notice nicht (Core: standalone/application-service.js:1557); der Hinweis nach DS-080
+   auf einen Ergebnisordner im Netzwerk erscheint nicht. R-036: errorCode() in workspace.js verwirft
+   die Details eines Fehlers; ohne eigenen Text sind SOURCE_SELECTION_REJECTED, SOURCE_ARTIFACT_IGNORED,
+   MARKDOWN_CONVERSION_NOT_READY, STANDALONE_DROP_MIXED und SOURCE_SNAPSHOT_CHANGED; ignored_artifact_count
+   und already_selected_count werden nicht angezeigt. Beides gilt auch für den Tag v3.2.0-rc178. Dazu
+   drei nicht belegte Punkte (Prüfstart-Fehler erreicht den Anwender nur als allgemeiner Satz; keine
+   Rückmeldung nach erfolgreichem Öffnen; möglicher Wettlauf zwischen Leeren der Auswahl und Drop) und
+   38 Verhalten ohne oder mit nur teilweisem Test an der geladenen Oberfläche.
 0000. R-019 und R-034, Commits 8cf5dd93 und 1d908311, vom 25.11. nachts, auf Entscheidung des Anwenders:
    frontend/index.html, app.js und styles.css sind entfernt, ebenso tests/test-standalone-frontend.js
    (52 Tests nur für app.js) und tests/manual/standalone-ui-browser.mjs. Das Fenster lud nur
@@ -1254,7 +1281,7 @@ Für Codex zuerst prüfen:
    STANDALONE_NO_ADMISSION, BATCH_PSEUDONYM_CAPACITY_EXCEEDED und
    STANDALONE_RESULT_BINDING_UNAVAILABLE (vorher nur app.js). Zu prüfen: (a) ob von den 52
    entfallenen Tests ein Verhalten für die neue Oberfläche ungeprüft bleibt (nicht Test für Test
-   abgeglichen); (b) die vier nativen Befehle ohne Aufrufer in der geladenen Oberfläche
+   abgeglichen; nachgeholt, siehe Punkt 00000); (b) die vier nativen Befehle ohne Aufrufer in der geladenen Oberfläche
    (remove_admitted_source, open_review_window, open_local_ledger, shutdown) samt dem getrennten
    Prüffenster und capabilities/review.json; (c) der Mac- und Linux-Build (der eingebettete Ordner
    ändert sich dort ebenso; Rust-Quellen sind unverändert); (d) docs/canonical/TRACEABILITY.md nennt
