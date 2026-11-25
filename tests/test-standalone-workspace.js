@@ -5816,6 +5816,7 @@ function closeHarness(extra = {}) {
     }
     if (command === 'confirm_close' || command === 'decline_close_request') return { ok: true };
     const answer = () => {
+      if (command === 'pause_batch') { model.state = { ...model.state, pause_requested: true }; return { ok: true }; }
       if (command !== 'continue_current_batch') return fallback();
       model.state = { ...model.state, state: 'processing' }; return { ok: true };
     };
@@ -6018,7 +6019,7 @@ testAsync('closing while a run is being started or the connection is restored as
   const dialog = starting.h.el('close-dialog');
   assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'unknown'); assert.equal(dialog.dataset.reason, 'starting');
   assert.equal(starting.h.el('close-dialog-title').textContent, 'Der Stand der Verarbeitung ist gerade nicht bekannt.');
-  assert.equal(starting.h.el('close-dialog-text').textContent, `Eine Verarbeitung wird gerade gestartet oder fortgesetzt. Warte kurz und schließe dann erneut. ${closeAnyway}`);
+  assert.equal(starting.h.el('close-dialog-text').textContent, `Ein Start oder eine Fortsetzung der Verarbeitung ist noch nicht bestätigt. Warte kurz und schließe dann erneut. ${closeAnyway}`);
   assert.equal(starting.h.el('close-dialog-stay').disabled, false, 'the answers stay usable while another command is in flight');
   assert.equal(starting.h.el('close-dialog-leave').disabled, false);
   assert.equal(starting.commands('confirm_close').length, 0);
@@ -6033,6 +6034,30 @@ testAsync('closing while a run is being started or the connection is restored as
   assert.equal(lost.h.el('close-dialog-text').textContent, `Die lokale Verbindung wird gerade wiederhergestellt. Warte kurz und schließe dann erneut. ${closeAnyway}`);
   await lost.h.act('close-dialog-leave');
   assert.deepEqual(lost.commands('confirm_close').map(call => call.args), [{ request: 19 }], 'closing anyway is an explicit answer');
+  // The connection is lost while the question for a working run is open: the
+  // pause cannot be sent, and the reason named is the connection, not a refusal.
+  const during = closeHarness(); await selectAndStart(during.h);
+  await during.requestClose(20);
+  assert.equal(during.h.el('close-dialog').dataset.kind, 'working');
+  during.h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } }); await tick();
+  await during.h.act('close-dialog-leave'); await tick();
+  assert.equal(during.commands('pause_batch').length, 0);
+  assert.equal(during.h.el('close-dialog').open, true);
+  assert.equal(during.h.el('close-dialog').dataset.kind, 'unknown'); assert.equal(during.h.el('close-dialog').dataset.reason, 'reconnecting');
+  assert.equal(during.commands('confirm_close').length, 0, 'a run that could not be paused is not closed as if it had been');
+  // The connection is lost while the pause is under way: its outcome is not known.
+  const mid = closeHarness({ hang: 'pause_batch' }); await selectAndStart(mid.h);
+  await mid.requestClose(21);
+  void mid.h.act('close-dialog-leave'); await tick();
+  assert.equal(mid.commands('pause_batch').length, 1);
+  mid.h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } }); await tick();
+  mid.release(); await tick(); await tick(); await tick();
+  // The answer of the pause was lost with the connection; the status read after it shows the pause is set.
+  assert.equal(mid.h.el('close-dialog').open, false, 'a pause that is set is not reported as refused');
+  assert.equal(mid.commands('confirm_close').length, 0, 'the active file is still being finished');
+  assert.match(mid.h.el('job-description').textContent, /schließt danach von selbst/u);
+  mid.h.model.state = { ...mid.h.model.state, state: 'paused' }; await mid.h.poll();
+  assert.deepEqual(mid.commands('confirm_close').map(call => call.args), [{ request: 21 }]);
 });
 testAsync('the window does not close by itself after the connection or the observed run changed', async () => {
   const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
@@ -6108,10 +6133,51 @@ testAsync('every command that starts or continues work keeps the state unknown u
   // The answers of the guided review do not renew the read generation; there the token alone
   // keeps a status read that began earlier from settling the question.
   assert.match(source, /summaryReadGeneration: historySummaryReadGeneration, work: workStarting \}\);/u);
-  assert.match(source, /if \(request\.work === workStarting\) workStarting = 0;/u);
-  // The answers of the guided review continue the worker as well.
-  assert.match(source, /if \(command === 'submit_review' \|\| command === 'continue_review_session'\) \{\s+markWorkStarting\(\);/u);
   assert.match(source, /const workCommands = new Set\(\['start_admitted_batch', 'continue_current_batch', 'continue_history_batch', 'skip_ocr_contact_review'\]\);/u);
+});
+testAsync('an answer of the guided review keeps the state unknown while it is under way and until a status read after it', async () => {
+  // The answers of the guided review continue the worker, but they neither block
+  // status reads nor renew the read generation as the commands of the workspace do.
+  for (const command of ['submit_review', 'continue_review_session']) {
+    let finish = () => {};
+    const { h, requestClose, commands } = closeHarness(); await tick();
+    const original = h.window.__TAURI__.core.invoke;
+    h.window.__TAURI__.core.invoke = (name, args) => {
+      if (name === 'get_review_session') { h.calls.push({ command: name, args }); return Promise.resolve({ ready: true, review_id: 'a'.repeat(32), chunk_count: 1 }); }
+      if (name === command) { h.calls.push({ command: name, args }); return new Promise(resolve => { finish = () => resolve({ accepted: true, action: 'reviewed' }); }); }
+      return original(name, args);
+    };
+    h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', selected_count: 1, resumable: true, status: 'review_required' }];
+    await h.act('nav-history'); await h.act('history-' + B + '-continue');
+    const bridge = h.window.__DATASECURE_REVIEW__;
+    await bridge.invoke('get_review_session');
+    // The status the core reports until the answer has reached the worker.
+    h.model.state = { state: 'review_required', batch_id: B, processing_mode: 'markdown-only', selected_count: 1 };
+    const pending = bridge.invoke(command, { reviewId: 'a'.repeat(32), answer: { action: 'reviewed' } }); await tick();
+    // A status read that begins and ends while the answer is under way settles nothing.
+    await h.poll();
+    await requestClose(40);
+    assert.equal(h.el('close-dialog').open, true, command);
+    assert.equal(h.el('close-dialog').dataset.kind, 'unknown', command); assert.equal(h.el('close-dialog').dataset.reason, 'starting', command);
+    assert.equal(commands('confirm_close').length, 0, 'an answer under way is not closed over silently');
+    // A status read that began while the answer was under way and ends after it settles nothing either.
+    let finishRead = () => {};
+    const withAnswer = h.window.__TAURI__.core.invoke;
+    h.window.__TAURI__.core.invoke = (name, args) => name === 'get_public_state'
+      ? new Promise(resolve => { h.calls.push({ command: name, args }); finishRead = () => resolve({ ...h.model.state }); }) : withAnswer(name, args);
+    const read = h.poll(); await tick();
+    h.window.__TAURI__.core.invoke = withAnswer;
+    finish(); await pending; await tick();
+    finishRead(); await read; await tick();
+    assert.equal(h.el('close-dialog').open, true, 'a read that began before the answer returned does not retire the question');
+    assert.equal(h.el('close-dialog').dataset.kind, 'unknown', command);
+    // The first status read that began after the answer had returned settles it.
+    await h.poll();
+    assert.equal(h.el('close-dialog').open, false, command);
+    assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 40 }]);
+    await requestClose(41);
+    assert.deepEqual(commands('confirm_close').map(call => call.args), [{ request: 41 }]);
+  }
 });
 testAsync('without a status of this session, without a core or with an unusable run id the window does not pretend to know', async () => {
   // The connection is lost before this session has read any status: nothing this window started, close at once.

@@ -338,11 +338,14 @@
   // Closing the main window while a run is working: the latest close request
   // of the shell, the run this window closes after once it has paused, and
   // whether this session has read a run status at all. `workStarting` marks a command that starts or continues
-  // work; it holds until a status read that began after the command returns.
+  // work. It holds while such a command is under way and after it until a
+  // status read that began after the command had returned.
   let closeRequest = 0, closeAfterPause = null, closeStateSeen = false;
-  let workStarting = 0, workToken = 0;
+  let workStarting = 0, workToken = 0, workInFlight = 0;
   const workCommands = new Set(['start_admitted_batch', 'continue_current_batch', 'continue_history_batch', 'skip_ocr_contact_review']);
-  const markWorkStarting = () => { workStarting = ++workToken; };
+  const workBegins = () => { workInFlight++; workStarting = ++workToken; };
+  // A new token on return: a status read that began while the command was under way does not settle it.
+  const workReturns = () => { workInFlight--; workStarting = ++workToken; };
   let reviewOrigin = null, documentsOrigin = 'history', admitting = false;
   let pendingResultAbandon = null;
   let connectionEpoch = 0, reconnecting = false, contextRequired = false;
@@ -371,8 +374,9 @@
       // Completion is learned only from this owned native session, never a
       // child-frame claim or the number of rendered/staged decisions.
       if (command === 'close_review_window') owner.closing = true;
-      if (command === 'submit_review' || command === 'continue_review_session') {
-        markWorkStarting(); // The worker may continue with this answer.
+      const work = command === 'submit_review' || command === 'continue_review_session';
+      if (work) {
+        workBegins(); // The worker may continue with this answer.
         invalidateHistoryCount();
         owner.phaseGeneration++; owner.complete = false; owner.stage = 'waiting'; refreshRunGuide();
       }
@@ -406,7 +410,7 @@
           owner.stage = 'uncertain'; refreshRunGuide();
         }
         throw error;
-      }
+      } finally { if (work) workReturns(); }
     }
   }) });
   const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -661,10 +665,10 @@
     if (busy || reconnecting) { await explainBlockedPicker(command, reconnecting ? 'reconnecting' : 'busy'); return null; }
     const connection = connectionEpoch;
     generation++; clearRunReview(); lastError = null; const ownership = beginBusy();
-    if (workCommands.has(command)) markWorkStarting();
+    const work = workCommands.has(command); if (work) workBegins();
     try { const result = await invoke(command, args); return connection === connectionEpoch ? result : null; }
     catch (error) { if (connection !== connectionEpoch) return null; lastError = errorCode(error); showError(error, command); return null; }
-    finally { endBusy(ownership); }
+    finally { if (work) workReturns(); endBusy(ownership); }
   }
   function showView(next, batchId = runDetails?.batchId, receipt = null, summaryBatchId = null) {
     if (closed || !['new', 'history', 'settings', 'details', 'documents', 'review'].includes(next)) return;
@@ -2088,8 +2092,8 @@
         if (recoveredConnection) feedback('Lokale Verbindung wiederhergestellt. Gespeicherte Läufe bleiben erhalten; kein Start und keine Entscheidung wurden automatisch wiederholt. Eine frühere Dateiauswahl bitte neu aufnehmen.');
       }
       current = state; closeStateSeen = true; observeHistoryCountState(state); updateStart();
-      // Only a read that began after the command knows what the command started.
-      if (request.work === workStarting) workStarting = 0;
+      // Only a read that began after the command had returned knows what the command started.
+      if (request.work === workStarting && !workInFlight) workStarting = 0;
       if (!job && !catalogue.length && /^[a-f0-9]{64}$/u.test(state.batch_id || '') && ['preparing', 'processing'].includes(state.state)) {
         adoptRun({ batchId: state.batch_id, task: state.processing_mode, name: `Lauf ${state.batch_id.slice(0, 8)}`,
           files: [], selectedCount: count(state.selected_count) });
@@ -2375,7 +2379,7 @@
       $('close-dialog-stay').textContent = 'Weiter warten'; $('close-dialog-leave').textContent = 'Jetzt schließen';
     } else if (kind === 'unknown') {
       $('close-dialog-title').textContent = 'Der Stand der Verarbeitung ist gerade nicht bekannt.';
-      $('close-dialog-text').textContent = `${reason === 'starting' ? 'Eine Verarbeitung wird gerade gestartet oder fortgesetzt.' : 'Die lokale Verbindung wird gerade wiederhergestellt.'} Warte kurz und schließe dann erneut. ${anyway}`;
+      $('close-dialog-text').textContent = `${reason === 'starting' ? 'Ein Start oder eine Fortsetzung der Verarbeitung ist noch nicht bestätigt.' : 'Die lokale Verbindung wird gerade wiederhergestellt.'} Warte kurz und schließe dann erneut. ${anyway}`;
       $('close-dialog-stay').textContent = 'Fenster offen lassen'; $('close-dialog-leave').textContent = 'Trotzdem schließen';
     } else {
       $('close-dialog-title').textContent = 'Dieser Lauf lässt sich gerade nicht pausieren.';
@@ -2435,6 +2439,10 @@
     if (!dialog.open) return; // Only a question on screen can be answered.
     if (dialog.dataset.kind !== 'working') { await confirmClose(); return; }
     hideCloseDialog();
+    // The question was asked for a working run. If its state is no longer
+    // known, "pause and close" must not close a run it could not pause.
+    const now = closeQuestion();
+    if (now?.kind === 'unknown') { presentClose('unknown', now.reason); return; }
     if (!runWorking(current)) { await confirmClose(); return; }
     const batchId = current.batch_id; lastError = null;
     const paused = validBatchId(batchId) ? await perform('pause_batch', { batchId }) : null;
@@ -2455,7 +2463,14 @@
       if (closed || !closeRequest) return;
       if (!closeQuestion()) { await confirmClose(); return; }
     }
-    presentClose('unpausable', retention ? 'retention' : 'refused');
+    // A connection that is being restored is the reason, not a refused pause.
+    const question = retention ? null : closeQuestion();
+    if (question?.kind === 'unknown') presentClose('unknown', question.reason);
+    else if (question?.kind === 'pausing' && current.pause_requested === true && current.batch_id === batchId) {
+      // The answer was lost, the pause is set: close after it as the user asked.
+      closeAfterPause = { batchId, connection: connectionEpoch }; lastJobSignature = '';
+      await refresh();
+    } else presentClose('unpausable', retention ? 'retention' : 'refused');
   });
   window.addEventListener('beforeunload', () => { closed = true; clearTimeout(timer); for (const unlisten of unlisteners) unlisten(); $('review-frame').src = 'about:blank'; });
   (async () => {
