@@ -1051,6 +1051,49 @@
           "R-031"
         ],
         "remark": "geändert in 56d7c744; nur der neue Schalteraufruf beurteilt"
+      },
+      "request_native_close": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Schließen des Hauptfensters an die Oberfläche reichen und nach zwei Sekunden ohne Antwort wie bisher beenden; Aufrufer der Fensterereignis-Handler",
+        "invariant": "keine Rückfrage, während das Beenden läuft; Ereignis nur an das Hauptfenster",
+        "evidence": "Quelltextvertrag in tests/test-standalone-desktop-contract.js; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20; der Frist-Thread ist nur am Quelltext und im nativen Lauf mit antwortender Oberfläche belegt, nicht mit einer stummen"
+      },
+      "acknowledge_close_request": {
+        "status": "GEPRÜFT",
+        "purpose": "Antwort der Oberfläche auf eine Schließanfrage annehmen",
+        "trust": "Nummer aus der Oberfläche",
+        "invariant": "nur die letzte, nicht zurückgezogene Anfrage schließt die App",
+        "evidence": "Rust-Tests in close_prompt.rs; Quelltextvertrag; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      },
+      "decline_close_request": {
+        "status": "GEPRÜFT",
+        "purpose": "Antwort der Oberfläche auf eine Schließanfrage annehmen",
+        "trust": "Nummer aus der Oberfläche",
+        "invariant": "nur die letzte, nicht zurückgezogene Anfrage schließt die App",
+        "evidence": "Rust-Tests in close_prompt.rs; Quelltextvertrag; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      },
+      "confirm_close": {
+        "status": "GEPRÜFT",
+        "purpose": "Antwort der Oberfläche auf eine Schließanfrage annehmen",
+        "trust": "Nummer aus der Oberfläche",
+        "invariant": "nur die letzte, nicht zurückgezogene Anfrage schließt die App",
+        "evidence": "Rust-Tests in close_prompt.rs; Quelltextvertrag; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
       }
     },
     "apps/datasecure-standalone/tauri-contract/src/private_namespace.rs": {
@@ -1107,6 +1150,162 @@
           "R-025"
         ],
         "remark": "vorhanden seit 2726675a; in 8c452ac4 an weiteren Stellen verwendet"
+      },
+      "closeQuestion": {
+        "status": "GEPRÜFT",
+        "purpose": "aus dem bekannten Stand die Art der Rückfrage bestimmen oder sagen, dass nichts arbeitet",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+      },
+      "presentClose": {
+        "status": "GEPRÜFT",
+        "purpose": "Rückfrage mit Text und Antworten anzeigen",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+      },
+      "receiveCloseRequest": {
+        "status": "GEPRÜFT",
+        "purpose": "Schließanfrage der Hülle beantworten: sofort schließen oder erst fragen, dann quittieren",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+      },
+      "confirmClose": {
+        "status": "GEPRÜFT",
+        "purpose": "Schließen für die letzte Anfrage bestätigen",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+      },
+      "withdrawClose": {
+        "status": "GEPRÜFT",
+        "purpose": "Rückfrage schließen und der Hülle melden, dass der Anwender bleibt",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+      },
+      "settleClose": {
+        "status": "GEPRÜFT",
+        "purpose": "nach jedem gelesenen Status: nach der Pause schließen, überholte Rückfrage zurückziehen oder erneuern",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+      },
+      "stayOpen": {
+        "status": "GEPRÜFT",
+        "purpose": "Antwort „bleiben“ und Esc",
+        "trust": "Laufstatus aus dem Core, Nummer aus der Hülle",
+        "invariant": "kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders",
+        "evidence": "tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+      }
+    },
+    "apps/datasecure-standalone/tauri-contract/src/close_prompt.rs": {
+      "ask": {
+        "status": "GEPRÜFT",
+        "purpose": "neue Schließanfrage des Hauptfensters nummerieren; Aufrufer request_native_close",
+        "trust": "Nummer aus der Oberfläche; nur Vergleich mit dem eigenen Zähler",
+        "invariant": "nur die letzte Anfrage zählt; eine zurückgezogene schließt nicht mehr",
+        "evidence": "fünf Rust-Tests in close_prompt.rs; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      },
+      "acknowledge": {
+        "status": "GEPRÜFT",
+        "purpose": "Rückfrage der Oberfläche für die letzte Anfrage quittieren; Aufrufer acknowledge_close_request",
+        "trust": "Nummer aus der Oberfläche; nur Vergleich mit dem eigenen Zähler",
+        "invariant": "nur die letzte Anfrage zählt; eine zurückgezogene schließt nicht mehr",
+        "evidence": "fünf Rust-Tests in close_prompt.rs; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      },
+      "withdraw": {
+        "status": "GEPRÜFT",
+        "purpose": "vom Anwender zurückgezogene Anfrage festhalten; Aufrufer decline_close_request",
+        "trust": "Nummer aus der Oberfläche; nur Vergleich mit dem eigenen Zähler",
+        "invariant": "nur die letzte Anfrage zählt; eine zurückgezogene schließt nicht mehr",
+        "evidence": "fünf Rust-Tests in close_prompt.rs; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      },
+      "latest": {
+        "status": "GEPRÜFT",
+        "purpose": "prüfen, ob eine Nummer die letzte Schließanfrage ist",
+        "trust": "Nummer aus der Oberfläche; nur Vergleich mit dem eigenen Zähler",
+        "invariant": "nur die letzte Anfrage zählt; eine zurückgezogene schließt nicht mehr",
+        "evidence": "fünf Rust-Tests in close_prompt.rs; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      },
+      "confirmable": {
+        "status": "GEPRÜFT",
+        "purpose": "prüfen, ob die Oberfläche für diese Anfrage schließen darf; Aufrufer confirm_close",
+        "trust": "Nummer aus der Oberfläche; nur Vergleich mit dem eigenen Zähler",
+        "invariant": "nur die letzte Anfrage zählt; eine zurückgezogene schließt nicht mehr",
+        "evidence": "fünf Rust-Tests in close_prompt.rs; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      },
+      "unanswered": {
+        "status": "GEPRÜFT",
+        "purpose": "prüfen, ob die Frist dieser Anfrage die App beenden darf; Aufrufer der Frist-Thread in request_native_close",
+        "trust": "Nummer aus der Oberfläche; nur Vergleich mit dem eigenen Zähler",
+        "invariant": "nur die letzte Anfrage zählt; eine zurückgezogene schließt nicht mehr",
+        "evidence": "fünf Rust-Tests in close_prompt.rs; nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); cargo test --locked (Windows x64); macOS-Zweig nicht übersetzt",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20"
+      }
+    },
+    "apps/datasecure-standalone/tauri-contract/src/ipc_transport.rs": {
+      "begun": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "sagen, ob das Beenden begonnen hat; Aufrufer request_native_close",
+        "evidence": "Quelltextvertrag in tests/test-standalone-desktop-contract.js",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in 5f670a20; ein Klick während des Beendens ist nicht nativ nachgestellt"
       }
     },
     "plugins/data-secure/server/standalone/markdown-retention.js": {

@@ -127,7 +127,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert an jedem beobachteten UDP-Endpunkt des WebView2-Netzwerkdienstes, weil sie dessen Profilordner ohne den Unterordner `EBWebView` vergleicht; aus demselben Grund wartet ihr Abbau nie auf WebView2. Die Diagnosezeile geht beim Abbruch verloren. | BL-010.21 | behoben (`dbf98cbf`) |
 | R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
 | R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | behoben für das beobachtete Verhalten (`56d7c744`, Probe `1c3f36af`); die Schalter sind keine zugesicherte Schnittstelle von WebView2 |
-| R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | offen; ob der Stapel stoppt oder mit Hinweis weiterläuft, ist eine Produktentscheidung |
+| R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft |
 
 ## Einzelbefunde
 
@@ -1372,9 +1372,10 @@ stehen am Ende des Abschnitts.
   Vorlage.
 - **Zuordnung** – BL-010.14 (Abbruch und Fortsetzung), BL-010.11
   (Lebenszyklus des Sidecars).
-- **Status** – offen, nicht geändert. Ob der Stapel beim Schließen stoppt
-  oder mit einem Hinweis zu Ende läuft, ist eine Produktentscheidung; der
-  losgelöste Start gehört zum gemeinsamen Core, den auch Cowork nutzt.
+- **Status** – bei der Meldung offen. Am 25.11.2026 hat der Anwender
+  entschieden; umgesetzt in `5f670a20` und `2ce74b9f` (Abschnitt „R-032 ·
+  Umsetzung, Gegenprüfungen und nativer Nachweis“). Der losgelöste Start im
+  gemeinsamen Core, den auch Cowork nutzt, ist unverändert.
 - **Nicht geprüft**
   - macOS.
   - Schließen während einer geführten Prüfung und während „Nur in Markdown
@@ -1468,6 +1469,164 @@ Zähltexte der vier Dateien.
 Die Änderung nach der dritten Gegenprüfung (`e66bab8f`) ist nicht erneut
 gegengeprüft.
 
+## R-032 · Umsetzung, Gegenprüfungen und nativer Nachweis
+
+Am 25.11.2026 hat der Anwender nach drei unabhängigen Fachsichten entschieden:
+Schließen pausiert den Lauf, mit Rückfrage. Das sind die Commits `5f670a20`
+und `2ce74b9f`. Die Entscheidung steht als Präzisierung von DS-110 in
+`docs/canonical/DECISIONS.md`.
+
+### Fachsichten vor der Entscheidung
+
+Drei Read-only-Läufe mit je eigener Frage (Laufzeit und Lebenszyklus,
+Datenschutz und Schutzgrenzen, Bedienung und Plattformkonventionen). Alle
+drei kamen unabhängig zum selben Kern; die tragenden Aussagen habe ich am
+Code nachgeprüft.
+
+- **Das Weiterlaufen ist geerbt, nicht entschieden.** Ein gestarteter
+  Arbeitsprozess beendet sich beim Verlust seines Elternprozesses bewusst
+  nicht (`plugins/data-secure/server/gateway/batch-worker.js:251`), und die
+  Hülle beendet nur den Sidecar (`ipc_transport.rs`, `Lifecycle::stop`). Das
+  ist für Cowork begründet; für Standalone gab es keine Entscheidung.
+- **Ein sicherer Stopp existierte schon.** `pause_batch` stellt die aktive
+  Datei samt Bereitstellung und Zuordnung fertig; danach beginnt keine
+  weitere (`gateway/standalone-pause.js`, `tests/test-standalone-pause.js`,
+  8 Fälle). Nur das Schließen rief ihn nicht auf.
+- **Verworfen:** bloßer Hinweis (wer abbrechen will, kann es nicht), eine
+  dritte Antwort „weiterlaufen lassen“ (erhält den Zustand, der verwirrt),
+  App im Infobereich (große neue Oberfläche, auf Windows und Mac
+  verschieden), harter Abbruch der Arbeitsprozesse (führt in den
+  Absturzpfad: die laufende Datei wird neu verarbeitet).
+
+### Was sich geändert hat
+
+- **Hülle** (`tauri-contract/src/close_prompt.rs`, `main.rs`,
+  `ipc_transport.rs`)
+  - Jede Schließanfrage des Hauptfensters wird nummeriert und als
+    `datasecure-close-requested` an das Hauptfenster gesendet.
+  - Die Oberfläche antwortet mit `confirm_close`,
+    `acknowledge_close_request` oder `decline_close_request`.
+  - Bestätigen gilt nur für die letzte Anfrage und nicht für eine
+    zurückgezogene.
+  - Ohne Antwort binnen zwei Sekunden schließt die Hülle wie bisher.
+  - Läuft das Beenden schon, löst ein weiterer Klick nichts mehr aus.
+- **Oberfläche** (`frontend/workspace.js`, Dialog in `workspace.html`)
+  - Arbeitet nichts, schließt die App sofort.
+  - Arbeitet ein Lauf: **Weiter verarbeiten** oder **Pausieren und
+    schließen**. Das Fenster bleibt offen, bis der Lauf nicht mehr arbeitet,
+    und schließt dann von selbst.
+  - Zweite Schließanfrage in dieser Zeit: **Weiter warten** oder **Jetzt
+    schließen**.
+  - Nicht pausierbar (Aufbewahrung 0 Tage, Vorbereitung, abgelehnte Pause)
+    oder Stand unbekannt (eben gestartet oder fortgesetzt, Verbindung wird
+    wiederhergestellt): **Fenster offen lassen** oder **Trotzdem
+    schließen**, mit dem Hinweis, was das Schließen zurücklässt.
+- **Nicht geändert:** der gemeinsame Core, Cowork, der losgelöste Start der
+  Arbeitsprozesse, das Beenden durch das Betriebssystem.
+
+### Nachweis
+
+| Art | Ergebnis |
+| --- | --- |
+| Rust | 5 Tests der Schließanfrage; `cargo test --locked` 338 bestanden, 3 ignoriert; Clippy ohne Befund |
+| Oberfläche | 15 Abläufe in `tests/test-standalone-workspace.js` (534 Fälle in der Datei) |
+| Verfälschungen | 42 gezielte Änderungen der Schließ-Logik, jede von mindestens einem Test erkannt (Scratch-Skript, kein Bestandteil des Repositorys) |
+| Verdrahtung | ein Quelltextvertrag in `tests/test-standalone-desktop-contract.js` (42 Fälle), Regex in `tests/test-standalone-linux-sandbox-workflow.js` |
+
+Nativ am Paket `721512f0…` (Build `ebc54e3c`, Stand `2ce74b9f`), isoliertes
+Profil, sechs erfundene Dateien (DOCX, XLSX, PPTX, Text-PDF, Scan-PDF, PNG),
+Zweck „Automatisch maskieren“ mit OCR:
+
+| Ablauf | Beobachtung |
+| --- | --- |
+| Schließen ohne Lauf | Fenster zu nach 0,2 s |
+| Schließen im Lauf | Rückfrage steht nach 3 s noch, die App lebt über die Frist der Hülle hinaus; Text wie im Test |
+| **Weiter verarbeiten** | Rückfrage weg, der Lauf arbeitet weiter |
+| **Pausieren und schließen** | Laufbeschreibung „Pause angefordert … DataSecure schließt danach von selbst.“; Fenster zu nach 6,5 s; kein Arbeitsprozess mehr; im Ergebnisordner 0 Dateien, auch 12 s später |
+| Neustart | Verlauf „6 Dateien · 2 Ergebnisse“, Schaltfläche **Fortsetzen**; danach „6 technisch geprüfte anonymisierte Ergebnisse“, kein Klartext von Name, Firma oder IBAN, Originale unverändert |
+| **Jetzt schließen** in der Wartezeit | zweite Rückfrage wie im Test; Fenster zu nach 0,2 s; fünf Arbeitsprozesse laufen 3,3 s weiter und enden; danach keine weitere Ergebnisdatei; Fortsetzen ergibt sechs Ergebnisse |
+| Startprobe mit `-AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound` | besteht; ihr Abbau schließt das Fenster über denselben Weg (154 ms) |
+
+Im nativen Lauf zuerst gesehen und danach in den Text übernommen: Nach
+**Pausieren und schließen** liegen die fertigen Dateien noch nicht im
+Ergebnisordner. Sie erscheinen erst, wenn der ganze Lauf abgeschlossen ist
+(`STANDALONE_SECURITY_MODEL.md`: „Beide Zwecke veröffentlichen erst nach
+terminalem Gesamtstapel“). Die erste Fassung der Rückfrage sagte nur „Fertige
+Ergebnisse bleiben erhalten“.
+
+### Gegenprüfungen
+
+Erste, auf dem Arbeitsstand vor `5f670a20`: zwei unabhängige Read-only-Läufe
+(Laufzeit, Datenschutz).
+
+| Einwand | Ergebnis |
+| --- | --- |
+| Die Rückfrage öffnet mit gesperrten Knöpfen, wenn gerade ein anderer Befehl läuft; die Hülle hat dann keine Frist mehr. | Berechtigt. Die Antwortknöpfe sind von der Sperre ausgenommen; mit Test. |
+| Schließen ohne Rückfrage, solange der Status unbekannt ist (Start läuft, Verbindung wird wiederhergestellt). | Berechtigt. Eigene Rückfrage „Stand nicht bekannt“. |
+| Eine quittierte Anfrage hebt die Frist dauerhaft auf; der Modulkommentar behauptete, die Oberfläche könne die App nicht offen halten. | Zutreffend. Die Oberfläche quittiert erst, wenn die Rückfrage angezeigt ist; jede neue Anfrage braucht wieder eine eigene Antwort. Kommentar und Dokumente sagen jetzt, was gilt. |
+| `confirm_close` blieb nach „Weiter verarbeiten“ gültig. | Berechtigt. `decline_close_request`; eine zurückgezogene Anfrage schließt nicht mehr. |
+| Der Text nennt die Aufbewahrung nicht und verspricht bei 0 Tagen zu viel. | Berechtigt. Beide Texte geändert. |
+| Das Ereignis geht an alle Fenster. | Jetzt nur an das Hauptfenster (`emit_to`). |
+| Ein Klick während des Beendens fragt erneut. | Berechtigt. `ExitGate::begun`. |
+| Acht Verfälschungen bestanden die Tests. | Tests erweitert; die Probe umfasst jetzt 42. |
+
+Zweite, auf `5f670a20`: ein unabhängiger Read-only-Lauf.
+
+| Einwand | Ergebnis |
+| --- | --- |
+| Nur der Start gilt als „Stand unbekannt“; Fortsetzen, Überspringen des OCR-Vergleichs und Antworten der geführten Prüfung stoßen den Arbeitsprozess genauso an. | Berechtigt. `2ce74b9f`: Jeder solche Befehl gilt, bis ein danach begonnener Status gelesen ist. |
+| Ein nicht bestätigter Start beendet den unbekannten Zustand, bevor ein Status gelesen ist. | Berechtigt. Derselbe Mechanismus. |
+| Kommt während des Pausenaufrufs eine neue Schließanfrage, bietet die neue Rückfrage „Weiter verarbeiten“, obwohl die Pause gesetzt ist. | Berechtigt. Die gesetzte Pause zählt sofort; die neue Rückfrage sagt „wird noch fertiggestellt“. |
+| „Wer das Fenster offen lässt, zieht die Anfrage zurück“ gilt nicht für **Weiter warten**. | Dokument präzisiert; das Verhalten ist gewollt. |
+| Sieben Verfälschungen bestanden die Tests. | Drei jetzt erkannt (kein Status dieser Sitzung, Startfehler des Dienstes, unbrauchbare Laufkennung); vier betreffen Zeilen, die nur absichern, und sind unten genannt. |
+
+Ohne Fund geprüft hat der zweite Lauf: dass die App in jedem Zustand
+schließbar bleibt, die Zählung und das Zurückziehen der Anfragen in Hülle
+und Oberfläche, dass sich das Verhalten bei laufendem Beenden gegenüber
+vorher nicht verschlechtert, und die Übereinstimmung der Dokumente mit dem
+Code.
+
+Die Änderungen nach der zweiten Gegenprüfung (`2ce74b9f`) sind nicht erneut
+gegengeprüft.
+
+### Grenzen
+
+- **Weiter ohne Rückfrage:**
+  - Beenden durch das Betriebssystem (Abmelden, Herunterfahren, App-Menü
+    **Beenden** unter macOS).
+  - Absturz der Hülle; Prozessende über den Task-Manager.
+  - Die Oberfläche antwortet nicht binnen zwei Sekunden.
+  - Der lokale Dienst konnte nicht gestartet werden.
+  - Ein Arbeitsprozess aus einer früheren Sitzung, bevor die neue Sitzung
+    ihren ersten Laufstatus gelesen hat.
+  - Bereitstellung und Prüfvorbereitung außerhalb der Zustände
+    „Vorbereitung“ und „Wird verarbeitet“.
+- **Wartezeit:** Die Pause wirkt an der Dateigrenze. Bei einer großen Datei
+  mit OCR kann das Fenster Minuten offen bleiben; der Ausweg ist die zweite
+  Schließanfrage mit **Jetzt schließen**. Gemessen habe ich nur sechs kleine
+  Dateien.
+- **Arbeitskopien:** Nach **Pausieren und schließen** liegen die privaten
+  Arbeitskopien der offenen Dateien, bis der Lauf fortgesetzt wird oder die
+  Aufbewahrung endet. Vorher lief der Lauf zu Ende.
+- **Nur im Test, nicht nativ:** die Rückfragen „nicht pausierbar“
+  (Aufbewahrung 0 Tage, Vorbereitung, abgelehnte Pause) und „Stand nicht
+  bekannt“, Esc, die Frist der Hülle bei stummer Oberfläche, ein Klick
+  während des Beendens.
+- **Nicht geprüft:** macOS und Linux (der neue Rust-Code hat keine
+  plattformabhängigen Zweige, übersetzt wurde nur Windows); Screenreader;
+  Schließen während „Nur in Markdown umwandeln“ und während einer geführten
+  Prüfung mit ungespeicherten Eingaben. Dort arbeitet kein Lauf, die App
+  schließt wie bisher sofort, und nicht übergebene Eingaben der Prüfung
+  gehen wie bisher verloren.
+- **Vier Zeilen ohne eigenen Test:** das Zurücksetzen der Anfragenummer in
+  `confirmClose` und in `withdrawClose` (die Hülle lehnt eine veraltete oder
+  zurückgezogene Nummer ohnehin ab), die Prüfung auf ein schon entladenes
+  Fenster in `receiveCloseRequest`, und `closeAfterPause` in der Wahl der
+  Rückfrage „wird noch fertiggestellt“ (deckt sich mit dem gelesenen
+  Pausenwunsch).
+- **Der Frist-Thread der Hülle** ist am Quelltext festgehalten und im
+  nativen Lauf nur mit antwortender Oberfläche gesehen.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -1499,9 +1658,12 @@ gegengeprüft.
 | A-026 | Die Schalter des Produkts gelten unabhängig von der Umgebung des Hosts. | Sie stehen fest in Konfiguration und Code. | WebView2 hängt den Inhalt von `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` an; die Startprobe entfernt die Variable und sieht das nicht. | Gegenprüfung (read-only); eigener Versuch am Paket | Eingegrenzt: Die Variable wird angehängt (gemessen). Ob ein späterer gleichnamiger Schalter gewinnt, ist nicht geprüft. Im Sicherheitsmodell als Grenze genannt. |
 | A-027 | Eine Probe, die ihre Tabellen liest und nichts findet, hat nichts übersehen. | Die Positivkontrolle sah die eigene Verbindung. | Die Kontrolle prüfte nur IPv4 und den eigenen Prozess; Lesefehler wurden verschluckt. | Gegenprüfung (read-only) mit Mutationen | Widerlegt für die erste Fassung; Kontrolle um IPv6 und einen Kindprozess erweitert, Lesefehler lassen den Lauf scheitern. Kurze Verbindungen zwischen zwei Stichproben bleiben unsichtbar. |
 | A-028 | Die Positivkontrolle der Außenverbindungsprüfung deckt den Weg ab, den die Beobachtung nimmt. | Die Kontrolle sah die eigenen Verbindungen über IPv4, IPv6 und einen Kindprozess. | Sie las die Tabellen über einen einzelnen Aufruf; die Beobachtung läuft über einen Hintergrundthread mit Start und Stopp. Ein Thread, der nie abtastet, oder ein Stopp ohne Ergebnis hätte bestanden. | Gegenprüfung des Endstands (read-only) mit Mutationen; eigene Mutationen danach | Widerlegt; seit `1db8c744` müssen die Kontrollen auch über diesen Weg erscheinen. Dass ein einzelner Fehler der Abtastung gezählt wird, ist weiter nur gelesen. |
-| A-029 | Schließen des Fensters beendet die Verarbeitung; ein offener Lauf lässt sich danach fortsetzen (so lesen sich BL-010.14 und der Text der alten Oberfläche). | Die Hülle stoppt beim Schließen den Sidecar und endet ordentlich. | Die Arbeitsprozesse des Core sind losgelöst gestartet und hängen nicht am Sidecar. | nativer Lauf mit sechs Dateien; Lektüre des Schließpfads | Widerlegt für die automatische Maskierung auf Windows: Der Stapel läuft zu Ende. R-032. |
+| A-029 | Schließen des Fensters beendet die Verarbeitung; ein offener Lauf lässt sich danach fortsetzen (so lesen sich BL-010.14 und der Text der alten Oberfläche). | Die Hülle stoppt beim Schließen den Sidecar und endet ordentlich. | Die Arbeitsprozesse des Core sind losgelöst gestartet und hängen nicht am Sidecar. | nativer Lauf mit sechs Dateien; Lektüre des Schließpfads | Widerlegt für die automatische Maskierung auf Windows: Der Stapel lief zu Ende. R-032; seit `5f670a20` fragt die App und pausiert. |
 | A-030 | Ein Test, der einen Text der Oberfläche festhält, hält den richtigen Text fest. | Die Tests bestanden. | Zwei Tests schrieben die falsche Form fest („(1 Werte)“, „1 Ergebnisse wurden sichtbar kopiert“). | Gegenprüfung des Endstands; eigene Suche über die vier Oberflächendateien | Widerlegt; `8c452ac4`, `1126dc36` und `e66bab8f` berichtigen zusammen zehn Testfälle und prüfen die Textklasse statt einzelner Sätze. |
 | A-031 | Nach dem zweiten Teil von R-025 hat jeder Zähltext der geladenen Oberfläche seine Einzahl (so die Nachricht von `8c452ac4`). | Der Wächtertest meldete keine Stelle mehr. | Der Wächter kannte nur die Hauptwörter, nach denen ich gesucht hatte; und die Änderung selbst hatte eine Verbform verdorben. | zweite Gegenprüfung (read-only) mit nachgebauten Sätzen für 0, 1 und 2 | Widerlegt; `1126dc36`. Die dritte Gegenprüfung fand danach noch zwei Stellen (`e66bab8f`). Belegt ist nur, dass die bekannten Wörter und Formen keine Stelle mehr treffen. |
+| A-032 | Die Oberfläche weiß aus ihrem zuletzt gelesenen Status, ob ein Lauf arbeitet. | Sie liest den Status alle 1,6 bis 5 Sekunden und nach jedem Befehl. | Zwischen einem Befehl, der Arbeit anstößt (Start, Fortsetzen, Überspringen, Antwort der Prüfung), und dem ersten Status danach sagt der alte Status „arbeitet nicht“. | zwei Gegenprüfungen (read-only) mit nachgestellten Abläufen im Testgerüst | Widerlegt; in dieser Zeit gilt der Stand seit `2ce74b9f` als unbekannt, und die App fragt. |
+| A-033 | Eine Oberfläche kann die App mit der neuen Rückfrage nicht offen halten (so der erste Modulkommentar). | Ohne Antwort schließt die Hülle nach zwei Sekunden. | Eine quittierte Anfrage hat keine Frist mehr; mit gesperrten Knöpfen wäre die Rückfrage nicht bedienbar gewesen. | Gegenprüfung (read-only), im Testgerüst nachgestellt | Widerlegt für die quittierte Anfrage. Die Oberfläche quittiert erst nach dem Anzeigen, die Knöpfe bleiben bedienbar, und jede neue Schließanfrage braucht wieder eine Antwort; der Kommentar und die Dokumente sagen das jetzt. |
+| A-034 | „Fertige Ergebnisse bleiben erhalten“ beschreibt, was der Anwender nach dem Pausieren vorfindet. | Die fertigen Dateien sind gespeichert. | Sichtbar im Ergebnisordner werden sie erst nach dem Abschluss des ganzen Laufs. | nativer Lauf: 0 Dateien im Ergebnisordner bei 2 fertigen | Eingegrenzt; die Rückfrage sagt es jetzt ausdrücklich. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

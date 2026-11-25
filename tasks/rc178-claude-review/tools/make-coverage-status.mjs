@@ -276,6 +276,44 @@ sym(`${app}frontend/workspace.js`, 'counted', {
   trust: 'Zähler aus dem öffentlichen Zustand; keine sichere Ganzzahl gilt als 0', invariant: 'bei genau 1 die Einzahl, sonst die Mehrzahl',
   evidence: 'tests/test-standalone-workspace.js (Ergebnisdialog, Verlauf, Wächter über die vier Oberflächendateien)',
   findings: ['R-025'], remark: 'vorhanden seit 2726675a; in 8c452ac4 an weiteren Stellen verwendet' });
+const closeNative = 'nativer Lauf am Paket 721512f0 (Schließen ohne Lauf, im Lauf mit Bleiben, Pausieren und schließen, Jetzt schließen, Fortsetzen nach Neustart); ' + win;
+for (const [name, purpose] of [
+  ['ask', 'neue Schließanfrage des Hauptfensters nummerieren; Aufrufer request_native_close'],
+  ['acknowledge', 'Rückfrage der Oberfläche für die letzte Anfrage quittieren; Aufrufer acknowledge_close_request'],
+  ['withdraw', 'vom Anwender zurückgezogene Anfrage festhalten; Aufrufer decline_close_request'],
+  ['latest', 'prüfen, ob eine Nummer die letzte Schließanfrage ist'],
+  ['confirmable', 'prüfen, ob die Oberfläche für diese Anfrage schließen darf; Aufrufer confirm_close'],
+  ['unanswered', 'prüfen, ob die Frist dieser Anfrage die App beenden darf; Aufrufer der Frist-Thread in request_native_close']]) {
+  sym(`${rs}close_prompt.rs`, name, { purpose, trust: 'Nummer aus der Oberfläche; nur Vergleich mit dem eigenen Zähler',
+    invariant: 'nur die letzte Anfrage zählt; eine zurückgezogene schließt nicht mehr',
+    evidence: 'fünf Rust-Tests in close_prompt.rs; ' + closeNative, findings: ['R-032'], remark: 'neu in 5f670a20' });
+}
+sym(`${rs}main.rs`, 'request_native_close', { status: 'TEILGEPRÜFT',
+  purpose: 'Schließen des Hauptfensters an die Oberfläche reichen und nach zwei Sekunden ohne Antwort wie bisher beenden; Aufrufer der Fensterereignis-Handler',
+  invariant: 'keine Rückfrage, während das Beenden läuft; Ereignis nur an das Hauptfenster',
+  evidence: 'Quelltextvertrag in tests/test-standalone-desktop-contract.js; ' + closeNative,
+  findings: ['R-032'], remark: 'neu in 5f670a20; der Frist-Thread ist nur am Quelltext und im nativen Lauf mit antwortender Oberfläche belegt, nicht mit einer stummen' });
+for (const name of ['acknowledge_close_request', 'decline_close_request', 'confirm_close']) {
+  sym(`${rs}main.rs`, name, { purpose: 'Antwort der Oberfläche auf eine Schließanfrage annehmen', trust: 'Nummer aus der Oberfläche',
+    invariant: 'nur die letzte, nicht zurückgezogene Anfrage schließt die App',
+    evidence: 'Rust-Tests in close_prompt.rs; Quelltextvertrag; ' + closeNative, findings: ['R-032'], remark: 'neu in 5f670a20' });
+}
+sym(`${rs}ipc_transport.rs`, 'begun', { purpose: 'sagen, ob das Beenden begonnen hat; Aufrufer request_native_close',
+  evidence: 'Quelltextvertrag in tests/test-standalone-desktop-contract.js', findings: ['R-032'], status: 'TEILGEPRÜFT',
+  remark: 'neu in 5f670a20; ein Klick während des Beendens ist nicht nativ nachgestellt' });
+for (const [name, purpose] of [
+  ['closeQuestion', 'aus dem bekannten Stand die Art der Rückfrage bestimmen oder sagen, dass nichts arbeitet'],
+  ['presentClose', 'Rückfrage mit Text und Antworten anzeigen'],
+  ['receiveCloseRequest', 'Schließanfrage der Hülle beantworten: sofort schließen oder erst fragen, dann quittieren'],
+  ['confirmClose', 'Schließen für die letzte Anfrage bestätigen'],
+  ['withdrawClose', 'Rückfrage schließen und der Hülle melden, dass der Anwender bleibt'],
+  ['settleClose', 'nach jedem gelesenen Status: nach der Pause schließen, überholte Rückfrage zurückziehen oder erneuern'],
+  ['stayOpen', 'Antwort „bleiben“ und Esc']]) {
+  sym(`${app}frontend/workspace.js`, name, { purpose, trust: 'Laufstatus aus dem Core, Nummer aus der Hülle',
+    invariant: 'kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders',
+    evidence: 'tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); ' + closeNative,
+    findings: ['R-032'], remark: 'neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ' });
+}
 
 for (const name of ['linkNamePattern', 'linkIdentityHits']) {
   sym(`${privacy}engine.js`, name, {
