@@ -255,7 +255,10 @@ erst beim nächsten Öffnen. Nach **Pausieren und schließen** bleiben die
 privaten Arbeitskopien der offenen Dateien liegen, bis der Lauf fortgesetzt
 wird oder die eingestellte Aufbewahrung endet. Bei Aufbewahrung 0 Tage ist
 keine Pause möglich; wird ein solcher Lauf ohne Fenster unterbrochen, müssen
-die offenen Dateien neu ausgewählt werden.
+die offenen Dateien neu ausgewählt werden. Im Standalone-Paket kommt dieser
+Fall derzeit nicht vor: Die Hülle gibt dem Core eine feste Umgebung und
+reicht `EU_PRIVACY_RETENTION_DAYS` nicht weiter, sodass dort immer die
+Vorgabe von sieben Tagen gilt. Die Rückfrage dafür ist nur im Test ausgelöst.
 
 Die Oberfläche erhält mit der Schließanfrage nur eine laufende Nummer. Sie kann
 die App nur für die letzte Schließanfrage des Anwenders schließen und nicht
