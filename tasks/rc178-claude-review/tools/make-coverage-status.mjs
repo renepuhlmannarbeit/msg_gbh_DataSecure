@@ -137,11 +137,16 @@ sym(`${privacy}engine.js`, 'findLiteralSpans', {
 sym(`${privacy}engine.js`, 'personGenitiveSuffix', {
   purpose: 'Suffixmuster für den Personengenitiv; einziger Aufrufer findLiteralSpans',
   evidence: 'tests/test-privacy-inflected-names.js', findings: ['R-001'], remark: 'neu in 8cf00fa7' });
-sym(`${privacy}structured.js`, 'findStructuredSpans', {
-  purpose: 'Strukturierte Identifikatoren sammeln; Aufrufer anonymize, scanStructured (Restprüfung), replaceStructured',
-  invariant: 'Redaktion und Restprüfung nutzen dieselbe Funktion',
-  evidence: 'tests/test-privacy-repeated-phones.js; tests/test-privacy-inline-credentials.js (die gewöhnliche Suche kennt das Label mitten in der Zeile nicht)',
-  findings: ['R-002', 'R-027'], remark: 'geändert in af203451; seit 283e6ed9 Hülle um collectStructuredSpans' });
+sym(`${privacy}structured.js`, 'findStructuredSpans', { status: 'TEILGEPRÜFT',
+  purpose: 'Strukturierte Identifikatoren sammeln; Aufrufer anonymize, scanStructured (Restprüfung), replaceStructured, canonicalizeRenderedText, protectedEvidenceRanges',
+  invariant: 'Redaktion und Restprüfung nutzen dieselbe Funktion und lesen Platzhalter gleich; eine Spanne des zweiten Blicks berührt weder einen Platzhalter noch eine Spanne des ersten',
+  evidence: 'tests/test-privacy-repeated-phones.js; tests/test-privacy-inline-credentials.js (die gewöhnliche Suche kennt das Label mitten in der Zeile nicht); tests/test-privacy-role-labels-and-name-lists.js (Nummer hinter Label und ersetztem Namen); Suchlauf mit 19 440 Fällen; Gegenprüfung mit rund 1 800 gezielten und 30 000 Zufallsfällen ohne Fall mit mehr Klartext',
+  findings: ['R-002', 'R-027', 'R-033'], remark: 'geändert in af203451; seit 283e6ed9 Hülle um collectStructuredSpans; seit 0bd5e26f zweiter Blick mit Platzhaltern als Leerraum. Die Wirkung über canonicalizeRenderedText und protectedEvidenceRanges ist nur über Zufallsfälle beurteilt' });
+sym(`${srv}gateway/privacy-text-operation.js`, 'reservePersonReviewCandidates', { status: 'TEILGEPRÜFT',
+  purpose: 'Fundstellen offener Personenhinweise vor dem Kerndurchlauf reservieren und danach wiederherstellen; Aufrufer prepareTextPrivacyReview',
+  invariant: 'eine anderweitig belegte Identität wird nicht reserviert; weitere Stellen eines Kandidatennamens werden wie die Fundstelle reserviert',
+  evidence: 'tests/test-privacy-text-operation.js; tests/test-privacy-role-labels-and-name-lists.js; Suchlauf mit 19 440 Fällen',
+  findings: ['R-033'], remark: 'in 1c8e971c wurden weitere Stellen von der Reservierung ausgenommen, in 0bd5e26f wieder aufgenommen; nur dieser Zweig beurteilt' });
 sym(`${privacy}structured.js`, 'collectStructuredSpans', { status: 'TEILGEPRÜFT',
   purpose: 'Schleife über alle Detektoren; Aufrufer findStructuredSpans und findInlineCredentialSpans',
   invariant: 'der Detektor für das Label mitten in der Zeile läuft nur im eigenen Aufruf',

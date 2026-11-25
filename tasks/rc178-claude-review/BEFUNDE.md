@@ -128,7 +128,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
 | R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | behoben für das beobachtete Verhalten (`56d7c744`, Probe `1c3f36af`); die Schalter sind keine zugesicherte Schnittstelle von WebView2 |
 | R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`, `d41a042b`, `34de4509`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft. Die Rückfrage „Aufbewahrung 0 Tage“ ist im Standalone-Paket nicht erreichbar |
-| R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname; neu als Folge ein Stopp bei `Label Name Nummer` (siehe Abschnitt vom 25.11. abends) |
+| R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`, `0bd5e26f`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Der als Folge häufiger erreichte Stopp bei `Label Name Nummer` ist in `0bd5e26f` behoben |
 
 ## Einzelbefunde
 
@@ -1883,6 +1883,8 @@ ersetzt sie.
   Restfund ihn kreuzt. Der Kommentar in `gateway/privacy-text-operation.js`
   nennt als Beispiel `Tel. Hans Müller 030 …`; dieses Dokument stoppt weiter,
   jetzt in der Schlussprüfung statt im Kerndurchlauf (siehe „Was bleibt“).
+  Nachtrag: Mit `0bd5e26f` stoppt es nicht mehr, weitere Stellen werden
+  wieder reserviert, und der Kommentar ist ersetzt.
 
 ### Nachweise
 
@@ -1924,8 +1926,8 @@ gegengeprüft, nur mit den Vergleichsläufen, dem Suchlauf und den Tests.
   sobald der Name ersetzt ist. `Name: Hans Müller` und später
   `Tel. Hans Müller 030 1234567` stoppt deshalb schon in RC178. Die neuen
   Regeln machen Namen an mehr Stellen bekannt und erreichen diesen Stopp
-  häufiger, auch im zweiten Dokument eines Stapels. Nicht behoben: Die
-  Korrektur gehört in die Telefon- und Nummernregeln des Kerns.
+  häufiger, auch im zweiten Dokument eines Stapels. Nachtrag: behoben in
+  `0bd5e26f`, siehe den folgenden Abschnitt.
 - **Unterredaktion:** ein voller Name in Prosa ohne Hinweisverb (`Petra Lang
   hat den Vertrag unterschrieben`), ein einzelner Nachname oder ein
   abgekürzter Vorname hinter einer Rolle oder in einer Liste (`Patient:
@@ -1967,6 +1969,96 @@ gegengeprüft, nur mit den Vergleichsläufen, dem Suchlauf und den Tests.
 - **Nicht geprüft:** XLSX, PPTX und PDF als Quelle der neuen Regeln (geprüft
   sind Text und Word); Listen mit echter Word-Nummerierung; Laufzeit bei
   Zeilen aus sehr vielen großgeschriebenen Wörtern.
+
+## R-033 · Stopp bei Label, Name, Nummer behoben (25.11. spät)
+
+Auftrag des Anwenders nach der vorigen Übergabe: den Stopp beheben, den die
+Ausweitung der Personenhinweise häufiger erreichte. Ergebnis ist der Commit
+`0bd5e26f`.
+
+### Ursache
+
+Die Schlussprüfung (`scanResidual` in `privacy/engine.js`) liest den Text mit
+jedem Platzhalter als Leerraum. `Tel. [PERSON_001] 030 1234567` ist für sie
+ein Telefonlabel direkt vor seiner Nummer. Die Redaktion las denselben Text
+mit dem Platzhalter zwischen Label und Nummer und ließ die Nummer stehen. Das
+Dokument stoppte mit `RESIDUAL_PII`, sobald ein Name zwischen einem Label und
+einer Nummer ersetzt war. In RC178 ist das genauso; dort genügt
+`Name: Hans Müller` und später `Tel. Hans Müller 030 1234567`. Betroffen
+waren alle Erkennungen, die ein Label vor dem Wert verlangen: Telefon,
+Geburtsdatum, Steuer-ID, Aktenzeichen, Personalnummer.
+
+### Korrektur
+
+| Stelle | Änderung |
+| --- | --- |
+| `privacy/structured.js`, `findStructuredSpans` | Enthält der Text Platzhalter, läuft die Erkennung ein zweites Mal über die Sicht der Schlussprüfung (Platzhalter als Leerraum, gleiche Koordinaten). Eine Spanne aus dem zweiten Blick, die einen Platzhalter oder eine Spanne des ersten Blicks berührt, wird verworfen. Gilt für beide Produkte. |
+| `gateway/privacy-text-operation.js`, `reservePersonReviewCandidates` | Weitere Stellen eines Namens, der anderswo Personenhinweis ist, werden wieder reserviert. Der Kern sieht dort einen Platzhalter und ersetzt die Nummer schon im ersten Durchlauf. Ohne Reservierung ersetzte erst die Entscheidung der Prüfung den Namen, nach der letzten Redaktion. Der ungenaue Kommentar aus `1c8e971c` ist dabei ersetzt. |
+
+Ergebnis: `Tel. [PERSON_001] [PHONE_REDACTED]`, entsprechend
+`[DATE_REDACTED]` und `[ID_REDACTED]`.
+
+### Nachweise
+
+| Lauf | Ergebnis |
+| --- | --- |
+| Suchlauf „derselbe Name an zwei Stellen“, Kern der achten Übergabe gegen Endstand, 19 440 Fälle in fünf Profilen | 0 neue Stopps (am Stand `1c8e971c` 1 608), 0 mehr sichtbar, 11 096 weniger sichtbar; 356 Fälle, die schon am Kern der achten Übergabe stoppten, laufen jetzt durch. Mit maskierten Zeichen, 3 888 Fälle: 0 neue Stopps, 40 behobene. |
+| RC178-Kern gegen Endstand, 18 600 Fälle, wie geschrieben und mit maskiertem Punkt | unverändert: 0 neue Stopps; „mehr sichtbar“ nur die zehn gewollten Fälle von R-024. |
+| Kern der achten Übergabe gegen Endstand, 1 230 und 240 Zeilen | unverändert: 0 neue Stopps, 0 mehr sichtbar, 774 weniger sichtbar, 6 von 240 personenfreien Zeilen zusätzlich ersetzt. |
+| Stichprobe: vier Hinweiszeilen mal 16 Zeilen mit Label, Name und Wert, als ein Dokument und als Stapelpaar | Kern der achten Übergabe: 51 Stopps von 128; Endstand: 0. |
+| `tests/test-privacy-role-labels-and-name-lists.js` | 9 Tests bestanden; der neue Test schlägt am Kern von `1c8e971c` fehl. |
+| Kernabhängige Testdateien der Suite | 106 Dateien, die den Datenschutzkern laden, einzeln ausgeführt: alle bestanden. `tests/test-pii-regression.js`: 164 Fälle bestanden. Danach die Gesamtsuite: 367 Dateien bestanden. |
+
+### Gegenprüfung
+
+Ein unabhängiger Read-only-Lauf, Kern von `1c8e971c` gegen den Endstand,
+mit dem Auftrag zu widerlegen: rund 1 800 gezielte Fälle (elf
+Platzhalter-Schreibweisen im Quelltext mal 83 Schablonen, 16 weitere
+Umgebungen für denselben Namen an zwei Stellen, maskierte Zeichen), dazu rund
+30 000 Zufallsfälle. Kein Fall mit mehr Klartext, kein neuer Stopp, kein
+beschädigter Platzhalter. Laufzeit des Kerndurchlaufs bei 5 000 Platzhaltern
+1,3- bis 1,6-fach, linear wachsend.
+
+Die Gegenprüfung hat eine Behauptung von mir berichtigt. Ich hatte angenommen,
+der zweite Blick ändere nur Dokumente, die bisher stoppten. Er ändert auch
+solche, die durchliefen:
+
+- `Telefon: [PERSON_001] 0171 2345678` in einem Quelltext, der selbst
+  Platzhalter enthält: vorher `Telefon: [FIELD_REDACTED]`, jetzt
+  `Telefon: [FIELD_REDACTED] [PHONE_REDACTED]`. Mehr ersetzt, nie weniger.
+- Die Schlussprüfung wird in seltenen Fällen selbst strenger, weil die
+  Darstellungsbereinigung (`canonicalizeRenderedText`, `privacy/base.js`)
+  dieselbe Erkennung nutzt. Ein Zufallsfall von 6 000 auf Kernebene; im
+  Ablauf der ganzen Operation kein neuer Stopp.
+- **Eine geschlossene Lücke:** `Name: Hans Müller` und später
+  `Tel. Hans Müller \(030\) 1234567` (maskierte Klammern der Vorwahl, wie aus
+  Word) wurde vorher mit lesbarer Nummer freigegeben, ohne Stopp. Jetzt ist
+  die Nummer ersetzt. Als Test aufgenommen.
+
+### Was bleibt
+
+- **Ein Stopp hatte nebenbei geschützt.** Ein Dokument, das vorher wegen
+  einer solchen Nummer stoppte, wird jetzt freigegeben, auch wenn es an
+  anderer Stelle einen Namen enthält, den der Kern nicht erkennt
+  (`Tel. [EMAIL_REDACTED] 030 1234567 Hans Müller und Hans Müller`;
+  `Von: Hans Müller`, `An: Erika Beispiel`, `Tel. Herr Hans Müller 030 …`
+  lässt `Erika Beispiel` lesbar). Fünf von 324 solchen Fällen der
+  Gegenprüfung. Die Ursache ist die bekannte Lücke für Namen ohne Hinweis,
+  nicht diese Änderung.
+- **Unverändert:** `Tel. Hans Müller 030 1234567` ohne jeden weiteren Hinweis
+  auf die Person bleibt mit Name und Nummer lesbar; für beide Leser steht das
+  Label dort nicht vor der Nummer.
+- **Zwei Stopps bleiben Stopps** mit anderem Code
+  (`AMBIGUITY_REVIEW_REQUIRED` statt `RESIDUAL_PII`): dieselbe Zeile zweimal
+  (`Tel. [PERSON_001] 030 1234567 und Tel. [PERSON_001] 030 1234567` im
+  Quelltext) und `Geburtsdatum Hans Müller 01.02.1980` mit einem zweiten
+  Namen.
+- **Label mit ersetzt:** `Zeuge: Hans Müller` und später
+  `Steuer-ID Hans Müller 12345678903` wird zu `[PERSON_002] [ID_REDACTED]`;
+  die Restprüfung liest `Steuer-ID Hans Müller` als einen Hinweis.
+- **Nicht geprüft:** echte Office-Dateien mit Platzhaltern in Tabellenzellen;
+  5 000 Platzhalter in einer einzigen Zeile; die Korrektur ist nach der
+  Gegenprüfung nur noch um einen Test ergänzt worden.
 
 ## Annahmen und Revalidierung
 
@@ -2015,6 +2107,8 @@ gegengeprüft, nur mit den Vergleichsläufen, dem Suchlauf und den Tests.
 | A-042 | Eine Zeile endet am Zeilenumbruch. | Der Kern teilt an `\n`. | Eine Textdatei von Windows endet ihre Zeilen mit `\r\n`; das `\r` blieb am Zeilenende und verhinderte jede Listenzeile. | Dritte Gegenprüfung mit einer extrahierten Textdatei | Widerlegt; behoben vor dem Commit, Test mit Windows-Zeilenenden. |
 | A-043 | Ein Name ist dort zu Ende, wo die Namensform endet. | Bis zu vier großgeschriebene Wörter. | Das nächste Wort ist oft ein Satzanfang oder ein Feldlabel und ebenfalls großgeschrieben. | Zweite und dritte Gegenprüfung | Widerlegt in beide Richtungen: ohne Kürzung verschluckt die Regel Folgetext, mit Kürzung bleibt ein Namensteil wie `Im Hof` stehen. Kürzung beibehalten, Grenze dokumentiert. |
 | A-044 | Was die Fundstelle eines Personenhinweises schützt, schützt auch jede weitere Stelle des Namens. | Die Fundstelle wird vor dem Kern verborgen und danach entschieden. | Verbergen ändert, was die Regeln um die Stelle sehen. | Dritte Gegenprüfung; Nachstellung am alten und neuen Kern | Widerlegt; weitere Stellen liest der Kern jetzt wie bisher, nur ein danach noch lesbarer Name wird Hinweis. |
+| A-045 | Redaktion und Schlussprüfung lesen denselben Text (so der Kommentar in `privacy/base.js`: beide können sich nicht widersprechen). | Beide nutzen dieselben Muster. | Die Schlussprüfung liest Platzhalter als Leerraum, die Redaktion nicht; ein ersetzter Name zwischen Label und Nummer trennte für die eine, was für die andere zusammenstand. | Nachstellung am RC178-Kern und am Endstand; Lesen von `scanResidual` | Widerlegt; behoben in `0bd5e26f`. In RC178 gleich. |
+| A-046 | Der zweite Blick der Redaktion ändert nur Dokumente, die bisher stoppten. | Er liefert, was die Schlussprüfung ohnehin meldete. | Die Erkennung hat weitere Aufrufer, und nicht jeder Fund der Schlussprüfung führte im Ablauf zum Stopp. | Gegenprüfung (read-only) mit rund 1 800 gezielten und 30 000 Zufallsfällen | Zum Teil widerlegt: mehr Ersetzung auch in Dokumenten, die durchliefen, und eine dadurch geschlossene Lücke; kein Fall mit mehr Klartext, kein neuer Stopp. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung
