@@ -6279,4 +6279,136 @@ testAsync('count texts of the standalone surface never put a bare plural after a
   }
 });
 
+// RC178 review R-035 and R-036. The earlier interface showed these notices
+// and its tests held them; the loaded interface received the same data from
+// the Core and the shell and showed none of it. The shell rejects with a
+// string, so the fixtures throw strings.
+testAsync('a result folder on a network drive is confirmed with the notice of DS-080, without a path, and only then', async () => {
+  for (const notice of [true, false, 'yes']) {
+    const h = harness({ invoke(command, args, fallback) {
+      return command === 'configure_results' ? { ok: true, local_ui_only: true, external_disclosure: false,
+        result_folder: '\\\\dateiserver\\freigabe\\Ausgabe', ...(notice === false ? {} : { network_folder_notice: notice }) } : fallback(); } });
+    await tick(); await h.act('configure-results');
+    const text = h.el('feedback').textContent;
+    assert.match(text, /^Ergebnisordner gespeichert\. Vorhandene Läufe bleiben an ihrem bisherigen Speicherort\./u);
+    assert.equal(/Netzlaufwerk/u.test(text), notice === true, String(notice));
+    assert.doesNotMatch(text, /dateiserver|freigabe/u, 'the notice names no path');
+    assert.equal(h.el('feedback').attrs.role, 'status');
+    assert.equal(h.el('destination').textContent, '\\\\dateiserver\\freigabe\\Ausgabe', 'the folder itself is shown where it always was');
+    if (notice === true) assert.match(text, /Ergebnisse und die vertraulichen Zuordnungsdateien können darüber an andere Systeme übertragen werden\.$/u);
+  }
+});
+
+testAsync('a refused selection names the files that are the reason, bounded and as text', async () => {
+  const details = { selection_files: [{ name: 'Akte/~$Bericht.docx', reason_code: 'SOURCE_ARTIFACT_IGNORED' },
+    { name: 'Akte/leer.txt', reason_code: 'SOURCE_FILE_EMPTY' }, { name: '../geheim.txt', reason_code: 'SOURCE_FILE_EMPTY' },
+    { name: 'Akte/x.txt', reason_code: 'raw text <b>' }], selection_count: 5 };
+  const refused = (payload) => harness({ invoke(command, args, fallback) {
+    if (command === 'select_files') throw payload; // eslint-disable-line no-throw-literal
+    return fallback(); } });
+  const h = refused(JSON.stringify({ code: 'SOURCE_SELECTION_REJECTED', details }));
+  await tick(); await h.act('select-files');
+  const text = h.el('feedback').textContent;
+  assert.match(text, /^Diese Dateiauswahl konnte nicht übernommen werden\. Die bisherige Auswahl bleibt unverändert\. \(SOURCE_SELECTION_REJECTED\)\nNicht aufgenommen \(5\):/u);
+  assert.match(text, /\n• Akte\/~\$Bericht\.docx: Temporäre Office-Sperrdateien sind keine Dokumente\./u);
+  assert.match(text, /\n• Akte\/leer\.txt: Die Datei ist leer\./u);
+  assert.doesNotMatch(text, /geheim|raw text|<b>|undefined/u, 'an unsafe label or an unknown reason is not shown');
+  assert.match(text, /\n3 weitere Dateien sind hier nicht einzeln aufgeführt\.$/u);
+  assert.equal(h.el('feedback').attrs.role, 'alert');
+  assert.equal(h.el('catalogue').hidden, true, 'nothing was admitted');
+  // The name stays in this one text: no command carries it out of the window.
+  assert.equal(h.calls.some(call => JSON.stringify(call).includes('Bericht')), false);
+  assert.equal(h.nodes.some(node => node.id !== 'feedback' && (node.ownText.includes('Bericht') || JSON.stringify(node.attrs).includes('Bericht'))), false);
+
+  // One announced message names at most ten files, however many arrive, and
+  // a name that could reorder the sentence around it is counted, not shown.
+  const many = refused(JSON.stringify({ code: 'SOURCE_SELECTION_REJECTED', details: { selection_count: 4096,
+    selection_files: [{ name: 'Akte/\u202egnp.exe', reason_code: 'SOURCE_FILE_EMPTY' }, { name: 'Akte/a\u2028b.txt', reason_code: 'SOURCE_FILE_EMPTY' },
+      ...Array.from({ length: 198 }, (unused, n) => ({ name: `Ordner/${'x'.repeat(250)}-${n}.txt`, reason_code: 'SOURCE_FILE_EMPTY' }))] } }));
+  await tick(); await many.act('select-files');
+  const long = many.el('feedback').textContent;
+  assert.equal(long.split('\n').filter(line => line.startsWith('• ')).length, 10);
+  assert.doesNotMatch(long, /[\u202e\u2028]|gnp\.exe/u);
+  assert.match(long, /\n4086 weitere Dateien sind hier nicht einzeln aufgeführt\.$/u);
+  assert.ok(long.length < 4000, `bounded message, got ${long.length} characters`);
+
+  const folder = refused(JSON.stringify({ code: 'SOURCE_FOLDER_UNSUPPORTED_FILES',
+    details: { unsupported_files: ['Akte/a.zip', 'b.exe'], unsupported_count: 2 } }));
+  await tick(); await folder.act('select-files');
+  assert.match(folder.el('feedback').textContent, /\(SOURCE_FOLDER_UNSUPPORTED_FILES\)\nNicht unterstützt \(2\):\n• Akte\/a\.zip\n• b\.exe$/u);
+
+  // Details that are out of bounds, or that come with another code, add nothing.
+  for (const payload of [
+    { code: 'SOURCE_SELECTION_REJECTED', details: { selection_files: [{ name: 'a.txt', reason_code: 'SOURCE_FILE_EMPTY' }], selection_count: 0 } },
+    { code: 'SOURCE_SELECTION_REJECTED', details: { selection_files: Array.from({ length: 201 }, (unused, n) => ({ name: `${n}.txt`, reason_code: 'SOURCE_FILE_EMPTY' })), selection_count: 201 } },
+    { code: 'SOURCE_SELECTION_REJECTED', details: [{ name: 'a.txt' }] },
+    { code: 'STANDALONE_BUSY', details },
+    { code: 'SOURCE_FILE_EMPTY', details: { unsupported_files: ['a.zip'], unsupported_count: 1 } }]) {
+    const other = refused(JSON.stringify(payload));
+    await tick(); await other.act('select-files');
+    assert.doesNotMatch(other.el('feedback').textContent, /\n|•|a\.txt|a\.zip|Akte/u, JSON.stringify(payload).slice(0, 80));
+    assert.match(other.el('feedback').textContent, new RegExp(`\\(${payload.code}\\)$`, 'u'));
+  }
+});
+
+testAsync('every reason code a refused file can carry has its own sentence, and five codes no longer get the general one', async () => {
+  const codes = ['SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY', 'SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED',
+    'SOURCE_PATH_UNSAFE', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_ARTIFACT_IGNORED'];
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'select_files') throw JSON.stringify({ code: 'SOURCE_SELECTION_REJECTED', // eslint-disable-line no-throw-literal
+      details: { selection_files: codes.map((reason_code, n) => ({ name: `Datei-${n}.txt`, reason_code })), selection_count: codes.length } });
+    return fallback(); } });
+  await tick(); await h.act('select-files');
+  const lines = h.el('feedback').textContent.split('\n').filter(line => line.startsWith('• '));
+  assert.equal(lines.length, codes.length);
+  for (const line of lines) assert.match(line, /^• Datei-\d\.txt: \p{Lu}[^:]{12,}\.$/u, line);
+  assert.equal(new Set(lines.map(line => line.replace(/^• Datei-\d\.txt: /u, ''))).size, codes.length, 'each code has a sentence of its own');
+  for (const code of ['SOURCE_SELECTION_REJECTED', 'SOURCE_ARTIFACT_IGNORED', 'STANDALONE_DROP_MIXED', 'MARKDOWN_CONVERSION_NOT_READY', 'SOURCE_SNAPSHOT_CHANGED']) {
+    const one = harness({ invoke(command, args, fallback) { if (command === 'select_files') throw code; return fallback(); } }); // eslint-disable-line no-throw-literal
+    await tick(); await one.act('select-files');
+    assert.match(one.el('feedback').textContent, new RegExp(`^\\p{Lu}.{30,} \\(${code}\\)$`, 'u'));
+    assert.doesNotMatch(one.el('feedback').textContent, /Der lokale Vorgang konnte nicht abgeschlossen werden/u, code);
+  }
+});
+
+testAsync('a refused drop shows the same names, and a mixed drop says what to drop instead', async () => {
+  const h = harness(); await tick();
+  const drop = h.listeners.get('datasecure-native-drop');
+  drop({ payload: { phase: 'checking' } }); await tick();
+  drop({ payload: { phase: 'failed', error_code: 'SOURCE_SELECTION_REJECTED',
+    error_details: { selection_files: [{ name: 'Akte/leer.txt', reason_code: 'SOURCE_FILE_EMPTY' }], selection_count: 1 } } }); await tick();
+  assert.match(h.el('feedback').textContent, /\(SOURCE_SELECTION_REJECTED\)\nNicht aufgenommen \(1\):\n• Akte\/leer\.txt: Die Datei ist leer\.$/u);
+  drop({ payload: { phase: 'rejected', error_code: 'STANDALONE_DROP_MIXED' } }); await tick();
+  assert.equal(h.el('feedback').textContent,
+    'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam aufgenommen werden. (STANDALONE_DROP_MIXED)');
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+
+testAsync('an accepted selection says what it left out: files already selected and known companion files', async () => {
+  const left = { already_selected_count: 1, ignored_artifact_count: 3,
+    ignored_artifacts: [{ name: 'Akte/.DS_Store', reason_code: 'SOURCE_ARTIFACT_IGNORED' }, { name: 'Akte/Thumbs.db' }, { name: '../x' }] };
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'select_files' ? { ...fallback(), ...left } : fallback(); } });
+  await tick(); await h.act('select-files');
+  assert.equal(h.el('feedback').textContent, 'Dateien aufgenommen. Häkchen prüfen und dann starten. ' +
+    '1 bereits ausgewählte Datei nicht doppelt hinzugefügt. 3 bekannte Begleitdateien übersprungen: Akte/.DS_Store, Akte/Thumbs.db und weitere.');
+  assert.equal(h.el('feedback').attrs.role, 'status');
+  const plain = harness(); await tick(); await plain.act('select-files');
+  assert.equal(plain.el('feedback').textContent, 'Dateien aufgenommen. Häkchen prüfen und dann starten.');
+  // The same through a drop; a count without names stays a count.
+  const dropped = harness(); await tick();
+  const drop = dropped.listeners.get('datasecure-native-drop');
+  drop({ payload: { phase: 'checking' } }); await tick();
+  drop({ payload: { phase: 'accepted', result: { ui_context: { local_ui_only: true, external_disclosure: false, source_catalogue: catalogue(), catalogue_revision: 1 },
+    ignored_artifact_count: 1 } } }); await tick();
+  assert.equal(dropped.el('feedback').textContent, 'Auswahl aufgenommen. 1 bekannte Begleitdatei übersprungen.');
+  // Many companion files: five names and the count, never two hundred names.
+  const crowd = harness({ invoke(command, args, fallback) {
+    return command === 'select_files' ? { ...fallback(), ignored_artifact_count: 200,
+      ignored_artifacts: Array.from({ length: 200 }, (unused, n) => ({ name: `Ordner-${n}/.DS_Store` })) } : fallback(); } });
+  await tick(); await crowd.act('select-files');
+  assert.equal(crowd.el('feedback').textContent, 'Dateien aufgenommen. Häkchen prüfen und dann starten. 200 bekannte Begleitdateien übersprungen: ' +
+    'Ordner-0/.DS_Store, Ordner-1/.DS_Store, Ordner-2/.DS_Store, Ordner-3/.DS_Store, Ordner-4/.DS_Store und weitere.');
+});
+
 done();

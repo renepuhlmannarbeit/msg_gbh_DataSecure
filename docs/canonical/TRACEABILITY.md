@@ -18,7 +18,14 @@ Ordner nichts anderes enthält; `test-standalone-workspace.js` und
 Dateien. `workspace.js` erklärt jetzt auch `SOURCE_FOLDER_UNSUPPORTED_FILES`,
 `STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED` und
 `STANDALONE_RESULT_BINDING_UNAVAILABLE`, die bisher nur die frühere Oberfläche
-erklärte (R-034). Ohne Aufrufer in der geladenen Oberfläche bleiben die
+erklärte (R-034). Der Einzelabgleich der 52 entfallenen Tests hat zwei
+Verhalten gezeigt, die der geladenen Oberfläche fehlten und jetzt in
+`workspace.js` stehen: der einmalige, pfadfreie Hinweis auf einen
+Ergebnisordner im Netzwerk (R-035; BL-002, BL-040.5, DS-080) und die Namen und
+Gründe der Dateien einer abgelehnten Auswahl samt fünf weiteren Erklärungen
+und den Hinweisen auf übersprungene Begleitdateien und bereits enthaltene
+Dateien (R-036; BL-010.46). `test-standalone-workspace.js` prüft beides.
+Ohne Aufrufer in der geladenen Oberfläche bleiben die
 nativen Befehle `remove_admitted_source`, `open_review_window`,
 `open_local_ledger` und `shutdown`; sie sind nicht entfernt.
 

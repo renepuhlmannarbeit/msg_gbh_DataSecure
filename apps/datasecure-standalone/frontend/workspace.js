@@ -109,6 +109,12 @@
     STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
     BATCH_PSEUDONYM_CAPACITY_EXCEEDED: 'Die gemeinsame Pseudonymzuordnung dieses Laufs hat ihre Grenze erreicht. Es wurde kein ungeprüftes Ergebnis veröffentlicht. Bitte die verbleibenden Dateien in einem kleineren neuen Lauf verarbeiten.',
     STANDALONE_RESULT_BINDING_UNAVAILABLE: 'Die bisherigen Ergebniszuordnungen konnten nicht sicher geprüft werden. Der Ergebnisordner blieb unverändert; bitte den lokalen Verlauf und die Diagnose prüfen.',
+    // RC178 review R-036: five more codes of the same kind.
+    SOURCE_SELECTION_REJECTED: 'Diese Dateiauswahl konnte nicht übernommen werden. Die bisherige Auswahl bleibt unverändert.',
+    SOURCE_ARTIFACT_IGNORED: 'Temporäre Office-Sperrdateien sind keine Dokumente. Bitte die eigentliche Word-, Excel- oder PowerPoint-Datei auswählen.',
+    STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam aufgenommen werden.',
+    MARKDOWN_CONVERSION_NOT_READY: 'Diese Installation unterstützt die gewählte Betriebsart nicht. Bitte das vollständige aktuelle App-Paket verwenden. Es wurde kein Lauf gestartet; die Dateiauswahl bleibt erhalten.',
+    SOURCE_SNAPSHOT_CHANGED: 'Die Datei hat sich während der Verarbeitung verändert. Eine unveränderte Kopie auswählen und neu verarbeiten.',
     STANDALONE_DOCUMENT_VIEW_UNAVAILABLE: 'Die Ergebnisprüfung konnte nicht geöffnet werden. Bitte das vollständige App-Paket verwenden. Die gespeicherten Entscheidungen bleiben erhalten; kein Lauf wurde neu gestartet.'
   };
   const terminalCoreStartupCodes = new Set([
@@ -550,7 +556,47 @@
   function errorCode(error) { const raw = error?.code || error?.message || String(error);
     try { const value = JSON.parse(raw); return /^[A-Z][A-Z0-9_]{1,80}$/u.test(value?.code) ? value.code : 'STANDALONE_OPERATION_FAILED'; }
     catch { return /^[A-Z][A-Z0-9_]{1,80}$/u.test(raw) ? raw : 'STANDALONE_OPERATION_FAILED'; } }
-  function showError(error, command = null) { const code = errorCode(error);
+  // RC178 review R-036. A refused selection arrives as {code, details}: the
+  // Core and the shell name the files that are the reason, bounded and
+  // already checked there. Only these source codes carry such details, and
+  // only a safe relative label with a known reason code is shown, as text.
+  const sourceDetailCodes = new Set(['SOURCE_FOLDER_UNSUPPORTED_FILES', 'SOURCE_SELECTION_REJECTED', 'SOURCE_FORMAT_SIZE_LIMIT',
+    'SOURCE_FILE_EMPTY', 'SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED', 'SOURCE_PATH_UNSAFE',
+    'SOURCE_IDENTITY_CHANGED', 'SOURCE_ARTIFACT_IGNORED']);
+  function errorDetails(error) { const raw = error?.code || error?.message || String(error);
+    try { const value = JSON.parse(raw); return value && typeof value.details === 'object' ? value.details : null; } catch { return null; } }
+  // The message is one announced text, so it names at most ten files and
+  // counts the rest. A name with a direction or line-separator character is
+  // counted, not shown: inside a sentence it could reorder the words around it.
+  const sentenceLabel = value => safeLabel(value) && !/[\u200e\u200f\u202a-\u202e\u2066-\u2069\u2028\u2029]/u.test(value);
+  function sourceDetailText(code, details) {
+    if (!sourceDetailCodes.has(code) || !details || typeof details !== 'object' || Array.isArray(details)) return '';
+    const bounded = (files, total) => Array.isArray(files) && files.length > 0 && files.length <= 200 &&
+      Number.isSafeInteger(total) && total >= files.length && total <= 4096;
+    const rest = (total, shown) => total > shown ? `\n${counted(total - shown, 'weitere Datei ist', 'weitere Dateien sind')} hier nicht einzeln aufgeführt.` : '';
+    if (bounded(details.selection_files, details.selection_count)) {
+      const files = details.selection_files.filter(file => file && sentenceLabel(file.name) && sourceDetailCodes.has(file.reason_code) &&
+        !['SOURCE_SELECTION_REJECTED', 'SOURCE_FOLDER_UNSUPPORTED_FILES'].includes(file.reason_code)).slice(0, 10);
+      return `\nNicht aufgenommen (${details.selection_count}):${files.map(file => `\n• ${file.name}: ${reasons[file.reason_code]}`).join('')}` +
+        rest(details.selection_count, files.length);
+    }
+    if (code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' && bounded(details.unsupported_files, details.unsupported_count)) {
+      const files = details.unsupported_files.filter(sentenceLabel).slice(0, 10);
+      return `\nNicht unterstützt (${details.unsupported_count}):${files.map(name => `\n• ${name}`).join('')}` +
+        rest(details.unsupported_count, files.length);
+    }
+    return '';
+  }
+  // What an accepted selection left out, said once with the confirmation.
+  function admissionHints(result) {
+    const already = count(result?.already_selected_count), ignored = count(result?.ignored_artifact_count);
+    const names = (Array.isArray(result?.ignored_artifacts) ? result.ignored_artifacts : []).slice(0, 200)
+      .map(item => item?.name).filter(sentenceLabel).slice(0, 5);
+    return (already ? ` ${counted(already, 'bereits ausgewählte Datei', 'bereits ausgewählte Dateien')} nicht doppelt hinzugefügt.` : '') +
+      (ignored ? ` ${counted(ignored, 'bekannte Begleitdatei', 'bekannte Begleitdateien')} übersprungen${
+        names.length ? `: ${names.join(', ')}${ignored > names.length ? ' und weitere' : ''}` : ''}.` : '');
+  }
+  function showError(error, command = null, details = errorDetails(error)) { const code = errorCode(error);
     if (bootstrapFailure) { renderBootstrapFailure(); return; }
     if (code === 'RESULT_DIRECTORY_UNAVAILABLE' && ['open_history_results', 'open_current_results'].includes(command)) {
       feedback('Der Ergebnisordner ist nicht mehr sicher erreichbar. Die Verarbeitung ist abgeschlossen; private Prüfstände bleiben erhalten. Es wird nichts neu angelegt oder überschrieben.', false,
@@ -567,7 +613,7 @@
     const reason = command === 'configure_results' && code === 'AI_EXPORT_CONFLICT'
       ? 'Der gewählte Ergebnisordner konnte nicht sicher vorbereitet werden. Die bisherige Einstellung bleibt unverändert. Durch diese Ordnerwahl wurde kein Dokumentlauf und kein Export gestartet. Bitte Diagnose und aktuellen Laufstatus prüfen; keinen Lauf oder Export blind wiederholen.'
       : reasons[code] || 'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen.';
-    feedback(`${reason} (${code})`, true,
+    feedback(`${reason} (${code})${sourceDetailText(code, details)}`, true,
       connectionError ? { kind: 'connection-unconfirmed' } : null);
     $('connection-help').hidden = !(reconnecting || contextRequired || connectionError); }
   function activeCoreDescription(activity) {
@@ -915,7 +961,7 @@
       return;
     }
     try { applyContext(result.ui_context); $('add-options').hidden = true; $('add-more').setAttribute('aria-expanded', 'false');
-      feedback('Dateien aufgenommen. Häkchen prüfen und dann starten.'); $('select-all').focus(); } catch (error) { showError(error); }
+      feedback(`Dateien aufgenommen. Häkchen prüfen und dann starten.${admissionHints(result)}`); $('select-all').focus(); } catch (error) { showError(error); }
   }
   async function clearFiles() { if (!await perform('cancel_admission')) return; catalogue = []; selected.clear(); knownIds.clear(); expanded.clear(); renderTree(); feedback(''); }
   function consumeAdmission() {
@@ -2187,7 +2233,11 @@
     }
     resultFolderUnavailable = false; resultPreparationPending = false; $('retry-destination').hidden = true; $('retry-results').hidden = true;
     $('destination').textContent = result.result_folder; $('settings-destination').textContent = result.result_folder;
-    updateStart(); feedback('Ergebnisordner gespeichert. Vorhandene Läufe bleiben an ihrem bisherigen Speicherort.'); }
+    // RC178 review R-035, decision DS-080. A result folder on a network drive
+    // is allowed, and the Core says so once, without a path. The notice was
+    // shown by the earlier interface only.
+    updateStart(); feedback('Ergebnisordner gespeichert. Vorhandene Läufe bleiben an ihrem bisherigen Speicherort.' +
+      (result.network_folder_notice === true ? ' Hinweis: Der Ordner liegt auf einem Netzlaufwerk. Ergebnisse und die vertraulichen Zuordnungsdateien können darüber an andere Systeme übertragen werden.' : '')); }
   async function recheckDestination() {
     const context = await perform('get_ui_context'); if (!context) return;
     try { applyContext(context); updateStart(); feedback(resultPreparationPending
@@ -2526,10 +2576,10 @@
         if (data.phase === 'accepted') { if (dropOwnership === null) return;
           const ownership = dropOwnership; dropOwnership = null; admitting = false; endBusy(ownership); if (view === 'review') return;
           job = null; $('setup').hidden = false; $('job').hidden = true;
-          try { applyContext(data.result.ui_context); showView('new'); feedback('Auswahl aufgenommen.'); } catch (error) { showError(error); } }
+          try { applyContext(data.result.ui_context); showView('new'); feedback(`Auswahl aufgenommen.${admissionHints(data.result)}`); } catch (error) { showError(error); } }
         if (['failed', 'rejected'].includes(data.phase)) {
           if (dropOwnership !== null) { const ownership = dropOwnership; dropOwnership = null; admitting = false; endBusy(ownership); renderTree(); }
-          showError(data.error_code);
+          showError(data.error_code, null, data.error_details);
         }
       })); nativeDropReady = true; } catch { feedback('Drag-and-drop ist nicht verfügbar. Bitte die Auswahlbuttons verwenden.'); }
       try { unlisteners.push(await window.__TAURI__.event.listen('datasecure-admission-progress', event => {
