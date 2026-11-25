@@ -48,11 +48,12 @@ function reservePersonReviewCandidates(text, registry, allowOrganizationReview =
   const reservations = candidates
     .filter(span => {
       // A further place of a name that is a candidate elsewhere (R-033) is
-      // not hidden from the redactor: the engine reads that place as it did
-      // before, and only a name that is still there afterwards is put to the
-      // review. Hiding it changed what the rules around it saw and stopped
-      // documents ("Tel. Hans Müller 030 …").
-      if (span.further) return false;
+      // reserved like the place with the cue. The redactor then reads
+      // "Tel. <reservation> 030 …" as the residual gate reads it, with the
+      // label directly in front of its number (findStructuredSpans), and
+      // replaces the number. Left unreserved, the name was replaced only by
+      // the review decision, after the last redaction, and the document
+      // stopped at the final gate.
       if (contextualIdentities?.has(registryComparisonValue(span.value))) return false;
       if (registry?.lookup?.('PERSON', span.value) || allowOrganizationReview && registry?.lookup?.('ORG', span.value)) return false;
       if (!knownIdentities.length) return true;

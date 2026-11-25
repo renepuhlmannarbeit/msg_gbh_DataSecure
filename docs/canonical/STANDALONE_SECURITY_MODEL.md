@@ -476,12 +476,19 @@ RC178-Review ersetzte die Entscheidung den Namen nur an der Fundstelle
 zwei Zeilen weiter blieb er lesbar. Die Ausweitung endet nach 500 weiteren
 Stellen je Dokument, über alle Namen gezählt, weil die lokale Prüfung eine
 Obergrenze für die Zahl ihrer Fundstellen hat; darüber hinaus bleibt der Name
-wie bisher lesbar, ohne Stopp. Eine weitere Stelle liest der Kern zunächst wie
-bisher: Ersetzt er den Namen dort schon aus eigenem Grund, bleibt es dabei.
-Steht der Name zwischen einem Telefon- oder Nummernlabel und der Nummer
-(`Tel. Hans Müller 030 …`), stoppt das Dokument jetzt mit `RESIDUAL_PII`:
-Ohne den Namen erkennt die Schlussprüfung die Nummer, die der Kern vorher
-samt Namen lesbar freigab.
+wie bisher lesbar, ohne Stopp. Sieht die Restprüfung an einer weiteren Stelle
+einen breiteren Hinweis (`Hans Müller IBAN`), behält dieser die Stelle.
+
+Steht ein ersetzter Name zwischen einem Label und seiner Nummer
+(`Tel. Hans Müller 030 …`, ebenso Geburtsdatum, Steuer-ID, Aktenzeichen und
+Personalnummer), wird auch die Nummer ersetzt:
+`Tel. [PERSON_001] [PHONE_REDACTED]`. Bis zum RC178-Review stoppte ein solches
+Dokument mit `RESIDUAL_PII`, sobald der Name bekannt war: Die Schlussprüfung
+liest einen Platzhalter als Leerraum und sah das Label direkt vor der Nummer,
+die Redaktion sah den Platzhalter dazwischen und ließ die Nummer stehen.
+Beide lesen den Text jetzt gleich. Das gilt in beiden Produkten. Ist der Name
+dem Kern nicht bekannt, bleibt die Zeile wie bisher unverändert, mit Name und
+Nummer.
 
 Personenhinweise entscheidet die geführte Prüfung; der automatische Modus
 ersetzt sie. Der Kern erkennt einen Namen dabei allein an der Form (zwei bis
@@ -504,7 +511,9 @@ umgestellte Form einer noch unbekannten Person hinter einer Rolle
 (`Zeugen: Anna Sommer, Erika Beispiel`), eine Namensliste ohne Label oder
 unter `Verteiler` und `Mitglieder`, ein Listeneintrag aus einem einzelnen
 Nachnamen (`- Müller (Protokoll)`), eine Telefonnummer ohne Label und ohne
-internationale Schreibweise (`Die Nummer 030 7654321 ist neu`) und ein
+internationale Schreibweise (`Die Nummer 030 7654321 ist neu`), eine Nummer
+hinter einem Label und einem unbekannten Namen
+(`Tel. Hans Müller 030 1234567` ohne weiteren Hinweis auf die Person) und ein
 Geburtsname hinter `geb.` (`Anna Meier (geb. Schulz)` wird zu
 `[PERSON_001] (geb. Schulz)`). Ein Name aus drei Wörtern, dessen drittes Wort
 auch ein Satzanfang oder Feldlabel sein kann, wird hinter einer Rolle nur

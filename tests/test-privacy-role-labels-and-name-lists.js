@@ -114,9 +114,9 @@ async function main() {
         'Antragsteller: [PERSON_001]\n\nSpäter kam [PERSON_001] wieder.', profile);
     }
     assert.equal(await note('Teilnehmer:\n- Anna Sommer\n\nAnna Sommer wird Protokoll führen.'), 'Teilnehmer:\n- [PERSON_001]\n\n[PERSON_001] wird Protokoll führen.');
-    // A further place is read by the engine as before. Where the engine or
-    // the residual scan decides it on its own evidence, that decision stands;
-    // an earlier version put its own hint across it and stopped the document.
+    // Where the residual scan sees a wider hint at a further place
+    // ("Hans Müller IBAN"), that hint keeps the place; an earlier version
+    // put its own hint across it and stopped the document.
     for (const source of ['Zeuge: Hans Müller\n\nHans Müller IBAN DE89370400440532013000',
       'Hans Müller bestätigt den Termin.\n\nHans Müller IBAN DE89370400440532013000'])
       assert.doesNotMatch(await note(source), /Hans|Müller|DE89/u, source);
@@ -124,6 +124,34 @@ async function main() {
     const lines = (count) => `Zeuge: Hans Müller\n\n${Array.from({ length: count }, () => 'Hans Müller war dort.').join('\n')}`;
     assert.equal(((await note(lines(500))).match(/Hans Müller/gu) || []).length, 0);
     assert.equal(((await note(lines(520))).match(/Hans Müller/gu) || []).length, 20);
+  });
+
+  await testAsync('a replaced name between a label and its number does not stop the document', async () => {
+    // The residual gate reads a placeholder as blanks: "Tel. [PERSON_001]
+    // 030 …" is a label in front of its number. The redactor did not, left
+    // the number, and the document stopped with RESIDUAL_PII, in RC178 as soon
+    // as the name was known ("Name: …") and since R-033 for every name that
+    // is a candidate elsewhere. Now the number is replaced as well.
+    const cases = [['Tel. X 030 1234567', 'Tel. [PERSON_001] [PHONE_REDACTED]'],
+      ['Mobil X: 0171 2345678', 'Mobil [PERSON_001]: [PHONE_REDACTED]'],
+      ['Geburtsdatum X: 01.02.1980', 'Geburtsdatum [PERSON_001]: [DATE_REDACTED]'],
+      ['Personalnr. X 4711', 'Personalnr. [PERSON_001] [ID_REDACTED]'],
+      [`Tel${BS}. X 030 1234567`, `Tel${BS}. [PERSON_001] [PHONE_REDACTED]`],
+      // From Word the brackets of the area code arrive escaped. This number
+      // was released in clear behind a replaced name, without a stop.
+      [`Tel. X ${BS}(030${BS}) 1234567`, 'Tel. [PERSON_001] [PHONE_REDACTED]'],
+      ['| Tel. | X 030 1234567 |', '| Tel. | [PERSON_001] [PHONE_REDACTED] |']];
+    for (const profile of PROFILES) for (const cue of ['Name: X', 'Zeuge: X', 'X bestätigt den Termin.']) for (const [line, expected] of cases) {
+      const source = `${cue}\n\n${line}`.split('X').join('Hans Müller');
+      assert.equal((await note(source, profile)).split('\n\n')[1], expected, `${profile}: ${source}`);
+    }
+    for (const line of ['Steuer-ID X 12345678903', 'Aktenzeichen X 12/2026', 'Notfallkontakt X 0171 2345678'])
+      assert.doesNotMatch(await note(`Zeuge: X\n\n${line}`.split('X').join('Hans Müller')), /Hans|Müller|12345678903|12\/2026|2345678/u, line);
+    // Without a number behind the name nothing else is taken, and a name the
+    // kernel does not know keeps the line as it was: the label is then not
+    // in front of the number for either reader.
+    assert.equal(await note('Name: Hans Müller\n\nTel. Hans Müller Zimmer 12'), 'Name: [PERSON_001]\n\nTel. [PERSON_001] Zimmer 12');
+    await unchanged(['Tel. Hans Müller 030 1234567']);
   });
 
   await testAsync('two capitalised words in front of "hat" are no person', async () => {

@@ -40,7 +40,7 @@ const {
   tableHeaderAt,
   sameLineHasIban
 } = require('./base');
-const { placeholderSpans, applySpans } = require('./spans');
+const { placeholderSpans, maskPlaceholders, applySpans } = require('./spans');
 const { ibanBoundaryEnd } = require('./iban-boundary');
 const FOLLOWING_EMAIL_RE = new RegExp(EMAIL_RE.source, EMAIL_RE.flags.replace('g', 'y'));
 // Five digits followed by a unit are far more likely to be a quantity than a
@@ -506,8 +506,26 @@ function acceptRepeatedPhones(spans, candidates) {
 // with such a label as RC178 did. The shared privacy operation asks for those
 // tokens separately, after all other rules (prepareTextPrivacyReview in
 // gateway/privacy-text-operation.js).
+//
+// A second look reads the text as the residual gate does, with every
+// placeholder as blanks (RC178 review R-033). The gate has always read
+// "Tel. [PERSON_001] 030 …" as a label directly in front of its number; the
+// redactor saw the placeholder between the two and left the number, so the
+// document stopped with RESIDUAL_PII as soon as the name between a label and
+// a number was replaced. Coordinates are the same in both views. A span from
+// the second look never touches a placeholder and never competes with a span
+// of the first.
 function findStructuredSpans(text) {
-  return collectStructuredSpans(text, false);
+  const src = String(text || '');
+  const spans = collectStructuredSpans(src, false);
+  const reserved = placeholderSpans(src);
+  if (!reserved.length) return spans;
+  for (const span of collectStructuredSpans(maskPlaceholders(src), false)) {
+    if (reserved.some((r) => span.start < r.end && r.start < span.end) ||
+        spans.some((known) => span.start < known.end && known.start < span.end)) continue;
+    spans.push({ ...span, text: src.slice(span.start, span.end) });
+  }
+  return spans;
 }
 
 // Only the tokens behind a credential label inside a line.
