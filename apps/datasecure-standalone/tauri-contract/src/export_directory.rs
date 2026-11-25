@@ -238,6 +238,7 @@ pub(crate) const IDENTITIES_FILE: &str = "Personen-Pseudonym-Zuordnung.txt";
 pub(crate) const PSEUDONYM_IDENTITIES_FILE: &str = "Pseudonym-Zuordnung.txt";
 pub(crate) const PSEUDONYM_WORKBOOK_FILE: &str = "Pseudonym-Zuordnung.xlsx";
 pub(crate) const MAX_WORKBOOK_BYTES: u64 = 16 * 1024 * 1024;
+pub(crate) const DIAGNOSTIC_INVENTORY_LIMIT: usize = 2048;
 /// Fixed companion roles, never caller-selected paths or another document.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -568,9 +569,13 @@ impl Directory {
     /// Diagnostic-only inventory. Unlike export evidence, an append-only log
     /// may grow during collection. The caller receives a bounded tail and
     /// must label truncation/growth; this never validates an export or journal.
+    ///
+    /// The bound covers years of ordinary use: a session leaves two to four
+    /// segments and nothing here is ever removed. Beyond it the caller falls
+    /// back to the segments this process owns and labels the snapshot partial.
     pub(crate) fn diagnostic_names(&self) -> io::Result<Vec<String>> {
         self.check()?;
-        let names = platform::list_names(&self.inner, 128)?;
+        let names = platform::list_names(&self.inner, DIAGNOSTIC_INVENTORY_LIMIT)?;
         self.check()?; Ok(names)
     }
     pub(crate) fn diagnostic_modified(&self, name: &str) -> io::Result<u128> {

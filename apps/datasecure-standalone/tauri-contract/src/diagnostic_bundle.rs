@@ -638,7 +638,8 @@ mod tests {
     #[test]
     fn inventory_overflow_retains_current_native_desktop_and_rotated_core_without_unbounded_scan() {
         let root = root();
-        for n in 0..140 { std::fs::write(root.join(format!("sidecar-interactions.{n:032x}.jsonl")), format!("{}\n", record())).unwrap(); }
+        let beyond = crate::export_directory::DIAGNOSTIC_INVENTORY_LIMIT + 12;
+        for n in 0..beyond { std::fs::write(root.join(format!("sidecar-interactions.{n:032x}.jsonl")), format!("{}\n", record())).unwrap(); }
         let desktop = "desktop-interactions.50101.000000000000000018df08c63413f240.2.jsonl";
         let core = "sidecar-interactions.abcdef0123456789abcdef0123456789.8.jsonl";
         let mut raw = record(); raw["time_ms"] = json!(123);
@@ -652,6 +653,31 @@ mod tests {
         assert!(parts.iter().any(|p| p["component"] == "desktop" && p["records"][0]["time_ms"] == 123));
         assert!(parts.iter().any(|p| p["component"] == "sidecar" && p["records"][0]["time_ms"] == 456));
         assert!(!bundle.to_string().contains("PRIVATE"));
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), beyond + 2, "collection never cleans old evidence");
+        cleanup(root);
+    }
+    #[test]
+    fn a_folder_of_many_earlier_sessions_still_yields_the_newest_earlier_session() {
+        // 140 entries used to exceed the inventory and left only the segments
+        // of the running process. The session before a crash is the evidence
+        // a support snapshot is usually saved for.
+        let root = root();
+        for n in 0..140u64 {
+            timed_source(&root, &format!("sidecar-interactions.{n:032x}.jsonl"), format!("{}\n", record()).as_bytes(), 1_000 + n);
+        }
+        let mut raw = record(); raw["time_ms"] = json!(777);
+        let earlier = "desktop-interactions.40404.000000000000000018df08c63413f000.jsonl";
+        timed_source(&root, earlier, format!("{raw}\n").as_bytes(), 9_000);
+        raw["time_ms"] = json!(888);
+        let current = "desktop-interactions.50101.000000000000000018df08c63413f240.jsonl";
+        timed_source(&root, current, format!("{raw}\n").as_bytes(), 500);
+        let bundle = collect_with_segments(&root, Some(current.into()), Vec::new());
+        assert_eq!(bundle["inventory"], "available");
+        assert_eq!(bundle["source_limit_reached"], true, "more known logs than the snapshot carries");
+        let parts = bundle["sources"].as_array().unwrap();
+        assert_eq!(parts.iter().filter(|p| p["status"] == "snapshot").count(), MAX_FILES);
+        assert!(parts.iter().any(|p| p["component"] == "desktop" && p["records"][0]["time_ms"] == 888), "running session");
+        assert!(parts.iter().any(|p| p["component"] == "desktop" && p["records"][0]["time_ms"] == 777), "newest earlier session");
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 142, "collection never cleans old evidence");
         cleanup(root);
     }
@@ -678,6 +704,12 @@ mod tests {
         let bundle = collect(&root);
         assert!(bundle["sources"].as_array().unwrap().iter().any(|p| p["component"] == "desktop" && p["status"] == "unreadable_or_unsafe"));
         for i in 0..130 { std::fs::write(root.join(format!("unexpected-{i}")), b"PRIVATE").unwrap(); }
+        let crowded = collect(&root);
+        assert_eq!(crowded["inventory"], "available");
+        // The planted target and the 130 foreign names are counted, never read.
+        assert_eq!(crowded["ignored_entries"], 131);
+        assert!(!crowded.to_string().contains("PRIVATE") && !crowded.to_string().contains("unexpected-"));
+        for i in 130..crate::export_directory::DIAGNOSTIC_INVENTORY_LIMIT { std::fs::write(root.join(format!("unexpected-{i}")), b"PRIVATE").unwrap(); }
         assert_eq!(collect(&root)["inventory"], "unreadable_or_limit");
         cleanup(root);
     }
