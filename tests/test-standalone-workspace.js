@@ -5805,7 +5805,7 @@ testAsync('epoch92V2 receipt for an older retry never completes the later failur
 // shell emits 'datasecure-close-requested' for every close request and exits
 // by itself when the renderer does not answer in time; that deadline is Rust's.
 function closeHarness(extra = {}) {
-  const answers = { acknowledge: { ok: true }, pause: null, hang: null, ...extra };
+  const answers = { acknowledge: { ok: true }, pause: null, hang: null, fail: null, ...extra };
   const seen = { dialogOpenAtAcknowledge: [] };
   let release = () => {};
   const h = harness({ invoke(command, args, fallback, model) {
@@ -5815,7 +5815,13 @@ function closeHarness(extra = {}) {
       return answers.acknowledge;
     }
     if (command === 'confirm_close' || command === 'decline_close_request') return { ok: true };
-    if (command === answers.hang) return new Promise(resolve => { release = () => resolve(fallback()); });
+    const answer = () => {
+      if (command !== 'continue_current_batch') return fallback();
+      model.state = { ...model.state, state: 'processing' }; return { ok: true };
+    };
+    if (command === answers.hang) return new Promise(resolve => { release = () => resolve(answer()); });
+    if (command === 'continue_current_batch') return answer();
+    if (answers.fail && command === answers.fail[0]) throw Error(answers.fail[1]);
     if (command === 'pause_batch') {
       if (answers.pause) { answers.onPauseFailure?.(model); throw Error(answers.pause); }
       model.state = { ...model.state, pause_requested: true }; return { ok: true };
@@ -6012,7 +6018,7 @@ testAsync('closing while a run is being started or the connection is restored as
   const dialog = starting.h.el('close-dialog');
   assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'unknown'); assert.equal(dialog.dataset.reason, 'starting');
   assert.equal(starting.h.el('close-dialog-title').textContent, 'Der Stand der Verarbeitung ist gerade nicht bekannt.');
-  assert.equal(starting.h.el('close-dialog-text').textContent, `Ein Lauf wird gerade gestartet. Warte kurz und schließe dann erneut. ${closeAnyway}`);
+  assert.equal(starting.h.el('close-dialog-text').textContent, `Eine Verarbeitung wird gerade gestartet oder fortgesetzt. Warte kurz und schließe dann erneut. ${closeAnyway}`);
   assert.equal(starting.h.el('close-dialog-stay').disabled, false, 'the answers stay usable while another command is in flight');
   assert.equal(starting.h.el('close-dialog-leave').disabled, false);
   assert.equal(starting.commands('confirm_close').length, 0);
@@ -6049,10 +6055,109 @@ testAsync('the window does not close by itself after the connection or the obser
     ? new Promise(resolve => { raced.h.calls.push({ command, args }); finishPause = () => resolve({ ok: true }); }) : original(command, args);
   await raced.requestClose(25); void raced.h.act('close-dialog-leave'); await tick();
   await raced.requestClose(26);
+  assert.equal(raced.h.el('close-dialog').dataset.kind, 'working', 'the pause is not confirmed yet');
+  raced.h.model.state = { ...raced.h.model.state, pause_requested: true };
   finishPause(); await tick(); await tick();
-  raced.h.model.state = { ...raced.h.model.state, state: 'paused' }; await raced.h.poll();
-  assert.equal(raced.commands('confirm_close').length, 0, 'the answer to the replaced request closes nothing; the newer question is unanswered');
-  assert.equal(raced.h.el('job-description').textContent.includes('schließt danach von selbst'), false);
+  // The pause is set: the newer question says so instead of offering to go on.
+  assert.equal(raced.h.el('close-dialog').open, true); assert.equal(raced.h.el('close-dialog').dataset.kind, 'pausing');
+  assert.match(raced.h.el('close-dialog-text').textContent, /und DataSecure schließt von selbst/u);
+  assert.equal(raced.commands('confirm_close').length, 0);
+  raced.h.model.state = { ...raced.h.model.state, state: 'paused', pause_requested: false }; await raced.h.poll();
+  assert.deepEqual(raced.commands('confirm_close').map(call => call.args), [{ request: 26 }], 'the latest request closes after the pause');
+});
+
+testAsync('every command that starts or continues work keeps the state unknown until a status read after it', async () => {
+  // Resuming a paused run: the click is sent, the old status still says paused.
+  const resumed = closeHarness({ hang: 'continue_current_batch' }); await selectAndStart(resumed.h);
+  resumed.h.model.state = { ...resumed.h.model.state, state: 'paused' }; await resumed.h.poll();
+  void resumed.h.act('job-action-resume'); await tick();
+  await resumed.requestClose(30);
+  assert.equal(resumed.h.el('close-dialog').dataset.kind, 'unknown'); assert.equal(resumed.h.el('close-dialog').dataset.reason, 'starting');
+  assert.equal(resumed.commands('confirm_close').length, 0, 'a run that is being continued is not closed over silently');
+  await resumed.h.act('close-dialog-stay'); resumed.release(); await tick();
+  // A start that is not confirmed may have consumed the selection and started the run.
+  const unconfirmed = closeHarness({ fail: ['start_admitted_batch', 'STANDALONE_IPC_TIMEOUT'] }); await selectAndStart(unconfirmed.h);
+  assert.match(unconfirmed.h.el('feedback').textContent, /Der Start ist nicht bestätigt/u);
+  await unconfirmed.requestClose(31);
+  const dialog = unconfirmed.h.el('close-dialog');
+  assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'unknown');
+  assert.equal(unconfirmed.commands('confirm_close').length, 0);
+  // The next status read settles it: nothing works, the question is retired, closing is immediate.
+  await unconfirmed.h.poll();
+  assert.equal(dialog.open, false);
+  assert.deepEqual(unconfirmed.commands('decline_close_request').map(call => call.args), [{ request: 31 }]);
+  await unconfirmed.requestClose(32);
+  assert.deepEqual(unconfirmed.commands('confirm_close').map(call => call.args), [{ request: 32 }]);
+  // A status read that began before the command does not settle it.
+  let finishRead = () => {}, holdRead = false;
+  const late = closeHarness(); await selectAndStart(late.h);
+  late.h.model.state = { ...late.h.model.state, state: 'paused' }; await late.h.poll();
+  const original = late.h.window.__TAURI__.core.invoke;
+  late.h.window.__TAURI__.core.invoke = (command, args) => command === 'get_public_state' && holdRead
+    ? new Promise(resolve => { late.h.calls.push({ command, args }); finishRead = () => resolve({ ...late.h.model.state }); }) : original(command, args);
+  // The command is accepted, but no status has been read since: still unknown.
+  holdRead = true; void late.h.act('job-action-resume'); await tick(); await tick();
+  assert.equal(late.commands('continue_current_batch').length, 1);
+  await late.requestClose(36);
+  assert.equal(late.h.el('close-dialog').dataset.kind, 'unknown', 'an accepted command is not yet a read status');
+  assert.equal(late.commands('confirm_close').length, 0);
+  holdRead = false; finishRead(); await tick(); await tick();
+  assert.equal(late.h.el('close-dialog').open, true);
+  assert.equal(late.h.el('close-dialog').dataset.kind, 'working', 'the read status settles the question');
+  const source = fs.readFileSync(path.join(base, 'workspace.js'), 'utf8');
+  // The answers of the guided review do not renew the read generation; there the token alone
+  // keeps a status read that began earlier from settling the question.
+  assert.match(source, /summaryReadGeneration: historySummaryReadGeneration, work: workStarting \}\);/u);
+  assert.match(source, /if \(request\.work === workStarting\) workStarting = 0;/u);
+  // The answers of the guided review continue the worker as well.
+  assert.match(source, /if \(command === 'submit_review' \|\| command === 'continue_review_session'\) \{\s+markWorkStarting\(\);/u);
+  assert.match(source, /const workCommands = new Set\(\['start_admitted_batch', 'continue_current_batch', 'continue_history_batch', 'skip_ocr_contact_review'\]\);/u);
+});
+testAsync('without a status of this session, without a core or with an unusable run id the window does not pretend to know', async () => {
+  // The connection is lost before this session has read any status: nothing this window started, close at once.
+  const early = closeHarness({ hang: 'get_public_state' }); await tick(); await tick();
+  early.h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } }); await tick();
+  await early.requestClose(33);
+  assert.equal(early.h.el('close-dialog').open, false);
+  assert.deepEqual(early.commands('confirm_close').map(call => call.args), [{ request: 33 }]);
+  // The core could not be started: there is nothing this window could pause.
+  const failed = closeHarness(); await selectAndStart(failed.h);
+  failed.h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'bootstrap_failed', error_code: 'STANDALONE_RESULT_ROOT_ACCESS_DENIED' } }); await tick();
+  await failed.requestClose(34);
+  assert.equal(failed.h.el('close-dialog').open, false);
+  assert.deepEqual(failed.commands('confirm_close').map(call => call.args), [{ request: 34 }]);
+  // A working run without a usable id cannot be paused by this window.
+  const nameless = closeHarness(); await selectAndStart(nameless.h);
+  nameless.h.model.state = { ...nameless.h.model.state, batch_id: 'not-a-run-id' }; await nameless.h.poll();
+  await nameless.requestClose(35);
+  assert.equal(nameless.h.el('close-dialog').dataset.kind, 'unpausable'); assert.equal(nameless.h.el('close-dialog').dataset.reason, 'state');
+  await nameless.h.act('close-dialog-leave');
+  assert.equal(nameless.commands('pause_batch').length, 0);
+  assert.deepEqual(nameless.commands('confirm_close').map(call => call.args), [{ request: 35 }]);
+});
+
+testAsync('a pause that fails after the user withdrew a newer question asks nothing more', async () => {
+  let failPause = () => {};
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  const original = h.window.__TAURI__.core.invoke;
+  h.window.__TAURI__.core.invoke = (command, args) => command === 'pause_batch'
+    ? new Promise((resolve, reject) => { h.calls.push({ command, args }); failPause = () => reject(Error('STANDALONE_PAUSE_RETENTION_UNAVAILABLE')); }) : original(command, args);
+  await requestClose(40); void h.act('close-dialog-leave'); await tick();
+  await requestClose(41); await h.act('close-dialog-stay');
+  assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 41 }]);
+  failPause(); await tick(); await tick(); await h.poll();
+  assert.equal(h.el('close-dialog').open, false, 'no question without a close request of the user');
+  assert.equal(commands('confirm_close').length, 0);
+  // With the newer question still open, the failed pause is told there.
+  const open = closeHarness(); await selectAndStart(open.h);
+  const invoke = open.h.window.__TAURI__.core.invoke;
+  open.h.window.__TAURI__.core.invoke = (command, args) => command === 'pause_batch'
+    ? new Promise((resolve, reject) => { open.h.calls.push({ command, args }); failPause = () => reject(Error('STANDALONE_BUSY')); }) : invoke(command, args);
+  await open.requestClose(42); void open.h.act('close-dialog-leave'); await tick();
+  await open.requestClose(43);
+  failPause(); await tick(); await tick(); await tick();
+  assert.equal(open.h.el('close-dialog').open, true); assert.equal(open.h.el('close-dialog').dataset.kind, 'unpausable');
+  assert.equal(open.h.el('close-dialog').dataset.reason, 'refused');
 });
 
 // German count texts: an interpolated number is never followed by a bare plural. Each such place

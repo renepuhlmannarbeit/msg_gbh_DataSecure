@@ -336,9 +336,13 @@
   let requestedHistorySummaryBatchId = null;
   let lastError = null;
   // Closing the main window while a run is working: the latest close request
-  // of the shell, the run this window closes after once it has paused, a start
-  // that is in flight, and whether this session has read a run status at all.
-  let closeRequest = 0, closeAfterPause = null, startingRun = false, closeStateSeen = false;
+  // of the shell, the run this window closes after once it has paused, and
+  // whether this session has read a run status at all. `workStarting` marks a command that starts or continues
+  // work; it holds until a status read that began after the command returns.
+  let closeRequest = 0, closeAfterPause = null, closeStateSeen = false;
+  let workStarting = 0, workToken = 0;
+  const workCommands = new Set(['start_admitted_batch', 'continue_current_batch', 'continue_history_batch', 'skip_ocr_contact_review']);
+  const markWorkStarting = () => { workStarting = ++workToken; };
   let reviewOrigin = null, documentsOrigin = 'history', admitting = false;
   let pendingResultAbandon = null;
   let connectionEpoch = 0, reconnecting = false, contextRequired = false;
@@ -368,6 +372,7 @@
       // child-frame claim or the number of rendered/staged decisions.
       if (command === 'close_review_window') owner.closing = true;
       if (command === 'submit_review' || command === 'continue_review_session') {
+        markWorkStarting(); // The worker may continue with this answer.
         invalidateHistoryCount();
         owner.phaseGeneration++; owner.complete = false; owner.stage = 'waiting'; refreshRunGuide();
       }
@@ -656,6 +661,7 @@
     if (busy || reconnecting) { await explainBlockedPicker(command, reconnecting ? 'reconnecting' : 'busy'); return null; }
     const connection = connectionEpoch;
     generation++; clearRunReview(); lastError = null; const ownership = beginBusy();
+    if (workCommands.has(command)) markWorkStarting();
     try { const result = await invoke(command, args); return connection === connectionEpoch ? result : null; }
     catch (error) { if (connection !== connectionEpoch) return null; lastError = errorCode(error); showError(error, command); return null; }
     finally { endBusy(ownership); }
@@ -920,9 +926,6 @@
     else if (ocr && $('ocr-review').checked) args.ocrContactReview = true;
     if (mode === 'markdown-and-anonymize' && $('fast-anonymize').checked) args.reviewPolicy = 'automatic-conservative';
     const startConnection = connectionEpoch;
-    // Until the first status of the new run is read, closing cannot know whether it works.
-    startingRun = true;
-    try {
     const result = await perform('start_admitted_batch', args);
     if (startConnection !== connectionEpoch) return;
     if (!result) {
@@ -942,7 +945,6 @@
     adoptRun({ ...snapshot, batchId: result.batch_id, selectedCount: files.length }); consumeAdmission();
     feedback('');
     showView('details', job.batchId); $('job-title').focus(); await refresh();
-    } finally { startingRun = false; }
   }
   function adoptRun(run) {
     invalidateHistoryCount();
@@ -2037,7 +2039,7 @@
     const flight = { read: null }; refreshing = flight;
     const attempt = bootstrapRecoveryPending ? bootstrapRecoveryAttempt : null;
     const ownRead = () => {
-      const owner = Object.freeze({ generation, connection: connectionEpoch, summaryReadGeneration: historySummaryReadGeneration });
+      const owner = Object.freeze({ generation, connection: connectionEpoch, summaryReadGeneration: historySummaryReadGeneration, work: workStarting });
       flight.read = owner; return owner;
     };
     let request = ownRead();
@@ -2086,6 +2088,8 @@
         if (recoveredConnection) feedback('Lokale Verbindung wiederhergestellt. Gespeicherte Läufe bleiben erhalten; kein Start und keine Entscheidung wurden automatisch wiederholt. Eine frühere Dateiauswahl bitte neu aufnehmen.');
       }
       current = state; closeStateSeen = true; observeHistoryCountState(state); updateStart();
+      // Only a read that began after the command knows what the command started.
+      if (request.work === workStarting) workStarting = 0;
       if (!job && !catalogue.length && /^[a-f0-9]{64}$/u.test(state.batch_id || '') && ['preparing', 'processing'].includes(state.state)) {
         adoptRun({ batchId: state.batch_id, task: state.processing_mode, name: `Lauf ${state.batch_id.slice(0, 8)}`,
           files: [], selectedCount: count(state.selected_count) });
@@ -2335,7 +2339,7 @@
   // What this window knows about work that closing would leave without a window.
   function closeQuestion() {
     if (bootstrapFailure) return null; // No core is connected; there is nothing this window could pause.
-    if (startingRun) return { kind: 'unknown', reason: 'starting' };
+    if (workStarting) return { kind: 'unknown', reason: 'starting' };
     if (reconnecting && closeStateSeen) return { kind: 'unknown', reason: 'reconnecting' };
     if (!runWorking(current)) return null;
     if (current.pause_requested === true || closeAfterPause) return { kind: 'pausing', reason: '' };
@@ -2371,7 +2375,7 @@
       $('close-dialog-stay').textContent = 'Weiter warten'; $('close-dialog-leave').textContent = 'Jetzt schließen';
     } else if (kind === 'unknown') {
       $('close-dialog-title').textContent = 'Der Stand der Verarbeitung ist gerade nicht bekannt.';
-      $('close-dialog-text').textContent = `${reason === 'starting' ? 'Ein Lauf wird gerade gestartet.' : 'Die lokale Verbindung wird gerade wiederhergestellt.'} Warte kurz und schließe dann erneut. ${anyway}`;
+      $('close-dialog-text').textContent = `${reason === 'starting' ? 'Eine Verarbeitung wird gerade gestartet oder fortgesetzt.' : 'Die lokale Verbindung wird gerade wiederhergestellt.'} Warte kurz und schließe dann erneut. ${anyway}`;
       $('close-dialog-stay').textContent = 'Fenster offen lassen'; $('close-dialog-leave').textContent = 'Trotzdem schließen';
     } else {
       $('close-dialog-title').textContent = 'Dieser Lauf lässt sich gerade nicht pausieren.';
@@ -2432,19 +2436,23 @@
     if (dialog.dataset.kind !== 'working') { await confirmClose(); return; }
     hideCloseDialog();
     if (!runWorking(current)) { await confirmClose(); return; }
-    const batchId = current.batch_id, request = closeRequest; lastError = null;
+    const batchId = current.batch_id; lastError = null;
     const paused = validBatchId(batchId) ? await perform('pause_batch', { batchId }) : null;
-    if (closed || closeRequest !== request) return; // A newer close request owns the question.
+    if (closed) return;
     if (paused) {
+      // The pause is set whatever happened to the question meanwhile: the
+      // window closes after it, and a newer question says that it is pausing.
       closeAfterPause = { batchId, connection: connectionEpoch }; lastJobSignature = '';
+      if (dialog.open) presentClose('pausing');
       await refresh();
       return;
     }
+    if (!closeRequest) return; // The user withdrew the request meanwhile; there is nothing left to ask.
     const retention = lastError === 'STANDALONE_PAUSE_RETENTION_UNAVAILABLE';
     if (!retention) {
       // The run may have ended or paused in the meantime; read it before asking again.
       lastJobSignature = ''; await refresh();
-      if (closed || closeRequest !== request) return;
+      if (closed || !closeRequest) return;
       if (!closeQuestion()) { await confirmClose(); return; }
     }
     presentClose('unpausable', retention ? 'retention' : 'refused');

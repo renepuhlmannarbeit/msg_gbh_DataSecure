@@ -241,7 +241,8 @@ deshalb ohne Fenster weiterlaufen:
   schließen** bei einem nicht pausierbaren Lauf oder unbekanntem Stand;
 - wenn die Oberfläche auf die Schließanfrage nicht binnen zwei Sekunden
   antwortet;
-- beim Beenden durch das Betriebssystem und nach einem Absturz der Hülle;
+- beim Beenden durch das Betriebssystem, nach einem Absturz der Hülle und wenn
+  der lokale Dienst nicht gestartet werden konnte;
 - wenn die Oberfläche die Arbeit nicht als arbeitenden Lauf kennt: ein
   Arbeitsprozess aus einer früheren Sitzung vor dem ersten gelesenen
   Laufstatus, oder Bereitstellung und Prüfvorbereitung außerhalb der Zustände

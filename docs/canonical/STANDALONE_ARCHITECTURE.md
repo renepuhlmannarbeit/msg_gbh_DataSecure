@@ -505,8 +505,9 @@ Bestätigen außerdem nicht für eine zurückgezogene. Ohne Antwort läuft die
 bisherige Schließbehandlung; läuft sie bereits, löst ein weiterer Klick keine
 neue Anfrage aus. Eine quittierte Anfrage hält das Fenster offen, bis der
 Anwender antwortet oder erneut schließt; jede neue Anfrage braucht wieder ihre
-eigene Antwort binnen zwei Sekunden. Die Rückfrage nutzt das vorhandene
-`pause_batch`; die Hülle beendet weiterhin nur den Sidecar. Arbeitsprozesse des
+eigene Antwort binnen zwei Sekunden. Nach jedem Befehl, der Arbeit startet oder
+fortsetzt, gilt der Stand als unbekannt, bis ein danach begonnener Laufstatus
+gelesen ist. Die Rückfrage nutzt das vorhandene `pause_batch`; die Hülle beendet weiterhin nur den Sidecar. Arbeitsprozesse des
 gemeinsamen Core bleiben losgelöst gestartet und enden über ihre Pause oder
 ihren Abschluss. `ExitRequested` des Betriebssystems geht nicht über die
 Rückfrage.

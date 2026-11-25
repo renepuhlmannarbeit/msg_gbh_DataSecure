@@ -2205,19 +2205,24 @@ Schließanfrage in der Wartezeit bietet **Weiter warten** oder **Jetzt
 schließen**; dann wird die aktive Datei ohne Fenster fertiggestellt, und
 weitere beginnen nicht. Lässt sich ein Lauf nicht pausieren (Aufbewahrung
 0 Tage, Vorbereitungsphase, abgelehnte Pause) oder ist sein Stand gerade
-nicht bekannt (ein Start läuft, die lokale Verbindung wird wiederhergestellt),
-sagt die Rückfrage das und bietet **Fenster offen lassen** oder **Trotzdem
+nicht bekannt (eine Verarbeitung wurde eben gestartet oder fortgesetzt und
+noch kein Laufstatus danach gelesen, oder die lokale Verbindung wird
+wiederhergestellt), sagt die Rückfrage das und bietet **Fenster offen lassen** oder **Trotzdem
 schließen**; im zweiten Fall kann der Lauf wie bisher ohne Fenster
 weiterlaufen. Wer das Fenster offen lässt, zieht die Schließanfrage zurück;
-sie kann die App danach nicht mehr schließen. Endet der Lauf, während die
+sie kann die App danach nicht mehr schließen. Nur **Weiter warten** nach
+**Pausieren und schließen** behält sie: Die Pause ist dann gesetzt, und die App
+schließt nach ihr. Endet der Lauf, während die
 Rückfrage offen ist, verschwindet sie, und das Fenster bleibt offen.
 
 Grenzen dieser Entscheidung: Antwortet die Oberfläche nicht binnen zwei
 Sekunden, schließt die Hülle wie bisher. Kein harter Abbruch von
 Arbeitsprozessen; der gemeinsame Core und Cowork bleiben unverändert. Nicht
 erfasst sind das Beenden durch das Betriebssystem (Abmelden, Herunterfahren,
-das App-Menü **Beenden** unter macOS), ein Absturz der Hülle und Arbeit, die
-die Oberfläche nicht als arbeitenden Lauf kennt: ein Arbeitsprozess aus einer
+das App-Menü **Beenden** unter macOS), ein Absturz der Hülle, ein nicht
+gestarteter lokaler Dienst (dann gibt es nichts, was dieses Fenster pausieren
+könnte) und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt: ein
+Arbeitsprozess aus einer
 früheren Sitzung, bevor die neue Sitzung ihren ersten Laufstatus gelesen hat,
 sowie Bereitstellung oder Prüfvorbereitung außerhalb der Zustände
 „Vorbereitung“ und „Wird verarbeitet“. Dort gilt weiter der
