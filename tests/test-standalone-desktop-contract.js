@@ -235,6 +235,16 @@ test('Linux Standalone has an explicit AppImage and glibc baseline contract', ()
   assert.match(guide, /sichtbare menschliche Linux-Abnahme\s+bleibt[^.]+offen/u);
 });
 
+test('page zoom is a setting of the Windows webview, not a renderer permission or an injected script', () => {
+  // RC178 review R-020. WebView2 scales the page on Ctrl with plus, minus,
+  // zero or the wheel. The Tauri switch would inject a script on macOS and
+  // Linux that needs a webview permission; those targets stay unchanged.
+  assert.match(rust, /#\[cfg\(windows\)\]\nfn enable_page_zoom\(window: &tauri::WebviewWindow\) \{[\s\S]{0,260}SetIsZoomControlEnabled\(true\)/u);
+  assert.match(rust, /#\[cfg\(windows\)\]\n\s+if let Some\(window\) = app\.get_webview_window\("main"\) \{ enable_page_zoom\(&window\); \}/u);
+  assert.ok(config.app.windows.every((window) => window.zoomHotkeysEnabled === undefined));
+  assert.doesNotMatch(JSON.stringify(capability), /core:webview/u);
+});
+
 test('Tauri renderer has no direct file, dialog, shell or network permission', () => {
   const serialized = JSON.stringify(capability);
   assert.deepStrictEqual(capability.windows, ['main']);

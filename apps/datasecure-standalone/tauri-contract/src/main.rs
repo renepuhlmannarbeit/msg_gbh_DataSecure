@@ -3152,6 +3152,19 @@ fn begin_native_exit(state: DesktopState) {
     });
 }
 
+// Page zoom for readers who need larger text: Ctrl with plus, minus, zero or
+// the wheel. WebView2 scales the page itself, so the renderer gains no
+// command and no permission. macOS and Linux would need an injected script
+// and a webview permission; they are unchanged until that is decided.
+#[cfg(windows)]
+fn enable_page_zoom(window: &tauri::WebviewWindow) {
+    let _ = window.with_webview(|webview| unsafe {
+        if let Ok(settings) = webview.controller().CoreWebView2().and_then(|core| core.Settings()) {
+            let _ = settings.SetIsZoomControlEnabled(true);
+        }
+    });
+}
+
 // The close button of the main window. The renderer knows whether a run is
 // working and asks the user; the shell only waits a bounded time for its
 // answer. Without one it exits as before, so a renderer that does not answer
@@ -3251,6 +3264,8 @@ fn main() {
                 close_prompt: close_prompt::ClosePrompt::default(),
             };
             app.manage(state);
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") { enable_page_zoom(&window); }
             diagnostic_event("setup_completed", None, "ready", None, None);
             Ok(())
         })

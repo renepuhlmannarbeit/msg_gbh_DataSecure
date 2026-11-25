@@ -264,6 +264,13 @@ Anfrage quittiert und danach nicht mehr reagiert, hält das Fenster offen, bis
 der Anwender erneut schließt; die neue Anfrage braucht wieder eine Antwort
 binnen zwei Sekunden. Das Prüffenster besitzt diese Befehle nicht.
 
+Unter Windows vergrößert und verkleinert das Hauptfenster die Seite mit Strg
+und Plus, Minus, Null oder dem Mausrad. Das ist eine Einstellung von WebView2;
+die Oberfläche erhält dafür weder einen Befehl noch eine Berechtigung. Unter
+macOS und Linux gibt es diesen Seitenzoom nicht: Tauri müsste dort ein Skript
+einschleusen und der Oberfläche eine Webview-Berechtigung geben; das ist nicht
+entschieden.
+
 Aufnahmefehler dürfen über einen geschlossenen, größenbegrenzten privaten
 Vertrag Dateilabels an die eigene Hauptansicht geben: relative Namen mit
 Endungen und feste Ursachecodes, keine beliebigen Exceptions oder Inhalte.
