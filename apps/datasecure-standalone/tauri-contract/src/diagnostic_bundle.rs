@@ -709,7 +709,13 @@ mod tests {
         // The planted target and the 130 foreign names are counted, never read.
         assert_eq!(crowded["ignored_entries"], 131);
         assert!(!crowded.to_string().contains("PRIVATE") && !crowded.to_string().contains("unexpected-"));
-        for i in 130..crate::export_directory::DIAGNOSTIC_INVENTORY_LIMIT { std::fs::write(root.join(format!("unexpected-{i}")), b"PRIVATE").unwrap(); }
+        // The folder holds the target, its planted link and the foreign names.
+        // Exactly the bound is still an inventory; one entry more is not.
+        let limit = crate::export_directory::DIAGNOSTIC_INVENTORY_LIMIT;
+        for i in 130..limit - 2 { std::fs::write(root.join(format!("unexpected-{i}")), b"PRIVATE").unwrap(); }
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), limit);
+        assert_eq!(collect(&root)["inventory"], "available");
+        std::fs::write(root.join("unexpected-last"), b"PRIVATE").unwrap();
         assert_eq!(collect(&root)["inventory"], "unreadable_or_limit");
         cleanup(root);
     }

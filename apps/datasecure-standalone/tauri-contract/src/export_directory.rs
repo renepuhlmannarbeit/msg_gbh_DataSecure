@@ -570,9 +570,12 @@ impl Directory {
     /// may grow during collection. The caller receives a bounded tail and
     /// must label truncation/growth; this never validates an export or journal.
     ///
-    /// The bound covers years of ordinary use: a session leaves two to four
-    /// segments and nothing here is ever removed. Beyond it the caller falls
-    /// back to the segments this process owns and labels the snapshot partial.
+    /// Nothing here is ever removed. A quiet session leaves a few segments,
+    /// a busy one up to eight of the shell plus those of the core, so the
+    /// bound is reached after some hundred to a thousand sessions. Beyond it
+    /// the caller falls back to the segments this process owns and labels
+    /// the snapshot partial. The caller opens every known name once to rank
+    /// it; that is why the bound is not higher.
     pub(crate) fn diagnostic_names(&self) -> io::Result<Vec<String>> {
         self.check()?;
         let names = platform::list_names(&self.inner, DIAGNOSTIC_INVENTORY_LIMIT)?;
