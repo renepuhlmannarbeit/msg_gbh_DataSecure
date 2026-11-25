@@ -971,14 +971,6 @@ function parseWordStructure(body, options = {}) {
     }
     node.pending.push(value);
   }
-  function emitFormCheck(check, node) {
-    // The field data itself is metadata of the field. The mark belongs to the
-    // run that carries the field: a deleted run stays unseen, and outside a
-    // paragraph there is no text owner.
-    const run = stack.findLast(item => item.name === 'w:r');
-    if (node.type !== 'p' || !run || run.node !== node || (story && !story.fieldOwnerVisible(run.storyEvent))) return;
-    sourceText(node, check.checked ? '☒' : '☐', run.storyEvent);
-  }
   function finishParagraph(node){
     if(!story||node.type!=='p'||node.wordNumbered)return;
     node.wordNumbered=true;
@@ -1081,7 +1073,6 @@ function parseWordStructure(body, options = {}) {
     if (closing) {
       if (selfClosing || attributes.trim() || stack.length === 1 || frame.name !== name) throw wordStructureError();
       if (frame.ownMathEvent) endMath(frame.mathEvent, frame.node);
-      if (frame.formCheck) emitFormCheck(frame.formCheck, frame.node);
       if (frame.created) {finishParagraph(frame.node);flush(frame.node);}
       if(frame.ownStoryEvent)story.end(frame.storyEvent);
       if (frame.name === 'mc:AlternateContent' && !frame.alternate?.selected) throw wordStructureError();
@@ -1233,20 +1224,8 @@ function parseWordStructure(body, options = {}) {
         oneProperty(node,name);node.wordNumbering[name==='w:numId'?'numId':'ilvl']=xmlDecode(attrs.get('w:val')||'');wordGridLeaf=true;
       }
     }
-    // A legacy form check box (FORMCHECKBOX) has no result text. Whether it is
-    // ticked is stored on the field itself: w:checked, else w:default. Without
-    // it "[x] Ja  [ ] Nein" reads "Ja Nein" (RC178 review R-003).
-    const dead = Boolean(frame.dead || branchSkipped || blockedWordElement);
-    let formCheck = null;
-    if (name === 'w:checkBox' && !dead && ['w:ffData', 'w:fldChar', 'w:r'].every((parent, index) => propertyParents().at(-1 - index)?.name === parent)) formCheck = { checked: false, explicit: false };
-    else if (frame.formCheck && frame.name === 'w:checkBox' && (name === 'w:default' || name === 'w:checked')) {
-      const on = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
-      if (name === 'w:checked') { frame.formCheck.checked = on; frame.formCheck.explicit = true; }
-      else if (!frame.formCheck.explicit) frame.formCheck.checked = on;
-    }
-    if (formCheck && selfClosing) emitFormCheck(formCheck, node);
     if(story&&ownStoryEvent)storyOwners.set(storyEvent,{node,offset:node.wordTextOffset??null,structure:node.wordStructureId??0,boundary:node.children.length});
-    if (!selfClosing) stack.push({ name, node, skipped, boxes, created, alternate, wordGridLeaf, dead, formCheck,
+    if (!selfClosing) stack.push({ name, node, skipped, boxes, created, alternate, wordGridLeaf,
       mathEvent: event, ownMathEvent,storyEvent,ownStoryEvent,revisionMetadata });
     else if (name === 'mc:AlternateContent' || (name === 'mc:Fallback' && !frame.alternate?.selected)) {
       throw wordStructureError();

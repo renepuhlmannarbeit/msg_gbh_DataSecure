@@ -310,13 +310,6 @@ function createWordStoryContext(options) {
   function logicalParent(node){let p=node.parent;while(p?.namespaceURI===MC)p=p.parent;return p;}
   function fieldScope(){return [...stack].reverse().find(n=>is(n,'fldSimple')||is(n,'tc')||['body','hdr','ftr','footnote','endnote','comment','txbxContent'].some(k=>is(n,k)))||root;}
   function visible(node){if(finished)return false;const state=states.get(node);return Boolean(state?.structural&&!state.metadata&&fields.every(f=>f.phase==='result'));}
-  // A legacy form field keeps its state on the begin control of its own field
-  // and has no result. While that field is the innermost one and still in its
-  // instruction, its run is seen exactly when the run would be without it.
-  function fieldOwnerVisible(node){
-    if(finished||!fields.length||fields.at(-1).phase!=='instruction')return false;const state=states.get(node);
-    return Boolean(state?.structural&&!state.metadata&&fields.slice(0,-1).every(f=>f.phase==='result'));
-  }
   function start(node) {
     if(finished||!node||typeof node!=='object'||types.isProxy(node)||states.has(node))throw failure();
     const own=Object.getOwnPropertyDescriptors(node);
@@ -412,7 +405,7 @@ function createWordStoryContext(options) {
     return Object.freeze({revisionView:config.revisionView,fieldCount,revisionCount,complete:reasons.size===0,
       reasons:Object.freeze([...reasons].sort()),notices:Object.freeze([...notices].sort()),comments:Object.freeze(result)});
   }
-  return Object.freeze({start,visible,fieldOwnerVisible,textAllowed,projectionState,end,finish});
+  return Object.freeze({start,visible,textAllowed,projectionState,end,finish});
 }
 
 // Heading level of a paragraph style by its built-in name, following the

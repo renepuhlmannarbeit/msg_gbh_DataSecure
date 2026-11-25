@@ -61,62 +61,6 @@ test('a stray inline mark outside a paragraph is ignored as before, stray text s
   assert.throws(() => convert(`<w:t>lose</w:t>${paragraph}`, content));
 });
 
-// A legacy form check box (FORMCHECKBOX) has no result text; whether it is
-// ticked is stored on the begin control of its field. Dropping it turned
-// "[x] Ja  [ ] Nein" into "Ja Nein".
-const formField = (data, instruction = ' FORMCHECKBOX ') => `<w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="K"/><w:enabled/>${data}</w:ffData></w:fldChar></w:r>` +
-  `<w:r><w:instrText xml:space="preserve">${instruction}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
-const run = (value) => `<w:r>${text(value)}</w:r>`;
-const firstLine = (markdown) => markdown.split('\n')[0].replace(/&#32;/gu, ' ');
-
-test('a legacy form check box shows whether it is ticked', () => {
-  const cases = [
-    ['<w:checkBox><w:sizeAuto/><w:default w:val="0"/><w:checked/></w:checkBox>', '☒ Antwort'],
-    ['<w:checkBox><w:sizeAuto/><w:default w:val="1"/></w:checkBox>', '☒ Antwort'],
-    ['<w:checkBox><w:sizeAuto/><w:default w:val="0"/></w:checkBox>', '☐ Antwort'],
-    ['<w:checkBox><w:default w:val="1"/><w:checked w:val="0"/></w:checkBox>', '☐ Antwort'],
-    ['<w:checkBox><w:checked w:val="true"/></w:checkBox>', '☒ Antwort'],
-    ['<w:checkBox><w:sizeAuto/></w:checkBox>', '☐ Antwort'],
-    ['<w:checkBox/>', '☐ Antwort']
-  ];
-  for (const options of [content, undefined]) {
-    for (const [data, expected] of cases) {
-      assert.equal(firstLine(convert(`<w:p>${formField(data)}${run(' Antwort')}</w:p>`, options)), expected, data);
-    }
-    const line = firstLine(convert(`<w:p>${formField(cases[0][0])}${run(' Ja  ')}${formField(cases[2][0])}${run(' Nein')}</w:p>`, options));
-    assert.match(line, /^☒ Ja +☐ Nein$/u);
-    assert.match(convert(`<w:tbl><w:tblGrid><w:gridCol/></w:tblGrid><w:tr><w:tc><w:tcPr/><w:p>${formField(cases[0][0])}${run(' Zustimmung')}</w:p></w:tc></w:tr></w:tbl>`, options),
-      /☒(?: |&#32;)Zustimmung/u);
-  }
-});
-
-test('only a visible check box of a form field is shown, and nothing else changes', () => {
-  const ticked = '<w:checkBox><w:default w:val="0"/><w:checked/></w:checkBox>';
-  // A form text field keeps showing its stored result and no mark.
-  const textField = `<w:p><w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="T"/><w:enabled/><w:textInput><w:default w:val="1"/></w:textInput></w:ffData></w:fldChar></w:r>` +
-    `<w:r><w:instrText xml:space="preserve"> FORMTEXT </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run('Eingabe')}<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
-  // A check box inside the instruction of another field is not on the page.
-  const nested = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>${formField(ticked)}<w:r><w:instrText xml:space="preserve"> QUOTE </w:instrText></w:r>` +
-    `<w:r><w:fldChar w:fldCharType="separate"/></w:r>${run('Ergebnis')}<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
-  // A check box inside the stored result of another field is.
-  const inResult = `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> QUOTE </w:instrText></w:r>` +
-    `<w:r><w:fldChar w:fldCharType="separate"/></w:r>${formField(ticked)}${run(' Ergebnis')}<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`;
-  // A deleted field is not part of the final text.
-  const deleted = `<w:p><w:del w:id="1" w:author="A" w:date="2026-01-01T00:00:00Z"><w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="K"/>${ticked}</w:ffData></w:fldChar></w:r>` +
-    `<w:r><w:delInstrText xml:space="preserve"> FORMCHECKBOX </w:delInstrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:del>${run('Rest')}</w:p>`;
-  // State elements outside a check box of a form field mean nothing.
-  const stray = `<w:p><w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:default w:val="1"/><w:checked/></w:ffData></w:fldChar></w:r>` +
-    `<w:r><w:instrText xml:space="preserve"> FORMCHECKBOX </w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>${run('Rest')}</w:p>`;
-  assert.doesNotMatch(convert(textField, content), /[☒☐]/u);
-  assert.match(convert(textField, content), /Eingabe/u);
-  assert.doesNotMatch(convert(nested, content), /[☒☐]/u);
-  assert.match(convert(nested, content), /Ergebnis/u);
-  assert.match(convert(inResult, content), /☒(?: |&#32;)Ergebnis/u);
-  assert.doesNotMatch(convert(deleted, content), /[☒☐]/u);
-  assert.match(convert(deleted, content), /Rest/u);
-  assert.equal(firstLine(convert(stray, content)), 'Rest');
-});
-
 test('a soft hyphen still produces no visible character', () => {
   const markdown = convert(`<w:p><w:r>${text('Tren')}<w:softHyphen/>${text('nung')}</w:r></w:p>`, content);
   assert.match(markdown, /Trennung/u);
