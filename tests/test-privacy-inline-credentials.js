@@ -46,6 +46,43 @@ async function main() {
     ]) assert.equal(await note(source), released, source);
   });
 
+  await testAsync('a value in quotation marks that close on the same line is taken whole', async () => {
+    // The closing mark is a written end of the value. Only the first word
+    // went before, and the rest of the secret stayed: "… [X] Garten Regen\"".
+    for (const [source, released] of [
+      ['WLAN-Passwort: "Tulpe Garten Regen"', `WLAN-Passwort: ${M}`],
+      ['Zugang: Benutzer sepp, Passwort: „Tulpe Garten“ und PIN: 4711', `Zugang: Benutzer sepp, Passwort: ${M} und PIN: ${M}`],
+      ['Das Kennwort: »blauer Himmel 7« bitte ändern.', `Das Kennwort: ${M} bitte ändern.`],
+      ['Der Token: \'Xy9 kalt\' gilt bis 2026.', `Der Token: ${M} gilt bis 2026.`],
+      ['Das Passwort: "Tulpe Garten". Danach weiter.', `Das Passwort: ${M}. Danach weiter.`],
+      ['(Passwort: "Tulpe Garten")', `(Passwort: ${M})`],
+      // Without a closing mark on the line, or with text directly behind the
+      // mark, the first token is taken as before.
+      ['Das Passwort: "Tulpe Garten ohne Ende', `Das Passwort: ${M} Garten ohne Ende`],
+      ['Das Kennwort: "Tulpe"x Garten', `Das Kennwort: ${M} Garten`]
+    ]) assert.equal(await note(source), released, source);
+    // A person behind the quoted value is still found, in every profile.
+    for (const profile of PROFILES) {
+      const released = await release('Anna Meier ist hier.\n\nZugang: Benutzer sepp, Passwort: "x1 y2" fuer Dr. Anna Meier und weiter', profile);
+      assert.doesNotMatch(released, /Anna|Meier|x1|y2/u, profile);
+      assert.match(released, /Passwort: \[CREDENTIAL_REDACTED\] fuer Dr\. \[PERSON_001\] und weiter/u, profile);
+    }
+    // An open person hint inside the quoted value: the whole value would take
+    // the hint in and is not replaced. Its first token still is, as it was
+    // before quoted values were read whole. Found by the counter-check: without
+    // this fall-back the first word of the secret became visible again.
+    for (const profile of PROFILES) {
+      for (const [source, secret] of [
+        ['Zugang ist Passwort: "geheim7. Anna Sommer sagt hallo"', /geheim7/u],
+        ['Zugang ist Passwort: "Hallo9. Anna Sommer sagt Tulpe" und PIN: 4711', /Hallo9|4711/u]
+      ]) {
+        const released = await note(source, profile);
+        assert.doesNotMatch(released, secret, `${profile}: ${source}`);
+        assert.doesNotMatch(released, /Anna|Sommer/u, `${profile}: ${source}`);
+      }
+    }
+  });
+
   await testAsync('the text behind that token is read as before', async () => {
     // Running text keeps its sentence; only the word behind the label goes.
     assert.equal(await note('Der Auftraggeber erhält das Zugangstoken: es bleibt Eigentum des Anbieters. Haftung ausgeschlossen. Die neue PIN: 4711', 'contract'),

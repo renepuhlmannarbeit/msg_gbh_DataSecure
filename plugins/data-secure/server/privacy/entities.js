@@ -174,12 +174,17 @@ function collectContextOrganizations(text) {
 // could backtrack exponentially on long title-like runs).
 // English salutations are gendered as well; without them "Mrs. Erika Beispiel"
 // carried neither a name anchor nor a salutation removal (counter-review rc93).
-const GENDERED_SALUTATION = '(?:Herrn?|Frau|(?<![\\p{L}])M(?:rs|r|s|x)\\.?)';
+// The period of an abbreviation. Markdown from Office and PDF sources writes
+// every literal period as "\.", so "Dr\. Anna Meier" has to anchor the name
+// exactly as "Dr. Anna Meier" does; without the optional backslash the name
+// behind a title stayed in documents converted from Word (RC178 review R-033).
+const DOT = '\\\\?\\.';
+const GENDERED_SALUTATION = `(?:Herrn?|Frau|(?<![\\p{L}])M(?:rs|r|s|x)(?:${DOT})?)`;
 // "Dr.-Ing." is one title token; "Dr." followed by "-Ing." broke the anchor and
 // left the whole name in clear (counter-review rc93).
-const ACADEMIC_TITLE = '(?:Dr\\.?(?:-Ing\\.?)?|Prof\\.?|PD|Priv\\.-Doz\\.?|Dipl\\.?-?(?:Ing|Inf|Kfm|Psych|Päd)\\.?|Mag\\.?)';
+const ACADEMIC_TITLE = `(?:Dr(?:${DOT})?(?:-Ing(?:${DOT})?)?|Prof(?:${DOT})?|PD|Priv${DOT}-Doz(?:${DOT})?|Dipl(?:${DOT})?-?(?:Ing|Inf|Kfm|Psych|Päd)(?:${DOT})?|Mag(?:${DOT})?)`;
 const HONORIFIC_TITLE = `(?:${GENDERED_SALUTATION}|${ACADEMIC_TITLE})`;
-const HONORIFIC_QUALIFIER = '(?:med|dent|vet|jur|phil|theol|oec|habil|h\\.\\s?c|rer\\.\\s?(?:nat|pol|soc|medic))\\.?';
+const HONORIFIC_QUALIFIER = `(?:med|dent|vet|jur|phil|theol|oec|habil|h${DOT}\\s?c|rer${DOT}\\s?(?:nat|pol|soc|medic))(?:${DOT})?`;
 const HONORIFIC = `(?:${HONORIFIC_TITLE}(?:\\s+(?:${HONORIFIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;
 const ACADEMIC_HONORIFIC = `(?:${ACADEMIC_TITLE}(?:\\s+(?:${ACADEMIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;
 
@@ -739,8 +744,8 @@ function collectContextualNameCandidates(text, profile, { includeNegation = fals
   const discovery = entityDiscoveryView(src);
   const out = [];
   const before =
-    /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|person|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/iu;
-  const contactAfter = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b/iu;
+    /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr(?:\\?\.)?|prof(?:\\?\.)?|von|durch|gegenüber|kontakt|person|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\\?\.\s?hd(?:\\?\.)?)\s*$/iu;
+  const contactAfter = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\\?\.|mobil|kontakt|geb(?:\\?\.)?|geboren)\b/iu;
   // Employment prose may wrap across lines, but not a paragraph boundary. In
   // the residual view, a masked person in the next paragraph is whitespace,
   // not permission to make the preceding heading the subject.

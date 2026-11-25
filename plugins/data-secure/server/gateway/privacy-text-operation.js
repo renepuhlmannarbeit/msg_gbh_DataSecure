@@ -153,7 +153,15 @@ function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptio
           pending.push({ start: at, end: at + finding.text.length });
       }
     }
-    const edits = inlineCredentials.filter(span => !pending.some(range => range.start < span.end && span.start < range.end))
+    const free = span => !pending.some(range => range.start < span.end && span.start < range.end);
+    // A value in quotation marks can take in an open finding further back in
+    // it. Then its first token is replaced, as it was before quoted values
+    // were read whole; giving up the value would leave more of it visible.
+    const firstToken = span => {
+      const token = /^\S+/u.exec(anon.text.slice(span.start, span.end))?.[0] || '';
+      return token.length < span.end - span.start && /[\p{L}\p{N}]/u.test(token) ? { ...span, end: span.start + token.length } : null;
+    };
+    const edits = inlineCredentials.map(span => free(span) ? span : firstToken(span)).filter(span => span && free(span))
       .map(span => ({ start: span.start, end: span.end, original: anon.text.slice(span.start, span.end),
         replacement: span.replacement, kind: 'CREDENTIAL' }));
     if (edits.length) {

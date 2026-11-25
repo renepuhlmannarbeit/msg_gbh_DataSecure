@@ -412,6 +412,41 @@ ersetzt (`nach Kochs Rezept` bei bekannter `Anna Koch`), und `Fr.` vor dem
 vollen Namen gilt als Anrede, außer nach einer Wochentagsspanne
 (`Mo. bis Fr.`).
 
+### Abkürzungen in Markdown aus Office- und PDF-Quellen (R-033)
+
+Markdown aus Word, Excel, PowerPoint und PDF schreibt jeden wörtlichen Punkt
+als `\.`. Bis zum RC178-Review lasen die Regeln für ein abgekürztes
+Telefonlabel, für Titel, für `geb.`, für `z. Hd.` und für abgekürzte
+Nummernlabels (`Personalnr.`, `Kunden-Nr.`, `Az.`) diese Form nicht:
+`Tel\. 030 …`, `Dr\. Anna Meier`, `geb\. 12\.03\.1980`,
+`z\. Hd\. Hans Müller` und `Personalnr\. 4711` blieben im freigegebenen
+Markdown eines Word-Dokuments stehen, während dieselbe Zeile aus einer
+Textdatei ersetzt wurde. Diese Regeln lesen den Punkt jetzt mit und ohne
+Backslash. Für Text ohne `\.` ändert sich dadurch nichts.
+
+Nicht behoben sind die übrigen Fälle derselben Art, weil sie keine einzelne
+Regel betreffen: Eine maskierte Klammer verhindert die Erkennung eines
+unbekannten Namens davor (`Anna Meier \(geb\. Schulz\)`), ebenso ein
+wörtlich getipptes, maskiertes Listen- oder Hervorhebungszeichen vor oder um
+den Namen (`1\. Anna Meier`, `\*Anna Meier\*`). Ob weitere Regeln betroffen
+sind, ist nicht vollständig geprüft; geprüft wurden rund 180 Zeilenformen
+aus Word gegen dieselbe Zeile als Text. Der Kern liest solches Markdown Regel
+für Regel; eine einheitliche Sicht ohne Maskierung gibt es nicht.
+
+Weiterhin nicht ersetzt werden, unabhängig vom Quellformat und in jedem
+Profil: ein Name hinter einem Feldlabel, das die Erkennung nicht kennt
+(`Antragsteller: …`, `Patient: …`; bekannt sind unter anderem `Name`, `Kunde`,
+`Ansprechpartner`, `Mitarbeiter`, `Bearbeiter`), ein voller Name in
+gewöhnlicher Prosa ohne Hinweiswort (`Petra Lang hat den Vertrag
+unterschrieben`) und eine Telefonnummer ohne Label und ohne internationale
+Schreibweise (`Rückruf unter 030 7654321`). Im Profil Allgemein bleibt
+außerdem eine Namenszeile hinter einem Aufzählungszeichen stehen
+(`- Anna Sommer`), während dieselbe Zeile ohne Zeichen ersetzt wird; das
+Profil Personalprofil ersetzt sie hinter `-`, `*` und einer Nummer, nicht
+hinter `•`. Diese Fälle sind ein verbleibendes Unterredaktionsrisiko. Die
+geführte Prüfung zeigt sie nicht von selbst an, weil der Kern dort keinen
+Hinweis sieht; wer solche Dokumente verarbeitet, muss das Ergebnis lesen.
+
 ### Zugangsdaten
 
 Zugangsdaten werden nur hinter einem ausdrücklichen Label erkannt, dem `:`
@@ -439,7 +474,11 @@ eines Links oder einer Abfragezeichenfolge (`…?token=…`); ein solcher Link
 wird behandelt, wie es das Profil für Links vorsieht. In Tabellenzeilen
 gelten die Zellregeln. Von einem Geheimnis aus mehreren Wörtern hinter einem
 Label mitten in der Zeile wird nur das erste Wort ersetzt
-(`…, Passwort: Sommer 2024` lässt `2024` stehen). Die Ersetzung unterbleibt
+(`…, Passwort: Sommer 2024` lässt `2024` stehen). Einzige Ausnahme ist ein
+Wert in Anführungszeichen, die in derselben Zeile wieder schließen
+(`"…"`, `„…“`, `»…«`, `'…'`, höchstens 80 Zeichen): Er wird ganz ersetzt,
+weil sein Ende geschrieben steht. Fehlt das schließende Zeichen oder folgt
+ihm unmittelbar weiterer Text, bleibt es beim ersten Wort. Die Ersetzung unterbleibt
 für ein ganzes Dokument, wenn sich mit ihr ein offener Personenhinweis nicht
 mehr eindeutig zuordnen ließe; das kommt bei wiederholten gleichlautenden
 Zeilen mit noch unbekannten Namen vor. Das Dokument wird dann verarbeitet wie

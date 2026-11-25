@@ -369,7 +369,8 @@ function isPersistedPersonAliasOccurrence(text, span, coveringOrganizations = []
   if (header && isPersonFieldLabel(normalizeSpaces(header), personFieldPolicy)) return true;
 
   const before = text.slice(Math.max(0, span.start - 80), span.start);
-  if (/(?:z\.\s*hd\.?|zu\s+händen)\s*:?\s*$/iu.test(before)) return true;
+  // The periods also in their escaped Markdown form "\." (RC178 review R-033).
+  if (/(?:z\\?\.\s*hd(?:\\?\.)?|zu\s+händen)\s*:?\s*$/iu.test(before)) return true;
   // A genitive without a determiner ("Wüstenhagens Büro") is how a person is
   // named; the season or trade of the same spelling takes an article or an
   // inflected adjective ("des Sommers", "letzten Sommers"). The bare

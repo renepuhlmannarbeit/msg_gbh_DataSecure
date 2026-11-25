@@ -191,7 +191,8 @@ kein Geheimnis anhand seiner Zeichenform geraten. Das Label gilt als Feld,
 wenn ihm `:` oder `=` folgt. Am Zeilenanfang ist der Rest der Zeile der
 Wert. Mitten in der Zeile nach Leerraum oder als Ende eines
 zusammengesetzten Worts (`WLAN-Passwort: …`, `…, Passwort: …`) ist es das
-erste Wort hinter dem Label.
+erste Wort hinter dem Label, bei einem Wert in Anführungszeichen, die in
+derselben Zeile schließen, der ganze Wert.
 Grenzen stehen im
 [Sicherheitsmodell](canonical/STANDALONE_SECURITY_MODEL.md).
 

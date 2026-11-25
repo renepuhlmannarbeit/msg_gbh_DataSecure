@@ -129,8 +129,12 @@ const PHONE_LABEL_PATTERN =
   `|rückfragen(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?${PHONE_CALL_SPACE}unter` +
   `|telefonisch${PHONE_CALL_SPACE}unter)` +
   `(?:[\\s-]?(?:nummer|nr\\.?|number|numéro|número|numero))?${LABEL_QUALIFIER}`;
+// Markdown from Office and PDF sources writes every literal period as "\.".
+// The period of an abbreviated label ("Tel\. 030 …") is therefore read with
+// an optional backslash in front of it; without that the number behind
+// "Tel." stayed in documents converted from Word (RC178 review R-033).
 const PHONE_LABEL_RE = new RegExp(
-  `${PHONE_LABEL_PATTERN}\\s*\\.?\\s*:?\\s*$`,
+  `${PHONE_LABEL_PATTERN}\\s*(?:\\\\?\\.)?\\s*:?\\s*$`,
   'iu'
 );
 // France commonly groups local subscriber numbers into four two-digit pairs
@@ -216,7 +220,7 @@ const DATE_OF_BIRTH_RE = new RegExp(
 // Review rc91 (F4): only German/English literals were known; French, Spanish,
 // Dutch and Italian headers left birth dates in clear.
 const DATE_OF_BIRTH_LABEL_RE = new RegExp(
-  '(?:geburtsdatum|geburtstag|geboren(?:\\s+am)?|geb\\.|date\\s+of\\s+birth|birth\\s*date|birthday|dob' +
+  '(?:geburtsdatum|geburtstag|geboren(?:\\s+am)?|geb\\\\?\\.|date\\s+of\\s+birth|birth\\s*date|birthday|dob' +
   '|date\\s+de\\s+naissance|née?\\s+le|fecha\\s+de\\s+nacimiento|nacid[oa]\\s+el|geboortedatum|geboren\\s+op|data\\s+di\\s+nascita)' +
   `${LABEL_QUALIFIER}\\s*:?\\s*$`,
   'iu'
@@ -349,7 +353,7 @@ const DE_SV_RE = new RegExp(
 const DE_TAX_SHAPE = `\\d{2}${SEP}?\\d{3}${SEP}?\\d{3}${SEP}?\\d{3}`;
 const DE_TAX_RE = new RegExp(`${NB}${DE_TAX_SHAPE}${NA}`, 'gu');
 const DE_TAX_LABEL_RE =
-  /(?:steuer(?:-?\s?id|nummer|liche\s+identifikationsnummer)|id-?nr|idnr|ust-?id(?:nr)?)\s*\.?\s*:?\s*$/i;
+  /(?:steuer(?:-?\s?id|nummer|liche\s+identifikationsnummer)|id-?nr|idnr|ust-?id(?:nr)?)\s*(?:\\?\.)?\s*:?\s*$/i;
 
 const CREDIT_RE = new RegExp(`${NB}(?:\\d[ \\-]?){12,18}\\d${NA}`, 'gu');
 
@@ -357,9 +361,10 @@ const CREDIT_RE = new RegExp(`${NB}(?:\\d[ \\-]?){12,18}\\d${NA}`, 'gu');
 // match with high precision and impossible to confuse with quantities.
 const ID_LABELS =
   '(?:Mitarbeiter|Personal|Kunden|Auftrags|Vertrags|Rechnungs|Bestell|Versicherungs|Sozialversicherungs|Ausweis|Personalausweis|Reisepass|Führerschein|Matrikel|Patienten|Fall|Akten|Beleg|Lieferanten|Debitoren|Kreditoren)' +
-  '(?:nummer|nr\\.?|-nr\\.?|-nummer|zeichen)' +
-  '|Aktenzeichen|Az\\.|Personalnr\\.|SV-?Nr\\.|Steuernummer|Steuer-?ID' +
-  '|(?:contract|reference|order|invoice|employee|customer|case|patient)[ \\t]*(?:number|no\\.?|id)';
+  // The period of "Nr." and "Az." also in its escaped Markdown form "\." (R-033).
+  '(?:nummer|nr(?:\\\\?\\.)?|-nr(?:\\\\?\\.)?|-nummer|zeichen)' +
+  '|Aktenzeichen|Az\\\\?\\.|Personalnr\\\\?\\.|SV-?Nr\\\\?\\.|Steuernummer|Steuer-?ID' +
+  '|(?:contract|reference|order|invoice|employee|customer|case|patient)[ \\t]*(?:number|no(?:\\\\?\\.)?|id)';
 const LABELED_ID_RE = new RegExp(
   `(${ID_LABELS})([ \\t]*[:=][ \\t]*|[ \\t]+)((?:[A-Z0-9][A-Z0-9./\\-]*)(?:[ ][A-Z0-9][A-Z0-9./\\-]*){0,3})`,
   'giu'
@@ -403,6 +408,13 @@ const CREDENTIAL_LABEL_HEADER_RE = new RegExp(`^${CREDENTIAL_LABELS}[ \\t]*[:：
 // bracket or quote, so a label inside a link or a query string
 // ("…?token=…", "…/a;Token=…") is none. And the token ends in front of a
 // marker, so nothing that was replaced before is taken in.
+// One exception to the single token: a value in quotation marks that close
+// on the same line ("Passwort: „Sommer 2024“") has an end that is written
+// down, so it is taken whole. Without a closing mark, or with a marker
+// inside, the first token is taken as before.
+const CREDENTIAL_QUOTED_VALUE =
+  '(?:"[^"\\r\\n\\[\\]]{1,80}"|„[^„“”"\\r\\n\\[\\]]{1,80}[“”"]|»[^»«\\r\\n\\[\\]]{1,80}«|«[^»«\\r\\n\\[\\]]{1,80}»' +
+  '|\'[^\'\\r\\n\\[\\]]{1,80}\')(?=\\s|$|[.,;:!?)\\]])';
 const CREDENTIAL_ATTACHABLE_LABELS =
   '(?:Pass[ \\t]*wort|Kenn[ \\t]*wort|Pass[ \\t]*word|Pass[ \\t]*phrase|Secret|Token|API(?:[ \\t-]+)?Key' +
   '|Zugangs[ \\t]*daten|Zugangs[ \\t]*code|Benutzer[ \\t]*name|Nutzer[ \\t]*name|User[ \\t]*name' +
@@ -410,7 +422,7 @@ const CREDENTIAL_ATTACHABLE_LABELS =
 const CREDENTIAL_INLINE_FIELD_RE = new RegExp(
   '(?<=(?:^|[ \\t])[(\\[«"\']?)((?:[\\p{L}\\p{N}]+[-‐‑])*' +
   `(?:[\\p{L}]{0,30}${CREDENTIAL_ATTACHABLE_LABELS}|PIN|Login)[ \\t]*(?::|=|：|＝)[ \\t]*)` +
-  '(\\S+?)(?=\\s|$|\\[[A-Z][A-Z0-9_]*\\])',
+  `(${CREDENTIAL_QUOTED_VALUE}|\\S+?(?=\\s|$|\\[[A-Z][A-Z0-9_]*\\]))`,
   'gimu'
 );
 
