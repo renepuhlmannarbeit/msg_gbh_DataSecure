@@ -436,19 +436,91 @@ sind, ist nicht vollständig geprüft; geprüft wurden rund 180 Zeilenformen
 aus Word gegen dieselbe Zeile als Text. Der Kern liest solches Markdown Regel
 für Regel; eine einheitliche Sicht ohne Maskierung gibt es nicht.
 
-Weiterhin nicht ersetzt werden, unabhängig vom Quellformat und in jedem
-Profil: ein Name hinter einem Feldlabel, das die Erkennung nicht kennt
-(`Antragsteller: …`, `Patient: …`; bekannt sind unter anderem `Name`, `Kunde`,
-`Ansprechpartner`, `Mitarbeiter`, `Bearbeiter`), ein voller Name in
-gewöhnlicher Prosa ohne Hinweiswort (`Petra Lang hat den Vertrag
-unterschrieben`) und eine Telefonnummer ohne Label und ohne internationale
-Schreibweise (`Rückruf unter 030 7654321`). Im Profil Allgemein bleibt
-außerdem eine Namenszeile hinter einem Aufzählungszeichen stehen
-(`- Anna Sommer`), während dieselbe Zeile ohne Zeichen ersetzt wird; das
-Profil Personalprofil ersetzt sie hinter `-`, `*` und einer Nummer, nicht
-hinter `•`. Diese Fälle sind ein verbleibendes Unterredaktionsrisiko. Die
-geführte Prüfung zeigt sie nicht von selbst an, weil der Kern dort keinen
-Hinweis sieht; wer solche Dokumente verarbeitet, muss das Ergebnis lesen.
+Drei Lücken aus demselben Lauf betreffen jedes Quellformat. Die
+Standalone-App schließt sie seit dem RC178-Review so:
+
+- **Name hinter einer Rolle.** Steht hinter einer Rolle mit Doppelpunkt oder
+  Gleichheitszeichen ein namensförmiger Wert, ist er ein Personenhinweis:
+  `Antragsteller: Hans Müller`, `- Mandant: Hans Müller`,
+  `Mieter 1: Hans Müller`. Folgt dem Namen ein neuer Satz oder ein Feldlabel,
+  endet der Name davor (`Zeuge: Hans Müller Die Verhandlung beginnt …`,
+  `Mieter: Anna Sommer Geburtsdatum: …`); stehen mehrere Rollen in einer
+  Zeile, erhält jede ihren Namen. Die
+  umgestellte Form `Müller, Hans` gehört nicht dazu; sie wird wie bisher nur
+  für eine im Dokument schon bekannte Person erkannt und erhält dann deren
+  Pseudonym. Die Rollen reichen von `Antragsteller`,
+  `Patient`, `Versicherte`, `Mandant`, `Mieter` und `Vermieter` über
+  `Zeuge`, `Kläger`, `Beklagte`, `Arzt`, `Rechtsanwalt` und `Notar` bis
+  zu `Ehemann`, `Ehefrau`, `Sohn` und `Tochter`; die vollständige Liste
+  steht im Quelltext (`ROLE_CUE`). Anders als bei einem Personenfeld wie
+  `Name` oder `Kunde` wird nur ein namensförmiger Wert ersetzt; eine
+  Bemerkung bleibt stehen (`Patient: stabil`, `Mieter: ja`).
+- **Namensliste unter einem Label.** Steht ein Personenlabel, eine Rolle oder
+  eines der Stichwörter `Anwesend`, `Abwesend`, `Entschuldigt`,
+  `Teilnehmende`, `Teilnehmerliste` und `Unterzeichnende` allein in einer
+  Zeile, gelten die Namen der Listeneinträge darunter als Personenhinweis. Der
+  Name endet am Zeilenende, vor einem Komma, einem Doppelpunkt, einer Klammer,
+  einem Gedankenstrich oder einem Feldlabel (`- Anna Sommer, Leitung`,
+  `- Anna Sommer: Protokoll`, `- Anna Sommer Telefon: …`). Ein Eintrag, der
+  kein Name ist, bleibt stehen und beendet die Liste nicht
+  (`- Müller (Protokoll)`, `- Einkauf`); die erste Zeile, die kein
+  Listeneintrag ist, beendet sie. Eine Liste ohne ein solches Label bleibt
+  unverändert (`- Anna Sommer` unter `Themen:`).
+- **Rückruf.** `Rückruf unter …` und `Rückruf an …` gelten als Telefonlabel,
+  auch im Cowork-Plugin.
+
+Ein Personenhinweis gilt außerdem an jeder weiteren Stelle desselben
+Dokuments, an der derselbe volle Name in derselben Schreibweise steht. Bis zum
+RC178-Review ersetzte die Entscheidung den Namen nur an der Fundstelle
+(`Anna Sommer bestätigt den Termin`) und im nächsten Dokument des Stapels;
+zwei Zeilen weiter blieb er lesbar. Die Ausweitung endet nach 500 weiteren
+Stellen je Dokument, über alle Namen gezählt, weil die lokale Prüfung eine
+Obergrenze für die Zahl ihrer Fundstellen hat; darüber hinaus bleibt der Name
+wie bisher lesbar, ohne Stopp. Eine weitere Stelle liest der Kern zunächst wie
+bisher: Ersetzt er den Namen dort schon aus eigenem Grund, bleibt es dabei.
+Steht der Name zwischen einem Telefon- oder Nummernlabel und der Nummer
+(`Tel. Hans Müller 030 …`), stoppt das Dokument jetzt mit `RESIDUAL_PII`:
+Ohne den Namen erkennt die Schlussprüfung die Nummer, die der Kern vorher
+samt Namen lesbar freigab.
+
+Personenhinweise entscheidet die geführte Prüfung; der automatische Modus
+ersetzt sie. Der Kern erkennt einen Namen dabei allein an der Form (zwei bis
+vier großgeschriebene Wörter, die nicht auf seiner Liste gewöhnlicher Wörter
+stehen); eine Liste von Vornamen hat er nicht. Deshalb ersetzt der
+automatische Modus an diesen Stellen auch Organisationen, Orte und
+Produktnamen als Person (`Vermieter: Wohnbau Kassel`, wie bisher schon
+`Stadt Kassel bestätigt den Termin`), und eine so entschiedene Bezeichnung
+wird im restlichen Dokument und in den folgenden Dokumenten des Stapels
+ebenfalls ersetzt. Aus demselben Grund gibt es keine Regel für einen Namen
+vor `hat` und einem Partizip: Sie hielt `Letzte Woche hat der Chef
+angerufen` für eine Person.
+
+Weiterhin nicht ersetzt werden: ein voller Name in gewöhnlicher Prosa ohne
+eines der Hinweisverben (`Petra Lang hat den Vertrag unterschrieben`,
+`Petra Lang wohnt in Kassel`), ein einzelner Nachname oder ein abgekürzter
+Vorname hinter einer Rolle (`Patient: Müller`, `Patient: H. Müller`), die
+umgestellte Form einer noch unbekannten Person hinter einer Rolle
+(`Mandant: Müller, Hans`), mehrere Namen hinter einer Rolle in der Mehrzahl
+(`Zeugen: Anna Sommer, Erika Beispiel`), eine Namensliste ohne Label oder
+unter `Verteiler` und `Mitglieder`, ein Listeneintrag aus einem einzelnen
+Nachnamen (`- Müller (Protokoll)`), eine Telefonnummer ohne Label und ohne
+internationale Schreibweise (`Die Nummer 030 7654321 ist neu`) und ein
+Geburtsname hinter `geb.` (`Anna Meier (geb. Schulz)` wird zu
+`[PERSON_001] (geb. Schulz)`). Ein Name aus drei Wörtern, dessen drittes Wort
+auch ein Satzanfang oder Feldlabel sein kann, wird hinter einer Rolle nur
+teilweise ersetzt (`Zeuge: Hans Peter Im Hof` wird zu `[PERSON_001] Im Hof`),
+ebenso ein Doppelname, wenn dessen erster Teil an anderer Stelle als voller
+Name steht (`Anna Sommer-Meier` wird zu `[PERSON_001]-Meier`).
+Diese Fälle sind ein verbleibendes Unterredaktionsrisiko. Die geführte Prüfung
+zeigt sie nicht von selbst an, weil der Kern dort keinen Hinweis sieht; wer
+solche Dokumente verarbeitet, muss das Ergebnis lesen.
+
+Bekannt und unverändert ist außerdem eine Überredaktion der Personenfelder:
+Hinter `Name`, `Kunde`, `Mitarbeiter`, `Teilnehmer` und den übrigen
+Personenlabels wird jeder Wert ersetzt, auch eine Bemerkung, und dieses Wort
+danach im ganzen Dokument (`Kunde: zufrieden` ersetzt jedes weitere
+`zufrieden`); in einer Tabellenspalte mit einem solchen Kopf gilt das für
+jede Zelle.
 
 ### Zugangsdaten
 

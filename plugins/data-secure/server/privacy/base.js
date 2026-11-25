@@ -127,6 +127,9 @@ const PHONE_LABEL_PATTERN =
   `|${PHONE_CALL_REQUEST}` +
   `|melden${PHONE_CALL_SPACE}sie${PHONE_CALL_SPACE}sich(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?${PHONE_CALL_SPACE}unter` +
   `|rückfragen(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?${PHONE_CALL_SPACE}unter` +
+  // "Rückruf unter 030 …" and "Rückruf an 030 …" name a number as plainly as
+  // "Rückfragen unter" does (RC178 review R-033).
+  `|rückruf(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?${PHONE_CALL_SPACE}(?:unter|an)` +
   `|telefonisch${PHONE_CALL_SPACE}unter)` +
   `(?:[\\s-]?(?:nummer|nr\\.?|number|numéro|número|numero))?${LABEL_QUALIFIER}`;
 // Markdown from Office and PDF sources writes every literal period as "\.".

@@ -47,6 +47,12 @@ function reservePersonReviewCandidates(text, registry, allowOrganizationReview =
     : [];
   const reservations = candidates
     .filter(span => {
+      // A further place of a name that is a candidate elsewhere (R-033) is
+      // not hidden from the redactor: the engine reads that place as it did
+      // before, and only a name that is still there afterwards is put to the
+      // review. Hiding it changed what the rules around it saw and stopped
+      // documents ("Tel. Hans Müller 030 …").
+      if (span.further) return false;
       if (contextualIdentities?.has(registryComparisonValue(span.value))) return false;
       if (registry?.lookup?.('PERSON', span.value) || allowOrganizationReview && registry?.lookup?.('ORG', span.value)) return false;
       if (!knownIdentities.length) return true;
@@ -109,10 +115,13 @@ function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptio
   const reviewOf = (privateText) => {
     const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(profile)
       ? credentialIssuerAmbiguities(personReview.original, privateText) : [];
-    const proseAmbiguities = personProseAmbiguities(personReview.original, privateText, { ...fieldOptions, productChannel, profile, ocrLineReview });
     const residual = pii.scanResidual(privateText, profile, anon.dictionary, { ...fieldOptions,
       strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
       includeKnownValueSpans: productChannel === 'standalone', originalSourceText: personReview.original });
+    // The residual scan may see a wider person hint at a further place of a
+    // name ("Hans Müller IBAN"); that hint keeps the place, as it did before.
+    const proseAmbiguities = personProseAmbiguities(personReview.original, privateText, { ...fieldOptions, productChannel, profile, ocrLineReview,
+      residualPersonSpans: residual.filter(finding => finding.type === 'PERSON_CANDIDATE') });
     const personAmbiguities = [...proseAmbiguities, ...residualPersonAmbiguities(personReview.original, privateText,
       residual.filter(finding => finding.type === 'PERSON_CANDIDATE' && (productChannel === 'standalone' ||
         !proseAmbiguities.some(candidate => finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end))),

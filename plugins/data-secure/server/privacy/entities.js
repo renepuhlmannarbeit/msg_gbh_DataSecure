@@ -745,7 +745,8 @@ function collectContextualNameCandidates(text, profile, { includeNegation = fals
   const out = [];
   const before =
     /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr(?:\\?\.)?|prof(?:\\?\.)?|von|durch|gegenüber|kontakt|person|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\\?\.\s?hd(?:\\?\.)?)\s*$/iu;
-  const contactAfter = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\\?\.|mobil|kontakt|geb(?:\\?\.)?|geboren)\b/iu;
+  // The bracket and the dash also in their escaped Markdown form (R-033).
+  const contactAfter = /^\s*(?:,|\\?\(|\\?-|–|—)?\s*(?:e-?mail|telefon|tel\\?\.|mobil|kontakt|geb(?:\\?\.)?|geboren)\b/iu;
   // Employment prose may wrap across lines, but not a paragraph boundary. In
   // the residual view, a masked person in the next paragraph is whitespace,
   // not permission to make the preceding heading the subject.

@@ -50,6 +50,40 @@ const AUXILIARY_SUBJECT_RE = new RegExp(
 );
 const AUXILIARY_ACTION_RE =
   /^(?:[ \t]+(?:[^.!?\n]{0,160}?[ \t]+)?)(?:geschickt|gesendet|genehmigt|bestätigt|dokumentiert|erstellt|geprüft|übernommen|unterzeichnet|gesprochen|telefoniert|berichtet|sent|approved|confirmed|documented|created|reviewed|signed|spoken|talked)\b/iu;
+// Standalone only (RC178 review R-033). Two bounded places where a name-shaped
+// value is a candidate for the local review, as the attributions above are.
+//
+// A role in front of a colon or an equals sign ("Antragsteller: Hans Müller").
+// Only a value that is shaped like a name counts: "Patient: stabil" and
+// "Mieter: ja" stay as they are. That is the difference to a person field,
+// whose whole value is replaced and whose words then count as that person in
+// the rest of the document. The name ends at the line end, at punctuation, in
+// front of a lower-case word or in front of the next label on the same line
+// ("Mieter: Anna Sommer Adresse: …", also behind a tab from a table row).
+// Markdown from Office escapes brackets, so "\(m/w/d\)" is read as well.
+const ROLE_CUE = '(?:Antragsteller|Antragsgegner|Patient|Versicherte[rn]?|Versicherungsnehmer|Mandant|Klient|Mieter|Untermieter|Hauptmieter' +
+  '|Vermieter|Käufer|Verkäufer|Arbeitnehmer|Bewohner|Bevollmächtigte[rn]?|Erziehungsberechtigte[rn]?|Angehörige[rn]?|Zeug(?:e|in)' +
+  '|Kläger|Beklagte[rn]?|Beschuldigte[rn]?|Geschädigte[rn]?|Unfallgegner|Schuldner|Gläubiger|Bürg(?:e|in)|Erb(?:e|in)|Erblasser' +
+  '|Begünstigte[rn]?|Zahlungsempfänger|Leistungsempfänger|Halter|Fahrer|Inhaber|Kontoinhaber|Geschäftsführer|Vorgesetzte[rn]?' +
+  '|Projektleiter|Teamleiter|(?:(?:Behandelnde[rn]?|Überweisende[rn]?)[ \\t]+)?(?:Arzt|Ärztin)|Haus(?:arzt|ärztin)|Fach(?:arzt|ärztin)' +
+  '|Therapeut|Gutachter|Rechtsanwalt|Rechtsanwältin|Anwalt|Anwältin|Notar|Betroffene[rn]?|Beschwerdeführer|Anrufer|Ansprechperson' +
+  '|Bezugsperson|Betreuungsperson|Pflegekraft|Proband|Notfallkontakt|Ehepartner|Ehemann|Ehefrau|Lebensgefährt(?:e|in)|Sohn|Tochter' +
+  '|Mutter|Vater|Applicant|Tenant|Landlord|Policyholder|Insured|Claimant|Employee|Guardian|Witness|Plaintiff|Defendant|Spouse|Physician)';
+const ROLE_NAME_RE = new RegExp(
+  `(?<![\\p{L}\\p{M}\\p{N}])(?:${ROLE_CUE})(?:in)?(?:[/*:_]in)?(?:[ \\t]*\\\\?\\(m/w/d\\\\?\\))?(?:[ \\t]+(?:zu[ \\t]+)?\\d{1,2})?(?:\\*\\*|__)?[ \\t]*[:=](?:\\*\\*|__)?[ \\t]*` +
+    `(?:(?:Herrn?|Frau)[ \\t]+)?(${NAME_SHAPE})(?=[ \\t]*(?:$|[,;.(|–—\\\\]|-[ \\t])|[ \\t]+\\p{Ll}|[ \\t]+\\p{Lu}[\\p{L}\\p{M}./-]{1,40}[ \\t]*[:=])`,
+  'gmu'
+);
+// A person label, a role or a list cue alone on its line, followed by list
+// items that are names ("Teilnehmer:" / "- Anna Sommer"). The label names what
+// the items are; without it a list of two capitalised words is not a list of
+// people ("Themen:" / "- Neue Projekte").
+const NAME_LIST_CUE = '(?:Anwesende?|Abwesende?|Entschuldigte?|Teilnehmende|Teilnehmerliste|Unterzeichnende|Attendees|Participants|Present|Absent)';
+const LIST_MARK = '^[ \\t]*(?:\\\\?[-*+•]|\\d{1,3}\\\\?[.)])[ \\t]+';
+const LIST_ITEM_RE = new RegExp(`${LIST_MARK}\\S`, 'u');
+// The name of an item ends at the line end or at punctuation; the backslash
+// is the escape in front of a bracket or a dash in Markdown from Office.
+const NAME_LIST_ITEM_RE = new RegExp(`${LIST_MARK}(${NAME_SHAPE})(?=[ \\t]*(?:$|[,;:(–—\\\\]|-[ \\t]))`, 'u');
 // Standalone has a local, source-bound decision path. Broader conversational
 // attributions are candidates for that path, never automatic person decisions.
 const CONVERSATION_ACTION = 'sagt(?:e|en)?|rief|rufen|trifft|traf|besucht(?:e|en)?|kontaktiert(?:e|en)?|said|called|met|visited|contacted';
@@ -155,6 +189,7 @@ function disjointCandidates(source, candidates) {
     if (previous && candidate.start < previous.end) {
       previous.end = Math.max(previous.end, candidate.end);
       previous.value = source.slice(previous.start, previous.end);
+      if (!candidate.further) delete previous.further;
     } else disjoint.push({ ...candidate });
   }
   return disjoint;
@@ -243,6 +278,66 @@ function standalonePresentationCandidateSpans(text, profile = 'personnel_profile
   return disjointCandidates(source, candidates);
 }
 
+// Up to four capitalised words are a name shape, and the next sentence or a
+// field label begins with one ("Vermieter: Wohnbau Kassel Das Wetter …",
+// "Zeuge: Hans Müller Telefon privat …"). From the third word on, such a word
+// ends the name; taking it in would swallow text or hide the label of the
+// number behind it.
+const FOLLOWING_WORD_RE = /^(?:Der|Die|Das|Den|Dem|Ein|Eine|Er|Sie|Es|Wir|Ich|Am|Im|In|Bei|Mit|Nach|Seit|Heute|Gestern|Morgen|Telefon|Tel|Mobil|Handy|Fax|E-Mail|Email|Mail|Adresse|Anschrift|Geburtsdatum|IBAN|Nummer|Nr)$/u;
+function withoutFollowingWords(value) {
+  const tokens = [...value.matchAll(/[^ \t]+/gu)];
+  for (let index = 2; index < tokens.length; index++)
+    if (FOLLOWING_WORD_RE.test(tokens[index][0])) return value.slice(0, tokens[index].index).trimEnd();
+  return value;
+}
+
+// A name-shaped value behind a role and a colon, anywhere in a line. The
+// comma form "Müller, Hans" is left to the engine, which folds it onto a
+// person it already knows; as a candidate it received a pseudonym of its own.
+function roleLabelNameSpans(source) {
+  const candidates = [];
+  ROLE_NAME_RE.lastIndex = 0;
+  let match;
+  while ((match = ROLE_NAME_RE.exec(source))) {
+    const start = match.index + match[0].length - match[1].length;
+    const value = withoutFollowingWords(match[1]);
+    if (!plausiblePerson(value)) continue;
+    candidates.push({ start, end: start + value.length, value });
+  }
+  return candidates;
+}
+
+// List items under a line that is only a person label, a role or a list cue.
+// At most one blank line may separate the label from the list and one item
+// from the next; the first line that is no list item ends the list. An item
+// that is no name ("- Müller (Protokoll)", "- Einkauf") stays as it is and
+// does not end the list: the names below it are still names. Each item is its
+// own candidate, and only its name; a field label in front of a colon is cut
+// off ("- Anna Sommer Telefon: …"). A text file from Windows ends its lines
+// with a carriage return, which is not part of the line here.
+function labelledNameListSpans(source, personFieldPolicy) {
+  const label = new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?(?:\\*\\*|__)?(?:${personFieldPattern(personFieldPolicy)}|${NAME_LIST_CUE}|(?:${ROLE_CUE})(?:in|innen|n|en)?)(?:\\*\\*|__)?[ \\t]*:?(?:\\*\\*|__)?[ \\t]*$`, 'iu');
+  const candidates = [];
+  let lineStart = 0, open = false, blank = false;
+  for (const raw of source.split('\n')) {
+    const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+    if (label.test(line)) { open = true; blank = false; }
+    else if (open && !line.trim()) { if (blank) open = false; blank = true; }
+    else if (open && !LIST_ITEM_RE.test(line)) open = false;
+    else if (open) {
+      blank = false;
+      const item = NAME_LIST_ITEM_RE.exec(line);
+      if (item) {
+        const start = lineStart + item[0].length - item[1].length;
+        const value = /^[ \t]*:/u.test(line.slice(start + item[1].length - lineStart)) ? withoutFollowingWords(item[1]) : item[1];
+        if (plausiblePerson(value)) candidates.push({ start, end: start + value.length, value });
+      }
+    }
+    lineStart += raw.length + 1;
+  }
+  return candidates;
+}
+
 function personProseCandidateSpans(text, options = {}) {
   const { policy: personFieldPolicy, consumerOptions } = personFieldContextForConsumer(options);
   const original = normalizeText(text);
@@ -295,6 +390,30 @@ function personProseCandidateSpans(text, options = {}) {
     lineStart += line.length + 1;
   }
   if (options.productChannel === 'standalone') {
+    candidates.push(...roleLabelNameSpans(original), ...labelledNameListSpans(original, personFieldPolicy));
+    // A name that is a candidate at one place is the same name at its other
+    // places in this document (RC178 review R-033). Without this the decision
+    // replaced it at the cue, and in the next document of the batch, but left
+    // it readable two lines further down. Exact spelling and case, full names
+    // only; presentation hypotheses below keep their single occurrence.
+    // At most 500 further places per document, counted over all names: the
+    // local review takes a bounded number of findings, and a name on every
+    // line of a long export must not turn the document into one that cannot
+    // be reviewed at all. Beyond that the name stays where it stood before.
+    // A further place is marked: where the engine has already replaced the
+    // name on other evidence, there is nothing left to decide.
+    const known = new Set(candidates.map(candidate => candidate.start));
+    let further = 0;
+    for (const value of new Set(candidates.map(candidate => candidate.value))) {
+      if (further >= 500) break;
+      if (!/[ \t]/u.test(value)) continue;
+      for (const span of sourceLiteralSpans(original, value)) {
+        if (further >= 500) break;
+        if (known.has(span.start) || original.slice(span.start, span.end) !== value) continue;
+        candidates.push({ start: span.start, end: span.end, value, further: true });
+        further++;
+      }
+    }
     candidates.push(...standalonePresentationCandidateSpans(original, options.profile, consumerOptions));
     const ranges = protectedEvidenceRanges(original, options.profile, personFieldPolicy);
     const fields = require('./field-value-coverage');
@@ -335,6 +454,10 @@ function personProseAmbiguities(originalText, anonymizedText, options = {}) {
         const sourceCopies = literalOccurrences(original, candidate.value);
         const outputCopies = literalOccurrences(anonymized, candidate.value);
         const ordinal = sourceCopies.findIndex(item => item.start === originalStart);
+        // A further place of a name the engine has replaced there on its own
+        // evidence ("Hans Müller IBAN …") is decided. Only the place with
+        // the cue has to be found again; without this the document stopped.
+        if (candidate.further && sourceCopies.length !== outputCopies.length) continue;
         if (outputCopies.length && (sourceCopies.length !== outputCopies.length || ordinal < 0)) {
           const error = new Error('Die Fundstelle kann nicht eindeutig ihrem Quelltext zugeordnet werden. Eine erneute lokale Prüfung ist erforderlich.');
           error.code = 'AMBIGUITY_REVIEW_REQUIRED';
@@ -348,6 +471,8 @@ function personProseAmbiguities(originalText, anonymizedText, options = {}) {
       }
     }
     if (!mapped || anonymized.slice(mapped.start, mapped.end) !== candidate.value) continue;
+    if (candidate.further && (options.residualPersonSpans || []).some(finding => finding.start < mapped.end && mapped.start < finding.end &&
+        (finding.start < mapped.start || finding.end > mapped.end))) continue;
     const key = `${mapped.start}:${mapped.end}`;
     if (used.has(key)) continue;
     used.add(key);

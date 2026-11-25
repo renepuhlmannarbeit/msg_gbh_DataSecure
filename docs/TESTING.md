@@ -812,7 +812,7 @@ durch; die Suite bricht am ersten Fehler ab. Vorher sind herzustellen
 6. die vorbereitete Standalone-Laufzeit:
    `node scripts/prepare-standalone-runtime.mjs`.
 
-Ein Durchlauf umfasst 366 Dateien und dauert auf einem aktuellen
+Ein Durchlauf umfasst 367 Dateien und dauert auf einem aktuellen
 Windows-Rechner knapp 50 Minuten; rund ein Viertel davon entfällt auf
 `tests/test-result-generations.js`.
 

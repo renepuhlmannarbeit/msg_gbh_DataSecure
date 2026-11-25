@@ -305,13 +305,15 @@ test('structured field roles preserve the public literal phone and DOB grammar e
   // Changed on purpose in the RC178 review (R-033): the period of an abbreviated
   // label is also read in its escaped Markdown form "\.", so "Tel\. 030 …" and
   // "geb\. 12\.03\.1980" from an Office source are labels as in plain text. The
-  // label words (PHONE_LABEL_PATTERN) are unchanged.
-  assert.equal(sha(base.PHONE_LABEL_RE.source), '82f982d0512e426f4fff5277b91a8c0c34fea5690c31df7bea2c8f4026360bd7');
-  assert.equal(sha(base.PHONE_LABEL_PATTERN), '5d8366475e3411e1b06db45341dac4534f74cbe70e257c3cd35e7824299870b2');
+  // label words (PHONE_LABEL_PATTERN) gained one phrase on purpose, in the same
+  // review: "Rückruf unter" and "Rückruf an", beside "Rückfragen unter".
+  assert.equal(sha(base.PHONE_LABEL_RE.source), '471ee650ef6f73ca45d34e8c651e48b912e17938740c57341f05765dd2e5752e');
+  assert.equal(sha(base.PHONE_LABEL_PATTERN), 'cf5beaaa0714e051b9e711021abaffaa453e11ede93959128e4ad0424c3782cf');
+  assert.equal(base.PHONE_LABEL_PATTERN.includes('|rückruf('), true);
   assert.equal(sha(base.DATE_OF_BIRTH_LABEL_RE.source), '0cdb4a75602d3c626138e50a67a444d58282339ddae5a30e5494b3f827a91c06');
   assert.equal(base.PHONE_LABEL_RE.source.endsWith(String.raw`\s*(?:\\?\.)?\s*:?\s*$`), true);
   assert.equal(base.DATE_OF_BIRTH_LABEL_RE.source.includes(String.raw`geb\\?\.`), true);
-  for (const label of ['Telefonnummer','Rufen Sie mich an unter','Rückfragen gerne unter'])
+  for (const label of ['Telefonnummer','Rufen Sie mich an unter','Rückfragen gerne unter','Rückruf gerne unter'])
     assert.equal(base.structuredLabelRole(label).wholeMetadata, true);
 });
 

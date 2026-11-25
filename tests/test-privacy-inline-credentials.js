@@ -95,9 +95,11 @@ async function main() {
       assert.match(released, /Passwort: \[CREDENTIAL_REDACTED\] fuer Dr\. \[PERSON_001\] und weiter/u, profile);
     }
     // An open person hint on the same line is still resolved; a wider value
-    // swallowed its reservation and stopped the document.
+    // swallowed its reservation and stopped the document. Since R-033 the
+    // name decided at "Hans Kurz sagte" is replaced at its other place in the
+    // same document too; before, it stayed readable in the first line.
     assert.equal(await release('Anna Meier ist Kundin. Hans Kurz ist Kunde.\n\nNotiz: WLAN-Passwort: abc1 siehe Frau Dr. Anna Meier; Hans Kurz sagte.\n'),
-      `[PERSON_001] ist Kundin. Hans Kurz ist Kunde.\n\nNotiz: WLAN-Passwort: ${M} siehe Dr. [PERSON_001]; [PERSON_002] sagte.\n`);
+      `[PERSON_001] ist Kundin. [PERSON_002] ist Kunde.\n\nNotiz: WLAN-Passwort: ${M} siehe Dr. [PERSON_001]; [PERSON_002] sagte.\n`);
     // Other identifiers behind the value keep their own replacement.
     assert.equal(await note('Ich bin hier, Passwort: x. DE89370400440532013000 anna.meier@example.org'),
       `Ich bin hier, Passwort: ${M} [BANK_DATA_REDACTED] [EMAIL_REDACTED]`);
