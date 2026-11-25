@@ -302,9 +302,15 @@ test('qualifier decoration view accepts actual RGI clusters but never trims arbi
 test('structured field roles preserve the public literal phone and DOB grammar exactly', () => {
   const crypto = require('node:crypto'), base = require('../plugins/data-secure/server/privacy/base');
   const sha = value => crypto.createHash('sha256').update(value).digest('hex');
-  assert.equal(sha(base.PHONE_LABEL_RE.source), '95bb928e886b90e9ac9ab70ddcf6d5dc5ff4ef0a83e9056a22018077cad5a15f');
+  // Changed on purpose in the RC178 review (R-033): the period of an abbreviated
+  // label is also read in its escaped Markdown form "\.", so "Tel\. 030 …" and
+  // "geb\. 12\.03\.1980" from an Office source are labels as in plain text. The
+  // label words (PHONE_LABEL_PATTERN) are unchanged.
+  assert.equal(sha(base.PHONE_LABEL_RE.source), '82f982d0512e426f4fff5277b91a8c0c34fea5690c31df7bea2c8f4026360bd7');
   assert.equal(sha(base.PHONE_LABEL_PATTERN), '5d8366475e3411e1b06db45341dac4534f74cbe70e257c3cd35e7824299870b2');
-  assert.equal(sha(base.DATE_OF_BIRTH_LABEL_RE.source), '9a2734d206fd52acd1058698c34cfae4f702425b9a5388ba236f2d749048533f');
+  assert.equal(sha(base.DATE_OF_BIRTH_LABEL_RE.source), '0cdb4a75602d3c626138e50a67a444d58282339ddae5a30e5494b3f827a91c06');
+  assert.equal(base.PHONE_LABEL_RE.source.endsWith(String.raw`\s*(?:\\?\.)?\s*:?\s*$`), true);
+  assert.equal(base.DATE_OF_BIRTH_LABEL_RE.source.includes(String.raw`geb\\?\.`), true);
   for (const label of ['Telefonnummer','Rufen Sie mich an unter','Rückfragen gerne unter'])
     assert.equal(base.structuredLabelRole(label).wholeMetadata, true);
 });
