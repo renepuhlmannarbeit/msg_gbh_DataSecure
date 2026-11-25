@@ -32,6 +32,9 @@ pub struct ExitGate {
 
 impl ExitGate {
     pub fn begin(&self) -> bool { !self.exit_started.swap(true, Ordering::AcqRel) }
+    // Shutdown is under way. A further click on the close button must not
+    // ask the renderer again while the sidecar is being stopped.
+    pub fn begun(&self) -> bool { self.exit_started.load(Ordering::Acquire) }
     pub fn allowed(&self, requested_code: Option<i32>) -> bool {
         match self.terminal_exit.load(Ordering::Acquire) {
             1 => requested_code == Some(0),

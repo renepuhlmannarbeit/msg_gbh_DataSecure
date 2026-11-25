@@ -232,6 +232,37 @@ Die App wartet begrenzt auf das Ende ihres Sidecars und protokolliert eine
 nicht bestätigte Beendigung als `STANDALONE_SHUTDOWN_FAILED`, nicht als Erfolg.
 Sie beendet keine fremden Prozesse und gibt keine offenen Reviewdaten frei.
 
+Das Schließen des Hauptfensters bei arbeitendem Lauf führt über eine Rückfrage
+zur Dateigrenzen-Pause (DS-110, Präzisierung vom 25.11.2026). Arbeitsprozesse
+des Core beendet die Hülle weiterhin nicht selbst. Ein Arbeitsprozess kann
+deshalb ohne Fenster weiterlaufen:
+
+- nach **Jetzt schließen** für die aktive Datei und nach **Trotzdem
+  schließen** bei einem nicht pausierbaren Lauf oder unbekanntem Stand;
+- wenn die Oberfläche auf die Schließanfrage nicht binnen zwei Sekunden
+  antwortet;
+- beim Beenden durch das Betriebssystem und nach einem Absturz der Hülle;
+- wenn die Oberfläche die Arbeit nicht als arbeitenden Lauf kennt: ein
+  Arbeitsprozess aus einer früheren Sitzung vor dem ersten gelesenen
+  Laufstatus, oder Bereitstellung und Prüfvorbereitung außerhalb der Zustände
+  „Vorbereitung“ und „Wird verarbeitet“.
+
+Er unterliegt denselben Prüfungen wie bei offenem Fenster; in den
+Ergebnisordner gelangt nichts, was nicht auch bei offenem Fenster dorthin
+gelangt wäre. Die Abschlussanzeige eines so beendeten Laufs sieht der Anwender
+erst beim nächsten Öffnen. Nach **Pausieren und schließen** bleiben die
+privaten Arbeitskopien der offenen Dateien liegen, bis der Lauf fortgesetzt
+wird oder die eingestellte Aufbewahrung endet. Bei Aufbewahrung 0 Tage ist
+keine Pause möglich; wird ein solcher Lauf ohne Fenster unterbrochen, müssen
+die offenen Dateien neu ausgewählt werden.
+
+Die Oberfläche erhält mit der Schließanfrage nur eine laufende Nummer. Sie kann
+die App nur für die letzte Schließanfrage des Anwenders schließen und nicht
+mehr, nachdem er das Fenster offen gelassen hat. Eine Oberfläche, die eine
+Anfrage quittiert und danach nicht mehr reagiert, hält das Fenster offen, bis
+der Anwender erneut schließt; die neue Anfrage braucht wieder eine Antwort
+binnen zwei Sekunden. Das Prüffenster besitzt diese Befehle nicht.
+
 Aufnahmefehler dürfen über einen geschlossenen, größenbegrenzten privaten
 Vertrag Dateilabels an die eigene Hauptansicht geben: relative Namen mit
 Endungen und feste Ursachecodes, keine beliebigen Exceptions oder Inhalte.

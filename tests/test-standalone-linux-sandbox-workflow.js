@@ -71,7 +71,8 @@ assert.match(conversionWorker,
 assert.match(conversionResolver,
   /process\.platform === 'linux' && process\.arch === 'x64' \? 'linux-x64-glibc' : null/u);
 assert.match(tauriMain,
-  /WindowEvent::CloseRequested[\s\S]*?api\.prevent_close\(\);[\s\S]*?begin_native_exit\(state\.inner\(\)\.capture_connection\(\)\)/u);
+  /WindowEvent::CloseRequested[\s\S]{0,160}?api\.prevent_close\(\);[\s\S]{0,160}?request_native_close\(state\.inner\(\)\.capture_connection\(\)\)/u);
+assert.match(tauriMain, /if waiting\.close_prompt\.unanswered\(request\) \{ begin_native_exit\(waiting\); \}/u);
 assert.match(tauriMain, /ExitRequested \{ api, code, \.\. \}/u);
 assert.match(tauriMain, /if !state\.exit_gate\.allowed\(code\) \{\s*api\.prevent_exit\(\)/u);
 

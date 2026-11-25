@@ -169,6 +169,21 @@ description = "Beendet den privaten lokalen Core-Prozess."
 commands.allow = ["shutdown"]
 
 [[permission]]
+identifier = "allow-acknowledge-close-request"
+description = "Meldet der Hülle, dass die Rückfrage zum Schließen des Hauptfensters angezeigt wird."
+commands.allow = ["acknowledge_close_request"]
+
+[[permission]]
+identifier = "allow-decline-close-request"
+description = "Meldet der Hülle, dass der Anwender das Fenster offen lässt; diese Schließanfrage verfällt."
+commands.allow = ["decline_close_request"]
+
+[[permission]]
+identifier = "allow-confirm-close"
+description = "Schließt die App für die letzte, nicht zurückgezogene Schließanfrage des Anwenders."
+commands.allow = ["confirm_close"]
+
+[[permission]]
 identifier = "allow-frontend-ready"
 description = "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat."
 commands.allow = ["frontend_ready"]

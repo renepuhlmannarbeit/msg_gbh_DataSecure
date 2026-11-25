@@ -105,6 +105,14 @@ Stapel. Die laufgebundene Ansicht nennt Fortschritt und Dateiprobleme.
 **Pausieren** beendet die aktive Datei einschließlich Bereitstellung; danach
 beginnt keine weitere. **Verarbeitung fortsetzen** gehört genau zu diesem Lauf.
 
+Wer das Hauptfenster schließt, während ein Lauf arbeitet, wird gefragt:
+**Weiter verarbeiten** oder **Pausieren und schließen**. Nach dem Pausieren
+schließt die App von selbst, sobald die aktive Datei fertig ist; der Lauf steht
+danach im Verlauf zum Fortsetzen bereit, und seine Ergebnisse erscheinen erst
+nach dem Abschluss im Ergebnisordner. Lässt sich ein Lauf nicht pausieren oder
+ist sein Stand gerade nicht bekannt, nennt die Rückfrage den Grund und sagt,
+was beim Schließen geschieht (DS-110, Präzisierung vom 25.11.2026).
+
 **Jetzt prüfen** öffnet die integrierte Fundstellenprüfung ohne Verlaufsumweg.
 Checkboxen sind Auswahl, zentrale Aktionen merken Entscheidungen zunächst vor;
 erst **Gruppe übergeben und weiter** speichert eine vollständig behandelte

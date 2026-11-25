@@ -55,6 +55,9 @@
     "allow-get-native-recovery-status",
     "allow-report-blocked-picker",
     "allow-shutdown",
+    "allow-acknowledge-close-request",
+    "allow-decline-close-request",
+    "allow-confirm-close",
     "allow-frontend-ready"
   ]
 }

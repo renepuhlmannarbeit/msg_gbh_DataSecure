@@ -195,6 +195,12 @@
           "markdownDescription": "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenster gerendert wurde."
         },
         {
+          "description": "Meldet der Hülle, dass die Rückfrage zum Schließen des Hauptfensters angezeigt wird.",
+          "type": "string",
+          "const": "allow-acknowledge-close-request",
+          "markdownDescription": "Meldet der Hülle, dass die Rückfrage zum Schließen des Hauptfensters angezeigt wird."
+        },
+        {
           "description": "Verwirft eine noch nicht gestartete lokale Auswahl.",
           "type": "string",
           "const": "allow-cancel-admission",
@@ -217,6 +223,12 @@
           "type": "string",
           "const": "allow-configure-results",
           "markdownDescription": "Ändert den Ergebnisordner über eine native lokale Ordnerauswahl."
+        },
+        {
+          "description": "Schließt die App für die letzte, nicht zurückgezogene Schließanfrage des Anwenders.",
+          "type": "string",
+          "const": "allow-confirm-close",
+          "markdownDescription": "Schließt die App für die letzte, nicht zurückgezogene Schließanfrage des Anwenders."
         },
         {
           "description": "Setzt den aktuell in dieser Sitzung verbundenen Lauf fort.",
@@ -247,6 +259,12 @@
           "type": "string",
           "const": "allow-decide-document-review-batch",
           "markdownDescription": "Speichert die genaue Auswahl revisionsgebundener Freigaben oder Widerrufe als gemeinsame Entscheidung."
+        },
+        {
+          "description": "Meldet der Hülle, dass der Anwender das Fenster offen lässt; diese Schließanfrage verfällt.",
+          "type": "string",
+          "const": "allow-decline-close-request",
+          "markdownDescription": "Meldet der Hülle, dass der Anwender das Fenster offen lässt; diese Schließanfrage verfällt."
         },
         {
           "description": "Exportiert nur explizit ausgewählte freigegebene Dokumentrevisionen ohne private Begleitdaten.",

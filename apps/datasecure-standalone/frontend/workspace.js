@@ -335,6 +335,10 @@
   let includeHiddenHistory = false;
   let requestedHistorySummaryBatchId = null;
   let lastError = null;
+  // Closing the main window while a run is working: the latest close request
+  // of the shell, the run this window closes after once it has paused, a start
+  // that is in flight, and whether this session has read a run status at all.
+  let closeRequest = 0, closeAfterPause = null, startingRun = false, closeStateSeen = false;
   let reviewOrigin = null, documentsOrigin = 'history', admitting = false;
   let pendingResultAbandon = null;
   let connectionEpoch = 0, reconnecting = false, contextRequired = false;
@@ -626,7 +630,9 @@
     if (value === busy) return;
     busy = value;
     if (value) for (const node of document.querySelectorAll('button:not(.nav-tab), input')) {
-      if (['diagnostics', 'connection-diagnostics', 'diagnostic-save', 'connection-diagnostic-save', 'document-export-diagnostic-save'].includes(node.id)) continue;
+      // Diagnostics stay reachable, and so do the answers to a close request.
+      if (['diagnostics', 'connection-diagnostics', 'diagnostic-save', 'connection-diagnostic-save', 'document-export-diagnostic-save',
+        'close-dialog-stay', 'close-dialog-leave'].includes(node.id)) continue;
       disabledBeforeBusy.set(node, node.disabled); node.disabled = true;
     }
     else { for (const [node, disabled] of disabledBeforeBusy) node.disabled = disabled; disabledBeforeBusy.clear(); }
@@ -914,6 +920,9 @@
     else if (ocr && $('ocr-review').checked) args.ocrContactReview = true;
     if (mode === 'markdown-and-anonymize' && $('fast-anonymize').checked) args.reviewPolicy = 'automatic-conservative';
     const startConnection = connectionEpoch;
+    // Until the first status of the new run is read, closing cannot know whether it works.
+    startingRun = true;
+    try {
     const result = await perform('start_admitted_batch', args);
     if (startConnection !== connectionEpoch) return;
     if (!result) {
@@ -933,6 +942,7 @@
     adoptRun({ ...snapshot, batchId: result.batch_id, selectedCount: files.length }); consumeAdmission();
     feedback('');
     showView('details', job.batchId); $('job-title').focus(); await refresh();
+    } finally { startingRun = false; }
   }
   function adoptRun(run) {
     invalidateHistoryCount();
@@ -1251,7 +1261,7 @@
       : 'Der aktuelle Ergebnisordner ist nicht bestätigt. Den gespeicherten Stand in der Nachbearbeitung prüfen; keine Änderung blind wiederholen.') : summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
       ? `${reviews} Datei${reviews === 1 ? ' wartet' : 'en warten'} auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
-      : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.' : `${done} von ${total} ${total === 1 ? 'Datei' : 'Dateien'} abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
+      : working ? state.pause_requested ? `Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.${closeAfterPause ? ' DataSecure schließt danach von selbst.' : ''}` : `${done} von ${total} ${total === 1 ? 'Datei' : 'Dateien'} abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
       : state.state === 'results_available' ? `${count(state.result_count)} ${count(state.result_count) === 1 ? rawResults ? 'Markdown-Ergebnis (nicht anonymisiert)' : anonymousResults ? 'technisch geprüftes anonymisiertes Ergebnis' : 'Ergebnis mit unbestätigtem Verarbeitungszweck' : rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
       : state.state === 'stopped' ? 'Der lokale Zwischenstand ist gespeichert. Fortsetzen verarbeitet nur noch offene Schritte.'
       : state.state === 'paused' ? 'Der Lauf ist pausiert. Fortsetzen verarbeitet nur offene Dateien. Die privaten Arbeitskopien unterliegen weiterhin der eingestellten Aufbewahrung.'
@@ -2075,12 +2085,13 @@
         if (bootstrapRecoveryAttempt === attempt) bootstrapRecoveryAttempt = null;
         if (recoveredConnection) feedback('Lokale Verbindung wiederhergestellt. Gespeicherte Läufe bleiben erhalten; kein Start und keine Entscheidung wurden automatisch wiederholt. Eine frühere Dateiauswahl bitte neu aufnehmen.');
       }
-      current = state; observeHistoryCountState(state); updateStart();
+      current = state; closeStateSeen = true; observeHistoryCountState(state); updateStart();
       if (!job && !catalogue.length && /^[a-f0-9]{64}$/u.test(state.batch_id || '') && ['preparing', 'processing'].includes(state.state)) {
         adoptRun({ batchId: state.batch_id, task: state.processing_mode, name: `Lauf ${state.batch_id.slice(0, 8)}`,
           files: [], selectedCount: count(state.selected_count) });
       }
       renderJob(state);
+      settleClose(state);
       if (!historySummaryReads) {
         if (view === 'history') await refreshHistory(true);
         else if (view === 'details' && runDetails?.connection === connectionEpoch && !$('run-history-detail').hidden)
@@ -2313,6 +2324,131 @@
     } finally { connectionRetryChecking = false; retry.disabled = false; retry.textContent = 'Verbindung und Laufstatus prüfen'; }
   });
   $('identities').addEventListener('click', () => perform('open_identity_mappings_directory'));
+  // Closing the main window while a run is working (DS-110, 25.11.2026). The
+  // shell hands every close request to this renderer and exits by itself when
+  // no answer arrives in time. Nothing working: close at once, as before.
+  // Otherwise the user decides. Pausing is the ordinary pause of that run: the
+  // active file is finished, no further file begins, the run stays resumable.
+  // A question the user withdraws is told to the shell, so that this request
+  // can no longer close the app.
+  const runWorking = state => Boolean(state) && (['preparing', 'processing'].includes(state.state) || state.intake_failure?.worker_active === true);
+  // What this window knows about work that closing would leave without a window.
+  function closeQuestion() {
+    if (bootstrapFailure) return null; // No core is connected; there is nothing this window could pause.
+    if (startingRun) return { kind: 'unknown', reason: 'starting' };
+    if (reconnecting && closeStateSeen) return { kind: 'unknown', reason: 'reconnecting' };
+    if (!runWorking(current)) return null;
+    if (current.pause_requested === true || closeAfterPause) return { kind: 'pausing', reason: '' };
+    if (current.state === 'processing' && validBatchId(current.batch_id)) return { kind: 'working', reason: '' };
+    return { kind: 'unpausable', reason: current.state === 'preparing' ? 'preparing' : 'state' };
+  }
+  function hideCloseDialog() { if ($('close-dialog').open) $('close-dialog').close(); }
+  async function confirmClose() {
+    const request = closeRequest; closeRequest = 0; closeAfterPause = null;
+    hideCloseDialog();
+    try { await invoke('confirm_close', { request }); }
+    catch { /* A newer close request replaced this one, or it was withdrawn; the shell asks again. */ }
+  }
+  async function withdrawClose() {
+    const request = closeRequest; closeRequest = 0;
+    hideCloseDialog();
+    if (!request) return;
+    try { await invoke('decline_close_request', { request }); }
+    catch { /* Only the latest request counts for the shell; the next close request replaces this one. */ }
+  }
+  function presentClose(kind, reason = '') {
+    const dialog = $('close-dialog'), total = count(current?.selected_count) || count(job?.selectedCount), done = count(current?.completed_count);
+    const windowless = 'Den Stand siehst du beim nächsten Öffnen im Verlauf.';
+    const anyway = `Wenn du trotzdem jetzt schließt, kann ein Lauf ohne Fenster weiterlaufen. ${windowless}`;
+    dialog.dataset.kind = kind; dialog.dataset.reason = reason;
+    if (kind === 'working') {
+      $('close-dialog-title').textContent = 'Die Verarbeitung ist noch nicht fertig.';
+      $('close-dialog-text').textContent = `${total ? `${done} von ${total} ${total === 1 ? 'Datei' : 'Dateien'} ${done === 1 || total === 1 ? 'ist' : 'sind'} fertig. ` : ''}Wenn du jetzt schließt, wird nach der laufenden Datei pausiert. Bereits fertige Dateien bleiben gespeichert; im Ergebnisordner erscheinen die Ergebnisse erst, wenn der ganze Lauf abgeschlossen ist. Den Rest kannst du später im Verlauf fortsetzen. Die Arbeitskopien der offenen Dateien bleiben dafür gespeichert und unterliegen der eingestellten Aufbewahrung.`;
+      $('close-dialog-stay').textContent = 'Weiter verarbeiten'; $('close-dialog-leave').textContent = 'Pausieren und schließen';
+    } else if (kind === 'pausing') {
+      $('close-dialog-title').textContent = 'Die laufende Datei wird noch fertiggestellt.';
+      $('close-dialog-text').textContent = `Danach pausiert der Lauf${closeAfterPause ? ', und DataSecure schließt von selbst' : ''}. Wenn du jetzt schließt, wird diese Datei ohne Fenster fertiggestellt; weitere Dateien beginnen nicht.`;
+      $('close-dialog-stay').textContent = 'Weiter warten'; $('close-dialog-leave').textContent = 'Jetzt schließen';
+    } else if (kind === 'unknown') {
+      $('close-dialog-title').textContent = 'Der Stand der Verarbeitung ist gerade nicht bekannt.';
+      $('close-dialog-text').textContent = `${reason === 'starting' ? 'Ein Lauf wird gerade gestartet.' : 'Die lokale Verbindung wird gerade wiederhergestellt.'} Warte kurz und schließe dann erneut. ${anyway}`;
+      $('close-dialog-stay').textContent = 'Fenster offen lassen'; $('close-dialog-leave').textContent = 'Trotzdem schließen';
+    } else {
+      $('close-dialog-title').textContent = 'Dieser Lauf lässt sich gerade nicht pausieren.';
+      $('close-dialog-text').textContent = reason === 'retention'
+        ? `Bei sofortiger Löschung der Arbeitskopien ist keine Pause möglich. Wenn du jetzt schließt, läuft der Lauf ohne Fenster weiter. Wird er dabei unterbrochen, etwa durch Abmelden oder Herunterfahren, müssen die offenen Dateien neu ausgewählt werden. ${windowless}`
+        : reason === 'preparing'
+          ? `Die Dateien werden gerade vorbereitet; in diesem Moment ist noch keine Pause möglich. Warte kurz und schließe dann erneut. ${anyway}`
+          : reason === 'refused'
+            ? `Die Pause konnte gerade nicht angefordert werden. Du kannst es gleich noch einmal versuchen. ${anyway}`
+            : `In diesem Zustand ist keine Pause möglich. ${anyway}`;
+      $('close-dialog-stay').textContent = 'Fenster offen lassen'; $('close-dialog-leave').textContent = 'Trotzdem schließen';
+    }
+    if (!dialog.open) dialog.showModal();
+    $('close-dialog-stay').focus();
+  }
+  async function receiveCloseRequest(event) {
+    const request = event?.payload?.request;
+    if (closed || !Number.isSafeInteger(request) || request < 1) return;
+    closeRequest = request;
+    const question = closeQuestion();
+    if (!question) { await confirmClose(); return; }
+    // Show first, then tell the shell: an acknowledged request always has a
+    // question on screen. If showing fails the shell closes after its deadline.
+    try { presentClose(question.kind, question.reason); } catch { return; }
+    let acknowledged = false;
+    try { acknowledged = (await invoke('acknowledge_close_request', { request }))?.ok === true; } catch { acknowledged = false; }
+    // Not acknowledged: the shell decides. A newer request owns the dialog by then.
+    if (!acknowledged && closeRequest === request) { closeRequest = 0; hideCloseDialog(); }
+  }
+  // After every status read: close the window the user asked to close after
+  // the pause, and retire or renew a question that no longer fits the run.
+  function settleClose(state) {
+    if (closeAfterPause && (closeAfterPause.connection !== connectionEpoch ||
+        validBatchId(state?.batch_id) && state.batch_id !== closeAfterPause.batchId)) {
+      closeAfterPause = null; lastJobSignature = '';
+      feedback('DataSecure schließt nicht mehr von selbst, weil sich die Verbindung oder der beobachtete Lauf geändert hat. Bitte den Laufstatus prüfen und bei Bedarf erneut schließen.');
+    }
+    if (closeAfterPause) { if (!runWorking(state)) void confirmClose(); return; }
+    const dialog = $('close-dialog');
+    if (!dialog.open) return;
+    const question = closeQuestion();
+    // The run stopped working while the question was open. The user had not
+    // answered; the window stays and shows what the run reached.
+    if (!question) { void withdrawClose(); return; }
+    const transient = dialog.dataset.kind === 'unknown' || dialog.dataset.reason === 'preparing';
+    if (transient && (question.kind !== dialog.dataset.kind || question.reason !== dialog.dataset.reason)) presentClose(question.kind, question.reason);
+  }
+  function stayOpen() {
+    // "Weiter warten" keeps the request: the window still closes after the pause.
+    if ($('close-dialog').dataset.kind === 'pausing' && closeAfterPause) { hideCloseDialog(); return; }
+    void withdrawClose();
+  }
+  $('close-dialog-stay').addEventListener('click', stayOpen);
+  $('close-dialog').addEventListener('cancel', stayOpen); // Esc
+  $('close-dialog-leave').addEventListener('click', async () => {
+    const dialog = $('close-dialog');
+    if (!dialog.open) return; // Only a question on screen can be answered.
+    if (dialog.dataset.kind !== 'working') { await confirmClose(); return; }
+    hideCloseDialog();
+    if (!runWorking(current)) { await confirmClose(); return; }
+    const batchId = current.batch_id, request = closeRequest; lastError = null;
+    const paused = validBatchId(batchId) ? await perform('pause_batch', { batchId }) : null;
+    if (closed || closeRequest !== request) return; // A newer close request owns the question.
+    if (paused) {
+      closeAfterPause = { batchId, connection: connectionEpoch }; lastJobSignature = '';
+      await refresh();
+      return;
+    }
+    const retention = lastError === 'STANDALONE_PAUSE_RETENTION_UNAVAILABLE';
+    if (!retention) {
+      // The run may have ended or paused in the meantime; read it before asking again.
+      lastJobSignature = ''; await refresh();
+      if (closed || closeRequest !== request) return;
+      if (!closeQuestion()) { await confirmClose(); return; }
+    }
+    presentClose('unpausable', retention ? 'retention' : 'refused');
+  });
   window.addEventListener('beforeunload', () => { closed = true; clearTimeout(timer); for (const unlisten of unlisteners) unlisten(); $('review-frame').src = 'about:blank'; });
   (async () => {
     updateStart();
@@ -2367,6 +2503,8 @@
       try { unlisteners.push(await window.__TAURI__.event.listen('datasecure-admission-progress', event => {
         if (busy && event.payload?.phase === 'validating') feedback('Dateien und Unterordner werden lokal geprüft. Die Verarbeitung beginnt erst mit „Verarbeitung starten“.');
       })); } catch { /* Status remains available through the closed command API. */ }
+      try { unlisteners.push(await window.__TAURI__.event.listen('datasecure-close-requested', receiveCloseRequest)); }
+      catch { /* Without this listener the shell closes after its own deadline, as before. */ }
       unlisteners.push(await window.__TAURI__.event.listen('datasecure-review-closed', async event => {
         const origin = reviewOrigin;
         // Late/duplicate notifications must not leave an already opened

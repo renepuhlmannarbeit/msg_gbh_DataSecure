@@ -5801,6 +5801,260 @@ testAsync('epoch92V2 receipt for an older retry never completes the later failur
   noEpochMutation(h);
 });
 
+// Closing the main window while a run is working (DS-110, 25.11.2026). The
+// shell emits 'datasecure-close-requested' for every close request and exits
+// by itself when the renderer does not answer in time; that deadline is Rust's.
+function closeHarness(extra = {}) {
+  const answers = { acknowledge: { ok: true }, pause: null, hang: null, ...extra };
+  const seen = { dialogOpenAtAcknowledge: [] };
+  let release = () => {};
+  const h = harness({ invoke(command, args, fallback, model) {
+    if (command === 'acknowledge_close_request') {
+      seen.dialogOpenAtAcknowledge.push(h.el('close-dialog').open === true);
+      if (answers.acknowledge instanceof Error) throw answers.acknowledge;
+      return answers.acknowledge;
+    }
+    if (command === 'confirm_close' || command === 'decline_close_request') return { ok: true };
+    if (command === answers.hang) return new Promise(resolve => { release = () => resolve(fallback()); });
+    if (command === 'pause_batch') {
+      if (answers.pause) { answers.onPauseFailure?.(model); throw Error(answers.pause); }
+      model.state = { ...model.state, pause_requested: true }; return { ok: true };
+    }
+    return fallback();
+  } });
+  const requestClose = async request => { await h.listeners.get('datasecure-close-requested')({ payload: { request } }); await tick(); };
+  const commands = name => h.calls.filter(call => call.command === name);
+  return { h, answers, seen, requestClose, commands, release: () => release() };
+}
+const closeAnyway = 'Wenn du trotzdem jetzt schließt, kann ein Lauf ohne Fenster weiterlaufen. Den Stand siehst du beim nächsten Öffnen im Verlauf.';
+testAsync('closing without a working run closes at once and asks nothing', async () => {
+  const { h, requestClose, commands } = closeHarness(); await tick(); await tick();
+  assert.equal(typeof h.listeners.get('datasecure-close-requested'), 'function');
+  await requestClose(1);
+  assert.deepEqual(commands('confirm_close').map(call => call.args), [{ request: 1 }]);
+  assert.equal(commands('acknowledge_close_request').length, 0);
+  assert.equal(h.el('close-dialog').open, false);
+  for (const payload of [undefined, {}, { request: 0 }, { request: -1 }, { request: 1.5 }, { request: '2' }]) {
+    await h.listeners.get('datasecure-close-requested')({ payload }); await tick();
+  }
+  assert.equal(commands('confirm_close').length, 1, 'only a numbered request of the shell is answered');
+  // Paused, waiting for a decision or finished: nothing is working, the window closes.
+  for (const [request, state] of [[2, 'paused'], [3, 'review_required'], [4, 'stopped'], [5, 'results_available']]) {
+    h.model.state = { state, batch_id: A }; await h.poll(); await requestClose(request);
+    assert.deepEqual(commands('confirm_close').at(-1).args, { request }, state);
+  }
+});
+testAsync('closing while a run is working shows the question before the shell is told; staying withdraws the request', async () => {
+  const { h, seen, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  assert.equal(h.model.state.state, 'processing');
+  h.model.state = { ...h.model.state, selected_count: 3, completed_count: 1 }; await h.poll();
+  await requestClose(4);
+  assert.deepEqual(commands('acknowledge_close_request').map(call => call.args), [{ request: 4 }]);
+  assert.deepEqual(seen.dialogOpenAtAcknowledge, [true], 'an acknowledged request always has its question on screen');
+  const dialog = h.el('close-dialog');
+  assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'working');
+  assert.equal(h.el('close-dialog-title').textContent, 'Die Verarbeitung ist noch nicht fertig.');
+  assert.equal(h.el('close-dialog-text').textContent, '1 von 3 Dateien ist fertig. Wenn du jetzt schließt, wird nach der laufenden Datei pausiert. Bereits fertige Dateien bleiben gespeichert; im Ergebnisordner erscheinen die Ergebnisse erst, wenn der ganze Lauf abgeschlossen ist. Den Rest kannst du später im Verlauf fortsetzen. Die Arbeitskopien der offenen Dateien bleiben dafür gespeichert und unterliegen der eingestellten Aufbewahrung.');
+  assert.equal(h.el('close-dialog-stay').textContent, 'Weiter verarbeiten');
+  assert.equal(h.el('close-dialog-leave').textContent, 'Pausieren und schließen');
+  assert.equal(h.doc.activeElement, h.el('close-dialog-stay'), 'the safe answer has the focus');
+  await h.act('close-dialog-stay');
+  assert.equal(dialog.open, false);
+  assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 4 }], 'the shell learns that this request can no longer close');
+  assert.equal(commands('pause_batch').length, 0); assert.equal(commands('confirm_close').length, 0);
+  // Esc is the same answer as staying.
+  await requestClose(5); await h.act(dialog, 'cancel');
+  assert.equal(dialog.open, false);
+  assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 4 }, { request: 5 }]);
+  assert.equal(commands('confirm_close').length, 0);
+  // The sentence agrees in number for one file and for none finished.
+  h.model.state = { ...h.model.state, selected_count: 1, completed_count: 0 }; await h.poll(); await requestClose(6);
+  assert.match(h.el('close-dialog-text').textContent, /^0 von 1 Datei ist fertig\. /u);
+  await h.act('close-dialog-stay');
+  h.model.state = { ...h.model.state, selected_count: 4, completed_count: 0 }; await h.poll(); await requestClose(7);
+  assert.match(h.el('close-dialog-text').textContent, /^0 von 4 Dateien sind fertig\. /u);
+});
+testAsync('pause and close pauses this run, keeps the window until it has paused and then closes', async () => {
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  const batchId = h.model.state.batch_id;
+  await requestClose(7); await h.act('close-dialog-leave');
+  assert.deepEqual(commands('pause_batch').map(call => call.args), [{ batchId }]);
+  assert.equal(h.el('close-dialog').open, false);
+  assert.equal(commands('confirm_close').length, 0, 'the window stays while the active file is finished');
+  assert.match(h.el('job-description').textContent, /Pause angefordert\..*DataSecure schließt danach von selbst\.$/u);
+  await h.poll();
+  assert.equal(commands('confirm_close').length, 0);
+  // A second close request while pausing offers to wait or to close now.
+  await requestClose(8);
+  assert.equal(h.el('close-dialog').dataset.kind, 'pausing');
+  assert.equal(h.el('close-dialog-title').textContent, 'Die laufende Datei wird noch fertiggestellt.');
+  assert.equal(h.el('close-dialog-text').textContent, 'Danach pausiert der Lauf, und DataSecure schließt von selbst. Wenn du jetzt schließt, wird diese Datei ohne Fenster fertiggestellt; weitere Dateien beginnen nicht.');
+  assert.equal(h.el('close-dialog-stay').textContent, 'Weiter warten'); assert.equal(h.el('close-dialog-leave').textContent, 'Jetzt schließen');
+  await h.act('close-dialog-stay');
+  assert.equal(commands('decline_close_request').length, 0, 'waiting keeps the request: the window still closes after the pause');
+  assert.equal(commands('confirm_close').length, 0); assert.equal(commands('pause_batch').length, 1);
+  h.model.state = { ...h.model.state, state: 'paused', pause_requested: false }; await h.poll();
+  assert.deepEqual(commands('confirm_close').map(call => call.args), [{ request: 8 }], 'the latest close request of the user is confirmed');
+});
+testAsync('a pause requested with the ordinary button is not followed by an automatic close', async () => {
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  await h.act('job-action-pause');
+  assert.doesNotMatch(h.el('job-description').textContent, /schließt danach von selbst/u);
+  await requestClose(9);
+  assert.equal(h.el('close-dialog').dataset.kind, 'pausing');
+  assert.equal(h.el('close-dialog-text').textContent, 'Danach pausiert der Lauf. Wenn du jetzt schließt, wird diese Datei ohne Fenster fertiggestellt; weitere Dateien beginnen nicht.');
+  await h.act('close-dialog-stay');
+  assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 9 }]);
+  h.model.state = { ...h.model.state, state: 'paused', pause_requested: false }; await h.poll();
+  assert.equal(commands('confirm_close').length, 0, 'the user only asked for a pause');
+  await requestClose(10);
+  assert.deepEqual(commands('confirm_close').map(call => call.args), [{ request: 10 }], 'a paused run closes at once');
+});
+testAsync('closing now while the active file is finished is an explicit answer', async () => {
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  await requestClose(11); await h.act('close-dialog-leave'); await requestClose(12);
+  assert.equal(h.el('close-dialog').dataset.kind, 'pausing');
+  await h.act('close-dialog-leave');
+  assert.deepEqual(commands('confirm_close').map(call => call.args), [{ request: 12 }]);
+  assert.equal(commands('pause_batch').length, 1);
+});
+testAsync('a run that cannot be paused is neither stopped nor closed silently', async () => {
+  for (const [error, text] of [
+    ['STANDALONE_PAUSE_RETENTION_UNAVAILABLE', 'Bei sofortiger Löschung der Arbeitskopien ist keine Pause möglich. Wenn du jetzt schließt, läuft der Lauf ohne Fenster weiter. Wird er dabei unterbrochen, etwa durch Abmelden oder Herunterfahren, müssen die offenen Dateien neu ausgewählt werden. Den Stand siehst du beim nächsten Öffnen im Verlauf.'],
+    ['STANDALONE_BUSY', `Die Pause konnte gerade nicht angefordert werden. Du kannst es gleich noch einmal versuchen. ${closeAnyway}`]]) {
+    const { h, requestClose, commands } = closeHarness({ pause: error }); await selectAndStart(h);
+    await requestClose(13); await h.act('close-dialog-leave');
+    const dialog = h.el('close-dialog');
+    assert.equal(dialog.open, true, error); assert.equal(dialog.dataset.kind, 'unpausable');
+    assert.equal(h.el('close-dialog-title').textContent, 'Dieser Lauf lässt sich gerade nicht pausieren.');
+    assert.equal(h.el('close-dialog-text').textContent, text);
+    assert.equal(h.el('close-dialog-stay').textContent, 'Fenster offen lassen'); assert.equal(h.el('close-dialog-leave').textContent, 'Trotzdem schließen');
+    assert.equal(commands('confirm_close').length, 0, 'no close without the user answering the honest question');
+    await h.poll();
+    assert.equal(dialog.open, true, 'a status read does not replace the answer the user is reading');
+    assert.equal(dialog.dataset.kind, 'unpausable');
+    await h.act('close-dialog-stay');
+    assert.equal(commands('confirm_close').length, 0);
+    assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 13 }]);
+    await requestClose(14); await h.act('close-dialog-leave'); await h.act('close-dialog-leave');
+    assert.deepEqual(commands('confirm_close').map(call => call.args), [{ request: 14 }]);
+  }
+});
+testAsync('a refused pause of a run that has ended closes, and an earlier refusal does not colour a later one', async () => {
+  const ended = closeHarness({ pause: 'STANDALONE_PAUSE_UNAVAILABLE',
+    onPauseFailure(model) { model.state = { state: 'results_available', batch_id: A, result_count: 3, batch_complete: true }; } });
+  await selectAndStart(ended.h);
+  await ended.requestClose(20); await ended.h.act('close-dialog-leave');
+  assert.equal(ended.h.el('close-dialog').open, false);
+  assert.deepEqual(ended.commands('confirm_close').map(call => call.args), [{ request: 20 }], 'the user asked to close; nothing is working any more');
+  // First refusal: retention. The second attempt is blocked while a dropped selection is checked;
+  // that check owns the window without clearing the earlier error code.
+  const later = closeHarness({ pause: 'STANDALONE_PAUSE_RETENTION_UNAVAILABLE' });
+  await selectAndStart(later.h);
+  await later.requestClose(21); await later.h.act('close-dialog-leave');
+  assert.equal(later.h.el('close-dialog').dataset.reason, 'retention');
+  await later.h.act('close-dialog-stay');
+  later.h.listeners.get('datasecure-native-drop')({ payload: { phase: 'checking' } }); await tick();
+  await later.requestClose(22); await later.h.act('close-dialog-leave');
+  assert.equal(later.h.el('close-dialog').dataset.kind, 'unpausable');
+  assert.equal(later.h.el('close-dialog').dataset.reason, 'refused', 'the earlier error code is not reused');
+  assert.equal(later.commands('pause_batch').length, 1, 'a blocked command is not sent');
+  assert.equal(later.h.el('close-dialog-leave').disabled, false, 'the answers stay usable during the check');
+});
+testAsync('a run that is still being prepared is named as not yet pausable, and the question follows the run', async () => {
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  h.model.state = { ...h.model.state, state: 'preparing' }; await h.poll();
+  await requestClose(15);
+  const dialog = h.el('close-dialog');
+  assert.equal(dialog.dataset.kind, 'unpausable'); assert.equal(dialog.dataset.reason, 'preparing');
+  assert.equal(h.el('close-dialog-text').textContent, `Die Dateien werden gerade vorbereitet; in diesem Moment ist noch keine Pause möglich. Warte kurz und schließe dann erneut. ${closeAnyway}`);
+  assert.equal(commands('pause_batch').length, 0);
+  // Preparation ends while the question is open: the question becomes the ordinary one.
+  h.model.state = { ...h.model.state, state: 'processing' }; await h.poll();
+  assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'working');
+  assert.equal(h.el('close-dialog-leave').textContent, 'Pausieren und schließen');
+  await h.act('close-dialog-stay');
+  h.model.state = { ...h.model.state, state: 'preparing' }; await h.poll();
+  await requestClose(16); await h.act('close-dialog-leave');
+  assert.deepEqual(commands('confirm_close').map(call => call.args), [{ request: 16 }]);
+  // A failed start whose worker is still active was never asked to pause.
+  const failed = closeHarness(); await selectAndStart(failed.h);
+  failed.h.model.state = { state: 'start_failed', batch_id: A, intake_failure: { intake_id: A, error_code: 'STANDALONE_START_FAILED', worker_active: true } };
+  await failed.h.poll(); await failed.requestClose(17);
+  assert.equal(failed.h.el('close-dialog').dataset.kind, 'unpausable'); assert.equal(failed.h.el('close-dialog').dataset.reason, 'state');
+  assert.equal(failed.h.el('close-dialog-text').textContent, `In diesem Zustand ist keine Pause möglich. ${closeAnyway}`);
+});
+testAsync('an acknowledgement the shell refuses or cannot take leaves no question behind and closes nothing', async () => {
+  for (const acknowledge of [{ ok: false }, Error('STANDALONE_OPERATION_FAILED')]) {
+    const { h, requestClose, commands } = closeHarness({ acknowledge }); await selectAndStart(h);
+    await requestClose(16);
+    assert.equal(h.el('close-dialog').open, false, 'the shell decides; a newer request owns the question');
+    assert.equal(commands('confirm_close').length, 0); assert.equal(commands('decline_close_request').length, 0);
+    await h.act('close-dialog-leave');
+    assert.equal(commands('pause_batch').length, 0, 'a hidden question cannot be answered');
+  }
+});
+testAsync('a run that ends while the question is open retires the question and keeps the window', async () => {
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  await requestClose(17);
+  assert.equal(h.el('close-dialog').open, true);
+  h.model.state = { ...h.model.state, state: 'results_available', result_count: 3, batch_complete: true }; await h.poll();
+  assert.equal(h.el('close-dialog').open, false);
+  assert.equal(commands('confirm_close').length, 0, 'the user had not answered; the finished run stays on screen');
+  assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 17 }]);
+  assert.equal(commands('pause_batch').length, 0);
+});
+testAsync('closing while a run is being started or the connection is restored asks instead of guessing', async () => {
+  const starting = closeHarness({ hang: 'start_admitted_batch' }); await tick();
+  await starting.h.act('select-folder'); starting.h.el('mode-markdown').checked = true; await starting.h.act('mode-markdown', 'change');
+  void starting.h.act('start'); await tick();
+  await starting.requestClose(18);
+  const dialog = starting.h.el('close-dialog');
+  assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'unknown'); assert.equal(dialog.dataset.reason, 'starting');
+  assert.equal(starting.h.el('close-dialog-title').textContent, 'Der Stand der Verarbeitung ist gerade nicht bekannt.');
+  assert.equal(starting.h.el('close-dialog-text').textContent, `Ein Lauf wird gerade gestartet. Warte kurz und schließe dann erneut. ${closeAnyway}`);
+  assert.equal(starting.h.el('close-dialog-stay').disabled, false, 'the answers stay usable while another command is in flight');
+  assert.equal(starting.h.el('close-dialog-leave').disabled, false);
+  assert.equal(starting.commands('confirm_close').length, 0);
+  // The start returns: the question becomes the one for a working run.
+  starting.release(); await tick(); await tick(); await starting.h.poll();
+  assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'working');
+  await starting.h.act('close-dialog-stay');
+  const lost = closeHarness(); await selectAndStart(lost.h);
+  lost.h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } }); await tick();
+  await lost.requestClose(19);
+  assert.equal(lost.h.el('close-dialog').dataset.kind, 'unknown'); assert.equal(lost.h.el('close-dialog').dataset.reason, 'reconnecting');
+  assert.equal(lost.h.el('close-dialog-text').textContent, `Die lokale Verbindung wird gerade wiederhergestellt. Warte kurz und schließe dann erneut. ${closeAnyway}`);
+  await lost.h.act('close-dialog-leave');
+  assert.deepEqual(lost.commands('confirm_close').map(call => call.args), [{ request: 19 }], 'closing anyway is an explicit answer');
+});
+testAsync('the window does not close by itself after the connection or the observed run changed', async () => {
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  await requestClose(23); await h.act('close-dialog-leave');
+  assert.match(h.el('job-description').textContent, /schließt danach von selbst/u);
+  h.model.state = { ...h.model.state, state: 'paused', pause_requested: false, batch_id: B }; await h.poll();
+  assert.equal(commands('confirm_close').length, 0, 'another run than the one that was paused');
+  assert.match(h.el('feedback').textContent, /schließt nicht mehr von selbst/u);
+  const lost = closeHarness(); await selectAndStart(lost.h);
+  await lost.requestClose(24); await lost.h.act('close-dialog-leave');
+  lost.h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } }); await tick();
+  lost.h.model.state = { ...lost.h.model.state, state: 'paused', pause_requested: false };
+  await lost.h.poll(); await lost.h.poll();
+  assert.equal(lost.commands('confirm_close').length, 0, 'a new connection does not inherit the answer');
+  // A newer close request during the pause call owns the question.
+  let finishPause = () => {};
+  const raced = closeHarness(); await selectAndStart(raced.h);
+  const original = raced.h.window.__TAURI__.core.invoke;
+  raced.h.window.__TAURI__.core.invoke = (command, args) => command === 'pause_batch'
+    ? new Promise(resolve => { raced.h.calls.push({ command, args }); finishPause = () => resolve({ ok: true }); }) : original(command, args);
+  await raced.requestClose(25); void raced.h.act('close-dialog-leave'); await tick();
+  await raced.requestClose(26);
+  finishPause(); await tick(); await tick();
+  raced.h.model.state = { ...raced.h.model.state, state: 'paused' }; await raced.h.poll();
+  assert.equal(raced.commands('confirm_close').length, 0, 'the answer to the replaced request closes nothing; the newer question is unanswered');
+  assert.equal(raced.h.el('job-description').textContent.includes('schließt danach von selbst'), false);
+});
+
 // German count texts: an interpolated number is never followed by a bare plural. Each such place
 // either goes through `counted` or is the plural branch of a decision on the very same expression
 // (`x === 1`, `x > 1`) a few lines above at most. Verb forms and cases are beyond this guard; the

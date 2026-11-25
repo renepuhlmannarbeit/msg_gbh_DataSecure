@@ -2189,3 +2189,37 @@ Qualitätswarnungen bleiben sichtbar. Für genau diesen Prerelease-Lauf hat der
 Anwender die vorhandenen GitHub-Buildworkflows einschließlich möglicher Kosten
 ausdrücklich freigegeben. Die lokale Desktopfreigabe bleibt entzogen; hier nur
 Headless-Tests und Builds, sichtbare Bedienprüfung durch den Anwender.
+
+**Präzisierung DS-110, 25.11.2026 (Anwenderentscheidung nach R-032 des
+RC178-Reviews) – Schließen bei arbeitendem Lauf:** Das Schließen des
+Hauptfensters lässt einen arbeitenden Stapel nicht ungefragt ohne Fenster
+weiterlaufen. Die Hülle reicht jede Schließanfrage des Hauptfensters an die
+Oberfläche weiter. Arbeitet kein Lauf, schließt die App sofort. Arbeitet ein
+Lauf, fragt die Oberfläche: **Weiter verarbeiten** oder **Pausieren und
+schließen**. Pausieren ist die vorhandene Dateigrenzen-Pause; das Fenster
+bleibt offen, bis der Lauf pausiert ist, und schließt dann von selbst. Die
+Rückfrage sagt, dass Ergebnisse erst nach dem Abschluss des ganzen Laufs im
+Ergebnisordner erscheinen und dass die Arbeitskopien der offenen Dateien bis
+zum Fortsetzen der eingestellten Aufbewahrung unterliegen. Eine weitere
+Schließanfrage in der Wartezeit bietet **Weiter warten** oder **Jetzt
+schließen**; dann wird die aktive Datei ohne Fenster fertiggestellt, und
+weitere beginnen nicht. Lässt sich ein Lauf nicht pausieren (Aufbewahrung
+0 Tage, Vorbereitungsphase, abgelehnte Pause) oder ist sein Stand gerade
+nicht bekannt (ein Start läuft, die lokale Verbindung wird wiederhergestellt),
+sagt die Rückfrage das und bietet **Fenster offen lassen** oder **Trotzdem
+schließen**; im zweiten Fall kann der Lauf wie bisher ohne Fenster
+weiterlaufen. Wer das Fenster offen lässt, zieht die Schließanfrage zurück;
+sie kann die App danach nicht mehr schließen. Endet der Lauf, während die
+Rückfrage offen ist, verschwindet sie, und das Fenster bleibt offen.
+
+Grenzen dieser Entscheidung: Antwortet die Oberfläche nicht binnen zwei
+Sekunden, schließt die Hülle wie bisher. Kein harter Abbruch von
+Arbeitsprozessen; der gemeinsame Core und Cowork bleiben unverändert. Nicht
+erfasst sind das Beenden durch das Betriebssystem (Abmelden, Herunterfahren,
+das App-Menü **Beenden** unter macOS), ein Absturz der Hülle und Arbeit, die
+die Oberfläche nicht als arbeitenden Lauf kennt: ein Arbeitsprozess aus einer
+früheren Sitzung, bevor die neue Sitzung ihren ersten Laufstatus gelesen hat,
+sowie Bereitstellung oder Prüfvorbereitung außerhalb der Zustände
+„Vorbereitung“ und „Wird verarbeitet“. Dort gilt weiter der
+Wiederherstellungsvertrag aus BL-010.14. Die native Abnahme der Rückfrage auf
+Windows und macOS bleibt offen (BL-010.21).

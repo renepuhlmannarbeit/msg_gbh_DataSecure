@@ -492,6 +492,25 @@ Schließbehandlung wie der isolierte Smoke, ohne auf den Request-Mutex zu warten
 Die Kindprozessbeendigung wird begrenzt geprüft; fehlende Bestätigung erhält
 einen festen Diagnosecode, nicht eine unbegrenzte GUI-Warteoperation.
 
+Vor dieser Schließbehandlung steht seit der Präzisierung von DS-110 vom
+25.11.2026 die Rückfrage der Oberfläche. `CloseRequested` des Hauptfensters
+ruft `request_native_close`: Die Hülle nummeriert die Anfrage
+(`close_prompt.rs`), sendet `datasecure-close-requested` nur an das
+Hauptfenster und wartet höchstens zwei Sekunden. Die Oberfläche antwortet mit
+`confirm_close` (nichts arbeitet, oder Antwort des Anwenders), mit
+`acknowledge_close_request` (die Rückfrage steht bereits auf dem Bildschirm)
+oder später mit `decline_close_request` (der Anwender lässt das Fenster
+offen). Bestätigen und Quittieren gelten nur für die jeweils letzte Anfrage,
+Bestätigen außerdem nicht für eine zurückgezogene. Ohne Antwort läuft die
+bisherige Schließbehandlung; läuft sie bereits, löst ein weiterer Klick keine
+neue Anfrage aus. Eine quittierte Anfrage hält das Fenster offen, bis der
+Anwender antwortet oder erneut schließt; jede neue Anfrage braucht wieder ihre
+eigene Antwort binnen zwei Sekunden. Die Rückfrage nutzt das vorhandene
+`pause_batch`; die Hülle beendet weiterhin nur den Sidecar. Arbeitsprozesse des
+gemeinsamen Core bleiben losgelöst gestartet und enden über ihre Pause oder
+ihren Abschluss. `ExitRequested` des Betriebssystems geht nicht über die
+Rückfrage.
+
 Dateidetails enthalten nur lokale Basenames/relative Labels mit Endung und
 festen Ursachen. Gestoppte Dateien mit ausstehender Zuordnung bleiben sichtbar;
 noch nicht gestartete Dateien stehen getrennt. Diagnoseprotokolle erhalten

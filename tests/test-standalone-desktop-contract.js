@@ -349,6 +349,47 @@ test('result publication is a main-workspace batch-only native command, separate
   assert.match(channel, /native_export_broker::inspect_results/u);
 });
 
+test('the close button of the main window asks the renderer and exits by itself without an answer', () => {
+  const handler = rust.slice(rust.indexOf('.on_window_event(|window, event| {'), rust.indexOf('.invoke_handler(tauri::generate_handler!['));
+  assert.match(handler, /WindowEvent::CloseRequested \{ api, \.\. \} => \{\s+api\.prevent_close\(\);\s+if let Some\(state\) = window\.try_state::<DesktopState>\(\) \{\s+request_native_close\(state\.inner\(\)\.capture_connection\(\)\);/u);
+  assert.doesNotMatch(handler, /begin_native_exit/u, 'the close button never exits without asking or the deadline');
+  const request = rust.slice(rust.indexOf('fn request_native_close('), rust.indexOf('fn acknowledge_close_request('));
+  assert.match(request, /^fn request_native_close\(state: DesktopState\) \{\s+if state\.exit_gate\.begun\(\) \{ return; \}\s+let request = state\.close_prompt\.ask\(\);/u,
+    'a click while shutdown is under way neither asks again nor starts another deadline');
+  assert.match(request, /if state\.app\.emit_to\("main", "datasecure-close-requested", json!\(\{ "request": request \}\)\)\.is_err\(\) \{\s+begin_native_exit\(state\);\s+return;/u,
+    'an event that cannot be sent closes as before');
+  assert.match(request, /std::thread::sleep\(close_prompt::ANSWER_BUDGET\);\s+if waiting\.close_prompt\.unanswered\(request\) \{ begin_native_exit\(waiting\); \}/u,
+    'a renderer that does not answer cannot keep the app open');
+  assert.match(request, /if deadline\.is_err\(\) \{ begin_native_exit\(state\); \}/u);
+  const confirm = rust.slice(rust.indexOf('fn confirm_close('), rust.indexOf('fn main()'));
+  assert.match(confirm, /if !state\.close_prompt\.confirmable\(request\) \{ return Err\("STANDALONE_CLOSE_REQUEST_STALE"\.to_string\(\)\); \}\s+begin_native_exit\(/u,
+    'the renderer can only confirm the latest close request of the user, and not a withdrawn one');
+  assert.match(rust, /fn decline_close_request\(state: State<'_, DesktopState>, request: u64\) -> Value \{\s+json!\(\{ "ok": state\.close_prompt\.withdraw\(request\) \}\)/u);
+  assert.match(fs.readFileSync(path.join(root, 'tauri-contract/src/ipc_transport.rs'), 'utf8'), /pub fn begun\(&self\) -> bool \{ self\.exit_started\.load\(Ordering::Acquire\) \}/u);
+  const prompt = fs.readFileSync(path.join(root, 'tauri-contract/src/close_prompt.rs'), 'utf8');
+  assert.match(prompt, /pub\(crate\) const ANSWER_BUDGET: Duration = Duration::from_millis\(2000\);/u);
+  assert.doesNotMatch(prompt, /std::fs|std::process|tauri::/u, 'the prompt is plain state');
+  // Both commands are registered and allowed for the main window only.
+  for (const command of ['acknowledge_close_request', 'decline_close_request', 'confirm_close']) {
+    assert.match(rust.slice(rust.indexOf('.invoke_handler(tauri::generate_handler!['), rust.indexOf('.build(context)')), new RegExp('\\b' + command + ',', 'u'));
+    const permission = 'allow-' + command.replaceAll('_', '-');
+    assert.ok(fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8')
+      .includes('identifier = "' + permission + '"\n') || fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8')
+      .includes('identifier = "' + permission + '"\r\n'), permission);
+    assert.ok(JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/main.json'), 'utf8')).permissions.includes(permission));
+    assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/review.json'), 'utf8')).permissions.includes(permission), false,
+      'the review window cannot answer for the main window');
+  }
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
+  assert.match(workspace, /listen\('datasecure-close-requested', receiveCloseRequest\)/u);
+  assert.match(workspace, /invoke\('confirm_close', \{ request \}\)/u);
+  assert.match(workspace, /invoke\('acknowledge_close_request', \{ request \}\)/u);
+  assert.match(workspace, /invoke\('decline_close_request', \{ request \}\)/u);
+  assert.ok(workspace.indexOf('presentClose(question.kind, question.reason); } catch { return; }') < workspace.indexOf("invoke('acknowledge_close_request', { request })"),
+    'the question is shown before the shell is told');
+  assert.match(workspace, /'close-dialog-stay', 'close-dialog-leave'\]\.includes\(node\.id\)\) continue;/u, 'a busy command never disables the answers');
+});
+
 test('every repeated external quit stays prevented until the shutdown completion gate', () => {
   const exit = rust.slice(rust.indexOf('fn begin_native_exit('), rust.indexOf('fn main()'));
   assert.match(exit, /if !state\.exit_gate\.begin\(\)/u);

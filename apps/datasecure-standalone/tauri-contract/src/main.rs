@@ -3,6 +3,7 @@
 mod native_smoke;
 mod ipc_transport;
 mod ipc_activity;
+mod close_prompt;
 mod review_window;
 mod native_open;
 mod startup_diagnostics;
@@ -350,6 +351,7 @@ struct DesktopState {
     embedded_review_active: Arc<AtomicBool>,
     document_review_batch: Arc<Mutex<Option<String>>>,
     review_ui_busy: Arc<AtomicBool>,
+    close_prompt: close_prompt::ClosePrompt,
 }
 
 impl Clone for DesktopState {
@@ -363,7 +365,8 @@ impl Clone for DesktopState {
             exit_gate: self.exit_gate.clone(), selection_busy: self.selection_busy.clone(),
             admission_present: self.admission_present.clone(), frontend_ready: self.frontend_ready.clone(),
             review_window_binding: self.review_window_binding.clone(), embedded_review_active: self.embedded_review_active.clone(),
-            document_review_batch: self.document_review_batch.clone(), review_ui_busy: self.review_ui_busy.clone() }
+            document_review_batch: self.document_review_batch.clone(), review_ui_busy: self.review_ui_busy.clone(),
+            close_prompt: self.close_prompt.clone() }
     }
 }
 
@@ -3149,6 +3152,47 @@ fn begin_native_exit(state: DesktopState) {
     });
 }
 
+// The close button of the main window. The renderer knows whether a run is
+// working and asks the user; the shell only waits a bounded time for its
+// answer. Without one it exits as before, so a renderer that does not answer
+// cannot keep the app open. Quit requests of the operating system do not
+// pass here, and neither does a close request while shutdown is under way.
+fn request_native_close(state: DesktopState) {
+    if state.exit_gate.begun() { return; }
+    let request = state.close_prompt.ask();
+    if state.app.emit_to("main", "datasecure-close-requested", json!({ "request": request })).is_err() {
+        begin_native_exit(state);
+        return;
+    }
+    let waiting = state.clone();
+    let deadline = std::thread::Builder::new().name("close-prompt".into()).spawn(move || {
+        std::thread::sleep(close_prompt::ANSWER_BUDGET);
+        if waiting.close_prompt.unanswered(request) { begin_native_exit(waiting); }
+    });
+    if deadline.is_err() { begin_native_exit(state); }
+}
+
+// The renderer shows its question for this close request.
+#[tauri::command]
+fn acknowledge_close_request(state: State<'_, DesktopState>, request: u64) -> Value {
+    json!({ "ok": state.close_prompt.acknowledge(request) })
+}
+
+// The user keeps the window open; this request can no longer close the app.
+#[tauri::command]
+fn decline_close_request(state: State<'_, DesktopState>, request: u64) -> Value {
+    json!({ "ok": state.close_prompt.withdraw(request) })
+}
+
+// The user's answer, or nothing working: close now. Only the latest close
+// request of the user can be confirmed, and not one the user withdrew.
+#[tauri::command]
+fn confirm_close(state: State<'_, DesktopState>, request: u64) -> Result<Value, String> {
+    if !state.close_prompt.confirmable(request) { return Err("STANDALONE_CLOSE_REQUEST_STALE".to_string()); }
+    begin_native_exit(state.inner().capture_connection());
+    Ok(json!({ "ok": true }))
+}
+
 fn main() {
     source_fingerprint::retain();
     let profile = match native_smoke::from_environment() {
@@ -3204,6 +3248,7 @@ fn main() {
                 embedded_review_active: Arc::new(AtomicBool::new(false)),
                 document_review_batch: Arc::new(Mutex::new(None)),
                 review_ui_busy: Arc::new(AtomicBool::new(false)),
+                close_prompt: close_prompt::ClosePrompt::default(),
             };
             app.manage(state);
             diagnostic_event("setup_completed", None, "ready", None, None);
@@ -3222,7 +3267,7 @@ fn main() {
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     if let Some(state) = window.try_state::<DesktopState>() {
-                        begin_native_exit(state.inner().capture_connection());
+                        request_native_close(state.inner().capture_connection());
                     } else {
                         window.app_handle().exit(0);
                     }
@@ -3293,6 +3338,9 @@ fn main() {
             get_native_recovery_status,
             report_blocked_picker,
             shutdown,
+            acknowledge_close_request,
+            decline_close_request,
+            confirm_close,
             frontend_ready
         ])
         .build(context);
