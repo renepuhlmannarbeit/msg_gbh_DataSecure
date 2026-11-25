@@ -376,11 +376,13 @@
       if (command === 'close_review_window') owner.closing = true;
       const work = command === 'submit_review' || command === 'continue_review_session';
       if (work) {
-        workBegins(); // The worker may continue with this answer.
         invalidateHistoryCount();
         owner.phaseGeneration++; owner.complete = false; owner.stage = 'waiting'; refreshRunGuide();
       }
       const phaseGeneration = owner.phaseGeneration;
+      // The worker may continue with this answer. Counted directly in front of
+      // the try whose finally releases it, so nothing in between can leave it set.
+      if (work) workBegins();
       try {
         const result = await invoke(command, args);
         if (connection !== connectionEpoch || request !== generation) throw Error('STANDALONE_REVIEW_SURFACE_INVALID');
