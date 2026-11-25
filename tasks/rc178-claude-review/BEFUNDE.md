@@ -128,7 +128,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
 | R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | behoben für das beobachtete Verhalten (`56d7c744`, Probe `1c3f36af`); die Schalter sind keine zugesicherte Schnittstelle von WebView2 |
 | R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`, `d41a042b`, `34de4509`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft. Die Rückfrage „Aufbewahrung 0 Tage“ ist im Standalone-Paket nicht erreichbar |
-| R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | behoben für die genannten Regeln (`3ba2b8fb`); maskierte Klammern und getippte Listen- oder Hervorhebungszeichen vor einem Namen sowie R-033b bis R-033d offen |
+| R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname; neu als Folge ein Stopp bei `Label Name Nummer` (siehe Abschnitt vom 25.11. abends) |
 
 ## Einzelbefunde
 
@@ -1733,8 +1733,9 @@ geprüft wurden; ein Zwischenstand wäre ungeprüft gewesen.
   und ohne Backslash; für Text ohne `\.` ändert sich nichts. Die ersten drei
   Regeln habe ich gefunden, `z. Hd.` und die Nummernlabels die Gegenprüfung.
 
-Beim selben Lesen aufgefallen, in RC178 gleich, **nicht behoben**, weil es
-Regeln der Erkennung betrifft und eine Entscheidung braucht:
+Beim selben Lesen aufgefallen, in RC178 gleich, in dieser Runde **nicht
+behoben** (Nachtrag: am 25.11. abends bearbeitet, siehe den Abschnitt
+„R-033 · Erkennungslücken, Umsetzung am 25.11. abends“):
 
 - **R-033b:** Ein Name hinter `Antragsteller:` oder `Patient:` wird in keinem
   Profil ersetzt. `Kunde:`, `Ansprechpartner:`, `Mitarbeiter:` und
@@ -1825,6 +1826,148 @@ Alle Vergleichsläufe arbeiten mit erfundenen Sätzen aus wenigen Bausteinen.
   `cargo tree --target all` hat Crate-Quellen aller Plattformen in den
   Cargo-Cache des Rechners geladen.
 
+## R-033 · Erkennungslücken, Umsetzung am 25.11. abends
+
+Auftrag des Anwenders nach der vorigen Übergabe: die offenen
+Erkennungslücken aus R-033 angehen. Ergebnis ist der Commit `1c8e971c`. Drei
+unabhängige Gegenprüfungen haben daran mitgewirkt; zwei meiner Fassungen
+haben sie nicht bestanden und sind vor dem Commit umgebaut worden, die
+dritte hat acht weitere Punkte ergeben: drei sind behoben, drei zum Teil,
+zwei bleiben.
+
+### Was jetzt gilt (nur Standalone, bis auf das Rückruf-Label)
+
+| Lücke | Regel | Ort |
+| --- | --- | --- |
+| R-033b, Name hinter einer Rolle | Rolle vor Doppelpunkt oder Gleichheitszeichen mit namensförmigem Wert dahinter ist ein Personenhinweis (`Antragsteller: Hans Müller`, `Mieter 1: …`, `Patient/in: …`, aus Word auch `Antragsteller \(m/w/d\): …`). Rund 80 Rollen. Ein Wert, der kein Name ist, bleibt (`Patient: stabil`). Der Name endet vor einem neuen Satz oder dem nächsten Label derselben Zeile (`Mieter: Anna Sommer Geburtsdatum: …`); mehrere Rollen in einer Zeile erhalten je ihren Namen. | `privacy/person-ambiguities.js`, `ROLE_CUE`, `roleLabelNameSpans`, `withoutFollowingWords` |
+| R-033c, Namensliste | Personenlabel, Rolle oder Stichwort (`Anwesend`, `Abwesend`, `Entschuldigt`, `Teilnehmende`, `Teilnehmerliste`, `Unterzeichnende`) allein in einer Zeile: die Namen der Listeneinträge darunter sind Personenhinweise, auch bei Windows-Zeilenenden und mit maskierter Klammer aus Word. Ein Eintrag, der kein Name ist, bleibt und beendet die Liste nicht. Ohne Label ändert sich nichts. | `labelledNameListSpans` |
+| R-033d, Telefonnummer | `Rückruf unter …` und `Rückruf an …` sind Telefonlabel (auch im Cowork-Plugin). | `privacy/base.js`, `PHONE_LABEL_PATTERN` |
+| Rest R-033a | Die maskierte Klammer aus Word hinter einem Namen (`Anna Meier \(geb\. …`) wird gelesen. | `privacy/entities.js`, `contactAfter` |
+| neu gefunden | Ein Personenhinweis gilt an bis zu 500 weiteren Stellen desselben Dokuments mit demselben vollen Namen. Vorher ersetzte die Entscheidung den Namen an der Fundstelle (`Anna Sommer bestätigt den Termin`) und im nächsten Dokument des Stapels, ließ ihn aber zwei Zeilen weiter stehen. In RC178 gleich. Eine weitere Stelle liest der Kern zuerst wie bisher; nur ein danach noch lesbarer Name wird zum Hinweis. | `personProseCandidateSpans`, `personProseAmbiguities`, `gateway/privacy-text-operation.js` |
+
+Personenhinweise entscheidet die geführte Prüfung; der automatische Modus
+ersetzt sie.
+
+### Was verworfen wurde, und warum
+
+- **Rollen als Personenfelder** (erste Fassung). Ein Personenfeld ersetzt den
+  ganzen Wert, auch eine Bemerkung, und danach dieses Wort im ganzen
+  Dokument: `Patient: stabil` machte aus `Der Verlauf ist stabil` ein
+  `Der Verlauf ist [PERSON_001]`, und eine Tabellenspalte `Mieter` mit `ja`
+  und `nein` ersetzte danach jedes `ja` und `nein` im Text. Die Gegenprüfung
+  hat das gezeigt. Der Mechanismus ist nicht neu: Er gilt in RC178 für
+  `Kunde`, `Mitarbeiter`, `Teilnehmer` und alle übrigen Personenlabels (von
+  mir am RC178-Kern nachgestellt: `Kunde: zufrieden` ersetzt jedes weitere
+  `zufrieden`). Ich habe ihn nicht auf 30 weitere Labels ausgedehnt.
+- **Name vor „hat“ und einem Partizip** (`Petra Lang hat den Vertrag
+  unterschrieben`). Der Kern erkennt einen Namen allein an der Form; dieselbe
+  Form hat `Letzte Woche hat der Chef angerufen`. Die Regel machte `Letzte
+  Woche` zur Person, und die Entscheidung wurde in jedem folgenden Dokument
+  des Stapels wiederholt. Entfernt; die Lücke bleibt.
+- **Geburtsname hinter „geb.“.** Die Regel registrierte den einzelnen
+  Nachnamen als Person; stand derselbe Nachname noch einmal allein im
+  Dokument, stoppte es mit `RESIDUAL_PII` (40 neue Stopps im Vergleich gegen
+  RC178). Entfernt; die Lücke bleibt.
+- **Die umgestellte Form hinter einer Rolle** (`Mandant: Müller, Hans`). Als
+  Hinweis erhielt sie ein eigenes Pseudonym neben dem der schon bekannten
+  Person. Herausgenommen; für eine bekannte Person erkennt der Kern die Form
+  wie bisher.
+- **Weitere Stellen wie die Fundstelle behandeln.** Die Ausweitung
+  reservierte zuerst jede weitere Stelle vor dem Kern und meldete sie immer
+  als Hinweis. Ein Dokument, das vorher vollständig anonymisiert durchlief,
+  stoppte damit: `Hans Müller bestätigt den Termin.` und später
+  `Hans Müller IBAN DE89…` endete mit `AMBIGUITY_REVIEW_REQUIRED`, weil die
+  Restprüfung an der zweiten Stelle einen breiteren Hinweis sieht
+  (`Hans Müller IBAN`) und der neue ihn kreuzte. Umgebaut: Der Kern liest
+  weitere Stellen wie bisher, und ein weiterer Hinweis entfällt, wenn ein
+  Restfund ihn kreuzt. Der Kommentar in `gateway/privacy-text-operation.js`
+  nennt als Beispiel `Tel. Hans Müller 030 …`; dieses Dokument stoppt weiter,
+  jetzt in der Schlussprüfung statt im Kerndurchlauf (siehe „Was bleibt“).
+
+### Nachweise
+
+| Lauf | Ergebnis |
+| --- | --- |
+| RC178-Kern gegen Endstand, 18 600 Fälle, fünf Profile | 0 neue Stopps; „mehr sichtbar“ nur die zehn gewollten Fälle von R-024; 420 behobene Stopps; 5 356 Fälle mit weniger Klartext (vorher 5 274). |
+| Derselbe Lauf, jeder Punkt als `\.` | 0 neue Stopps; dieselben zehn Fälle; 5 396 mit weniger Klartext. |
+| Kern der vorigen Übergabe gegen Endstand, 1 230 Zeilen mit Schützenswertem und 240 personenfreie Zeilen | 0 neue Stopps, 0 mehr sichtbar, 774 weniger sichtbar. 288 bleiben sichtbar: die Sätze mit „hat“, die Geburtsnamen und die Liste unter `Verteiler`. Von den 240 personenfreien Zeilen werden 6 zusätzlich ersetzt (`Offene Punkte` unter `Teilnehmer:`, `Vertrieb Nord` und `Technischer Dienst` unter `Anwesend:`). Die erste Fassung ersetzte 68. |
+| Derselbe Name an zwei Stellen: sechs Hinweiszeilen mal 54 Umgebungen mal vier Namen, als ein Dokument in beiden Reihenfolgen und als zwei Dokumente eines Stapels; Kern der vorigen Übergabe gegen Endstand | 19 440 Vergleiche in fünf Profilen: 0 mehr sichtbar, 9 488 weniger sichtbar, 1 608 neue Stopps. Alle neuen Stopps sind `RESIDUAL_PII` in sieben Umgebungen der Form Label, Name, Nummer (siehe „Was bleibt“). Mit maskierten Zeichen im Profil Allgemein, 3 888 Vergleiche: 0 mehr sichtbar, 284 neue Stopps derselben Art. Vor dem Umbau der Ausweitung stoppte außerdem `Hans Müller IBAN DE89…` mit `AMBIGUITY_REVIEW_REQUIRED`; am Endstand nicht mehr. |
+| `tests/test-privacy-role-labels-and-name-lists.js` | 8 Tests bestanden; am Kern der vorigen Übergabe schlagen 5 fehl, die drei übrigen sind Gegenfälle, die unverändert bleiben müssen. |
+| Kernabhängige Testdateien der Suite | 106 Dateien, die den Datenschutzkern laden, einzeln ausgeführt: alle bestanden. `tests/test-pii-regression.js`: 164 Fälle bestanden. Danach die Gesamtsuite: 367 Dateien bestanden. |
+
+Alle Vergleichsläufe arbeiten mit erfundenen Sätzen aus wenigen Bausteinen.
+
+### Gegenprüfungen
+
+Drei unabhängige Read-only-Läufe, jeder mit dem Auftrag zu widerlegen.
+
+| Gegenstand | Ergebnis |
+| --- | --- |
+| Erste Fassung (Rollen als Personenfelder, Regel für „hat“, Geburtsname) | Zwei hohe Einwände, beide durch Ausführung belegt: Überredaktion ganzer Dokumente durch die neuen Personenfelder und Verschleppung von `Letzte Woche` in den Stapel. Fassung verworfen. |
+| Zweite Fassung (Rolle und Liste als Personenhinweis) | Nichts sichtbarer als vorher. Drei Einwände: neuer Stopp bei `- Anna Sommer Telefon: …`, zweites Pseudonym für `Müller, Hans`, verschluckter Folgetext hinter einem Rollenwert. Alle drei behoben. |
+| Dritte Fassung | Rund 250 gezielte Vergleiche, kein Fall mit mehr Klartext. Acht Punkte. Behoben: Listen bei Windows-Zeilenenden nie erkannt; eine maskierte Klammer aus Word beendete die ganze Liste, `\(m/w/d\)` wurde nicht gelesen; Name vor einem Label derselben Zeile blieb stehen. Zum Teil behoben: neue Stopps (`Hans Müller IBAN …` stoppt nicht mehr, `Label Name Nummer` stoppt weiter); die 500er-Grenze (Zählung berichtigt, die Grenze bleibt); weitere Lücken der Liste (ein Eintrag ohne Namensform beendet sie nicht mehr, ein einzelner Nachname bleibt lesbar). Bleiben: halbe Ersetzungen und `Rückruf an 12345 Kunden`. Laufzeit: 205 KB Prosa 2,0 s vorher und 2,1 s nachher; eine Liste mit 3 000 verschiedenen Namen 0,9 s vorher und 2,3 s nachher. |
+
+Die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig
+gegengeprüft, nur mit den Vergleichsläufen, dem Suchlauf und den Tests.
+
+### Was bleibt
+
+- **Neuer Stopp statt stiller Freigabe:** Steht ein Name, der an anderer
+  Stelle Personenhinweis ist, zwischen einem Label und einer Nummer
+  (`Tel. Hans Müller 030 1234567`, `Steuer-ID Hans Müller 12345678903`,
+  `Geburtsdatum Hans Müller: 01.02.1980`, `Aktenzeichen Hans Müller 12/2026`,
+  `Personalnr. Hans Müller 4711`, `Notfallkontakt Hans Müller 0171 …`,
+  `Mobil Hans Müller: 0171 …`), stoppt das Dokument mit `RESIDUAL_PII`.
+  Vorher liefen diese Dokumente durch und gaben Name und Nummer lesbar frei.
+  Die Ursache ist vorbestehend und in RC178 gleich: Der Kern ersetzt eine
+  Nummer hinter `Label Name` nicht, seine Schlussprüfung erkennt sie aber,
+  sobald der Name ersetzt ist. `Name: Hans Müller` und später
+  `Tel. Hans Müller 030 1234567` stoppt deshalb schon in RC178. Die neuen
+  Regeln machen Namen an mehr Stellen bekannt und erreichen diesen Stopp
+  häufiger, auch im zweiten Dokument eines Stapels. Nicht behoben: Die
+  Korrektur gehört in die Telefon- und Nummernregeln des Kerns.
+- **Unterredaktion:** ein voller Name in Prosa ohne Hinweisverb (`Petra Lang
+  hat den Vertrag unterschrieben`), ein einzelner Nachname oder ein
+  abgekürzter Vorname hinter einer Rolle oder in einer Liste (`Patient:
+  Müller`, `Patient: H. Müller`, `- Müller (Protokoll)`), die umgestellte Form
+  einer unbekannten Person (`Mandant: Müller, Hans`), mehrere Namen hinter
+  einer Rolle in der Mehrzahl (`Zeugen: Anna Sommer, Erika Beispiel`), eine
+  Namensliste ohne Label oder unter `Verteiler` und `Mitglieder`, eine
+  Telefonnummer ohne Label, ein Geburtsname hinter `geb.`. Die geführte
+  Prüfung zeigt diese Stellen nicht an.
+- **Grenze der Ausweitung:** Nach 500 weiteren Stellen je Dokument, über alle
+  Namen gezählt, bleibt der Name wie vorher lesbar, ohne Stopp und ohne
+  Hinweis (1 000 Zeilen mit demselben Namen: 500 ersetzt, 500 lesbar; vorher
+  1 000 lesbar).
+- **Halbe Ersetzungen:** `Zeuge: Hans Peter Im Hof` wird zu
+  `[PERSON_001] Im Hof`, weil `Im` auch ein Satzanfang sein kann;
+  `Anna Sommer-Meier` wird zu `[PERSON_001]-Meier` und `Maria Anna Sommer`
+  zu `Maria [PERSON_001]`, wenn `Anna Sommer` an anderer Stelle Hinweis ist.
+  Vorher blieben diese Namen ganz lesbar.
+- **Überredaktion:** Der automatische Modus ersetzt an den neuen Stellen auch
+  namensförmige Organisationen, Orte und Bemerkungen als Person
+  (`Vermieter: Wohnbau Kassel`, `Patient: Stabile Lage`, `- Vertrieb Nord`
+  unter `Anwesend:`), wie bisher schon vor einem Hinweisverb (`Stadt Kassel
+  bestätigt den Termin`); eine so entschiedene Bezeichnung wird im restlichen
+  Dokument und in den folgenden Dokumenten des Stapels ebenfalls ersetzt.
+  `Rückruf an 12345 Kunden` verliert die Zahl.
+- **Uneinheitliche Pseudonyme:** `Patient: Hans Müller` und später
+  `Herr Müller` im nächsten Dokument erhalten zwei Pseudonyme; ebenso
+  `Hans Müller bestätigt …` und `Hans Müller IBAN …` im selben Dokument
+  (in RC178 gleich).
+- **Randfall:** Eine Zeile `RÜCKRUF UNTER 030 …` in Versalien wird zu
+  `[PERSON_001] [PHONE_REDACTED]`; das Label gilt dort als Namenszeile.
+- **Eigentliche Ursache:** Der Kern hat keine Liste von Vornamen und kein
+  Wissen über Organisationen ohne Rechtsform. Jede Regel über die Form
+  tauscht Unterredaktion gegen Überredaktion. Wer Namen in Prosa zuverlässig
+  finden will, braucht ein Namensverzeichnis oder ein lokales Modell; das
+  ist eine Produktentscheidung.
+- **Vorbestehend und unverändert, neu beschrieben:** die Überredaktion der
+  Personenfelder (siehe oben, `Kunde: zufrieden`).
+- **Nicht geprüft:** XLSX, PPTX und PDF als Quelle der neuen Regeln (geprüft
+  sind Text und Word); Listen mit echter Word-Nummerierung; Laufzeit bei
+  Zeilen aus sehr vielen großgeschriebenen Wörtern.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -1868,6 +2011,10 @@ Alle Vergleichsläufe arbeiten mit erfundenen Sätzen aus wenigen Bausteinen.
 | A-038 | Ein Prüfwerkzeug, das einen Bericht liefert, hat geprüft. | Der Bericht war gültiges JSON ohne Befund. | Ein Werkzeug, das einen leeren Bericht ausgibt, bestand die Prüfung („0 Crates, 0 Befunde“). | Gegenprüfung (read-only) mit einem künstlichen `cargo` | Widerlegt; `927fb3bd` verlangt die Zahl der Crates der Lock-Datei, Übereinstimmung mit dem Exit-Code und eine Datenbank mit Einträgen. |
 | A-039 | Der Kern liest Markdown aus Office-Quellen wie Text (so die Tests, die mit Textzeilen arbeiten). | Viele Regeln lesen den maskierten Punkt. | Fünf Regeln lasen ihn nicht; weitere Maskierungen (Klammer, Listenzeichen) stören ebenfalls. | nativer Lauf, eigener Vergleich Text gegen Word, Gegenprüfung über rund 180 Zeilenformen | Widerlegt; R-033. Die Tests des Kerns arbeiten fast nur mit Text; ein Vergleich „dieselbe Zeile aus Word“ fehlte. |
 | A-040 | Ein Wert in Anführungszeichen lässt sich immer ganz ersetzen, weil sein Ende geschrieben steht. | Das Ende ist eindeutig. | Enthält der Wert einen offenen Personenhinweis, wird der ganze Treffer verworfen, und das erste Wort bleibt stehen, das vorher ersetzt wurde. | Gegenprüfung (read-only) mit gerichtetem Zufallslauf (1 034 von 16 000 Fällen) | Widerlegt; Rückfall auf das erste Wort in `3ba2b8fb`, danach 0 Fälle. |
+| A-041 | Ein Vergleichslauf ohne neuen Stopp zeigt, dass eine Regel keinen neuen Stopp bringt. | 18 600 Fälle in fünf Profilen, zweimal. | Kein Baustein des Korpus stellt denselben Namen an zwei Stellen in verschiedene Umgebungen. | Dritte Gegenprüfung (read-only); danach eigener Suchlauf mit 19 440 Fällen | Widerlegt: 1 608 neue Stopps einer Art (`Label Name Nummer`), dazu ein Stopp, wo der Kern den Namen selbst ersetzt (behoben). Der Suchlauf gehört jetzt zu den Nachweisen. |
+| A-042 | Eine Zeile endet am Zeilenumbruch. | Der Kern teilt an `\n`. | Eine Textdatei von Windows endet ihre Zeilen mit `\r\n`; das `\r` blieb am Zeilenende und verhinderte jede Listenzeile. | Dritte Gegenprüfung mit einer extrahierten Textdatei | Widerlegt; behoben vor dem Commit, Test mit Windows-Zeilenenden. |
+| A-043 | Ein Name ist dort zu Ende, wo die Namensform endet. | Bis zu vier großgeschriebene Wörter. | Das nächste Wort ist oft ein Satzanfang oder ein Feldlabel und ebenfalls großgeschrieben. | Zweite und dritte Gegenprüfung | Widerlegt in beide Richtungen: ohne Kürzung verschluckt die Regel Folgetext, mit Kürzung bleibt ein Namensteil wie `Im Hof` stehen. Kürzung beibehalten, Grenze dokumentiert. |
+| A-044 | Was die Fundstelle eines Personenhinweises schützt, schützt auch jede weitere Stelle des Namens. | Die Fundstelle wird vor dem Kern verborgen und danach entschieden. | Verbergen ändert, was die Regeln um die Stelle sehen. | Dritte Gegenprüfung; Nachstellung am alten und neuen Kern | Widerlegt; weitere Stellen liest der Kern jetzt wie bisher, nur ein danach noch lesbarer Name wird Hinweis. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

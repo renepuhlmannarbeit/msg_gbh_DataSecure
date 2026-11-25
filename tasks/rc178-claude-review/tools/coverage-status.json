@@ -1341,6 +1341,61 @@
         "remark": "neu in 5f670a20; ein Klick während des Beendens ist nicht nativ nachgestellt"
       }
     },
+    "plugins/data-secure/server/privacy/person-ambiguities.js": {
+      "roleLabelNameSpans": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "namensförmigen Wert hinter einer Rolle und einem Doppelpunkt als Personenhinweis melden; Aufrufer personProseCandidateSpans, nur Standalone",
+        "trust": "Dokumenttext; reiner Mustervergleich",
+        "invariant": "nur ein Wert in Namensform; eine Bemerkung bleibt; der Name endet vor einem neuen Satz oder dem nächsten Label",
+        "evidence": "tests/test-privacy-role-labels-and-name-lists.js; Differenzläufe gegen RC178 (18 600 Fälle, auch maskiert) und gegen den Kern der achten Übergabe; Suchlauf mit 19 440 Fällen; drei Gegenprüfungen; nativer Lauf mit gelesenen Ergebnissen",
+        "findings": [
+          "R-033"
+        ],
+        "remark": "neu in 1c8e971c; die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig gegengeprüft; Überredaktion namensförmiger Bezeichnungen und halbe Ersetzungen sind dokumentierte Grenzen"
+      },
+      "withoutFollowingWords": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Satzanfang oder Feldlabel ab dem dritten Wort vom Namen abschneiden; Aufrufer roleLabelNameSpans und labelledNameListSpans",
+        "trust": "Dokumenttext; reiner Mustervergleich",
+        "invariant": "die ersten beiden Wörter bleiben immer",
+        "evidence": "tests/test-privacy-role-labels-and-name-lists.js; Differenzläufe gegen RC178 (18 600 Fälle, auch maskiert) und gegen den Kern der achten Übergabe; Suchlauf mit 19 440 Fällen; drei Gegenprüfungen; nativer Lauf mit gelesenen Ergebnissen",
+        "findings": [
+          "R-033"
+        ],
+        "remark": "neu in 1c8e971c; die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig gegengeprüft; Überredaktion namensförmiger Bezeichnungen und halbe Ersetzungen sind dokumentierte Grenzen"
+      },
+      "labelledNameListSpans": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Namen der Listeneinträge unter einem Personenlabel, einer Rolle oder einem Listenstichwort als Personenhinweis melden; Aufrufer personProseCandidateSpans, nur Standalone",
+        "trust": "Dokumenttext; reiner Mustervergleich",
+        "invariant": "ohne Label keine Liste; die erste Zeile, die kein Listeneintrag ist, beendet sie",
+        "evidence": "tests/test-privacy-role-labels-and-name-lists.js; Differenzläufe gegen RC178 (18 600 Fälle, auch maskiert) und gegen den Kern der achten Übergabe; Suchlauf mit 19 440 Fällen; drei Gegenprüfungen; nativer Lauf mit gelesenen Ergebnissen",
+        "findings": [
+          "R-033"
+        ],
+        "remark": "neu in 1c8e971c; die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig gegengeprüft; Überredaktion namensförmiger Bezeichnungen und halbe Ersetzungen sind dokumentierte Grenzen"
+      },
+      "personProseCandidateSpans": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Personenhinweise eines Textes sammeln und auf die private Fassung abbilden; Aufrufer gateway/privacy-text-operation.js",
+        "invariant": "eine weitere Stelle eines Namens wird nicht vor dem Kern verborgen und nur dann Hinweis, wenn der Name danach noch lesbar ist und kein Restfund sie kreuzt",
+        "evidence": "tests/test-privacy-role-labels-and-name-lists.js (Ausweitung, Grenze 500, kein Stopp bei „Name IBAN …“); Suchlauf mit 19 440 Fällen",
+        "findings": [
+          "R-033"
+        ],
+        "remark": "geändert in 1c8e971c (Ausweitung auf weitere Stellen desselben Dokuments); nur dieser Zweig beurteilt; als Folge stoppen Dokumente mit „Label Name Nummer“"
+      },
+      "personProseAmbiguities": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Personenhinweise eines Textes sammeln und auf die private Fassung abbilden; Aufrufer gateway/privacy-text-operation.js",
+        "invariant": "eine weitere Stelle eines Namens wird nicht vor dem Kern verborgen und nur dann Hinweis, wenn der Name danach noch lesbar ist und kein Restfund sie kreuzt",
+        "evidence": "tests/test-privacy-role-labels-and-name-lists.js (Ausweitung, Grenze 500, kein Stopp bei „Name IBAN …“); Suchlauf mit 19 440 Fällen",
+        "findings": [
+          "R-033"
+        ],
+        "remark": "geändert in 1c8e971c (Ausweitung auf weitere Stellen desselben Dokuments); nur dieser Zweig beurteilt; als Folge stoppen Dokumente mit „Label Name Nummer“"
+      }
+    },
     "plugins/data-secure/server/standalone/markdown-retention.js": {
       "stalePendingPublication": {
         "status": "GEPRÜFT",

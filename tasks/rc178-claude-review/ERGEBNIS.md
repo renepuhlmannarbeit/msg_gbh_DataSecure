@@ -4,7 +4,8 @@ Gehört zum [Arbeitsauftrag](../AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md).
 Stand 25.11.2026, nach der zweiten Runde, einer dritten Prüfung, der
 Bearbeitung von R-027, der Behebung von R-028 bis R-031, einer Nacharbeit
 der Umsetzung von R-032 und einer weiteren Runde am selben Tag (Reste,
-Gegenprüfungen, neuer Befund R-033). Befunde
+Gegenprüfungen, neuer Befund R-033) und einer Runde am Abend zu den
+Erkennungslücken aus R-033. Befunde
 und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das Einzelregister in
 [ABDECKUNG.tsv](ABDECKUNG.tsv).
 
@@ -41,7 +42,12 @@ meiner Änderungen haben sie nicht bestanden (eine zurückgenommen, eine
 nachgebessert). Ein nativer Lauf hat einen neuen, schon in RC178 vorhandenen
 Befund ergeben (R-033): Aus Word-Dokumenten blieben Telefonnummern, Namen
 hinter Titeln und weitere Angaben im freigegebenen Markdown stehen. Dieser
-Bericht beschreibt den Endstand `33595449`.
+Stand wurde als `eccf9ad3` übergeben. Am Abend hat der Anwender beauftragt, die
+offenen Erkennungslücken aus R-033 anzugehen: der Commit `1c8e971c`.
+Drei Gegenprüfungen liefen dabei; zwei Fassungen haben sie nicht bestanden und
+sind vor dem Commit umgebaut worden, die dritte hat acht weitere Punkte
+ergeben (drei behoben, drei zum Teil, zwei bleiben). Dieser Bericht
+beschreibt den Endstand `1c8e971c`.
 
 ## Identität und Umfang
 
@@ -51,14 +57,14 @@ Bericht beschreibt den Endstand `33595449`.
 | GitHub-Arbeitsbranch | [`claude/rc178-standalone-review`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review) |
 | Eingefrorener Einstieg | `e88f1b8d100421017fb3909d77e338fd25c1b421` (`origin/codex/rc178-claude-review-handoff`) |
 | RC178-Produktbaseline | `v3.2.0-rc178` → `13ed39ff979a5f5d9bb076d35021164de380b9dd`, Fingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655` (nachgerechnet, 400 Quellinputs) |
-| Geprüfter Produktstand | `3359544931f40bbc635fbcdc68aa550cc2c738f4`. Produktcode zuletzt geändert in `3ba2b8fb` (Datenschutzkern); `997b55bc` ändert danach einen Test, `33595449` einen Absatz im Sicherheitsmodell. Fingerprint `46dd498fb7ed09a4baf2d6f15767d9902331dc27aa29aee1be4533bcde0ccbba`. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der siebten Übergabe: `2ce74b9f`, Fingerprint `ebc54e3c…`; der sechsten: `e66bab8f`, Fingerprint `bac4432a…`; der fünften: `0f35696e`, Fingerprint `9fe7076e…`; der vierten: `0b99529c`, Fingerprint `b4466f2a…`; der dritten: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
+| Geprüfter Produktstand | `1c8e971cb0abb78c7621c3fab90ffb502b8c178d` (Datenschutzkern, seine Tests, Sicherheitsmodell). Fingerprint `b8ea7acd0ed86768763ef32364694250479432976d65252381208a19796b322c`. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der achten Übergabe: `33595449`, Fingerprint `46dd498f…`; der siebten: `2ce74b9f`, Fingerprint `ebc54e3c…`; der sechsten: `e66bab8f`, Fingerprint `bac4432a…`; der fünften: `0f35696e`, Fingerprint `9fe7076e…`; der vierten: `0b99529c`, Fingerprint `b4466f2a…`; der dritten: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
 | Prüfumgebung | Claude Fable 5.2 (`claude-fable-5-2`) in Claude Code; Windows 11 Pro 10.0.26300 x64; Node 22.23.2 für alle Tests (Host-Node 24.18.0), npm 11.16.0, cargo/rustc 1.98.1, MSVC mit SDK 10.0.26100.0, WebView2 158.0.4370.33, Claude CLI 2.1.280 |
 | Verfügbare Zielplattformen | Nur Windows x64. Kein Mac, kein Xcode, kein iOS-Simulator. |
-| Abdeckung | 5 170 erfasste Einheiten in 347 Dateien: 53 `GEPRÜFT`, 1 950 `TEILGEPRÜFT`, 3 167 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
+| Abdeckung | 5 173 erfasste Einheiten in 347 Dateien: 53 `GEPRÜFT`, 1 955 `TEILGEPRÜFT`, 3 165 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
 
 Die Versionskennung `3.2.0-rc178` wurde nicht geändert. Der Stand ist kein
 Release; ein daraus gebautes Paket trägt dieselbe Versionsnummer wie RC178,
-aber den Build-Fingerprint `46dd498f…`.
+aber den Build-Fingerprint `b8ea7acd…`.
 
 ## Ergebnis auf einen Blick
 
@@ -314,7 +320,37 @@ aber den Build-Fingerprint `46dd498f…`.
      Exportdatensätze (die Hülle enthält bewusst keinen Löschcode),
      Entfernen der alten Oberfläche, Bidi-Zeichen, Live-Regionen, Seitenzoom
      unter macOS und Linux.
-7. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
+7. **Runde vom 25.11. abends, Erkennungslücken aus R-033** (Einzelheiten in
+   BEFUNDE.md, Abschnitt „R-033 · Erkennungslücken, Umsetzung am 25.11.
+   abends“)
+   - **Ersetzt wird jetzt** (Standalone, als Personenhinweis; der
+     automatische Modus ersetzt, die geführte Prüfung fragt): ein
+     namensförmiger Wert hinter einer Rolle (`Antragsteller: Hans Müller`,
+     rund 80 Rollen), die Namen einer Liste unter einem Personenlabel, einer
+     Rolle oder `Anwesend:`, und derselbe volle Name an bis zu 500 weiteren
+     Stellen desselben Dokuments. In beiden Produkten: `Rückruf unter …` als
+     Telefonlabel und der Name vor einer maskierten Klammer aus Word.
+   - **Im nativen Lauf mit denselben fünf erfundenen Dateien:** vorher
+     enthielten drei der fünf Ergebnisse Klartext, den ein Leser als
+     personenbezogen ansieht; jetzt eines (`Petra Koch hat den Vertrag am 12.03.2026 unterschrieben`).
+   - **Verworfen nach den Gegenprüfungen:** Rollen als Personenfelder
+     (ersetzten Bemerkungen wie `Patient: stabil` und das Wort danach im
+     ganzen Dokument), eine Regel für einen Namen vor „hat“ (hielt
+     `Letzte Woche hat der Chef angerufen` für eine Person), eine Regel für
+     den Geburtsnamen (neue Stopps).
+   - **Neue Folge, nicht behoben:** Steht ein Name, der an anderer Stelle
+     Personenhinweis ist, zwischen einem Label und einer Nummer
+     (`Tel. Hans Müller 030 …`), stoppt das Dokument mit `RESIDUAL_PII`.
+     Vorher wurden dort Name und Nummer lesbar freigegeben. Der Mechanismus
+     ist in RC178 derselbe für jeden bekannten Namen; die neuen Regeln
+     erreichen ihn häufiger (im eigenen Suchlauf 1 608 von 19 440 Fällen,
+     alle dieser Art).
+   - **Weiter offen:** ein voller Name in Prosa ohne Hinweisverb, ein
+     einzelner Nachname, eine Telefonnummer ohne Label, ein Geburtsname. Der
+     Kern erkennt Namen allein an der Form; ohne Namensverzeichnis oder
+     lokales Modell tauscht jede weitere Regel Unterredaktion gegen
+     Überredaktion. Das ist eine Produktentscheidung.
+8. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
 
 ## Änderungen je Thema
 
@@ -446,26 +482,38 @@ Befund“):
 ## Tests und Nachweise
 
 Alle Läufe auf Windows 11 x64 mit Node 22.23.2. Logs liegen lokal. Die
-ersten Zeilen gelten dem Endstand `33595449`, die folgenden halten die
+ersten Zeilen gelten dem Endstand `1c8e971c`, die folgenden halten die
 früheren Stände fest.
 
 | Bereich | Exakter Befehl und Teststand | Umgebung und Architektur | Ergebnis und Exitcode | Beobachtung |
 | --- | --- | --- | --- | --- |
-| Headless, Endstand | `node tests/run-product-suite.js headless` auf `997b55bc` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (366 headless files, no native GUI executed)“; 15:12–16:02 am 25.11. Parallel lief nichts außer dem Schreiben dieses Berichts in Scratch-Dateien. Ein erster Lauf auf `3ba2b8fb` stoppte an einer festgeschriebenen Prüfsumme (übernächste Zeile). `33595449` ändert danach nur einen Dokumentabsatz. |
-| Rust / Clippy, Endstand | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract`, Rust-Quellen von `927fb3bd` | Windows x64 | je `PASS`, 0 | 339 bestanden, 0 fehlgeschlagen, 3 ignoriert. Spätere Commits ändern keine Rust-Datei. Nur das Windows-Ziel. |
-| Datenschutzkern, Differenzläufe, Endstand | Scratch-Skripte: RC178-Kern gegen `3ba2b8fb`, 18 600 Fälle in fünf Profilen, einmal wie geschrieben, einmal mit jedem Punkt als `\.`; Kern von `927fb3bd` gegen `3ba2b8fb`, 9 600 Fälle mit Zugangsdaten in Anführungszeichen | Windows x64 | 0 neue Stopps in allen drei Läufen | „Mehr sichtbar“ nur die zehn gewollten Fälle von R-024; 420 behobene Stopps wie zuvor; mit maskiertem Punkt 5 314 Fälle mit weniger Klartext; bei den Zugangsdaten 2 700. Kein Bestandteil des Repositorys; erfundene Sätze aus wenigen Bausteinen. |
+| Headless, Endstand | `npm run test:product:headless` auf `1c8e971c` | Windows x64 | `PASS`, 0 | „Product headless suite passed (367 headless files, no native GUI executed).“ 17:58 bis 18:52 Uhr. Die neue Testdatei `tests/test-privacy-role-labels-and-name-lists.js` ist die 367. Datei. |
+| Rust / Clippy, Endstand | nicht erneut ausgeführt | — | — | Seit `927fb3bd` ist keine Rust-Quelle geändert (`git diff --stat 927fb3bd 1c8e971c -- apps/datasecure-standalone/tauri-contract` ist leer); es gilt der Lauf der achten Übergabe. Der Release-Build mit `--locked` ist für das Paket neu gelaufen. |
+| Datenschutzkern, Differenzläufe, Endstand | Scratch-Skripte: RC178-Kern gegen `1c8e971c`, 18 600 Fälle in fünf Profilen, einmal wie geschrieben, einmal mit jedem Punkt als `\.`; Kern von `33595449` gegen `1c8e971c`, 1 230 Zeilen mit Schützenswertem und 240 personenfreie Zeilen | Windows x64 | 0 neue Stopps in allen drei Läufen; „mehr sichtbar“ nur die zehn gewollten Fälle von R-024 | Gegen RC178 5 356 Fälle mit weniger Klartext (maskiert 5 396), 420 behobene Stopps. Gegen den Kern der achten Übergabe 774 Fälle mit weniger Klartext, 288 bleiben sichtbar, 6 von 240 personenfreien Zeilen zusätzlich ersetzt. |
+| Datenschutzkern, Suchlauf „derselbe Name an zwei Stellen“, Endstand | Scratch-Skript: sechs Hinweiszeilen mal 54 Umgebungen mal vier Namen, als ein Dokument in beiden Reihenfolgen und als zwei Dokumente eines Stapels; Kern von `33595449` gegen `1c8e971c`, fünf Profile, dazu Profil Allgemein mit maskierten Zeichen | Windows x64 | 19 440 Fälle: 0 mehr sichtbar, 9 488 weniger sichtbar, **1 608 neue Stopps** | Alle neuen Stopps sind `RESIDUAL_PII` in sieben Umgebungen der Form Label, Name, Nummer (`Tel. Hans Müller 030 …`). Vorher liefen diese Fälle durch und gaben Name und Nummer frei. Maskiert: 3 888 Fälle, 0 mehr sichtbar, 284 neue Stopps derselben Art. Siehe BEFUNDE.md. |
+| Gezielt, Endstand | 106 Testdateien der Suite, die den Datenschutzkern laden, dazu `tests/test-pii-regression.js` (164 Fälle) und `tests/test-privacy-role-labels-and-name-lists.js` (8) | Windows x64 | je `PASS`, 0 | Vor der Suite einzeln ausgeführt, vier nebeneinander. Die neue Testdatei schlägt am Kern von `33595449` in 5 von 8 Tests fehl; die drei übrigen sind Gegenfälle. Ein früherer Lauf am Zwischenstand hatte einen Ausfall (`test-office-image-ocr.mjs`, `CONVERSION_RUNTIME_UNAVAILABLE`), während eine Gegenprüfung parallel lief; am Endstand bestanden. |
+| Dokumentation, Endstand | `npm run test:docs` auf `1c8e971c` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests). |
+| Konverter, Endstand | `npm run test:standalone:conversion` auf `1c8e971c` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; 21 passive PDF-Gruppen; hinterlässt zwei `.tmp-standalone-package-*`-Ordner im Repository-Root, danach entfernt. |
+| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.js` auf `1c8e971c` | Windows x64 | je `PASS`, 0 | Paket `24a510dfc596ba5ae55b88c8d3068b77ec0502b95751d3b3658c0e8e950b3fa5`, 113 638 455 Bytes, 1 203 Einträge, Build `b8ea7acd`. Der Smoke-Test lief ungestört. |
+| Windows x64 Start mit Außenverbindungsprüfung, Endstand | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `24a510df…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 876 ms; 76 787 ms beobachtet, 4 594 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
+| Windows x64 Oberfläche, Endstand | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `24a510df…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde vom 25.11. abends“ unter dem nativen Lauf. |
+| Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | folgt | Der Plugin-Build verlangt einen sauberen Arbeitsbaum und läuft deshalb nach dem Commit dieses Berichts; das Ergebnis steht im Folgecommit. |
+| `git diff --check`, Endstand | `git diff --check eccf9ad3 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Headless, Stand der achten Übergabe | `node tests/run-product-suite.js headless` auf `997b55bc` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (366 headless files, no native GUI executed)“; 15:12–16:02 am 25.11. Parallel lief nichts außer dem Schreiben dieses Berichts in Scratch-Dateien. Ein erster Lauf auf `3ba2b8fb` stoppte an einer festgeschriebenen Prüfsumme (übernächste Zeile). `33595449` ändert danach nur einen Dokumentabsatz. |
+| Rust / Clippy, Stand der achten Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract`, Rust-Quellen von `927fb3bd` | Windows x64 | je `PASS`, 0 | 339 bestanden, 0 fehlgeschlagen, 3 ignoriert. Spätere Commits ändern keine Rust-Datei. Nur das Windows-Ziel. |
+| Datenschutzkern, Differenzläufe, Stand der achten Übergabe | Scratch-Skripte: RC178-Kern gegen `3ba2b8fb`, 18 600 Fälle in fünf Profilen, einmal wie geschrieben, einmal mit jedem Punkt als `\.`; Kern von `927fb3bd` gegen `3ba2b8fb`, 9 600 Fälle mit Zugangsdaten in Anführungszeichen | Windows x64 | 0 neue Stopps in allen drei Läufen | „Mehr sichtbar“ nur die zehn gewollten Fälle von R-024; 420 behobene Stopps wie zuvor; mit maskiertem Punkt 5 314 Fälle mit weniger Klartext; bei den Zugangsdaten 2 700. Kein Bestandteil des Repositorys; erfundene Sätze aus wenigen Bausteinen. |
 | R-033, Text gegen Word | Scratch-Skript: 24 Zeilen je einmal als Text und aus einem erzeugten DOCX, Extraktor und Kern am RC178-Stand und am Endstand; im Repository `tests/test-privacy-office-markdown-abbreviations.js` | Windows x64 | RC178: 7 von 24 anders; Endstand: 0 | Der neue Test schlägt am Stand vor `3ba2b8fb` fehl. |
-| Gezielt, Endstand | 106 Testdateien der Suite, die den Datenschutzkern laden, dazu `tests/test-standalone-workspace.js` (535), `tests/test-standalone-desktop-contract.js` (43) | Windows x64 | je `PASS`, 0 | Der erste Suite-Lauf auf `3ba2b8fb` stoppte nach zwei Minuten an `tests/test-sensitive-field-coverage.js`: Der Test schreibt die Prüfsumme der Label-Ausdrücke fest, die `3ba2b8fb` bewusst geändert hat. `997b55bc` trägt die neuen Werte ein. Danach liefen diese 106 Dateien vorab, vier gleichzeitig. |
-| Verfälschungsprobe R-032, Endstand | zwei Scratch-Skripte: 42 und 13 gezielte Änderungen der Schließ-Logik in `frontend/workspace.js`, je `tests/test-standalone-workspace.js` | Windows x64 | 53 von 55 erkannt | Nicht erkannt: ein Absicherungszweig nach fehlgeschlagener Pause und die Laufbindung der übernommenen Pause. |
+| Gezielt, Stand der achten Übergabe | 106 Testdateien der Suite, die den Datenschutzkern laden, dazu `tests/test-standalone-workspace.js` (535), `tests/test-standalone-desktop-contract.js` (43) | Windows x64 | je `PASS`, 0 | Der erste Suite-Lauf auf `3ba2b8fb` stoppte nach zwei Minuten an `tests/test-sensitive-field-coverage.js`: Der Test schreibt die Prüfsumme der Label-Ausdrücke fest, die `3ba2b8fb` bewusst geändert hat. `997b55bc` trägt die neuen Werte ein. Danach liefen diese 106 Dateien vorab, vier gleichzeitig. |
+| Verfälschungsprobe R-032, Stand der achten Übergabe | zwei Scratch-Skripte: 42 und 13 gezielte Änderungen der Schließ-Logik in `frontend/workspace.js`, je `tests/test-standalone-workspace.js` | Windows x64 | 53 von 55 erkannt | Nicht erkannt: ein Absicherungszweig nach fehlgeschlagener Pause und die Laufbindung der übernommenen Pause. |
 | Gegenprüfungen dieser Runde | fünf unabhängige Read-only-Läufe (Schließ-Logik; Hülle, Diagnosepaket, Zoom und Prüfskript; Kontrollkästchen; Zugangsdaten in Anführungszeichen; maskierter Punkt) | Windows x64 | Einwände in jedem Lauf, zwei davon schwer (Kontrollkästchen verhindert Namenserkennung; offener Personenhinweis im Wert) | Ergebnis je Lauf in BEFUNDE.md. Die letzte Ergänzung des Kerns (`z. Hd.`, Nummernlabels) ist nicht erneut gegengeprüft. |
-| Abhängigkeiten, Endstand | `npm run audit:standalone` mit `cargo-audit 0.23.0` im Pfad | Windows x64, online | `PASS`, 0 | 445 Crates gegen 1 568 Advisories, 0 Befunde, 10 Hinweise; vier paketierte JavaScript-Lockfiles 0 Befunde; Entwicklungsabhängigkeiten 10 Befunde wie zuvor. Am Lock der vorigen Übergabe: `FAIL` mit `url` und `cookie`. |
-| Dokumentation, Endstand | `npm run test:docs` auf dem Stand von `33595449` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden; die beiden Dokumenttests nach dem Dokumentcommit wiederholt. |
-| Konverter, Endstand | `npm run test:standalone:conversion` auf dem Stand von `33595449` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; 21 passive PDF-Gruppen; hinterlässt zwei `.tmp-standalone-package-*`-Ordner, die ich entfernt habe. |
-| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `3ba2b8fb` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `0d6bccd0313acb29935d3708094edf7bc8cac511b9fcaa695d36849b10150549`, 113 635 134 Bytes, 1 203 Einträge, Build `46dd498f`. Der Smoke-Test eines vorläufigen Pakets schlug fehl, weil ich währenddessen seinen Arbeitsordner gelöscht hatte. |
-| Windows x64 Start mit Außenverbindungsprüfung, Endstand | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `0d6bccd0…` | Windows x64, online mit IPv6 | `PASS`, 0 | Start 1 800 ms, Beobachtungsfenster 77 s, 4 873 Stichproben, kein Lesefehler, keine Verbindung, 0 TCP-Listener, 0 UDP-Endpunkte. |
-| Windows x64 Oberfläche, Endstand | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `0d6bccd0…`; davor ein vorläufiges Paket (`a7b443a2…`) | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Runde vom 25.11. nachmittags“ |
-| Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `9dc22477` (Stand `33595449`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `d18f690d…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderung am Datenschutzkern (`3ba2b8fb`) ist im Plugin enthalten. |
-| `git diff --check`, Endstand | `git diff --check 7de6aba6 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Abhängigkeiten, Stand der achten Übergabe | `npm run audit:standalone` mit `cargo-audit 0.23.0` im Pfad | Windows x64, online | `PASS`, 0 | 445 Crates gegen 1 568 Advisories, 0 Befunde, 10 Hinweise; vier paketierte JavaScript-Lockfiles 0 Befunde; Entwicklungsabhängigkeiten 10 Befunde wie zuvor. Am Lock der vorigen Übergabe: `FAIL` mit `url` und `cookie`. |
+| Dokumentation, Stand der achten Übergabe | `npm run test:docs` auf dem Stand von `33595449` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden; die beiden Dokumenttests nach dem Dokumentcommit wiederholt. |
+| Konverter, Stand der achten Übergabe | `npm run test:standalone:conversion` auf dem Stand von `33595449` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; 21 passive PDF-Gruppen; hinterlässt zwei `.tmp-standalone-package-*`-Ordner, die ich entfernt habe. |
+| Windows x64 Paket, Stand der achten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `3ba2b8fb` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `0d6bccd0313acb29935d3708094edf7bc8cac511b9fcaa695d36849b10150549`, 113 635 134 Bytes, 1 203 Einträge, Build `46dd498f`. Der Smoke-Test eines vorläufigen Pakets schlug fehl, weil ich währenddessen seinen Arbeitsordner gelöscht hatte. |
+| Windows x64 Start mit Außenverbindungsprüfung, Stand der achten Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `0d6bccd0…` | Windows x64, online mit IPv6 | `PASS`, 0 | Start 1 800 ms, Beobachtungsfenster 77 s, 4 873 Stichproben, kein Lesefehler, keine Verbindung, 0 TCP-Listener, 0 UDP-Endpunkte. |
+| Windows x64 Oberfläche, Stand der achten Übergabe | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `0d6bccd0…`; davor ein vorläufiges Paket (`a7b443a2…`) | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Runde vom 25.11. nachmittags“ |
+| Cowork-Plugin, Stand der achten Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `9dc22477` (Stand `33595449`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `d18f690d…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderung am Datenschutzkern (`3ba2b8fb`) ist im Plugin enthalten. |
+| `git diff --check`, Stand der achten Übergabe | `git diff --check 7de6aba6 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
 | Headless, Stand der siebten Übergabe | `node tests/run-product-suite.js headless` auf `2ce74b9f` (entspricht `npm run test:product:headless`) | Windows x64 | `PASS`, 0 | „Product headless suite passed (365 headless files, no native GUI executed)“; 09:58–10:51 am 25.11. Parallel liefen nur das Abdeckungswerkzeug und kleine Prüfskripte für diesen Bericht. |
 | Rust / Clippy, Stand der siebten Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract`, Rust-Quellen von `5f670a20` | Windows x64 | je `PASS`, 0 | 338 bestanden, 0 fehlgeschlagen, 3 ignoriert (fünf neue Tests der Schließanfrage). `2ce74b9f` ändert keine Rust-Datei. Nur das Windows-Ziel. |
 | Gezielt, Stand der siebten Übergabe | `tests/test-standalone-workspace.js` (534), `tests/test-standalone-desktop-contract.js` (42), `tests/test-standalone-linux-sandbox-workflow.js`, dazu die übrigen zehn Testdateien, die die Standalone-Oberfläche lesen | Windows x64 | je `PASS`, 0 | Neu: 15 Abläufe der Rückfrage beim Schließen, ein Quelltextvertrag der Hülle. |
@@ -867,9 +915,44 @@ Abnahme.
   stumme Oberfläche, eine wirklich große Datei, geführte Prüfung, „Nur in
   Markdown umwandeln“, macOS.
 
+#### Runde vom 25.11. abends (Paket `24a510df…`, Build `b8ea7acd`)
+
+Dasselbe isolierte Testprofil und dieselben fünf erfundenen Dateien wie in
+der Runde davor, Bedienung per Windows-UI-Automation. Beobachtung, keine
+Abnahme.
+
+- **Schließen im Lauf** – Rückfrage erscheint; **Esc** schließt sie, die App
+  läuft weiter. Erneut schließen, **Pausieren und schließen**: Fenster zu
+  nach 11 s, kein Prozess mehr, keine Datei im Ergebnisordner. Neustart:
+  Verlauf „5 Dateien · 2 Ergebnisse“, **Fortsetzen** endet nach 52 s mit
+  fünf Ergebnissen. Originale unverändert.
+- **Ergebnisse gelesen** – alle fünf Dateien Zeile für Zeile:
+  - Formular (Word): `Antragsteller: [PERSON_001], Tel\. [PHONE_REDACTED]`.
+    Vorher stand dort `Antragsteller: Hans Müller`. Die E-Mail-Adresse ist
+    ersetzt.
+  - Kurzer Text: `[PERSON_003] leitet die Sitzung. Rückruf unter
+    [PHONE_REDACTED].` Vorher stand die Nummer im Klartext.
+  - Notiz mit Zugangsdaten: `[PERSON_001] übernimmt den Raum.` Dasselbe
+    Pseudonym wie im Formular; der Name aus der Rollenzeile des ersten
+    Dokuments gilt im Stapel. Beide Passwörter und die PIN sind ersetzt.
+    Unverändert lesbar: `Benutzer hmueller` (kein Doppelpunkt hinter dem
+    Label, dokumentierte Grenze von R-027).
+  - Scan mit 40 Seiten: Name und Unternehmen auf jeder Seite ersetzt.
+  - Vermerk: `Petra Koch hat den Vertrag am 12.03.2026 unterschrieben.`
+    bleibt im Klartext. Das ist die verbleibende Lücke (voller Name in Prosa
+    ohne Hinweisverb).
+  Der Zustand der beiden Formular-Kästchen fehlt weiterhin (Rest von R-003).
+- **Startprobe** – `PASS`: Start 1 876 ms, Beobachtungsfenster 77 s mit
+  Haupt- und Prüffenster, 4 594 Stichproben, kein Lesefehler, keine
+  Verbindung, 0 TCP-Listener, 0 UDP-Endpunkte.
+- **Nicht beobachtet** – die geführte Prüfung mit den neuen Personenhinweisen
+  (der Lauf nutzt den automatischen Modus), Seitenzoom und **Jetzt
+  schließen** in dieser Runde (unverändert seit der Runde davor), „Nur in
+  Markdown umwandeln“, macOS.
+
 ## Urteil je Prüfdimension
 
-Zahlen aus ABDECKUNG.tsv am Stand `33595449`, nur Einzeleinheiten. Das
+Zahlen aus ABDECKUNG.tsv am Stand `1c8e971c`, nur Einzeleinheiten. Das
 Register zählte in der ersten Runde Produktivcode hinter einem
 `#[cfg(test)]` irrtümlich als Rust-Testmodul und damit als offen. Die
 Erkennung ist korrigiert; dadurch gelten rund 460 Rust-Einheiten jetzt als
@@ -879,7 +962,7 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 | Dimension | Urteil | Befunde | Abdeckung (geprüft / teilgeprüft / offen) und Grenze |
 | --- | --- | --- | --- |
 | Fachlichkeit und Formatqualität | Text und CSV solide; die belegten stillen Verluste in DOCX, XLSX und CSV sind behoben oder als Hinweis sichtbar, bis auf den Zustand alter Formular-Kontrollkästchen. Listen bleiben Tabellen. Ein Lebenslauf mit Namenslink ist jetzt automatisch verarbeitbar. | R-003 bis R-006, R-018, R-026 | 5 / 277 / 603. PDF, Scan-PDF, Bild-OCR und Office-OCR im Review nicht ausgeführt; Diagramme, SmartArt, Formeln nur über die Suite. |
-| Anonymisierung und Zuordnungen | Neu am 25.11.: Aus Word blieben Telefonnummern, Namen hinter Titeln, Geburtsdaten und Kennungen stehen, weil der Kern den maskierten Punkt nicht las (R-033, für fünf Regeln behoben); drei Erkennungslücken unabhängig vom Format sind offen (R-033b bis R-033d). Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung außer den zehn gewollten Fällen von R-024. Zugangsdaten mitten in der Zeile werden für ein Wort ersetzt (R-027, Teil). Offen: die dokumentierten Grenzen von R-027 und der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027 | 11 / 235 / 455. Eine geführte Entscheidung nativ ausgeführt, sonst keine; `privacy/entities.js`, `credentials.js`, `person-ambiguities.js` nicht gelesen. |
+| Anonymisierung und Zuordnungen | Neu am 25.11. abends: Name hinter einer Rolle, Namensliste unter einem Label und derselbe Name an weiteren Stellen werden ersetzt (R-033b bis d); als Folge stoppen Dokumente mit `Label Name Nummer`, die vorher beides lesbar freigaben. Neu am 25.11.: Aus Word blieben Telefonnummern, Namen hinter Titeln, Geburtsdaten und Kennungen stehen, weil der Kern den maskierten Punkt nicht las (R-033, für fünf Regeln behoben); drei Erkennungslücken unabhängig vom Format sind offen (R-033b bis R-033d). Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung außer den zehn gewollten Fällen von R-024. Zugangsdaten mitten in der Zeile werden für ein Wort ersetzt (R-027, Teil). Offen: die dokumentierten Grenzen von R-027 und der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027 | 11 / 240 / 453. Eine geführte Entscheidung nativ ausgeführt, sonst keine; `privacy/entities.js`, `credentials.js`, `person-ambiguities.js` nicht gelesen. |
 | Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist mehrfach nativ bedient (Ersetzen, Beibehalten, Später entscheiden und Wiederaufnahme); die Zähltexte haben ihre Einzahl. Schließen während eines Laufs führt über eine Rückfrage zur Pause; nativ bedient sind die Rückfrage, Bleiben, Pausieren und Jetzt schließen (R-032). | R-008, R-009, R-020, R-025, R-032 | 11 / 237 / 46. Quelltext plus Windows-Läufe; kein Screenreader, kein Zoom, kein WKWebView. |
 | Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Fünf Befunde der Rust-Shell behoben oder eingegrenzt, zuletzt die Startverweigerung bei belegter Ordnerkette. | R-011 bis R-014, R-022, R-028, R-032 | 25 / 755 / 546. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
 | Implementierung und Wartbarkeit | `main.rs` (rund 4 400 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, zwei ungenutzte Commands). Die zweite Runde hat `main.rs` um rund 280 Zeilen vergrößert. | — (Verbesserungen, nicht als Befund geführt) | 1 / 207 / 675. Kein systematischer Durchgang. |
@@ -1031,13 +1114,32 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 ## Übergabenachricht zum Weiterreichen
 
 ```text
-Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, R-027, R-028 bis R-033 und Nacharbeit, abgeschlossen.
+Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, R-027, R-028 bis R-033, Nacharbeit und Erkennungslücken aus R-033, abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
-Geprüfter Produktstand: 3359544931f40bbc635fbcdc68aa550cc2c738f4 (Produktcode zuletzt in 3ba2b8fb, danach ein Test und ein Dokumentabsatz; spätere Commits nur tasks/rc178-claude-review/)
+Geprüfter Produktstand: 1c8e971cb0abb78c7621c3fab90ffb502b8c178d (spätere Commits nur tasks/rc178-claude-review/)
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
 Für Codex zuerst prüfen:
+00. R-033b bis d, Commit 1c8e971c, vom 25.11. abends: privacy/person-ambiguities.js (ROLE_CUE,
+   roleLabelNameSpans, withoutFollowingWords, labelledNameListSpans, die Ausweitung in
+   personProseCandidateSpans mit der Marke "further" und ihr Überspringen in personProseAmbiguities),
+   gateway/privacy-text-operation.js (weitere Stellen werden nicht reserviert; reviewOf liest erst die
+   Restfunde), privacy/base.js (Rückruf unter/an), privacy/entities.js (contactAfter). Nur Standalone,
+   bis auf das Telefonlabel. Test: tests/test-privacy-role-labels-and-name-lists.js. Drei
+   Gegenprüfungen; verworfen wurden Rollen als Personenfelder, eine Regel für "Name hat … Partizip"
+   und eine für den Geburtsnamen. Zu prüfen: (a) der neue Stopp RESIDUAL_PII bei "Label Name Nummer"
+   ("Tel. Hans Müller 030 …", auch Steuer-ID, Aktenzeichen, Geburtsdatum, Personalnr., Notfallkontakt,
+   Mobil), sobald der Name an anderer Stelle Personenhinweis ist; vorher gab der Kern dort Name und
+   Nummer frei, und RC178 stoppt bei "Name: Hans Müller" plus dieser Zeile genauso. Die Ursache liegt
+   in den Telefon- und Nummernregeln (Redaktion ersetzt die Nummer hinter "Label Name" nicht, die
+   Schlussprüfung findet sie). (b) Überredaktion: namensförmige Organisationen, Orte und Bemerkungen
+   hinter einer Rolle oder in einer Liste werden im automatischen Modus als Person ersetzt und in
+   Dokument und Stapel weitergetragen. (c) Die Grenze von 500 weiteren Stellen je Dokument lässt den
+   Rest lesbar, ohne Stopp. (d) Halbe Ersetzungen ("Hans Peter Im Hof", "Anna Sommer-Meier").
+   (e) Die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig gegengeprüft.
+   Offen bleibt die eigentliche Lücke: voller Name in Prosa ohne Hinweisverb, einzelner Nachname,
+   Telefonnummer ohne Label, Geburtsname. Der Kern kennt Namen nur an der Form.
 0. R-033, Commit 3ba2b8fb, neu am 25.11. und schon in RC178 vorhanden: Markdown aus Office- und
    PDF-Quellen schreibt jeden Punkt als "\."; die Regeln für "Tel."/"Fax.", Titel ("Dr."), "geb.",
    "z. Hd." und abgekürzte Nummernlabels ("Personalnr.", "Az.") lasen das nicht. Aus einem
@@ -1046,12 +1148,10 @@ Für Codex zuerst prüfen:
    (privacy/base.js: PHONE_LABEL_RE, DATE_OF_BIRTH_LABEL_RE, ID_LABELS, DE_TAX_LABEL_RE;
    privacy/entities.js: DOT in den Titelmustern, before/contactAfter; privacy/engine.js: z. Hd.).
    Test: tests/test-privacy-office-markdown-abbreviations.js (Zeile aus Word gegen dieselbe Zeile als
-   Text). Offen: maskierte Klammer vor einem Namen ("Anna Meier \(geb\. Schulz\)"), getippte
+   Text). Die maskierte Klammer hinter einem Namen liest seit 1c8e971c contactAfter. Offen: getippte
    maskierte Listen- und Hervorhebungszeichen, XLSX/PPTX/PDF nicht einzeln ausgeführt. Tragfähig
    wäre eine einheitliche unmaskierte Sicht des Kerns auf solches Markdown statt Regel für Regel.
-   Unabhängig vom Format offen (R-033b bis d): Name hinter "Antragsteller:"/"Patient:", Namenszeile
-   hinter einem Aufzählungszeichen im Profil general, voller unbekannter Name in Prosa ohne
-   Hinweiswort, Telefonnummer ohne Label. Derselbe Commit enthält R-027: Zugangsdaten in
+   R-033b bis d: siehe Punkt 00. Derselbe Commit enthält R-027: Zugangsdaten in
    Anführungszeichen werden ganz ersetzt, mit Rückfall auf das erste Wort.
 1. R-027, Commit 283e6ed9: privacy/base.js (CREDENTIAL_INLINE_FIELD_RE), privacy/structured.js
    (findInlineCredentialSpans, getrennt von findStructuredSpans) und gateway/privacy-text-operation.js
@@ -1117,6 +1217,6 @@ zurückgenommen, weil das Zeichen die Erkennung eines Namens dahinter verhindert
 Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
 R-015, R-022; R-032 beim Beenden durch das Betriebssystem und bei Absturz; R-028 bei langer Belegung; R-031 hängt an nicht zugesicherten WebView2-Schaltern; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
 Überschriften, Tabellen und Links); vier Commit-Nachrichten mit falschem Backlogposten (siehe Bericht);
-Rest von R-003 (Kontrollkästchen) und von R-033; Entscheidungen zu Protokollaufbewahrung, alter Oberfläche und
+Rest von R-003 (Kontrollkästchen) und von R-033 (siehe Punkt 00); Entscheidungen zu Protokollaufbewahrung, alter Oberfläche und
 Seitenzoom unter macOS/Linux; rund 61 % der Einheiten im Register offen.
 ```

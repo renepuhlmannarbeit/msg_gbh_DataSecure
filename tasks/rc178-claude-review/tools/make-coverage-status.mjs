@@ -326,6 +326,24 @@ sym(`${rs}main.rs`, 'enable_page_zoom', { purpose: 'Seitenzoom von WebView2 für
   trust: 'keine Eingabe', invariant: 'keine neue Berechtigung und kein Befehl für die Oberfläche',
   evidence: 'Quelltextvertrag in tests/test-standalone-desktop-contract.js; nativer Lauf: Strg+Mausrad ändert die Breite eines Bedienelements von 284 auf 711 und 97 Pixel',
   findings: ['R-020'], remark: 'neu in 405eb370; macOS und Linux unverändert; Layout bei starker Vergrößerung nicht beurteilt' });
+for (const [name, purpose, invariant] of [
+  ['roleLabelNameSpans', 'namensförmigen Wert hinter einer Rolle und einem Doppelpunkt als Personenhinweis melden; Aufrufer personProseCandidateSpans, nur Standalone',
+    'nur ein Wert in Namensform; eine Bemerkung bleibt; der Name endet vor einem neuen Satz oder dem nächsten Label'],
+  ['withoutFollowingWords', 'Satzanfang oder Feldlabel ab dem dritten Wort vom Namen abschneiden; Aufrufer roleLabelNameSpans und labelledNameListSpans',
+    'die ersten beiden Wörter bleiben immer'],
+  ['labelledNameListSpans', 'Namen der Listeneinträge unter einem Personenlabel, einer Rolle oder einem Listenstichwort als Personenhinweis melden; Aufrufer personProseCandidateSpans, nur Standalone',
+    'ohne Label keine Liste; die erste Zeile, die kein Listeneintrag ist, beendet sie']]) {
+  sym(`${privacy}person-ambiguities.js`, name, { status: 'TEILGEPRÜFT', purpose, trust: 'Dokumenttext; reiner Mustervergleich', invariant,
+    evidence: 'tests/test-privacy-role-labels-and-name-lists.js; Differenzläufe gegen RC178 (18 600 Fälle, auch maskiert) und gegen den Kern der achten Übergabe; Suchlauf mit 19 440 Fällen; drei Gegenprüfungen; nativer Lauf mit gelesenen Ergebnissen',
+    findings: ['R-033'], remark: 'neu in 1c8e971c; die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig gegengeprüft; Überredaktion namensförmiger Bezeichnungen und halbe Ersetzungen sind dokumentierte Grenzen' });
+}
+for (const name of ['personProseCandidateSpans', 'personProseAmbiguities']) {
+  sym(`${privacy}person-ambiguities.js`, name, { status: 'TEILGEPRÜFT',
+    purpose: 'Personenhinweise eines Textes sammeln und auf die private Fassung abbilden; Aufrufer gateway/privacy-text-operation.js',
+    invariant: 'eine weitere Stelle eines Namens wird nicht vor dem Kern verborgen und nur dann Hinweis, wenn der Name danach noch lesbar ist und kein Restfund sie kreuzt',
+    evidence: 'tests/test-privacy-role-labels-and-name-lists.js (Ausweitung, Grenze 500, kein Stopp bei „Name IBAN …“); Suchlauf mit 19 440 Fällen',
+    findings: ['R-033'], remark: 'geändert in 1c8e971c (Ausweitung auf weitere Stellen desselben Dokuments); nur dieser Zweig beurteilt; als Folge stoppen Dokumente mit „Label Name Nummer“' });
+}
 
 for (const name of ['linkNamePattern', 'linkIdentityHits']) {
   sym(`${privacy}engine.js`, name, {
