@@ -1094,6 +1094,17 @@
           "R-032"
         ],
         "remark": "neu in 5f670a20"
+      },
+      "enable_page_zoom": {
+        "status": "GEPRÜFT",
+        "purpose": "Seitenzoom von WebView2 für das Hauptfenster einschalten; Aufrufer setup, nur Windows",
+        "trust": "keine Eingabe",
+        "invariant": "keine neue Berechtigung und kein Befehl für die Oberfläche",
+        "evidence": "Quelltextvertrag in tests/test-standalone-desktop-contract.js; nativer Lauf: Strg+Mausrad ändert die Breite eines Bedienelements von 284 auf 711 und 97 Pixel",
+        "findings": [
+          "R-020"
+        ],
+        "remark": "neu in 405eb370; macOS und Linux unverändert; Layout bei starker Vergrößerung nicht beurteilt"
       }
     },
     "apps/datasecure-standalone/tauri-contract/src/private_namespace.rs": {
@@ -1160,7 +1171,7 @@
         "findings": [
           "R-032"
         ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
       },
       "presentClose": {
         "status": "GEPRÜFT",
@@ -1171,7 +1182,7 @@
         "findings": [
           "R-032"
         ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
       },
       "receiveCloseRequest": {
         "status": "GEPRÜFT",
@@ -1182,7 +1193,7 @@
         "findings": [
           "R-032"
         ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
       },
       "confirmClose": {
         "status": "GEPRÜFT",
@@ -1193,7 +1204,7 @@
         "findings": [
           "R-032"
         ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
       },
       "withdrawClose": {
         "status": "GEPRÜFT",
@@ -1204,7 +1215,7 @@
         "findings": [
           "R-032"
         ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
       },
       "settleClose": {
         "status": "GEPRÜFT",
@@ -1215,7 +1226,7 @@
         "findings": [
           "R-032"
         ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
       },
       "stayOpen": {
         "status": "GEPRÜFT",
@@ -1226,7 +1237,29 @@
         "findings": [
           "R-032"
         ],
-        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ"
+        "remark": "neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar"
+      },
+      "workBegins": {
+        "status": "GEPRÜFT",
+        "purpose": "einen Befehl, der Arbeit anstößt oder fortsetzt, als laufend zählen",
+        "trust": "eigener Zustand der Oberfläche",
+        "invariant": "kein stilles Schließen, solange ein solcher Befehl läuft oder sein Ergebnis nicht gelesen ist",
+        "evidence": "tests/test-standalone-workspace.js (Antworten der geführten Prüfung, Fortsetzen, unbestätigter Start; 53 von 55 Verfälschungen erkannt); Gegenprüfung ohne Befund",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste"
+      },
+      "workReturns": {
+        "status": "GEPRÜFT",
+        "purpose": "den Befehl abmelden und die Marke erneuern, damit nur ein danach begonnenes Statuslesen sie löst",
+        "trust": "eigener Zustand der Oberfläche",
+        "invariant": "kein stilles Schließen, solange ein solcher Befehl läuft oder sein Ergebnis nicht gelesen ist",
+        "evidence": "tests/test-standalone-workspace.js (Antworten der geführten Prüfung, Fortsetzen, unbestätigter Start; 53 von 55 Verfälschungen erkannt); Gegenprüfung ohne Befund",
+        "findings": [
+          "R-032"
+        ],
+        "remark": "neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste"
       }
     },
     "apps/datasecure-standalone/tauri-contract/src/close_prompt.rs": {

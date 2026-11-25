@@ -98,7 +98,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | --- | --- | --- | --- | --- | --- |
 | R-001 | hoch | Anonymisierung, alle | Genitivformen bekannter Personennamen („Müllers Auto“) bleiben im freigegebenen Markdown, weil Redaktion und Restprüfung dieselbe exakte Wortgrenze nutzen. | BL-050.6 | behoben (`8cf00fa7`) |
 | R-002 | hoch | Anonymisierung, alle | Eine im Dokument bereits erkannte Telefonnummer bleibt an weiteren Stellen ohne Label im Klartext. | BL-050.6 | behoben (`af203451`) |
-| R-003 | hoch | Formatqualität DOCX, alle | `w:noBreakHyphen`, `w:ptab`, `w:sym` und der Zustand alter Formular-Kontrollkästchen werden ohne Hinweis verworfen („Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“). | BL-049.2, DS-085 | behoben (`14c12ee1`, `0d9e115c`, `a0d3e340`); Zustand alter Formular-Kontrollkästchen offen |
+| R-003 | hoch | Formatqualität DOCX, alle | `w:noBreakHyphen`, `w:ptab`, `w:sym` und der Zustand alter Formular-Kontrollkästchen werden ohne Hinweis verworfen („Müller‑Schmidt“ → „MüllerSchmidt“, „2019‑2024“ → „20192024“). | BL-049.2, DS-085 | behoben (`14c12ee1`, `0d9e115c`, `a0d3e340`); Zustand alter Formular-Kontrollkästchen offen: der Versuch `39f2b3aa` verhinderte die Erkennung eines Namens hinter dem Kästchen und ist in `22c34dcb` zurückgenommen |
 | R-004 | hoch | Formatqualität XLSX, alle | Das Standard-Datumsformat 14 erscheint als `mm-dd-yy`, Zahlen mit US-Trennzeichen; `03-05-23` und `1,234` sind für deutsche Leser mehrdeutig. | BL-049.2, DS-085 | teilweise behoben (`7f7f4d6f`); feste Zahlenschreibweise in der Formatmatrix dokumentiert (`2e34d532`), Umstellung bleibt Produktentscheidung |
 | R-005 | hoch | Formatqualität DOCX, alle | Überschriften werden nur über die englische Formatvorlagen-ID erkannt, nicht über den Vorlagennamen; lokalisierte IDs verlieren die Gliederung. | BL-049.2 | behoben (`c79f3aa4`), nur an synthetischen Fixtures gezeigt |
 | R-006 | hoch | Formatqualität DOCX, alle | Jede Word-Liste und jede nummerierte Überschrift wird als zwei einzellige Tabellen ausgegeben. | BL-049.2 | offen, bewusst nicht geändert (siehe Einzelbefund) |
@@ -106,28 +106,29 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-008 | mittel | Oberfläche, alle | Der Hinweis „Entscheidung nicht bestätigt“ wird in der eingebetteten Prüfung in ein ausgeblendetes Element geschrieben. | BL-010.53 | behoben (`c62bb1dd`) |
 | R-009 | mittel | Oberfläche, alle | Fünf Meldungen nennen Bedienelemente mit Namen, die es in der Oberfläche nicht gibt. | BL-010.53 | behoben (`c62bb1dd`) |
 | R-010 | mittel | Betrieb, alle | Nach hartem Abbruch bleibt ein `.pending-dm_*`-Ordner mit nicht anonymisiertem Markdown dauerhaft im privaten Bereich. | BL-050.6 | behoben (`97a70cd0`, `f8c69fe3`, Tests in `7693e162`) |
-| R-011 | mittel bis hoch | Rust-Shell, alle | Die private Exportwurzel füllt sich mit vier Einträgen je Vorgang ohne Bereinigung; nach etwa 512 Exporten scheitert jeder weitere. | BL-050.6 | teilweise behoben (`5f8bf47b`, `3b8fbba9`): Grenze von rund 512 auf rund 16 000 Exporte je Zielordner angehoben; abgeschlossene Datensätze werden weiterhin nie aufgeräumt. Nur Windows-Tests |
+| R-011 | mittel bis hoch | Rust-Shell, alle | Die private Exportwurzel füllt sich mit vier Einträgen je Vorgang ohne Bereinigung; nach etwa 512 Exporten scheitert jeder weitere. | BL-050.6 | teilweise behoben (`5f8bf47b`, `3b8fbba9`): Grenze von rund 512 auf rund 16 000 Exporte je Zielordner angehoben; abgeschlossene Datensätze werden weiterhin nie aufgeräumt (die Hülle enthält bewusst keinen Löschcode; Entscheidung). Nur Windows-Tests |
 | R-012 | mittel | Rust-Shell, alle | Voller Datenträger, entferntes Ziel und verweigerter Zugriff werden alle als „Konflikt“ gemeldet, ohne Diagnoseereignis. | BL-050.6 | teilweise behoben (`8c0dd30b`): Diagnoseursache und Hinweistext; öffentlicher Code bleibt „Konflikt“ |
-| R-013 | mittel | Rust-Shell, alle | Der Diagnose-Sink verstummt nach 16 MiB je Sitzung, und das Diagnosepaket bricht ab 129 Einträgen im Ordner ab. | BL-050.6 | teilweise behoben (`b30a6dbc`, `1fb7eaee`); Inventargrenze des Diagnosepakets und Aufbewahrung alter Protokolle offen |
+| R-013 | mittel | Rust-Shell, alle | Der Diagnose-Sink verstummt nach 16 MiB je Sitzung, und das Diagnosepaket bricht ab 129 Einträgen im Ordner ab. | BL-050.6 | teilweise behoben (`b30a6dbc`, `1fb7eaee`, `49add216`, `b755e208`): das Diagnosepaket listet bis zu 2 048 statt 128 Einträge; alte Protokolle werden weiterhin nie gelöscht (Grundsatz des Diagnosemoduls; Entscheidung) |
 | R-014 | mittel | Rust-Shell, alle | Nativ nicht vorgeprüfte Argumente der Nachbearbeitung beenden den Core statt abgelehnt zu werden. | BL-050.6 | behoben (`aef66f19`, `22688d75`) für alles, was die geladene Oberfläche sendet; nur Windows-Tests |
 | R-015 | hoch | Release-Nachweis | `main` enthält den RC178-Quellstand nicht, und das Windows-Paket hat keinen unabhängigen Lauf. | Freigabeentscheidung | offen; Sachstand in `docs/RELEASE.md` festgehalten (`2e34d532`) |
 | R-016 | mittel | Lieferkette | Die paketierten Drittanbieterhinweise nennen `emf-converter` nicht und beschreiben die macOS-Laufzeit unzutreffend. | BL-050.6 | behoben (`03c621a4`, `871daa7f`) |
 | R-017 | mittel | Anonymisierung, alle | Drei weitere Unterredaktionsmuster: Einzelnachname in Folgedokumenten, Name im Linkziel, „Nachname, Vorname“. | BL-050.6, BL-021.1 | teilweise behoben (`cfee417a`, `ac74cf71`, nachgebessert in `3e4a1be1`, `d4740dd6`, `e07ca2e6`); einzelner Nachname ohne Personenkontext im Folgedokument bleibt dokumentierte Grenze |
 | R-018 | mittel | Formatqualität CSV, alle | Eine einzelne Zeile abweichender Breite lässt die Trennzeichenerkennung still auf eine Spalte fallen, mit Abdeckung „vollständig“. | BL-049.2 | behoben (`803acbb9`, Hinweistexte in `2726675a`) |
 | R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | teilweise behoben (`7e9e0530`): Vertrag an die geladene Oberfläche gebunden; Tests der alten Oberfläche bestehen weiter |
-| R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise behoben (`c62bb1dd`, `2726675a`); Seitenzoom, versteckte Live-Regionen und Bidi-Steuerzeichen offen |
+| R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise behoben (`c62bb1dd`, `2726675a`, `405eb370`): Seitenzoom unter Windows; offen sind Seitenzoom unter macOS und Linux (Entscheidung), versteckte Live-Regionen (nur mit Screenreader prüfbar) und Bidi-Steuerzeichen (bewusst nicht geändert) |
 | R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | behoben (`e1afef0f`, `2e34d532`) |
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
-| R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | teilweise behoben (`6a90ed16`): lokale Prüfung der paketierten JavaScript-Abhängigkeiten; Rust-Crates und Repository-Einstellungen offen |
+| R-023 | mittel | Lieferkette | Keine Schwachstellenprüfung der ausgelieferten Abhängigkeiten; Repository öffentlich ohne Tag- und Release-Schutz. | Freigabeentscheidung | teilweise behoben (`6a90ed16`, `52dee47c`, `fc10973e`, `927fb3bd`): lokale Prüfung der paketierten JavaScript-Abhängigkeiten und der Rust-Crates; zwei gemeldete Schwachstellen (`url`, `cookie`) angehoben; zehn Hinweise auf nicht gepflegte oder als unsound gemeldete Crates bleiben; Repository-Einstellungen offen |
 | R-024 | mittel | Anonymisierung, alle | „im Zeitraum 2019-2024“ wird als Ort maskiert; mit geschütztem Bindestrich bleibt „‑2024“ stehen. Gefunden im nativen Windows-Lauf, am unveränderten RC178-Kern bestätigt. | BL-050.6 | behoben (`7b078d75`, Gegenfall im Test seit `7693e162`) |
 | R-025 | niedrig | Oberfläche, alle | Zähltexte ohne Einzahl („1 technisch geprüfte anonymisierte Ergebnisse“, „1 Dateien · 1 Ergebnisse“). Im nativen Windows-Lauf beobachtet. | BL-010.53 | behoben (`2726675a`, `907efc14`, `8c452ac4`, `1126dc36`, `e66bab8f`) für die geladene Oberfläche, soweit drei Gegenprüfungen und ein Wächtertest Zähltexte gefunden haben. Die nicht mehr geladene alte Oberfläche `app.js` ist unverändert |
 | R-026 | hoch | Fachlichkeit; Anonymisierung; alle Ziele | In den Profilen Personalprofil, Bewerbung und Kunde stoppt ein Dokument mit `RESIDUAL_PII`, sobald ein Link den Namen der Person enthält. Ein Lebenslauf mit LinkedIn-Adresse lässt sich nicht automatisch anonymisieren. Gefunden im Differenzlauf gegen den RC178-Kern. | BL-050.6 | behoben (`d91462b9`) |
-| R-027 | hoch | Anonymisierung; alle Ziele | Zugangsdaten werden nur als Feld am Zeilenanfang erkannt. „Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711“ bleibt vollständig stehen. Gefunden im Differenzlauf; in RC178 und am Stand `ffab4fa7` gleich. | BL-050.6 | teilweise behoben (`283e6ed9`): ein Wort hinter einem Label mitten in der Zeile wird ersetzt; mehrwortige Geheimnisse und weitere Formen bleiben dokumentierte Grenze |
+| R-027 | hoch | Anonymisierung; alle Ziele | Zugangsdaten werden nur als Feld am Zeilenanfang erkannt. „Zugang: Benutzer sepp, Passwort: Sommer2024! und PIN: 4711“ bleibt vollständig stehen. Gefunden im Differenzlauf; in RC178 und am Stand `ffab4fa7` gleich. | BL-050.6 | teilweise behoben (`283e6ed9`, `3ba2b8fb`): ein Wort hinter einem Label mitten in der Zeile wird ersetzt, ein Wert in Anführungszeichen ganz; mehrwortige Geheimnisse ohne Anführungszeichen und weitere Formen bleiben dokumentierte Grenze |
 | R-028 | niedrig | Architektur und Betrieb; Windows | Die App startet nicht, solange ein fremder Prozess einen Ordner oberhalb ihres Datenordners mit Löschzugriff geöffnet hält. Die Meldung nennt keinen vorübergehenden Zustand. Im isolierten Testprofil beobachtet, rund sieben Minuten lang. | BL-010.11, BL-010.21 | behoben (`b71439b2`): eigene Ursache „belegt“, kurzes Warten, Wiederanlauf im selben Fenster; die Schutzgrenze ist unverändert, eine lange Belegung verhindert den Start weiterhin |
 | R-029 | niedrig | Tests und Orakel; Windows | Die Startprobe scheitert an jedem beobachteten UDP-Endpunkt des WebView2-Netzwerkdienstes, weil sie dessen Profilordner ohne den Unterordner `EBWebView` vergleicht; aus demselben Grund wartet ihr Abbau nie auf WebView2. Die Diagnosezeile geht beim Abbruch verloren. | BL-010.21 | behoben (`dbf98cbf`) |
 | R-030 | niedrig | Tests und Orakel; Windows | Das Messskript für Startzeit und Netzwerkbeobachtung bricht in der ersten Wiederholung ab: Es wertet die falsche Ausgabezeile aus, und eine Zeile der App auf dem Fehlerkanal beendet es. In der Gegenprüfung von R-029 gefunden. | BL-010.21 | behoben (`b11a6131`, `0b99529c`) |
 | R-031 | mittel | Datenschutz und Sicherheitsgrenzen; Windows | Der WebView2-Netzwerkdienst der App fragt beim Start den Konfigurationsdienst von Edge ab und meldet sich danach alle 20 bis 40 Sekunden beim Komponenten-Updater von Microsoft; dazu kommt eine automatische Proxy-Suche. Sicherheitsmodell und Oberfläche beschreiben die App als lokal, ohne Internet und ohne Auto-Updater. Dokumentinhalte sind in den protokollierten Teilen nicht enthalten. Seit RC178 unverändert. | BL-010.11, BL-010.21 | behoben für das beobachtete Verhalten (`56d7c744`, Probe `1c3f36af`); die Schalter sind keine zugesicherte Schnittstelle von WebView2 |
-| R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft |
+| R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`, `d41a042b`, `34de4509`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft. Die Rückfrage „Aufbewahrung 0 Tage“ ist im Standalone-Paket nicht erreichbar |
+| R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | behoben für die genannten Regeln (`3ba2b8fb`); maskierte Klammern und getippte Listen- oder Hervorhebungszeichen vor einem Namen sowie R-033b bis R-033d offen |
 
 ## Einzelbefunde
 
@@ -1627,6 +1628,203 @@ gegengeprüft.
 - **Der Frist-Thread der Hülle** ist am Quelltext festgehalten und im
   nativen Lauf nur mit antwortender Oberfläche gesehen.
 
+## Runde vom 25.11. nachmittags · Reste, Gegenprüfungen und R-033
+
+Auftrag des Anwenders: alles erledigen, was sich hier erledigen lässt. Die
+Runde hat fünf Reste bearbeitet, den letzten R-032-Commit gegenprüfen lassen
+und im nativen Lauf einen neuen Befund ergeben (R-033). Zwei meiner
+Änderungen dieser Runde haben die Gegenprüfung nicht bestanden: eine ist
+zurückgenommen, die andere nachgebessert. Endstand des Produktcodes ist
+`3ba2b8fb`; `997b55bc` passt danach einen Test an, der die geänderten
+Label-Ausdrücke festschreibt und an dem die Suite zunächst stoppte.
+
+### Was umgesetzt ist
+
+| Befund | Änderung | Commits |
+| --- | --- | --- |
+| R-032 | Gegenprüfung von `2ce74b9f`: Eine Antwort der geführten Prüfung sperrt das Statuslesen nicht; ein Status, der während der Antwort gelesen wurde, galt als „danach gelesen“, und das Fenster schloss still. Ein laufender Befehl zählt jetzt selbst, und die Marke wird bei seiner Rückkehr erneuert. Beim Nachstellen gefunden: Ging die Verbindung verloren, während die Rückfrage offen war, schloss **Pausieren und schließen** das Fenster, ohne pausiert zu haben. Jetzt nennt die Rückfrage den unbekannten Stand. Eine Pause, deren Antwort verloren ging, die der nächste Status aber zeigt, gilt nicht mehr als abgelehnt. | `d41a042b`, `34de4509` |
+| R-013 | Das Diagnosepaket listet bis zu 2 048 statt 128 Einträge des Protokollordners. Damit enthält es wieder die Sitzung vor einem Absturz, auch wenn der Ordner viele alte Protokolle hält. Gelöscht wird weiterhin nichts. | `49add216`, `b755e208` |
+| R-023 | `cargo-audit 0.23.0` gegen die RustSec-Datenbank (1 568 Advisories) meldete zwei Schwachstellen in den gesperrten Crates der Hülle: `url 2.5.8` (RUSTSEC-2026-0592, Stapelüberlauf in `Url::origin()` bei verschachtelten `blob:`-Adressen) und `cookie 0.18.2` (RUSTSEC-2026-0594; das betroffene Merkmal ist hier nicht eingeschaltet). Beide sind auf die bereinigte Fehlerkorrektur-Version angehoben (`url 2.5.9` mit `form_urlencoded 1.2.3`, `cookie 0.18.3`). `npm run audit:standalone` prüft die Crates jetzt mit. Zehn Hinweise bleiben: nicht gepflegt `chrono`, `proc-macro-error` und fünf `unic`-Crates; als unsound gemeldet `glib`, `rustix`, `tokio`, jeweils in Schnittstellen anderer Plattformen. | `52dee47c`, `fc10973e`, `927fb3bd` |
+| R-020 | Seitenzoom im Hauptfenster unter Windows (Strg mit Plus, Minus, Null oder Mausrad) als Einstellung von WebView2. Die Oberfläche erhält keinen Befehl und keine Berechtigung. | `405eb370` |
+| R-027 | Ein Wert in Anführungszeichen, die in derselben Zeile schließen, wird ganz ersetzt (`Passwort: "Tulpe Garten Regen"`). Überlappt er einen offenen Personenhinweis, wird wie bisher sein erstes Wort ersetzt. | `3ba2b8fb` |
+| R-033 | Siehe unten. | `3ba2b8fb`, Test-Festschreibung in `997b55bc` |
+
+`3ba2b8fb` enthält R-027 und R-033 in einem Commit, weil beide als ein Stand
+geprüft wurden; ein Zwischenstand wäre ungeprüft gewesen.
+
+### Was zurückgenommen ist
+
+- **R-003, Zustand alter Formular-Kontrollkästchen.** `39f2b3aa` gab für ein
+  Feld FORMCHECKBOX ein ☒ oder ☐ aus. Die Gegenprüfung hat gezeigt, und ich
+  habe es nachvollzogen (`scratchpad/privacy/g21.js`): Das Zeichen steht am
+  Zeilenanfang, und eine Zeile, die nur aus einem Namen besteht, wird nur
+  ohne vorangestelltes Zeichen als Person erkannt. Aus ` Anna Sommer`
+  (ersetzt) wurde `☒ Anna Sommer` (nicht ersetzt). `22c34dcb` nimmt die
+  Änderung zurück; die Nachricht dieses Commits nennt den Grund nicht, er
+  steht hier. Neue Stopps hat die Gegenprüfung über rund 40
+  Dokumentvarianten nicht gefunden. Der Rest von R-003 bleibt offen. Er
+  braucht dasselbe wie R-006: eine Darstellung, die vom Zweck abhängt, oder
+  einen Kern, der ein solches Zeichen am Zeilenanfang wie Leerraum liest,
+  mit Differenzlauf.
+
+### Was nicht umgesetzt ist, und warum
+
+- **R-013, Aufbewahrung alter Protokolle.** Das Diagnosemodul legt nur an und
+  hängt an; so steht es in seinem Modulkopf („No reopen, truncate, rename or
+  deletion“), und ein Test hält fest, dass das Sammeln nichts aufräumt. Eine
+  Aufbewahrungsfrist ist eine Produktentscheidung und braucht nativen
+  Löschcode für drei Betriebssysteme, von denen hier eines übersetzbar ist.
+- **R-011, Aufräumen abgeschlossener Exportdatensätze.** Derselbe Grund: Die
+  Hülle enthält bewusst keinen Löschcode. Die Grenze von rund 16 000 Exporten
+  je Zielordner bleibt. In meiner Liste vor dieser Runde stand der Punkt
+  unter „könnte ich beheben“; das war zu viel versprochen.
+- **R-019, Tests der alten Oberfläche.** Die alte Oberfläche `app.js` wird
+  nicht geladen, aber paketiert. Sie zu entfernen ist eine Produktentscheidung
+  (`docs/canonical/PRODUCT.md`: die native Paketabnahme ist Voraussetzung der
+  Standardumschaltung).
+- **R-020, Bidi-Steuerzeichen in Namen.** Eine Anzeigefunktion wäre an rund
+  60 Stellen in zwei Dateien nötig; die Alternative, solche Namen abzulehnen,
+  träfe auch Dateien mit rechtsläufigen Namen. Der Nutzen ist gering:
+  DataSecure führt Dateien nicht aus und prüft Formate am Inhalt.
+- **R-020, versteckte Live-Regionen.** Zwölf Regionen; ob ein Screenreader sie
+  ansagt, lässt sich hier nicht beobachten. Bleibt bei der Abnahme BL-012.5.
+- **R-020, Seitenzoom unter macOS und Linux.** Tauri schleust dort ein Skript
+  ein, das eine Webview-Berechtigung braucht; der Vertragstest der Oberfläche
+  schließt sie aus. Entscheidung nötig.
+
+### R-033 · Aus Word bleiben Telefonnummer, Name hinter einem Titel und weitere Angaben stehen
+
+- **Priorität:** hoch.
+- **Dimension und Plattform:** Anonymisierung; alle Ziele; Quellen, die als
+  `content-v1`-Markdown beim Kern ankommen (DOCX belegt; XLSX, PPTX und PDF
+  nutzen dieselbe Schreibweise, dort nicht einzeln ausgeführt).
+- **Backlog:** BL-050.6, BL-021.1.
+- **Gefunden:** im nativen Lauf am 25.11., beim Lesen des Ergebnisses eines
+  erfundenen Word-Formulars. Im freigegebenen Markdown stand
+  `Antragsteller: Hans Müller, Tel\. 030 1234567`.
+- **Reproduktion:** `scratchpad/conversion/t61-escape-privacy.js` (dieselbe
+  Zeile als Text und aus einem DOCX, Extraktor und Kern am RC178-Stand):
+  7 von 24 Zeilen kommen aus Word mit mehr Klartext heraus. Im Repository:
+  `tests/test-privacy-office-markdown-abbreviations.js`, schlägt am Stand vor
+  `3ba2b8fb` fehl.
+
+  | Zeile im Dokument | aus einer Textdatei | aus Word, RC178 |
+  | --- | --- | --- |
+  | `Tel. 030 1234567` | `Tel. [PHONE_REDACTED]` | `Tel\. 030 1234567` |
+  | `Fax. 030 1234568` | `Fax. [PHONE_REDACTED]` | `Fax\. 030 1234568` |
+  | `Dr. Anna Meier kommt morgen.` | `Dr. [PERSON_001] kommt morgen.` | `Dr\. Anna Meier kommt morgen\.` |
+  | `Herr Dr. Meier hat unterschrieben.` | `Dr. [PERSON_001] hat unterschrieben.` | `Herr Dr\. Meier hat unterschrieben\.` |
+  | `geb. 12.03.1980` | `geb. [DATE_REDACTED]` | `geb\. 12\.03\.1980` |
+  | `z. Hd. Hans Müller` | `z. Hd. [PERSON_001]` | `z\. Hd\. Hans Müller` |
+  | `Personalnr. 4711` | `Personalnr. [ID_REDACTED]` | `Personalnr\. 4711` |
+
+- **Ursache:** Die Umwandlung schreibt jeden wörtlichen Punkt als `\.`
+  (`core/markdown-literal-content.js`). Andere Regeln lesen das (Datum nach
+  „Geboren am“, Straße, E-Mail-Adresse, IBAN). Nicht gelesen haben es: das
+  abgekürzte Telefonlabel (`privacy/base.js`, `PHONE_LABEL_RE`), Titel
+  (`privacy/entities.js`, `ACADEMIC_TITLE` und Verwandte), `geb.`
+  (`DATE_OF_BIRTH_LABEL_RE`), `z. Hd.` (`privacy/engine.js`) und die
+  abgekürzten Nummernlabels (`ID_LABELS`). RC178 verhält sich gleich.
+- **Ist/Soll:** Dieselbe Zeile muss aus Word so ersetzt werden wie aus Text.
+- **Auswirkung:** Die genannten Angaben standen im freigegebenen Markdown von
+  Word-Dokumenten, ohne Stopp und ohne Hinweis. Das betrifft Standalone und,
+  über denselben Kern, lokal extrahiertes Markdown im Cowork-Plugin.
+- **Status:** behoben in `3ba2b8fb` für diese Regeln. Sie lesen den Punkt mit
+  und ohne Backslash; für Text ohne `\.` ändert sich nichts. Die ersten drei
+  Regeln habe ich gefunden, `z. Hd.` und die Nummernlabels die Gegenprüfung.
+
+Beim selben Lesen aufgefallen, in RC178 gleich, **nicht behoben**, weil es
+Regeln der Erkennung betrifft und eine Entscheidung braucht:
+
+- **R-033b:** Ein Name hinter `Antragsteller:` oder `Patient:` wird in keinem
+  Profil ersetzt. `Kunde:`, `Ansprechpartner:`, `Mitarbeiter:` und
+  `Bearbeiter:` werden erkannt.
+- **R-033c:** Im Profil Allgemein bleibt eine Namenszeile hinter einem
+  Aufzählungszeichen stehen (`- Anna Sommer`, auch eine ganze Liste), während
+  `Anna Sommer` allein ersetzt wird. Das Profil Personalprofil ersetzt sie
+  hinter `-`, `*` und einer Nummer, nicht hinter `•`.
+- **R-033d:** Ein voller unbekannter Name in Prosa ohne Hinweiswort bleibt
+  stehen (`Petra Lang hat den Vertrag am 12.03.2026 unterschrieben`), ebenso
+  eine Telefonnummer ohne Label (`Rückruf unter 030 7654321`). Die geführte
+  Prüfung zeigt beides nicht an: der Kern meldet dort keinen offenen Hinweis
+  (`scratchpad/privacy/g23.js`).
+
+Im Lauf mit fünf erfundenen Dateien enthielten am Stand vor `3ba2b8fb` drei
+der fünf freigegebenen Ergebnisse Klartext, den ein Leser als
+personenbezogen ansieht. Am Endstand: die Telefonnummer des Formulars ist
+ersetzt; drei der fünf Ergebnisse enthalten weiterhin solchen Klartext (Name
+hinter `Antragsteller:`, Name in Prosa, Telefonnummer ohne Label).
+
+### Gegenprüfungen dieser Runde
+
+Fünf unabhängige Read-only-Läufe, jeder mit dem Auftrag zu widerlegen.
+
+| Gegenstand | Ergebnis |
+| --- | --- |
+| `2ce74b9f` (R-032) | Ein Einwand durch Ausführung bestätigt (Antwort der geführten Prüfung), einer am Text; kein Zustand ohne Schließmöglichkeit. Behoben in `d41a042b`. |
+| `d41a042b`, `49add216`, `405eb370`, `fc10973e` | `d41a042b`: kein Defekt, eine Härtung (`34de4509`). `49add216`: kein Defekt; die Annahme „zwei bis vier Segmente je Sitzung“ trug nicht, Grenztest fehlte (`b755e208`). `405eb370`: am Quelltext von Tauri und wry wirksam. `fc10973e`: ein künstliches `cargo` mit leerem Bericht bestand die Prüfung (`927fb3bd`). |
+| `39f2b3aa` (Kontrollkästchen) | Keine neuen Stopps; ein hoher Einwand: das Zeichen verhindert die Erkennung eines Namens dahinter. Zurückgenommen. |
+| Zugangsdaten in Anführungszeichen, vor dem Commit | 38 900 Vergleiche, 0 neue Stopps; ein Einwand: bei offenem Personenhinweis im Wert wurde nichts mehr ersetzt (1 034 von 16 000 gerichteten Fällen). Rückfall auf das erste Wort; danach 0. |
+| Maskierter Punkt, vor dem Commit | Rund 22 000 Kernläufe, keine Regression, Text ohne `\.` unverändert. Zwei weitere Regeln derselben Art gefunden (`z. Hd.`, Nummernlabels; behoben) und drei Formen, die offen bleiben (siehe Grenzen). |
+
+Die letzte Fassung des Kerns (mit `z. Hd.` und den Nummernlabels) ist nicht
+mehr unabhängig gegengeprüft, nur mit den Vergleichsläufen und Tests.
+
+### Nachweise am Kern
+
+| Lauf | Ergebnis |
+| --- | --- |
+| RC178-Kern gegen Endstand, 18 600 Fälle, fünf Profile | 0 neue Stopps; 10 Unterschiede „mehr sichtbar“, alle der gewollte Fall aus R-024; 420 behobene Stopps. Dieselben Zahlen wie vor dieser Runde. |
+| Derselbe Lauf, jeder Punkt als `\.` | 0 neue Stopps; dieselben 10 Unterschiede; 5 314 Fälle mit weniger Klartext. |
+| Kern des vorigen Commits gegen Endstand, 9 600 Fälle mit Zugangsdaten in Anführungszeichen | 0 neue Stopps, 0 mehr sichtbar, 2 700 weniger sichtbar. |
+| Dieselbe Zeile als Text und aus Word, 24 Zeilen | RC178: 7 anders; Endstand: 0. |
+| 19 datenschutzbezogene Testdateien der Suite, `test-pii-regression.js` (164 Fälle) | bestanden. |
+
+Alle Vergleichsläufe arbeiten mit erfundenen Sätzen aus wenigen Bausteinen.
+
+### Grenzen dieser Runde
+
+- **R-033 ist nicht vollständig.** Offen bleiben: eine maskierte Klammer vor
+  einem unbekannten Namen (`Anna Meier \(geb\. Schulz\)`), wörtlich
+  getippte, maskierte Listen- oder Hervorhebungszeichen vor oder um einen
+  Namen (`1\. Anna Meier`, `\*Anna Meier\*`). Geprüft sind rund 180
+  Zeilenformen aus Word; XLSX, PPTX und PDF sind nicht einzeln ausgeführt.
+  Der Kern liest Markdown aus Office-Quellen Regel für Regel; eine
+  einheitliche Sicht ohne Maskierung wäre die tragfähige Lösung und ist eine
+  größere Änderung.
+- **Folge der Korrektur:** Eine Word-Tabelle mit der Spalte `Tel.` und einer
+  Nummer darunter stoppt jetzt mit `RESIDUAL_PII`, wo vorher die Nummer still
+  stehen blieb. Derselbe Inhalt als Text stoppt in allen Ständen. Ein Titel
+  vor einem Wort, das kein Name ist (`Dipl.-Ing. Maschinenbau`), wird aus
+  Word jetzt wie aus Text als Person ersetzt.
+- **R-032:** Die Rückfrage „nicht pausierbar wegen Aufbewahrung 0 Tage“ kann
+  im Standalone-Paket nicht auftreten: Die Hülle reicht
+  `EU_PRIVACY_RETENTION_DAYS` nicht an den Core weiter
+  (`main.rs`, `configure_core_environment`); die Frist beträgt dort immer
+  sieben Tage. Im nativen Lauf mit gesetzter Variable wurde die Pause
+  angenommen. Der Zweig ist nur im Test erreichbar. „Stand unbekannt“ ist
+  weiterhin nur im Test ausgelöst. Ein Befehl, der nie zurückkehrt, hält den
+  Stand auf „unbekannt“; das Fenster bleibt über **Trotzdem schließen**
+  schließbar. Zwei von 55 Verfälschungen der Schließ-Logik erkennen die Tests
+  nicht (ein Absicherungszweig nach fehlgeschlagener Pause, die Laufbindung
+  der übernommenen Pause).
+- **R-013:** Das Paket öffnet jede bekannte Protokolldatei einmal, um sie zu
+  ordnen; bei 2 048 Dateien rund eine Sekunde in einer Näherung mit Node auf
+  diesem Rechner, nicht an der Hülle gemessen. Jenseits der Grenze fällt es
+  wie bisher auf die laufende Sitzung zurück.
+- **R-020:** Das Layout bei starker Vergrößerung ist nicht beurteilt. Das
+  getrennte Prüffenster der alten Oberfläche hat keinen Zoom.
+- **R-023:** Die Prüfung braucht Netzzugang und ein installiertes
+  `cargo-audit`; sie gehört nicht zur Suite. Für macOS und Linux ist die
+  angehobene Lock-Datei nicht übersetzt.
+- **Nicht geprüft:** macOS und Linux für alle Änderungen der Hülle; die
+  Wartezeit bei einer wirklich großen Datei (gemessen: 40 Seiten Scan).
+- **Eigene Fehler dieser Runde:** Ich habe während des Smoke-Tests des
+  vorläufigen Pakets dessen Arbeitsordner gelöscht; der Test schlug fehl.
+  Am endgültigen Paket lief er ungestört und bestand. Eine Abfrage mit
+  `cargo tree --target all` hat Crate-Quellen aller Plattformen in den
+  Cargo-Cache des Rechners geladen.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -1664,6 +1862,12 @@ gegengeprüft.
 | A-032 | Die Oberfläche weiß aus ihrem zuletzt gelesenen Status, ob ein Lauf arbeitet. | Sie liest den Status alle 1,6 bis 5 Sekunden und nach jedem Befehl. | Zwischen einem Befehl, der Arbeit anstößt (Start, Fortsetzen, Überspringen, Antwort der Prüfung), und dem ersten Status danach sagt der alte Status „arbeitet nicht“. | zwei Gegenprüfungen (read-only) mit nachgestellten Abläufen im Testgerüst | Widerlegt; in dieser Zeit gilt der Stand seit `2ce74b9f` als unbekannt, und die App fragt. |
 | A-033 | Eine Oberfläche kann die App mit der neuen Rückfrage nicht offen halten (so der erste Modulkommentar). | Ohne Antwort schließt die Hülle nach zwei Sekunden. | Eine quittierte Anfrage hat keine Frist mehr; mit gesperrten Knöpfen wäre die Rückfrage nicht bedienbar gewesen. | Gegenprüfung (read-only), im Testgerüst nachgestellt | Widerlegt für die quittierte Anfrage. Die Oberfläche quittiert erst nach dem Anzeigen, die Knöpfe bleiben bedienbar, und jede neue Schließanfrage braucht wieder eine Antwort; der Kommentar und die Dokumente sagen das jetzt. |
 | A-034 | „Fertige Ergebnisse bleiben erhalten“ beschreibt, was der Anwender nach dem Pausieren vorfindet. | Die fertigen Dateien sind gespeichert. | Sichtbar im Ergebnisordner werden sie erst nach dem Abschluss des ganzen Laufs. | nativer Lauf: 0 Dateien im Ergebnisordner bei 2 fertigen | Eingegrenzt; die Rückfrage sagt es jetzt ausdrücklich. |
+| A-035 | Ein Status, der nach dem Befehl begann, weiß, was der Befehl gestartet hat (so der Kommentar in `2ce74b9f`). | Für die Befehle der Arbeitsfläche stimmt es: sie sperren das Statuslesen. | Die Antworten der geführten Prüfung sperren es nicht; ein Status kann beginnen und enden, während die Antwort noch unterwegs ist. | Gegenprüfung (read-only) mit ausführbarem Gegenbeispiel | Widerlegt; `d41a042b`. Beim Nachstellen ein zweiter Fehler: nach Verbindungsverlust schloss „Pausieren und schließen“ ohne Pause. |
+| A-036 | Ein sichtbares Zeichen für ein angekreuztes Kästchen ändert nur die Darstellung. | Es ist ein einzelnes Zeichen vor dem Text. | Eine Zeile, die nur aus einem Namen besteht, wird nur ohne vorangestelltes Zeichen als Person erkannt; der Zweck erreicht den Konverter nicht. | Gegenprüfung (read-only), von mir am Kern nachvollzogen | Widerlegt; `39f2b3aa` in `22c34dcb` zurückgenommen. Meine Tests prüften nur den umgewandelten Text, nicht die Anonymisierung danach. |
+| A-037 | „Aufbewahrung 0 Tage“ kann im Standalone-Paket auftreten (so die Entscheidung zu R-032 und der Text der Rückfrage). | Der Core kennt den Zustand und lehnt dort die Pause ab. | Die Hülle leert die Umgebung des Core und reicht `EU_PRIVACY_RETENTION_DAYS` nicht durch. | eigene Lektüre von `configure_core_environment`; nativer Lauf mit gesetzter Variable: die Pause wurde angenommen | Widerlegt für das Paket. Der Zweig bleibt im Code und im Test; die Frist beträgt im Standalone immer sieben Tage. |
+| A-038 | Ein Prüfwerkzeug, das einen Bericht liefert, hat geprüft. | Der Bericht war gültiges JSON ohne Befund. | Ein Werkzeug, das einen leeren Bericht ausgibt, bestand die Prüfung („0 Crates, 0 Befunde“). | Gegenprüfung (read-only) mit einem künstlichen `cargo` | Widerlegt; `927fb3bd` verlangt die Zahl der Crates der Lock-Datei, Übereinstimmung mit dem Exit-Code und eine Datenbank mit Einträgen. |
+| A-039 | Der Kern liest Markdown aus Office-Quellen wie Text (so die Tests, die mit Textzeilen arbeiten). | Viele Regeln lesen den maskierten Punkt. | Fünf Regeln lasen ihn nicht; weitere Maskierungen (Klammer, Listenzeichen) stören ebenfalls. | nativer Lauf, eigener Vergleich Text gegen Word, Gegenprüfung über rund 180 Zeilenformen | Widerlegt; R-033. Die Tests des Kerns arbeiten fast nur mit Text; ein Vergleich „dieselbe Zeile aus Word“ fehlte. |
+| A-040 | Ein Wert in Anführungszeichen lässt sich immer ganz ersetzen, weil sein Ende geschrieben steht. | Das Ende ist eindeutig. | Enthält der Wert einen offenen Personenhinweis, wird der ganze Treffer verworfen, und das erste Wort bleibt stehen, das vorher ersetzt wurde. | Gegenprüfung (read-only) mit gerichtetem Zufallslauf (1 034 von 16 000 Fällen) | Widerlegt; Rückfall auf das erste Wort in `3ba2b8fb`, danach 0 Fälle. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

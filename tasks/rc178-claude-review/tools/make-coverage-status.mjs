@@ -312,8 +312,20 @@ for (const [name, purpose] of [
   sym(`${app}frontend/workspace.js`, name, { purpose, trust: 'Laufstatus aus dem Core, Nummer aus der Hülle',
     invariant: 'kein Schließen bei arbeitendem oder unbekanntem Lauf ohne Antwort des Anwenders',
     evidence: 'tests/test-standalone-workspace.js (15 Abläufe ab closeHarness; 42 Verfälschungen erkannt); ' + closeNative,
-    findings: ['R-032'], remark: 'neu in 5f670a20, überarbeitet in 2ce74b9f; die Fälle „Stand unbekannt“ und „nicht pausierbar“ sind nur im Test ausgelöst, nicht nativ' });
+    findings: ['R-032'], remark: 'neu in 5f670a20, überarbeitet in 2ce74b9f und nach der Gegenprüfung in d41a042b; „Stand unbekannt“ ist nur im Test ausgelöst, „nicht pausierbar wegen Aufbewahrung“ ist im Standalone-Paket nicht erreichbar' });
 }
+for (const [name, purpose] of [
+  ['workBegins', 'einen Befehl, der Arbeit anstößt oder fortsetzt, als laufend zählen'],
+  ['workReturns', 'den Befehl abmelden und die Marke erneuern, damit nur ein danach begonnenes Statuslesen sie löst']]) {
+  sym(`${app}frontend/workspace.js`, name, { purpose, trust: 'eigener Zustand der Oberfläche',
+    invariant: 'kein stilles Schließen, solange ein solcher Befehl läuft oder sein Ergebnis nicht gelesen ist',
+    evidence: 'tests/test-standalone-workspace.js (Antworten der geführten Prüfung, Fortsetzen, unbestätigter Start; 53 von 55 Verfälschungen erkannt); Gegenprüfung ohne Befund',
+    findings: ['R-032'], remark: 'neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste' });
+}
+sym(`${rs}main.rs`, 'enable_page_zoom', { purpose: 'Seitenzoom von WebView2 für das Hauptfenster einschalten; Aufrufer setup, nur Windows',
+  trust: 'keine Eingabe', invariant: 'keine neue Berechtigung und kein Befehl für die Oberfläche',
+  evidence: 'Quelltextvertrag in tests/test-standalone-desktop-contract.js; nativer Lauf: Strg+Mausrad ändert die Breite eines Bedienelements von 284 auf 711 und 97 Pixel',
+  findings: ['R-020'], remark: 'neu in 405eb370; macOS und Linux unverändert; Layout bei starker Vergrößerung nicht beurteilt' });
 
 for (const name of ['linkNamePattern', 'linkIdentityHits']) {
   sym(`${privacy}engine.js`, name, {
