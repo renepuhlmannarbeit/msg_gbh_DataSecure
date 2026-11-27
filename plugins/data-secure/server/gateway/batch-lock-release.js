@@ -19,10 +19,13 @@ function releaseOwnedLock(releaseActiveLock, token, ErrorType = SafeError, prima
   throw new ErrorType(RELEASE_MESSAGE);
 }
 
-// Four bounded asynchronous backoffs, only after an ordinary fixed Busy.
+// Bounded asynchronous backoffs, about two seconds in total, only after an
+// ordinary fixed Busy. The callers are worker processes without a deadline of
+// the desktop shell; 185 ms were too short to outlast another process that
+// keeps the native guard for a moment, and the run then stopped (R-041).
 // The synchronous callback always receives the SAME acquired epoch; no native
 // guard is retained across a timer. False/close/loss never qualify for retry.
-const EPOCH_RELEASE_BACKOFF_MS = Object.freeze([10, 25, 50, 100]);
+const EPOCH_RELEASE_BACKOFF_MS = Object.freeze([10, 25, 50, 100, ...Array(18).fill(100)]);
 async function releaseOwnedEpochWithBusyRetry(releaseEpoch, epoch, ErrorType = SafeError, primaryError = false, options = {}) {
   const delay = options.delay || (milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)));
   const observe = options.onFailure || (() => {});

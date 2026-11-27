@@ -52,11 +52,20 @@ Ablehnung wie bisher; der Eintrag wird weiterhin nie ohne bestätigte eigene
 Freigabe entfernt. Dasselbe gilt für den synchronen Weg derselben Funktion
 (`gateway/standalone-history-store.js`, `notice-summary.lock`).
 `test-standalone-document-control.js` prüft Wartezeit, Fortsetzung, ihre
-Grenzen und den Schutz eines späteren Eintrags. Unverändert ist
-`gateway/batch-lock-release.js` (Stapelsperre, vier Wartezeiten). R-037: Die
+Grenzen und den Schutz eines späteren Eintrags. `gateway/batch-lock-release.js`
+(Stapelsperre) blieb dabei unverändert; siehe R-041. R-037: Die
 Testhelfer `standalone-packaged-markdown.mjs`,
 `standalone-packaged-anonymized-ocr.mjs` und `standalone-packaged-ocr-review.mjs`
 lassen beim Warten auf den Ergebnisordner auch `STANDALONE_BUSY` zu.
+
+RC178-Review R-041 (BL-010.14, BL-050.6) → `gateway/batch-lock-release.js`
+(`releaseOwnedEpochWithBusyRetry`) wartet bei belegter Betriebssystemsperre
+jetzt rund zwei Sekunden statt 185 ms, bevor die Freigabe der Stapelsperre
+scheitert und der Arbeitsprozess den Lauf beendet. Eine Fortsetzung im
+Hintergrund gibt es hier nicht: Der Eintrag gehört einem Arbeitsprozess und
+wird nach dessen Ende vom nächsten Prozess übernommen.
+`test-batch-epoch-release-busy.js`, `test-batch-review-orchestrator.js` und
+`test-native-ownership-epoch-release.js` prüfen die neue Folge der Wartezeiten.
 
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor

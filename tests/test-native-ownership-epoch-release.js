@@ -23,7 +23,7 @@ const saved = { root: process.env.EU_PRIVACY_DATA_ROOT, workspace: process.env.E
   native: process.env.DATASECURE_NATIVE_EXPORT_CHANNEL, pin: process.env.DATASECURE_OWNERSHIP_GUARD_SHA256 };
 process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
 delete process.env.DATASECURE_OWNERSHIP_GUARD_SHA256;
-const TOKEN = 'e'.repeat(64), BACKOFFS = [10, 25, 50, 100];
+const TOKEN = 'e'.repeat(64), BACKOFFS = [10, 25, 50, 100, ...Array(18).fill(100)];
 const fixed = code => Object.assign(Error(code), { code });
 let fixture, holder, childTermination = null, assertions = 0, lifecycleModelCases = 0;
 let failure = null, completed = false, cleanup = false;
@@ -127,12 +127,12 @@ async function persistentBusy() {
       async delay(ms) {
         delays.push(ms); unchanged(state.target, state.before);
         check(state.unlinks(), 0); check(await holder.request('assert'), true);
-        await tick(); // Keep B held throughout all four backoffs.
+        await tick(); // Keep B held throughout all backoffs.
       },
       onFailure(error) { failures.push(error.code); }
     }), rejecting('STANDALONE_OWNERSHIP_CONTROL_BUSY'));
     assertions++;
-    check(attempts, 5); check(delays, BACKOFFS); check(state.unlinks(), 0);
+    check(attempts, BACKOFFS.length + 1); check(delays, BACKOFFS); check(state.unlinks(), 0);
     unchanged(state.target, state.before);
     check(failures.length > 0 && failures.every(code => code === 'STANDALONE_OWNERSHIP_CONTROL_BUSY'), true);
   } finally { await releaseHolder(); }

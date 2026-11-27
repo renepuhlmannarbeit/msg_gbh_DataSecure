@@ -12,6 +12,8 @@ const { documentStabilizationBlocked } = require('../plugins/data-secure/server/
 const { createSuite } = require('./helpers');
 
 const { test, testAsync, done, assert } = createSuite('Batch review orchestration boundary');
+// The pauses a release waits through while the native guard stays busy (R-041).
+const RELEASE_BACKOFFS = [10, 25, 50, 100, ...Array(18).fill(100)];
 
 function codedError(code, message = code) {
   const error = new SafeError(message);
@@ -374,7 +376,7 @@ async function main() {
   });
   await testAsync('persistent Busy, false, close, unsafe and non-Busy epoch release never report successful review', async () => {
     for (const [mode, expected, attempts] of [
-      ['OWNERSHIP_GUARD_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 5],
+      ['OWNERSHIP_GUARD_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', RELEASE_BACKOFFS.length + 1],
       ['false', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED', 1],
       ['OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED', 1],
       ['OWNERSHIP_GUARD_UNSAFE', 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 1],
@@ -390,7 +392,7 @@ async function main() {
         releaseDelay: async milliseconds => { assert.equal(value.active.has(value.token), true); delays.push(milliseconds); }
       });
       await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, value.deps), error => error.code === expected);
-      assert.equal(releases, attempts); assert.deepEqual(delays, attempts === 5 ? [10, 25, 50, 100] : []);
+      assert.equal(releases, attempts); assert.deepEqual(delays, attempts > 1 ? RELEASE_BACKOFFS : []);
       assert.equal(value.events.filter(event => event === 'acquire:token').length, 1);
       assert.equal(value.events.filter(event => event === 'publish').length, 1);
       assert.deepEqual(value.releaseDiagnostics, [{ phase: 'item_epoch_release', error_code: expected }]);
@@ -407,8 +409,8 @@ async function main() {
         recordBatchFailure() { assert.equal(value.active.has(value.token), true); throw new Error('observer failure'); }
       });
       await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, value.deps), error => error === primary);
-      assert.equal(releases, mode === 'OWNERSHIP_GUARD_BUSY' ? 5 : 1);
-      assert.deepEqual(delays, mode === 'OWNERSHIP_GUARD_BUSY' ? [10, 25, 50, 100] : []);
+      assert.equal(releases, mode === 'OWNERSHIP_GUARD_BUSY' ? RELEASE_BACKOFFS.length + 1 : 1);
+      assert.deepEqual(delays, mode === 'OWNERSHIP_GUARD_BUSY' ? RELEASE_BACKOFFS : []);
       assert.equal(value.writes(), 0); assert.equal(value.active.size, 0);
       assert.equal(documentStabilizationBlocked(primary), true);
       assert.deepEqual(value.releaseDiagnostics, [{ phase: 'item_epoch_release',

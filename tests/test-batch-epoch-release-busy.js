@@ -13,6 +13,8 @@ const diagnostic = require('../plugins/data-secure/server/gateway/batch-executio
 const { sanitizeWorkflowEvent } = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 const { testAsync, test, done, assert } = createSuite('Epoch release Busy / batch interruption MODEL');
 const TOKEN = 'e'.repeat(64), PID = 4242, BIRTH = 'a'.repeat(64);
+// The pauses a release waits through while the native guard stays busy (R-041).
+const RELEASE_BACKOFFS = [10, 25, 50, 100, ...Array(18).fill(100)];
 const fail = code => Object.assign(new Error('PRIVATE/path or document detail'), { code });
 function harness(plan, config = {}) {
   let state = { schema: 'datasecure-batch/7', product_channel: 'standalone', processing_mode: 'markdown-and-anonymize',
@@ -125,7 +127,8 @@ async function main() {
   await testAsync('persistent Busy preserves pending sources and committed CSV without false success', async () => {
     const h = harness(['OWNERSHIP_GUARD_BUSY']);
     await assert.rejects(h.run(), error => error.code === 'STANDALONE_OWNERSHIP_CONTROL_BUSY');
-    assert.deepStrictEqual(h.delays, [10, 25, 50, 100]); assert.strictEqual(h.stats().calls, 5);
+    assert.deepStrictEqual(h.delays, RELEASE_BACKOFFS); assert.strictEqual(h.stats().calls, RELEASE_BACKOFFS.length + 1);
+    assert.strictEqual(RELEASE_BACKOFFS.reduce((sum, value) => sum + value, 0), 1985, 'about two seconds, not 185 ms (R-041)');
     assert.deepStrictEqual(h.state().items.map(item => item.status), ['delivery_pending', 'pending', 'pending']);
     assert.strictEqual(h.stats().processed, 1); assert.strictEqual(h.stats().finalizations, 0);
     assert.strictEqual(h.stats().cleaned + h.stats().mappings, 0);
