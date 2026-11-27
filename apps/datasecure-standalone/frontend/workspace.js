@@ -623,7 +623,13 @@
     const reason = command === 'configure_results' && code === 'AI_EXPORT_CONFLICT'
       ? 'Der gewählte Ergebnisordner konnte nicht sicher vorbereitet werden. Die bisherige Einstellung bleibt unverändert. Durch diese Ordnerwahl wurde kein Dokumentlauf und kein Export gestartet. Bitte Diagnose und aktuellen Laufstatus prüfen; keinen Lauf oder Export blind wiederholen.'
       : reasons[code] || 'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen.';
-    feedback(`${reason} (${code})${sourceDetailText(code, details)}`, true,
+    // Under Windows the shell refuses a network path and the Core a mapped
+    // network drive as result folder. Neither refusal has a code of its own,
+    // so the choice of a result folder names this cause as a possible one.
+    const folderHint = command === 'configure_results' && ['AI_EXPORT_CONFLICT', 'STANDALONE_OPERATION_FAILED'].includes(code)
+      ? ' Mögliche Ursache: Der Ordner liegt auf einem Netzlaufwerk oder wird über einen Netzwerkpfad erreicht. Unter Windows nimmt DataSecure Standalone als Ergebnisordner nur einen Ordner auf einem lokalen Laufwerk an; ein Netzlaufwerk mit Laufwerksbuchstaben gehört nicht dazu. Bitte einen Ordner auf einem lokalen Laufwerk wählen.'
+      : '';
+    feedback(`${reason}${folderHint} (${code})${sourceDetailText(code, details)}`, true,
       connectionError ? { kind: 'connection-unconfirmed' } : null);
     $('connection-help').hidden = !(reconnecting || contextRequired || connectionError); }
   function activeCoreDescription(activity) {

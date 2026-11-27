@@ -29,6 +29,17 @@ Ohne Aufrufer in der geladenen Oberfläche bleiben die
 nativen Befehle `remove_admitted_source`, `open_review_window`,
 `open_local_ledger` und `shutdown`; sie sind nicht entfernt.
 
+RC178-Review R-038 (BL-002, BL-040.5, DS-080) → Standalone unter Windows nimmt
+keinen Ergebnisordner im Netzwerk an: `tauri-contract/src/export_directory.rs`
+(`open_directory`) lässt nur einen Laufwerksbuchstaben zu,
+`gateway/result-folder-config.js` (`inspectRoot`) lehnt ein Netzlaufwerk mit
+Laufwerksbuchstaben ab. Beides ist unverändert. Geändert ist die Meldung:
+`frontend/workspace.js` nennt bei einer mit `AI_EXPORT_CONFLICT` oder
+`STANDALONE_OPERATION_FAILED` abgelehnten Ordnerwahl das Netzlaufwerk als
+mögliche Ursache; `test-standalone-workspace.js` prüft das. Die Zusage in
+`PRODUCT.md` ist für Standalone unter Windows eingeschränkt (Präzisierung
+DS-080 vom 27.11.2026). Der Hinweis aus R-035 ist dort nicht erreichbar.
+
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor
 `sidecar_entry`/Ready. Der aktuelle lokale `tauri-contract/src/main.rs`

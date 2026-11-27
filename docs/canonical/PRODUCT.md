@@ -272,6 +272,11 @@ nicht unterstützte oder verdächtige Dateien stoppen die Aufnahme weiterhin.
   – bei Standalone-Anonymisierung – die laufbezogene Zuordnungsdatei dadurch an
   andere Systeme übertragen werden können. Das ist kein zusätzlicher Dialog und
   keine Sperre.
+  Einschränkung (Präzisierung DS-080 vom 27.11.2026): Standalone unter Windows
+  nimmt als Ergebnisordner derzeit nur einen Ordner auf einem lokalen Laufwerk
+  an. Ein Netzwerkpfad und ein Netzlaufwerk mit Laufwerksbuchstaben werden
+  abgelehnt; die bisherige Einstellung bleibt, und die Oberfläche nennt das
+  Netzlaufwerk als mögliche Ursache. Der Hinweis erscheint dort deshalb nicht.
 
 ## Claude- und Plattformvertrag
 

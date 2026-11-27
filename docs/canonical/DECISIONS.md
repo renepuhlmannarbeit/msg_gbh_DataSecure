@@ -1053,6 +1053,21 @@ keine abgeschlossenen Läufe. Diese Entscheidung präzisiert DS-023, DS-069 und
 DS-079 und schließt die projektbezogene Zielbindung bewusst ohne zusätzliche
 Bestätigungsorgie.
 
+**Präzisierung DS-080, 27.11.2026 (Anwenderentscheidung nach R-038 des
+RC178-Reviews) – Ergebnisordner im Netzwerk in Standalone unter Windows:** Die
+Zusage, dass ein ausdrücklich gewählter Ergebnisordner auf einem Netzlaufwerk
+liegen darf, ist in Standalone unter Windows derzeit nicht erfüllt. Die Hülle
+nimmt als Ergebnisordner nur einen Pfad mit Laufwerksbuchstaben an, und der
+Core lehnt ein Netzlaufwerk mit Laufwerksbuchstaben ab, weil Windows es zum
+Netzwerknamen auflöst. Bis neu entschieden ist, ob Standalone Netzordner
+unterstützen soll, bleibt die Ablehnung bestehen. Die Oberfläche nennt bei
+einer abgelehnten Ordnerwahl das Netzlaufwerk als mögliche Ursache und bittet
+um einen Ordner auf einem lokalen Laufwerk; die bisherige Einstellung bleibt.
+Der einmalige Hinweis auf ein Netzlaufwerk erscheint dort deshalb nicht. Für
+das Cowork-Plugin gilt die Entscheidung unverändert; nach dem Code lehnt der
+Core auch dort ein Netzlaufwerk mit Laufwerksbuchstaben ab und nimmt einen
+UNC-Pfad an. macOS ist dazu nicht geprüft.
+
 ## DS-081 – MCP-Version aushandeln statt künstlichen Cutover erzwingen
 
 Bestätigt am 05.09.2026 nach Abgleich mit der offiziellen MCP-Veröffentlichung

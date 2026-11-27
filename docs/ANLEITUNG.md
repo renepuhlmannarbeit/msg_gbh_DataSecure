@@ -175,6 +175,10 @@ einmal darauf hin. Ein ausdrücklich gewähltes Netzlaufwerk ist ebenfalls zulä
 DataSecure weist einmal darauf hin, dass Ergebnisse und bei Standalone auch die
 laufbezogene Zuordnungsdatei dadurch an andere Systeme übertragen werden können.
 Beide Hinweise sind reine Informationen und erzeugen keine weitere Bestätigung.
+DataSecure Standalone unter Windows nimmt als Ergebnisordner derzeit nur einen
+Ordner auf einem lokalen Laufwerk an. Wird ein Ordner auf einem Netzlaufwerk
+gewählt, bleibt der bisherige Ordner eingestellt, und die App nennt das
+Netzlaufwerk als mögliche Ursache.
 Gelöschte oder bearbeitete Ergebnisdateien werden nicht
 wiederhergestellt oder überschrieben.
 

@@ -9101,7 +9101,9 @@ nicht pro Projekt oder Stapel erneut. Liegt das ausdrücklich gewählte Ziel auf
 einem Netzlaufwerk, geben Cowork und Standalone einmal einen Hinweis aus, ohne es
 zu sperren oder eine weitere Bestätigung zu verlangen. Der Hinweis enthält keinen
 Pfad; Standalone benennt zusätzlich die mögliche Übertragung der laufbezogenen
-Zuordnungsdatei. Gemäß DS-079 gibt es keine sichtbare
+Zuordnungsdatei. Standalone unter Windows nimmt derzeit keinen Ergebnisordner
+im Netzwerk an und nennt bei der Ablehnung diese mögliche Ursache
+(Präzisierung DS-080 vom 27.11.2026, R-038 des RC178-Reviews). Gemäß DS-079 gibt es keine sichtbare
 Teilprojektion bereits klarer Positionen in Mischstapeln.
 
 ### BL-041 – Claude-Übergabe

@@ -3460,8 +3460,13 @@ testAsync('result folder conflict: unknown configure failure never becomes a pre
     return fallback();
   } });
   await tick(); await h.act('configure-results');
+  // Since R-038 the choice of a result folder also names the network drive as
+  // a possible cause; the unknown failure itself stays the general sentence.
   assert.equal(h.el('feedback').textContent,
-    'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen. (STANDALONE_OPERATION_FAILED)');
+    'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen.' +
+    ' Mögliche Ursache: Der Ordner liegt auf einem Netzlaufwerk oder wird über einen Netzwerkpfad erreicht. Unter Windows nimmt DataSecure Standalone als Ergebnisordner nur einen Ordner auf einem lokalen Laufwerk an; ein Netzlaufwerk mit Laufwerksbuchstaben gehört nicht dazu. Bitte einen Ordner auf einem lokalen Laufwerk wählen.' +
+    ' (STANDALONE_OPERATION_FAILED)');
+  assert.doesNotMatch(h.el('feedback').textContent, /vendor|raw-path|access denied|sicher vorbereitet/u);
 });
 
 testAsync('result folder conflict: a configure IPC failure retains connectivity guidance', async () => {
@@ -6600,6 +6605,46 @@ testAsync('a status answer requested before selection and start cannot repaint t
   assert.equal(h.el('job').hidden, false, 'the old "ready" does not hide the new run');
   assert.equal(h.el('job-title').textContent, title); assert.equal(h.el('job-count').textContent, count);
   assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+});
+
+// R-038: under Windows the shell refuses a result folder behind a network
+// path (AI_EXPORT_CONFLICT) and the Core one on a mapped network drive
+// (STANDALONE_OPERATION_FAILED). Neither refusal has a code of its own, so the
+// choice of a result folder names the network drive as a possible cause.
+testAsync('a refused result folder names the network drive as a possible cause, and only the folder choice does', async () => {
+  const hint = /Mögliche Ursache: Der Ordner liegt auf einem Netzlaufwerk oder wird über einen Netzwerkpfad erreicht\. Unter Windows nimmt DataSecure Standalone als Ergebnisordner nur einen Ordner auf einem lokalen Laufwerk an; ein Netzlaufwerk mit Laufwerksbuchstaben gehört nicht dazu\. Bitte einen Ordner auf einem lokalen Laufwerk wählen\./u;
+  for (const code of ['AI_EXPORT_CONFLICT', 'STANDALONE_OPERATION_FAILED']) {
+    const h = harness({ invoke(command, args, fallback) {
+      if (command === 'configure_results') throw Error(code);
+      return fallback();
+    } });
+    await tick();
+    const before = h.el('settings-destination').textContent;
+    await h.act('configure-results');
+    const message = h.el('feedback').textContent;
+    assert.match(message, hint, code);
+    assert.ok(message.endsWith(` (${code})`), 'the code stays at the end: ' + message);
+    assert.equal(message.split('Mögliche Ursache').length, 2, 'the cause is named once');
+    assert.equal(h.el('settings-destination').textContent, before, 'the shown folder stays the earlier one');
+    assert.equal(h.el('connection-help').hidden, true, 'a refused folder is not a connection failure');
+  }
+  // Another failure of the folder choice keeps its own explanation only.
+  const other = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') throw Error('STANDALONE_IPC_FAILED');
+    return fallback();
+  } });
+  await tick(); await other.act('configure-results');
+  assert.doesNotMatch(other.el('feedback').textContent, /Netzlaufwerk/u);
+  // The same codes from another command do not speak about a result folder.
+  for (const code of ['AI_EXPORT_CONFLICT', 'STANDALONE_OPERATION_FAILED']) {
+    const h = harness({ invoke(command, args, fallback) {
+      if (command === 'select_folder') throw Error(code);
+      return fallback();
+    } });
+    await tick(); await h.act('select-folder');
+    assert.match(h.el('feedback').textContent, new RegExp(`\\(${code}\\)`, 'u'), 'premise: the failure is shown');
+    assert.doesNotMatch(h.el('feedback').textContent, /Netzlaufwerk|Ergebnisordner nur/u, code);
+  }
 });
 
 done();
