@@ -115,6 +115,13 @@
     STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam aufgenommen werden.',
     MARKDOWN_CONVERSION_NOT_READY: 'Diese Installation unterstützt die gewählte Betriebsart nicht. Bitte das vollständige aktuelle App-Paket verwenden. Es wurde kein Lauf gestartet; die Dateiauswahl bleibt erhalten.',
     SOURCE_SNAPSHOT_CHANGED: 'Die Datei hat sich während der Verarbeitung verändert. Eine unveränderte Kopie auswählen und neu verarbeiten.',
+    // A refused continuation in front of the review carries the cause of the
+    // failed start. The review document explains these codes, but it is not
+    // opened then; the sentences are the ones of review.js.
+    LOCAL_REVIEW_START_MISSING: 'Eine benötigte lokale Laufzeit oder Prüfkomponente wurde nicht gefunden. Die Prüfung wurde nicht geöffnet; der Lauf bleibt im Verlauf erhalten.',
+    LOCAL_REVIEW_START_DENIED: 'Das Betriebssystem hat den Start der lokalen Prüfkomponente verweigert. Prüfe Ausführungsrechte und Sicherheitsrichtlinien. Die Prüfung wurde nicht geöffnet; der Lauf bleibt im Verlauf erhalten.',
+    LOCAL_REVIEW_START_ARCHITECTURE: 'Die lokale Prüfkomponente passt nicht zur Architektur oder zum ausführbaren Format dieses Geräts. Die Prüfung wurde nicht geöffnet; der Lauf bleibt im Verlauf erhalten.',
+    LOCAL_REVIEW_START_FAILED: 'Die lokale Prüfkomponente konnte nicht gestartet werden. Die Prüfung wurde nicht geöffnet; der Lauf bleibt im Verlauf erhalten.',
     STANDALONE_DOCUMENT_VIEW_UNAVAILABLE: 'Die Ergebnisprüfung konnte nicht geöffnet werden. Bitte das vollständige App-Paket verwenden. Die gespeicherten Entscheidungen bleiben erhalten; kein Lauf wurde neu gestartet.'
   };
   const terminalCoreStartupCodes = new Set([
@@ -577,7 +584,10 @@
     if (bounded(details.selection_files, details.selection_count)) {
       const files = details.selection_files.filter(file => file && sentenceLabel(file.name) && sourceDetailCodes.has(file.reason_code) &&
         !['SOURCE_SELECTION_REJECTED', 'SOURCE_FOLDER_UNSUPPORTED_FILES'].includes(file.reason_code)).slice(0, 10);
-      return `\nNicht aufgenommen (${details.selection_count}):${files.map(file => `\n• ${file.name}: ${reasons[file.reason_code]}`).join('')}` +
+      // A single refused file carries the code of the message itself; its
+      // sentence already stands above, so only the name is added.
+      return `\nNicht aufgenommen (${details.selection_count}):${files.map(file =>
+        `\n• ${file.name}${file.reason_code === code ? '' : `: ${reasons[file.reason_code]}`}`).join('')}` +
         rest(details.selection_count, files.length);
     }
     if (code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' && bounded(details.unsupported_files, details.unsupported_count)) {
