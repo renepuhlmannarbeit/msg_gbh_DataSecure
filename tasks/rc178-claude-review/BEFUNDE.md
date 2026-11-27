@@ -133,7 +133,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | behoben (`d474a579`) für den Fall, den der Core erkennt; ein zugeordneter Laufwerksbuchstabe und ein Mount unter `/Volumes` gelten dem Core nicht als Netzlaufwerk (vorbestehend; nach Entscheidung des Anwenders vorerst belassen). In Standalone unter Windows ist der Hinweis nicht erreichbar, siehe R-038 |
 | R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | behoben (`d474a579`, `6e10ac80`); für eine Office-Sperrdatei nativ beobachtet |
 | R-037 | niedrig bis mittel | Tests und Betrieb, alle | Die Ergebnisabfrage direkt nach Laufende wurde in einem Lauf der Suite mit `STANDALONE_BUSY` beantwortet statt mit „Veröffentlichung läuft noch“; der Test lässt das nicht zu, die Suite brach ab. Einmal beobachtet, nicht reproduziert. Core und Test sind seit RC178 unverändert. | BL-050.6 | Hypothese |
-| R-038 | mittel | Fachlichkeit und Plattform, Standalone Windows (Core-Teil auch Cowork) | Ein Ergebnisordner im Netzwerk wird abgelehnt, obwohl `PRODUCT.md` ihn ausdrücklich erlaubt: über den UNC-Pfad von der Hülle (sie lässt nur Laufwerksbuchstaben zu), über einen zugeordneten Laufwerksbuchstaben vom Core (Windows löst ihn zum UNC-Namen auf). Die Meldung nennt den Grund nicht; der Hinweis aus R-035 ist in Standalone unter Windows nicht erreichbar. Nativ beobachtet; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | offen |
+| R-038 | mittel | Fachlichkeit und Plattform, Standalone Windows (Core-Teil auch Cowork) | Ein Ergebnisordner im Netzwerk wird abgelehnt, obwohl `PRODUCT.md` ihn ausdrücklich erlaubt: über den UNC-Pfad von der Hülle (sie lässt nur Laufwerksbuchstaben zu), über einen zugeordneten Laufwerksbuchstaben vom Core (Windows löst ihn zum UNC-Namen auf). Die Meldung nennt den Grund nicht; der Hinweis aus R-035 ist in Standalone unter Windows nicht erreichbar. Nativ beobachtet; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | Ablehnung bleibt nach Entscheidung des Anwenders; Meldung nennt die mögliche Ursache und Produktaussage für Standalone unter Windows eingeschränkt (`8a167b09`). Netzordner zu unterstützen bleibt offen |
 
 ## Einzelbefunde
 
@@ -2591,14 +2591,58 @@ der Produktstand bleibt `3b85e395`, Paket `a4f7a0e6…`, Build `4b88b0db`.
   der Schreibweise des Pfads, nicht am Server. macOS (`/Volumes/…`) nicht
   geprüft: Dort nimmt `inspectRoot` den Pfad nach dem Code an, und der Hinweis
   bleibt aus, weil `isNetworkResultFolder` nur `//…` erkennt.
-- **Status:** offen, nichts geändert. Zu entscheiden ist, ob Standalone
-  Netzordner unterstützen soll (Hülle und Core ändern, mit Tests auf einem
-  echten Netzlaufwerk und auf macOS) oder ob die Produktaussage für
-  Standalone eingeschränkt und die Ablehnung verständlich erklärt wird.
-  BL-002, BL-040.5 (DS-080).
+- **Status:** Der Anwender hat am 27.11. entschieden, die Ablehnung zu
+  belassen und verständlich zu erklären; umgesetzt in `8a167b09`, siehe den
+  folgenden Abschnitt. Ob Standalone Netzordner unterstützen soll, bleibt
+  offen. BL-002, BL-040.5 (DS-080).
 - **Berichtigung zu R-035:** Meine Behebung ist dort nur mit einer
   nachgebildeten Antwort des Core getestet. Dass diese Antwort in Standalone
   unter Windows nie entsteht, hatte ich nicht geprüft.
+
+### R-038 · Entscheidung und Umsetzung
+
+- **Entscheidung des Anwenders (27.11.):** von zwei Vorlagen „Meldung
+  verbessern“ statt „Netzordner unterstützen“. Die Ablehnung bleibt, die
+  Oberfläche erklärt sie, und die Produktaussage wird für Standalone unter
+  Windows eingeschränkt.
+- **Oberfläche (`8a167b09`):** `frontend/workspace.js`, `showError`. Lehnt
+  der Befehl `configure_results` mit `AI_EXPORT_CONFLICT` oder
+  `STANDALONE_OPERATION_FAILED` ab, hängt die Meldung vor dem Code an:
+  „Mögliche Ursache: Der Ordner liegt auf einem Netzlaufwerk oder wird über
+  einen Netzwerkpfad erreicht. Unter Windows nimmt DataSecure Standalone als
+  Ergebnisordner nur einen Ordner auf einem lokalen Laufwerk an; ein
+  Netzlaufwerk mit Laufwerksbuchstaben gehört nicht dazu. Bitte einen Ordner
+  auf einem lokalen Laufwerk wählen.“
+  Andere Befehle mit denselben Codes und andere Fehler der Ordnerwahl
+  behalten ihren Text.
+- **Dokumente:** `docs/canonical/PRODUCT.md` (Einschränkung am Satz zum
+  Netzlaufwerk), `docs/canonical/DECISIONS.md` (Präzisierung DS-080 vom
+  27.11.2026), `docs/ANLEITUNG.md`, `docs/canonical/CURRENT_STATE.md`,
+  `docs/canonical/TRACEABILITY.md`. Hülle und Core sind unverändert.
+- **Test:** `tests/test-standalone-workspace.js`, „a refused result folder
+  names the network drive as a possible cause, and only the folder choice
+  does“ (beide Codes; Code bleibt am Ende; Hinweis genau einmal; der gezeigte
+  Ordner bleibt; kein Hinweis bei `STANDALONE_IPC_FAILED` und keiner bei
+  denselben Codes aus `select_folder`). Ein vorhandener Test, der den
+  allgemeinen Satz wörtlich festhielt, ist an den neuen Wortlaut angepasst.
+  549 Tests bestehen; an der Oberfläche von `3b85e395` schlagen beide fehl.
+- **Nativ am Paket `28c6f7ce…`, Build `d9999cb0`:** beide Wege erneut
+  gewählt. UNC-Pfad: der bisherige Text, danach der Hinweis, am Ende
+  `(AI_EXPORT_CONFLICT)`. Laufwerksbuchstabe: der allgemeine Satz, danach der
+  Hinweis, am Ende `(STANDALONE_OPERATION_FAILED)`. In beiden Fällen bleibt
+  der bisherige Ordner eingestellt.
+- **Grenzen:**
+  - Der Hinweis ist eine mögliche Ursache, keine Feststellung. Die beiden
+    Codes haben weitere Ursachen (etwa ein Ordner, der eine Verknüpfung ist);
+    auch dann erscheint er. Einen eigenen Code für das Netzlaufwerk gibt es
+    nicht, weil Hülle und Core unverändert bleiben sollten.
+  - Der Hinweis erscheint auch unter macOS, wenn die Ordnerwahl dort mit
+    einem der beiden Codes scheitert; sein Text nennt Windows. macOS ist
+    nicht geprüft.
+  - Für das Cowork-Plugin ist nichts geändert. Dort lehnt der Core nach der
+    Gegenprobe ein Netzlaufwerk mit Laufwerksbuchstaben ebenfalls ab; die
+    Meldung des Plugins dazu habe ich nicht angesehen.
+  - Geprüft mit `\\localhost\C$`, nicht mit einem Dateiserver.
 
 ### Ordner mit nicht unterstützten Dateien
 
