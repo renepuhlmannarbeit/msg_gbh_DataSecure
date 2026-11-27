@@ -1,16 +1,12 @@
 # RC178-Review · Ergebnis und Übergabe an Codex
 
 Gehört zum [Arbeitsauftrag](../AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md).
-Stand 25.11.2026, nach der zweiten Runde, einer dritten Prüfung, der
-Bearbeitung von R-027, der Behebung von R-028 bis R-031, einer Nacharbeit
-der Umsetzung von R-032 und einer weiteren Runde am selben Tag (Reste,
-Gegenprüfungen, neuer Befund R-033) und einer Runde am Abend zu den
-Erkennungslücken aus R-033 mit einer Korrektur danach und dem Entfernen
-der früheren Oberfläche. Befunde
+Stand 26.11.2026, nach dreizehn Übergaben; der folgende Absatz nennt sie
+der Reihe nach. Befunde
 und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das Einzelregister in
 [ABDECKUNG.tsv](ABDECKUNG.tsv).
 
-Der Bericht hat zwei Runden. Die erste endete mit dem Remote-Stand
+Der Bericht ist über dreizehn Übergaben gewachsen. Die erste endete mit dem Remote-Stand
 `d07bfced` (geprüfter Code `e1afef0f`). Danach hat der Anwender beauftragt,
 die offenen Befunde zu beheben und erneut zu prüfen. Die zweite Runde umfasst
 20 Codecommits bis `a0d3e340`. Eine dritte Prüfung vor der Übergabe hat in
@@ -23,7 +19,8 @@ hat der Anwender beauftragt, die beiden dabei gemeldeten Beobachtungen R-028
 und R-029 zu beheben und erneut zu prüfen; das sind die vier Commits
 `dbf98cbf` bis `0b99529c`. Eine anschließende Messung hat gezeigt, dass die
 eingebettete WebView2-Komponente regelmäßig Verbindungen zu Microsoft
-aufbaut (R-031); auf Auftrag behoben in `1c3f36af` und `56d7c744`. Zwei
+aufbaut (R-031); dieser Stand wurde als `af0a1d52` übergeben. Auf Auftrag
+behoben in `1c3f36af` und `56d7c744`. Zwei
 weitere Commits tragen die neue Prüfung in den Release-Workflow ein
 (`e881cc9c`, `0f35696e`). Dieser Stand wurde als `a1e4bc9b` übergeben. Danach
 hat der Anwender beauftragt, mit den offenen Punkten weiterzumachen, die sich
@@ -121,7 +118,8 @@ aber den Build-Fingerprint `6ba59a6f…`.
    - Zähltexte ohne Einzahl, fehlende Handlungshinweise bei Stoppgründen,
      schwache Feldränder und Rollen in der Oberfläche (R-020 Teil, R-025).
    - Der Quelltextvertrag der Oberfläche prüfte die nicht geladene alte
-     Oberfläche (R-019, Teil).
+     Oberfläche (R-019; die alte Oberfläche selbst ist seit `1d908311`
+     entfernt, siehe Punkt 9).
    - Nach der Übergabe, auf Auftrag: Ein Passwort im Dokument blieb stehen,
      sobald sein Label nicht das erste Wort der Zeile war („WLAN-Passwort:
      …“, „Admin PIN: …“, „…, Passwort: …“). Jetzt wird das Wort hinter dem
@@ -165,7 +163,7 @@ aber den Build-Fingerprint `6ba59a6f…`.
      enthielt zwei Lecks aus meinen eigenen Änderungen: In „Anna Müller,
      Hans Müller“ blieb „Anna“ stehen, und bei „l.meier@laura-stein.de“ der
      Teil vor dem @. Dazu kamen neue Stopps und ein fehlschlagender Fall der
-     Golden-Regression.
+     festen Regressionssammlung (`tests/test-pii-regression.js`).
    - Gefunden haben das eine eigene Probe, ein unabhängiger Faktencheck
      dieses Berichts, ein Differenzlauf des RC178-Kerns gegen den geänderten
      Kern und zwei weitere Gegenprüfungen. Keiner meiner Tests und nicht die
@@ -207,7 +205,9 @@ aber den Build-Fingerprint `6ba59a6f…`.
      Vergleich mit dem alten Kern über viele Satzformen hat die Fehler
      gezeigt (A-015 bis A-017).
 5. **Verbleibende Grenzen**
-   - Offen bleiben R-006 (Listen), R-015 und R-022 (Hypothesen für macOS).
+   - Offen bleiben R-006 (Listen), R-015 (Release-Nachweis für Windows,
+     Schutz von Tag und Release) und R-022 (Hypothesen für macOS), dazu die
+     Reste von R-003 (Formular-Kontrollkästchen) und R-033 (Punkt 7).
    - **R-032, behoben mit Grenzen:** Die Rückfrage gilt für das Schließen
      des Fensters. Ohne Rückfrage bleibt es beim Beenden durch das
      Betriebssystem (Abmelden, Herunterfahren, **Beenden** im App-Menü
@@ -223,8 +223,8 @@ aber den Build-Fingerprint `6ba59a6f…`.
    - Die erste Fassung der Rückfrage hatte Fehler, die erst zwei
      Gegenprüfungen gezeigt haben, darunter gesperrte Antwortknöpfe bei
      laufendem Befehl und stilles Schließen direkt nach **Verarbeitung
-     fortsetzen**. Behoben vor dem Push; der letzte Commit ist nicht
-     erneut gegengeprüft.
+     fortsetzen**. Behoben vor dem Push. Der letzte Commit wurde
+     danach gegengeprüft; zwei weitere Fehler sind behoben (Punkt 6).
    - **R-031, behoben für das beobachtete Verhalten:** Bis einschließlich
      des vierten Übergabestands, also auch in RC178, baute die eingebettete
      WebView2-Komponente Verbindungen zu Microsoft auf: beim Start zum
@@ -252,8 +252,8 @@ aber den Build-Fingerprint `6ba59a6f…`.
    - Der Abbau der Startprobe wartet jetzt erstmals wirklich auf WebView2
      (hier 0,1 bis 0,3 s von 20 s). Im Release-Workflow und in
      `scripts/run-pkg-04.ps1` ist das nicht ausgeführt worden.
-   - Nur teilweise behoben sind R-004, R-011, R-012, R-013, R-017, R-019,
-     R-020, R-023 und R-027. Die Gründe stehen unten und in BEFUNDE.md.
+   - Nur teilweise behoben sind R-004, R-011, R-012, R-013, R-017, R-020,
+     R-023, R-027 und R-033. Die Gründe stehen unten und in BEFUNDE.md.
    - Zu den Zähltexten gilt: Drei Durchgänge haben jeweils weitere
      Stellen gefunden. Dass keine mehr fehlt, ist nicht belegt; der
      Wächter kennt nur eine feste Wortliste und drei Satzformen.
@@ -273,7 +273,8 @@ aber den Build-Fingerprint `6ba59a6f…`.
      Wort ersetzt ist; vom Kern nicht erkannte Namen an anderer Stelle stehen
      dann im Ergebnis. Der Datenschutzkern braucht für Dokumente mit vielen
      solchen Labels 26 bis 45 % länger.
-   - Die zweite Runde ändert fünf Rust-Dateien. Übersetzt und getestet ist
+   - Seit der zweiten Runde sind acht Rust-Dateien geändert (Liste im
+     Abschnitt „Mac-Status“). Übersetzt und getestet ist
      nur das Windows-Ziel; die macOS-Zweige derselben Dateien sind nicht
      übersetzt worden.
    - Kein Mac- und kein iOS-Lauf. Alle macOS-Aussagen sind Quelltext- oder
@@ -286,6 +287,8 @@ aber den Build-Fingerprint `6ba59a6f…`.
    - Zwei Reviews der ersten Runde (Datenschutz, Laufzeit) und eine
      Gegenprüfung der dritten Prüfung endeten am Schrittlimit; die letzte
      hat ihren Bericht auf Nachfrage aus dem bis dahin Geprüften geliefert.
+     Später endeten weitere Gegenprüfungen so (Testtabelle, Zeilen zu R-027
+     und zu R-028 bis R-030).
    - Zwei Zwischencommits (`8c0dd30b`, `b30a6dbc`) lassen sich nicht
      übersetzen: `main.rs` ist dort syntaktisch fehlerhaft, weil beim
      Aufteilen der Änderungen Code an die falsche Stelle geriet. Ab
@@ -298,7 +301,9 @@ aber den Build-Fingerprint `6ba59a6f…`.
      Ereignisnamen und Zähler, laut Bericht ohne Inhalte). Der Auftrag
      schließt Diagnoserohdaten aus. Nichts davon steht im Repository; die
      Befundtexte stützen sich auf den Quelltext.
-6. **Runde vom 25.11. nachmittags** (Einzelheiten in BEFUNDE.md)
+6. **Runde vom 25.11. nachmittags** (Stand am Ende dieser Runde; was davon
+   später behoben wurde, steht in den Punkten 7 bis 9. Einzelheiten in
+   BEFUNDE.md)
    - **Neu und am wichtigsten, R-033:** Im nativen Lauf stand im
      freigegebenen Ergebnis eines Word-Formulars
      `Antragsteller: Hans Müller, Tel\. 030 1234567`. Die Umwandlung
@@ -313,7 +318,7 @@ aber den Build-Fingerprint `6ba59a6f…`.
      einem Aufzählungszeichen im Profil Allgemein (R-033c), ein voller
      unbekannter Name in Prosa ohne Hinweiswort und eine Telefonnummer ohne
      Label (R-033d). Die geführte Prüfung zeigt diese Stellen nicht an. Im
-     Lauf mit fünf erfundenen Dateien enthielten am Endstand drei der fünf
+     Lauf mit fünf erfundenen Dateien enthielten am Ende dieser Runde drei der fünf
      Ergebnisse solchen Klartext.
    - **R-032, Gegenprüfung des letzten Commits:** zwei Fehler behoben (stilles
      Schließen, während eine Antwort der geführten Prüfung unterwegs ist;
@@ -330,7 +335,8 @@ aber den Build-Fingerprint `6ba59a6f…`.
      eines Namens dahinter verhinderte.
    - **Nicht umgesetzt:** Aufbewahrung alter Protokolle und Aufräumen alter
      Exportdatensätze (die Hülle enthält bewusst keinen Löschcode),
-     Entfernen der alten Oberfläche, Bidi-Zeichen, Live-Regionen, Seitenzoom
+     Entfernen der alten Oberfläche (inzwischen erfolgt, Punkt 9),
+     Bidi-Zeichen, Live-Regionen, Seitenzoom
      unter macOS und Linux.
 7. **Runde vom 25.11. abends, Erkennungslücken aus R-033** (Einzelheiten in
    BEFUNDE.md, Abschnitt „R-033 · Erkennungslücken, Umsetzung am 25.11.
@@ -425,7 +431,8 @@ aber den Build-Fingerprint `6ba59a6f…`.
       ausgelassen hat.
     - **Grenze:** Der Core erkennt ein Netzlaufwerk nur am UNC-Pfad. Bei einem
       zugeordneten Laufwerksbuchstaben und am Mac unter `/Volumes` bleibt
-      der Hinweis aus. Das war schon vorher so und ist offen.
+      der Hinweis aus. Das war schon vorher so. Der Anwender hat nach der
+      dreizehnten Übergabe entschieden, es vorerst dabei zu belassen.
     - **Nicht nativ beobachtet:** kein Netzlaufwerk im Testprofil, keine
       abgelehnte Auswahl über die Fensterbedienung ausgelöst.
 12. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
@@ -449,7 +456,7 @@ Zweite Runde:
 | Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
 | --- | --- | --- | --- | --- |
 | `7b078d75`, Test `7693e162` | R-024 | `privacy/structured.js`: ein Zeitwort mit Jahreszahl oder Jahresspanne („im Zeitraum 2019‑2024“) gilt nicht als Straßenadresse (geschlossene Wortliste). | `tests/test-privacy-time-periods.js` (1 Fall mit vier Gegenfällen, darunter „Zeitraumstraße 12“) | Gemeinsamer Kern, auch Cowork. |
-| `cfee417a`, `ac74cf71` | R-017 | `privacy/engine.js`: abgekürzte Anrede („Hr.“, „Fr.“), „Nachname, Vorname“, Kennungen mit `_` und `.`, Genitiv eines bekannten Alias im Folgedokument. Die hier eingeführte Ganzersetzung von Links und die Regel für umgestellte Namen waren fehlerhaft; siehe „Dritte Prüfung“. Grenze in `docs/canonical/STANDALONE_SECURITY_MODEL.md`. | `tests/test-privacy-name-variants.js` (am Endstand 9 Fälle, mit Gegenfällen) | Gemeinsamer Kern, auch Cowork. Policy-Fingerprint ändert sich. |
+| `cfee417a`, `ac74cf71` | R-017 | `privacy/engine.js`: abgekürzte Anrede („Hr.“, „Fr.“), „Nachname, Vorname“, Kennungen mit `_` und `.`, Genitiv eines bekannten Alias im Folgedokument. Die hier eingeführte Ganzersetzung von Links und die Regel für umgestellte Namen waren fehlerhaft; siehe „Dritte Prüfung“. Grenze in `docs/canonical/STANDALONE_SECURITY_MODEL.md`. | `tests/test-privacy-name-variants.js` (am Endstand 10 Fälle, mit Gegenfällen) | Gemeinsamer Kern, auch Cowork. Policy-Fingerprint ändert sich. |
 | `97a70cd0`, `f8c69fe3`, Tests `7693e162` | R-010 | `standalone/markdown-retention.js`: verwaiste `.pending-…`-Ordner werden entfernt, wenn sie älter sind als die Aufbewahrungsfrist und in jedem Fall älter als eine Stunde; ein verschwindender Eintrag bricht den Lauf nicht ab. Der Schutz einer laufenden Veröffentlichung beruht auf dem Alter, nicht auf einer Sperre. | `tests/test-markdown-retention.js` (15 Fälle) | Nur Standalone, alle Ziele; nur unter Windows ausgeführt. |
 | `5f8bf47b`, `3b8fbba9`, Kommentar `d5992265` | R-011 | `tauri-contract/src/export_directory.rs`: nur verwaiste Vorbereitungen zählen gegen die Grenze von 2 048; die Gesamtzahl der Namen ist auf 65 536 begrenzt, das sind rund 16 000 Exporte je Zielordner. Windows-Listing mit einer Menge je Listing. | Rust-Test `completed_records_do_not_exhaust_the_abandoned_preparation_bound` | `write_record_bounded` ist plattformneutral; das Listing ist ein Windows-Zweig. macOS nicht übersetzt. |
 | `8c0dd30b` | R-012 | `native_export_broker.rs`, `native_export_channel.rs`, `main.rs`, `diagnostic_bundle.rs`: Diagnoseereignis `native_export_failed` mit Fehlerklasse und Systemcode, ohne Pfad; `frontend/document-review.js`: Hinweistext mit möglichen Ursachen. | Rust-Tests für die Erfassung der Ursache und für die Bereinigung des Ereignisses. Kein Test zeigt, dass ein fehlschlagender Export das Ereignis tatsächlich schreibt: der Aufruf ist im Testbau abgeschaltet. | Plattformneutraler Code; macOS nicht übersetzt. Commit allein nicht übersetzbar. |
@@ -481,7 +488,6 @@ Gegenprüfungen“):
 | Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
 | --- | --- | --- | --- | --- |
 | `283e6ed9` | R-027, A-018 bis A-020 | `privacy/base.js`: Muster für ein Zugangsdaten-Label mitten in der Zeile. `privacy/structured.js`: eigener Detektor und `findInlineCredentialSpans`, getrennt von der gewöhnlichen Suche. `gateway/privacy-text-operation.js`: das Wort hinter dem Label wird nach dem Kern ersetzt, wenn es zu keinem offenen Befund gehört und die Prüfung danach dieselben offenen Entscheidungen ergibt. `privacy/engine.js` ist unverändert. Dokumentiert in `docs/canonical/STANDALONE_SECURITY_MODEL.md`, `docs/FORMAT_COVERAGE_MATRIX.md`, `docs/TESTING.md`. | `tests/test-privacy-inline-credentials.js` (7 Fälle mit den Gegenfällen der vier Gegenprüfungen); `tests/test-pii-regression.js` (164 Fälle); Differenzlauf | Gemeinsamer Kern, auch Cowork. Policy-Fingerprint ändert sich. |
-
 | `ebe526ec` | R-027 | `docs/canonical/STANDALONE_SECURITY_MODEL.md`: drei Folgen der Regel, die die fünfte Gegenprüfung gezeigt hat (das Wort reicht bis zum nächsten Leerraum; einzelne bisher gestoppte Dokumente laufen durch; die Prüfung läuft für solche Dokumente zweimal). Kein Code. | `npm run test:docs` und die beiden Dokumenttests | — |
 
 Am 24.11. auf Auftrag (Einzelheiten in BEFUNDE.md, „R-028 bis R-030 ·
@@ -507,7 +513,7 @@ Nacharbeit am 24.11. auf Auftrag (BEFUNDE.md, „Nacharbeit nach R-031“):
 | Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
 | --- | --- | --- | --- | --- |
 | `cebc39a0` | R-031 | `scripts/run-pkg-04.ps1`: Das lokale Freigabeskript ruft die Startprobe zusätzlich mit `-AssertNoOutbound` auf. Kein Produktcode. | `tests/test-standalone-package.js` hält den Schalter fest. Das Skript selbst ist nicht ausgeführt worden. | Nur Windows. |
-| `907efc14`, `8c452ac4`, `1126dc36`, `e66bab8f` | R-025, A-030, A-031 | `frontend/review.js`, `workspace.js`, `document-review.js`, `workflow-presentation.js`: Jeder Zähltext entscheidet über die Einzahl oder nutzt `counted`; wo die Einzahl einen anderen Satzbau braucht, steht ein eigener Satz. Nur Texte, kein Ablauf. | `tests/test-standalone-workspace.js` (519, darunter der Wächter über die vier Dateien: 71 Stellen am Stand vor R-025), `tests/test-standalone-review-frontend.js` (74), `tests/test-workflow-presentation.js` (55), `tests/test-standalone-document-review-frontend.js` (308, darunter die Zählsätze für 0, 1 und 2); zehn Testfälle hielten falsche Formen fest und sind berichtigt; vier zurückgedrehte Korrekturen werden vom Wächter gemeldet; nativer Lauf | Nur Standalone, alle Ziele; kein WKWebView-Nachweis. Build-Fingerprint ändert sich. Die alte Oberfläche `app.js` ist unverändert. |
+| `907efc14`, `8c452ac4`, `1126dc36`, `e66bab8f` | R-025, A-030, A-031 | `frontend/review.js`, `workspace.js`, `document-review.js`, `workflow-presentation.js`: Jeder Zähltext entscheidet über die Einzahl oder nutzt `counted`; wo die Einzahl einen anderen Satzbau braucht, steht ein eigener Satz. Nur Texte, kein Ablauf. | `tests/test-standalone-workspace.js` (519, darunter der Wächter über die vier Dateien: 71 Stellen am Stand vor R-025), `tests/test-standalone-review-frontend.js` (74), `tests/test-workflow-presentation.js` (55), `tests/test-standalone-document-review-frontend.js` (308, darunter die Zählsätze für 0, 1 und 2); zehn Testfälle hielten falsche Formen fest und sind berichtigt; vier zurückgedrehte Korrekturen werden vom Wächter gemeldet; nativer Lauf | Nur Standalone, alle Ziele; kein WKWebView-Nachweis. Build-Fingerprint ändert sich. Die alte Oberfläche `app.js` blieb dabei unverändert (seit `1d908311` entfernt). |
 | `1db8c744`, `98b426dd` | R-031, A-028 | `tests/manual/standalone-native-windows-launch.ps1`: Die Positivkontrolle läuft zusätzlich über den Hintergrundthread der Beobachtung (`…_OBSERVER_WORKER_INVALID`) und verlangt, dass nach dem Stopp nichts mehr abtastet; die IPv6-Tabelle bleibt nur dort ungelesen, wo es kein IPv6 gibt und sie nicht lesbar ist. `tests/manual/measure-standalone-native-windows.ps1`: `review_window_asserted` in der Zusammenfassung. `docs/TESTING.md`. Kein Produktcode. | `tests/test-native-smoke-integrity.js` (83); sieben von neun verfälschten Kopien der Probe abgelehnt; Probe am Paket des Endstands | Nur Windows. Der Zweig für Hosts ohne IPv6 ist nicht ausgeführt. |
 | `05efbad8`, `4c98d621` | R-028 | `tests/test-standalone-desktop-contract.js`: gemeinsames Wartebudget, kein Warten nach dem Anlegen, Bindung der zurückgegebenen Generation. Nur Test. | 41 Fälle | — |
 | `7eefdcd4` | R-028, R-031 | `docs/canonical/STANDALONE_SECURITY_MODEL.md`: Herkunft der Aussage zum UDP-Socket; ein nach dem Anlegen gescheiterter Start hinterlässt einen leeren Datenroot. Kein Code. | `npm run test:docs` | — |
@@ -519,6 +525,29 @@ Gegenprüfungen und nativer Nachweis“):
 | --- | --- | --- | --- | --- |
 | `5f670a20` | R-032, A-029, A-033, A-034 | `tauri-contract/src/close_prompt.rs` (neu), `main.rs` (`request_native_close`, drei Befehle), `ipc_transport.rs` (`ExitGate::begun`), `capabilities/main.json`, `permissions/commands.toml`, `gen/schemas/*`: Die Hülle reicht das Schließen des Hauptfensters an die Oberfläche weiter und schließt ohne Antwort nach zwei Sekunden wie bisher. `frontend/workspace.js`, `workspace.html`, `workspace.css`: Rückfrage, Pausieren über `pause_batch`, Schließen nach der Pause. `docs/canonical/DECISIONS.md` (Präzisierung DS-110), `PRODUCT.md`, `STANDALONE_ARCHITECTURE.md`, `STANDALONE_SECURITY_MODEL.md`, `BACKLOG.md` (BL-010.14). | fünf Rust-Tests, `tests/test-standalone-workspace.js`, `tests/test-standalone-desktop-contract.js`, `tests/test-standalone-linux-sandbox-workflow.js`; `cargo test`, Clippy | Der Rust-Code hat keine plattformabhängigen Zweige; übersetzt und bedient ist nur Windows. Beenden über das App-Menü unter macOS geht nicht über die Rückfrage. Der gemeinsame Core und Cowork sind unverändert. Build-Fingerprint ändert sich. |
 | `2ce74b9f` | R-032, A-032 | `frontend/workspace.js`: Nach jedem Befehl, der Arbeit startet oder fortsetzt, gilt der Stand als unbekannt, bis ein danach begonnener Status gelesen ist; eine gesetzte Pause zählt sofort. Dokumente nachgezogen. | `tests/test-standalone-workspace.js` (534, darunter 15 Abläufe der Rückfrage); 42 Verfälschungen erkannt; nativer Lauf am Paket `721512f0…` | Nur Standalone, alle Ziele; nur unter Windows bedient. |
+
+Runde vom 25.11. nachmittags (BEFUNDE.md, „Runde vom 25.11. nachmittags“ und die Abschnitte zu R-033):
+
+| Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
+| --- | --- | --- | --- | --- |
+| `d41a042b`, `34de4509` | R-032 | `frontend/workspace.js`: Die Rückfrage beim Schließen bleibt bestehen, solange eine Antwort der geführten Prüfung unterwegs ist oder die Verbindung zum Core fehlt; eine Antwort wird unmittelbar vor ihrem Versand gezählt (`workBegins`, `workReturns`). | `tests/test-standalone-workspace.js` | Nur Standalone, alle Ziele; nur unter Windows bedient. |
+| `49add216`, `b755e208` | R-013 | `tauri-contract/src/diagnostic_bundle.rs`, `export_directory.rs`: Das Diagnosepaket listet bis zu 2 048 statt 128 Einträge des Protokollordners; ein Test hält die Grenze fest. | Rust-Tests | Rust; nur für Windows übersetzt und getestet. |
+| `52dee47c` | R-023 | `tauri-contract/Cargo.lock`: `url` 2.5.9 und `cookie` 0.18.3. | `cargo test`, Paketbau | Alle Ziele; nur für Windows übersetzt. |
+| `fc10973e`, `927fb3bd` | R-023 | `scripts/audit-standalone-dependencies.mjs`, `docs/TESTING.md`: `npm run audit:standalone` prüft auch die Rust-Crates der Lock-Datei und lehnt einen Bericht ab, der die Lock-Datei nicht beschreibt. | lokal ausgeführt | Kein Bestandteil der Suite. |
+| `39f2b3aa`, zurückgenommen in `22c34dcb` | R-003 | `ooxml.js`, `word-content-context.js`: Ausgabe alter Formular-Kontrollkästchen; zurückgenommen, weil das Zeichen die Erkennung eines Namens dahinter verhinderte. | `tests/test-docx-inline-run-content.js` (wieder wie vor dem Versuch) | Am Endstand keine. |
+| `405eb370` | R-020 | `tauri-contract/src/main.rs`: Seitenzoom des Hauptfensters unter Windows über WebView2, ohne neue Berechtigung; `docs/canonical/STANDALONE_SECURITY_MODEL.md`. | `tests/test-standalone-desktop-contract.js`; nativ beobachtet | Nur Windows; macOS und Linux offen (Entscheidung). |
+| `3ba2b8fb`, Test `997b55bc` | R-033, R-027 | `privacy/base.js`, `entities.js`, `engine.js`, `gateway/privacy-text-operation.js`: Die Regeln für abgekürzte Labels und Titel lesen den Punkt auch in der Schreibweise `\.`; Zugangsdaten in Anführungszeichen werden ganz ersetzt. Dokumente nachgezogen. | `tests/test-privacy-office-markdown-abbreviations.js`, `tests/test-privacy-inline-credentials.js`, `tests/test-sensitive-field-coverage.js` | Gemeinsamer Kern, beide Produkte. |
+| `33595449` | R-032 | `docs/canonical/STANDALONE_SECURITY_MODEL.md`: Eine Aufbewahrung von 0 Tagen tritt im Standalone-Paket nicht auf. Kein Code. | `npm run test:docs` | — |
+
+Runden vom 25.11. abends bis zur dreizehnten Übergabe (BEFUNDE.md, Abschnitte zu R-033, „R-019 und R-034 · Frühere Oberfläche entfernt“ und „R-035 und R-036 · Umsetzung“):
+
+| Commit | Befund | Betroffene Pfade und Verhalten | Test / Ergebnis | Auswirkungen auf weitere Plattformen |
+| --- | --- | --- | --- | --- |
+| `1c8e971c` | R-033 (b bis d) | `privacy/person-ambiguities.js`: Name hinter einer Rolle, Namensliste unter einem Label, derselbe Name an weiteren Stellen (`ROLE_CUE`, `roleLabelNameSpans`, `labelledNameListSpans`); `gateway/privacy-text-operation.js`; `privacy/base.js` (`Rückruf unter`); `privacy/entities.js` (maskierte Klammer). Dokumente nachgezogen. | `tests/test-privacy-role-labels-and-name-lists.js` (am Endstand 9 Fälle); Differenzläufe | Personenhinweise nur Standalone; Telefonlabel und maskierte Klammer in beiden Produkten. |
+| `0bd5e26f` | R-033 | `privacy/structured.js`: `findStructuredSpans` liest Platzhalter ein zweites Mal so, wie die Schlussprüfung sie liest; `gateway/privacy-text-operation.js`. Behebt den Stopp bei `Label Name Nummer`. | derselbe Test; Suchlauf mit 19 440 Fällen | Gemeinsamer Kern, beide Produkte. |
+| `8cf5dd93` | R-034 | `frontend/workspace.js`: vier Fehlercodes des Core haben einen eigenen Satz. | `tests/test-standalone-workspace.js` | Nur Standalone, alle Ziele. |
+| `1d908311` | R-019 | Entfernt: `frontend/index.html`, `app.js`, `styles.css`, `tests/test-standalone-frontend.js`, `tests/manual/standalone-ui-browser.mjs`. Die Vertragstests lesen die geladenen Skripte; `package.json`, `tests/run-product-suite.js` und vier Dokumente nachgezogen. | Suite mit 366 Dateien; `tests/test-standalone-loaded-frontend-contract.js` (5) | Der eingebettete Ordner ändert sich für alle Ziele; Rust-Quellen unverändert; nur für Windows gebaut. |
+| `d474a579` | R-035, R-036 | `frontend/workspace.js`, `workspace.css`: Hinweis auf ein Netzlaufwerk nach der Ordnerwahl; Name und Grund abgelehnter Dateien; fünf weitere Fehlertexte. `docs/canonical/TRACEABILITY.md`. | `tests/test-standalone-workspace.js` (540) | Nur Standalone, alle Ziele; nur für Windows gebaut. |
 
 Nicht umgesetzt und begründet (Einzelheiten in BEFUNDE.md, „Entscheidungen je
 Befund“):
@@ -554,14 +583,25 @@ Befund“):
   und eine zusätzliche macOS-Berechtigung sind ohne Mac nicht verantwortbar.
 - **R-015, R-023 (Rest)** – Freigabe- und Repository-Einstellungen.
 - **R-022** – Hypothesen für macOS; nur auf einem Zielgerät zu klären.
-- **R-019, Tests der alten Oberfläche** – am 25.11. nachts auf Entscheidung
-  des Anwenders mit der Oberfläche entfernt (`1d908311`).
+- **R-033, Rest** – voller Name in Prosa ohne Hinweisverb, einzelner
+  Nachname, Telefonnummer ohne Label, Geburtsname. Der Kern erkennt Namen an
+  der Form; jede weitere Regel tauscht Unterredaktion gegen Überredaktion.
+  Produktentscheidung.
+- **R-035, Netzlaufwerk nur am UNC-Pfad** – vorbestehendes Verhalten des
+  Core; nach Entscheidung des Anwenders vorerst belassen.
+- **Vier native Befehle ohne Aufrufer** (`remove_admitted_source`,
+  `open_review_window`, `open_local_ledger`, `shutdown`) – sie zu entfernen
+  ändert die Hülle für drei Betriebssysteme; eigene Entscheidung.
+- **Erledigt, früher hier geführt: R-019, Tests der alten Oberfläche** – am
+  25.11. nachts auf Entscheidung des Anwenders mit der Oberfläche entfernt
+  (`1d908311`).
 
 ## Tests und Nachweise
 
 Alle Läufe auf Windows 11 x64 mit Node 22.23.2. Logs liegen lokal. Die
 ersten Zeilen gelten dem Endstand `d474a579`, die folgenden halten die
-früheren Stände fest.
+früheren Stände fest. Die elfte und die zwölfte Übergabe haben denselben
+Produktstand (`1d908311`); die zwölfte hat nur den Bericht ergänzt.
 
 | Bereich | Exakter Befehl und Teststand | Umgebung und Architektur | Ergebnis und Exitcode | Beobachtung |
 | --- | --- | --- | --- | --- |
@@ -571,22 +611,22 @@ früheren Stände fest.
 | Gezielt, Endstand | `tests/test-standalone-workspace.js` (540, davon fünf neu), `tests/test-standalone-desktop-contract.js` (43), `tests/test-standalone-loaded-frontend-contract.js` (5), `tests/test-standalone.js` (91), `tests/test-standalone-document-review-frontend.js` (308), `tests/test-standalone-review-frontend.js` (74) | Windows x64 | je `PASS`, 0 | Die fünf neuen Tests schlagen an der Oberfläche von `1d908311` fehl. Ein erster Lauf endete ohne Ergebniszeile, weil `workspace.js` durch wörtlich geschriebene Steuerzeichen nicht lesbar war; vor dem Commit behoben. |
 | Dokumentation, Endstand | `npm run test:docs` auf `d474a579` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests); nach dem Berichtscommit wiederholt. |
 | Konverter, Endstand | nicht erneut ausgeführt | — | — | Kein Konverter- und kein Core-Code geändert; zuletzt am Stand `1d908311` ausgeführt. |
-| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.js` auf `d474a579` | Windows x64 | je `PASS`, 0 | Paket `f641f720058cfee66842430d9bd1058dd33ed87e71ea7e7dc5940f1a4b688dd9`, 113 618 432 Bytes, 1 203 Einträge, Build `6ba59a6f`. Der Smoke-Test lief ungestört. |
+| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `d474a579` | Windows x64 | je `PASS`, 0 | Paket `f641f720058cfee66842430d9bd1058dd33ed87e71ea7e7dc5940f1a4b688dd9`, 113 618 432 Bytes, 1 203 Einträge, Build `6ba59a6f`. Der Smoke-Test lief ungestört. |
 | Windows x64 Start mit Außenverbindungsprüfung, Endstand | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `f641f720…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 832 ms; 76 896 ms beobachtet, 4 844 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
 | Windows x64 Oberfläche, Endstand | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `f641f720…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde zu R-035 und R-036“ unter dem nativen Lauf. |
 | Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `67d60834` (Stand `d474a579`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `8c8f2bc4…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Oberfläche gehört nicht zum Plugin. |
 | `git diff --check`, Endstand | `git diff --check 54c1f176 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
-| Headless, Stand der zwölften Übergabe | `npm run test:product:headless` auf `1d908311` | Windows x64 | `PASS`, 0 | „Product headless suite passed (366 headless files, no native GUI executed).“ 21:48 bis 22:38 Uhr. Eine Datei weniger: `tests/test-standalone-frontend.js` ist mit der früheren Oberfläche entfernt. |
-| Rust / Clippy, Stand der zwölften Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf dem Stand von `1d908311` | Windows x64 | je `PASS`, 0 | 339 bestanden, 0 fehlgeschlagen, 3 ignoriert. Rust-Quellen sind unverändert; ausgeführt, weil der eingebettete Ordner der Oberfläche kleiner geworden ist. |
-| Datenschutzkern, Differenzläufe und Suchlauf, Stand der zwölften Übergabe | nicht erneut ausgeführt | — | — | Seit `0bd5e26f` ist kein Core-Code geändert (`git diff --stat 0bd5e26f 1d908311 -- plugins native` ist leer); es gelten die Läufe der zehnten Übergabe. |
-| Gezielt, Stand der zwölften Übergabe | 53 Testdateien der Suite, die Oberfläche, Paket oder die geänderten Dokumente berühren, darunter `tests/test-standalone-desktop-contract.js` (43), `tests/test-standalone-workspace.js` (535), `tests/test-standalone-loaded-frontend-contract.js` (5), `tests/test-standalone.js` (91), `tests/test-native-smoke-integrity.js` (83) | Windows x64 | 51 `PASS`; 2 nur mit den Parametern des Suite-Runners | Die zwei übrigen (`test-macos-core-artifact-provenance.mjs`, `test-native-macos-static-core.mjs`) brauchen ein Node-Flag beziehungsweise einen Mac; in der Suite laufen sie wie vorgesehen. |
-| Dokumentation, Stand der zwölften Übergabe | `npm run test:docs` auf `1d908311` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests); nach dem Berichtscommit wiederholt. |
-| Konverter, Stand der zwölften Übergabe | `npm run test:standalone:conversion` auf `1d908311` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; 21 passive PDF-Gruppen. Kein Konvertercode geändert; ausgeführt, weil es zum Standardumfang gehört. |
-| Windows x64 Paket, Stand der zwölften Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.js` auf `1d908311` | Windows x64 | je `PASS`, 0 | Paket `e309421320dbaa79dcb734a598924c6abe60236e5f501a437b19a0738f0fb91b`, 113 616 680 Bytes, 1 203 Einträge, Build `383aa344`. Der Smoke-Test lief ungestört. |
-| Windows x64 Start mit Außenverbindungsprüfung, Stand der zwölften Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `e3094213…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 855 ms; 76 820 ms beobachtet, 4 877 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
-| Windows x64 Oberfläche, Stand der zwölften Übergabe | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `e3094213…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde vom 25.11. nachts“ unter dem nativen Lauf. |
-| Cowork-Plugin, Stand der zwölften Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `440da4d3` (Stand `1d908311`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `d30bb0f7…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Oberfläche gehört nicht zum Plugin; ausgeführt, weil `package.json` und gemeinsame Tests geändert sind. |
-| `git diff --check`, Stand der zwölften Übergabe | `git diff --check c612b647 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Headless, Stand der elften und zwölften Übergabe | `npm run test:product:headless` auf `1d908311` | Windows x64 | `PASS`, 0 | „Product headless suite passed (366 headless files, no native GUI executed).“ 21:48 bis 22:38 Uhr. Eine Datei weniger: `tests/test-standalone-frontend.js` ist mit der früheren Oberfläche entfernt. |
+| Rust / Clippy, Stand der elften und zwölften Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf dem Stand von `1d908311` | Windows x64 | je `PASS`, 0 | 339 bestanden, 0 fehlgeschlagen, 3 ignoriert. Rust-Quellen sind unverändert; ausgeführt, weil der eingebettete Ordner der Oberfläche kleiner geworden ist. |
+| Datenschutzkern, Differenzläufe und Suchlauf, Stand der elften und zwölften Übergabe | nicht erneut ausgeführt | — | — | Seit `0bd5e26f` ist kein Core-Code geändert (`git diff --stat 0bd5e26f 1d908311 -- plugins native` ist leer); es gelten die Läufe der zehnten Übergabe. |
+| Gezielt, Stand der elften und zwölften Übergabe | 53 Testdateien der Suite, die Oberfläche, Paket oder die geänderten Dokumente berühren, darunter `tests/test-standalone-desktop-contract.js` (43), `tests/test-standalone-workspace.js` (535), `tests/test-standalone-loaded-frontend-contract.js` (5), `tests/test-standalone.js` (91), `tests/test-native-smoke-integrity.js` (83) | Windows x64 | 51 `PASS`; 2 nur mit den Parametern des Suite-Runners | Die zwei übrigen (`test-macos-core-artifact-provenance.mjs`, `test-native-macos-static-core.mjs`) brauchen ein Node-Flag beziehungsweise einen Mac; in der Suite laufen sie wie vorgesehen. |
+| Dokumentation, Stand der elften und zwölften Übergabe | `npm run test:docs` auf `1d908311` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests); nach dem Berichtscommit wiederholt. |
+| Konverter, Stand der elften und zwölften Übergabe | `npm run test:standalone:conversion` auf `1d908311` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; 21 passive PDF-Gruppen. Kein Konvertercode geändert; ausgeführt, weil es zum Standardumfang gehört. |
+| Windows x64 Paket, Stand der elften und zwölften Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `1d908311` | Windows x64 | je `PASS`, 0 | Paket `e309421320dbaa79dcb734a598924c6abe60236e5f501a437b19a0738f0fb91b`, 113 616 680 Bytes, 1 203 Einträge, Build `383aa344`. Der Smoke-Test lief ungestört. |
+| Windows x64 Start mit Außenverbindungsprüfung, Stand der elften und zwölften Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `e3094213…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 855 ms; 76 820 ms beobachtet, 4 877 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
+| Windows x64 Oberfläche, Stand der elften und zwölften Übergabe | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `e3094213…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde vom 25.11. nachts“ unter dem nativen Lauf. |
+| Cowork-Plugin, Stand der elften und zwölften Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `440da4d3` (Stand `1d908311`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `d30bb0f7…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Oberfläche gehört nicht zum Plugin; ausgeführt, weil `package.json` und gemeinsame Tests geändert sind. |
+| `git diff --check`, Stand der elften und zwölften Übergabe | `git diff --check c612b647 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
 | Headless, Stand der zehnten Übergabe | `npm run test:product:headless` auf `0bd5e26f` | Windows x64 | `PASS`, 0 | „Product headless suite passed (367 headless files, no native GUI executed).“ 19:44 bis 20:40 Uhr. |
 | Rust / Clippy, Stand der zehnten Übergabe | nicht erneut ausgeführt | — | — | Seit `927fb3bd` ist keine Rust-Quelle geändert (`git diff --stat 927fb3bd 0bd5e26f -- apps/datasecure-standalone/tauri-contract` ist leer); es gilt der Lauf der achten Übergabe. Der Release-Build mit `--locked` ist für das Paket neu gelaufen. |
 | Datenschutzkern, Differenzläufe, Stand der zehnten Übergabe | Scratch-Skripte: RC178-Kern gegen `0bd5e26f`, 18 600 Fälle in fünf Profilen, einmal wie geschrieben, einmal mit jedem Punkt als `\.`; Kern von `33595449` gegen `0bd5e26f`, 1 230 Zeilen mit Schützenswertem und 240 personenfreie Zeilen | Windows x64 | 0 neue Stopps in allen drei Läufen; „mehr sichtbar“ nur die zehn gewollten Fälle von R-024 | Dieselben Zahlen wie am Stand der neunten Übergabe. |
@@ -594,7 +634,7 @@ früheren Stände fest.
 | Gezielt, Stand der zehnten Übergabe | 106 Testdateien der Suite, die den Datenschutzkern laden, dazu `tests/test-pii-regression.js` (164 Fälle) und `tests/test-privacy-role-labels-and-name-lists.js` (9) | Windows x64 | je `PASS`, 0 | Vor der Suite einzeln ausgeführt, drei nebeneinander. Der neue neunte Test schlägt am Kern von `1c8e971c` fehl. |
 | Dokumentation, Stand der zehnten Übergabe | `npm run test:docs` auf `0bd5e26f` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests); nach dem Berichtscommit wiederholt. |
 | Konverter, Stand der zehnten Übergabe | `npm run test:standalone:conversion` auf `0bd5e26f` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; 21 passive PDF-Gruppen; hinterlässt `.tmp-standalone-package-*`-Ordner im Repository-Root, danach entfernt. |
-| Windows x64 Paket, Stand der zehnten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.js` auf `0bd5e26f` | Windows x64 | je `PASS`, 0 | Paket `9ea88aab7fdf576535246ed5b7e066974cc9c48a8b843b47a3228ae64fb5ac4c`, 113 638 825 Bytes, 1 203 Einträge, Build `5c873336`. Der Smoke-Test lief ungestört. |
+| Windows x64 Paket, Stand der zehnten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `0bd5e26f` | Windows x64 | je `PASS`, 0 | Paket `9ea88aab7fdf576535246ed5b7e066974cc9c48a8b843b47a3228ae64fb5ac4c`, 113 638 825 Bytes, 1 203 Einträge, Build `5c873336`. Der Smoke-Test lief ungestört. |
 | Windows x64 Start mit Außenverbindungsprüfung, Stand der zehnten Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `9ea88aab…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 982 ms; 76 913 ms beobachtet, 4 650 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
 | Windows x64 Oberfläche, Stand der zehnten Übergabe | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `9ea88aab…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde vom 25.11. spät“ unter dem nativen Lauf. |
 | Cowork-Plugin, Stand der zehnten Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `3d0697f2` (Stand `0bd5e26f`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `25cd1e36…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Korrektur an `findStructuredSpans` ist im Plugin enthalten und wirkt dort ebenso. |
@@ -606,7 +646,7 @@ früheren Stände fest.
 | Gezielt, Stand der neunten Übergabe | 106 Testdateien der Suite, die den Datenschutzkern laden, dazu `tests/test-pii-regression.js` (164 Fälle) und `tests/test-privacy-role-labels-and-name-lists.js` (8) | Windows x64 | je `PASS`, 0 | Vor der Suite einzeln ausgeführt, vier nebeneinander. Die neue Testdatei schlägt am Kern von `33595449` in 5 von 8 Tests fehl; die drei übrigen sind Gegenfälle. Ein früherer Lauf am Zwischenstand hatte einen Ausfall (`test-office-image-ocr.mjs`, `CONVERSION_RUNTIME_UNAVAILABLE`), während eine Gegenprüfung parallel lief; am Endstand bestanden. |
 | Dokumentation, Stand der neunten Übergabe | `npm run test:docs` auf `1c8e971c` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests). |
 | Konverter, Stand der neunten Übergabe | `npm run test:standalone:conversion` auf `1c8e971c` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; 21 passive PDF-Gruppen; hinterlässt zwei `.tmp-standalone-package-*`-Ordner im Repository-Root, danach entfernt. |
-| Windows x64 Paket, Stand der neunten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.js` auf `1c8e971c` | Windows x64 | je `PASS`, 0 | Paket `24a510dfc596ba5ae55b88c8d3068b77ec0502b95751d3b3658c0e8e950b3fa5`, 113 638 455 Bytes, 1 203 Einträge, Build `b8ea7acd`. Der Smoke-Test lief ungestört. |
+| Windows x64 Paket, Stand der neunten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `1c8e971c` | Windows x64 | je `PASS`, 0 | Paket `24a510dfc596ba5ae55b88c8d3068b77ec0502b95751d3b3658c0e8e950b3fa5`, 113 638 455 Bytes, 1 203 Einträge, Build `b8ea7acd`. Der Smoke-Test lief ungestört. |
 | Windows x64 Start mit Außenverbindungsprüfung, Stand der neunten Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `24a510df…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 876 ms; 76 787 ms beobachtet, 4 594 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
 | Windows x64 Oberfläche, Stand der neunten Übergabe | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `24a510df…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde vom 25.11. abends“ unter dem nativen Lauf. |
 | Cowork-Plugin, Stand der neunten Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `0a4da43a` (Stand `1c8e971c`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `1bdec13d…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderungen am Datenschutzkern sind im Plugin enthalten; dort wirken das Telefonlabel `Rückruf unter` und die maskierte Klammer, die Personenhinweise hinter Rollen und in Listen nur im Standalone. |
@@ -657,10 +697,10 @@ früheren Stände fest.
 | Gegenprüfung R-031 | ein unabhängiger Read-only-Lauf (Datenschutz-Prüfer) auf dem Arbeitsstand vor den Commits, mit eigenen Skripten und Mutationen des Beobachters | Windows x64 | Schalter und Verdrahtung nicht widerlegt; sechs Einwände | Einwände und ihr Ergebnis in BEFUNDE.md. Die danach eingearbeiteten Änderungen sind nicht erneut gegengeprüft. |
 | Dokumentation, Stand der fünften Übergabe | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `56d7c744` | Windows x64 | je `PASS`, 0 | — |
 | Konverter, Stand der fünften Übergabe | `npm run test:standalone:conversion` auf `56d7c744` | Windows x64 | `PASS`, 0 | hinterlässt Ordner `.tmp-standalone-package-*` im Repository-Root, von mir entfernt |
-| Windows x64 Paket, Stand der fünften Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `56d7c744` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `1c672ef4be13f55858a580d2b73782b0b627bfbcfcac31761ded7ec0f86c4495`, 113 628 275 Bytes, 1 203 Einträge, Build `9fe7076e`. Das Paket des Vorstands (`cec20d6e…`) wurde vorher aus `dist/` verschoben. |
-| Windows x64 Start mit Außenverbindungsprüfung | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence`; dasselbe mit `-AssertReviewWindow`; dasselbe gegen das Paket `cec20d6e…` | Windows x64, online mit IPv6 | neues Paket `PASS`, 0 (Haupt- und Prüffenster); bisheriges Paket `FAIL` wie verlangt (`STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`) | Neues Paket: Fenster 77 s, 3 165 und 2 477 Stichproben, kein Lesefehler, keine Verbindung, 0 TCP-Listener, 0 UDP-Endpunkte. Bisheriges Paket: WebView2, IPv6, Port 443. |
+| Windows x64 Paket, Stand der fünften Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `56d7c744` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `1c672ef4be13f55858a580d2b73782b0b627bfbcfcac31761ded7ec0f86c4495`, 113 628 275 Bytes, 1 203 Einträge, Build `9fe7076e`. Das Paket des vorherigen Stands (`cec20d6e…`) wurde vorher aus `dist/` verschoben. |
+| Windows x64 Start mit Außenverbindungsprüfung, Stand der fünften Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence`; dasselbe mit `-AssertReviewWindow`; dasselbe gegen das Paket `cec20d6e…` | Windows x64, online mit IPv6 | neues Paket `PASS`, 0 (Haupt- und Prüffenster); bisheriges Paket `FAIL` wie verlangt (`STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED`) | Neues Paket: Fenster 77 s, 3 165 und 2 477 Stichproben, kein Lesefehler, keine Verbindung, 0 TCP-Listener, 0 UDP-Endpunkte. Bisheriges Paket: WebView2, IPv6, Port 443. |
 | Windows x64 Messung, Stand der fünften Übergabe | `tests/manual/measure-standalone-native-windows.ps1 -Archive … -ExpectedSha256 1c672ef4… -Iterations 3 -AssertNoListeners -AssertNoOutbound` | Windows x64 | `PASS`, 0 | p50 1 948 ms, 0 TCP-Listener, kein UDP-Endpunkt, keine Verbindung nach außen in drei Starts mit je 77 s Beobachtung. |
-| Netzverkehr, Stand der fünften Übergabe | Scratch-Skript wie beim Vorstand: Paket `1c672ef4…`, 600 s Betriebssystemtabellen mit einem Verarbeitungslauf; 100 s mit Netzprotokoll von Chromium | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | 20 814 Stichproben, kein TCP- und kein UDP-Endpunkt. Netzprotokoll: keine Anfrage nach außen; aufgelöst nur `tauri.localhost`; ein UDP-Socket ohne gesendetes Paket; ein Versuch zu `localhost:80`. Kein Bestandteil des Repositorys. |
+| Netzverkehr, Stand der fünften Übergabe | Scratch-Skript wie beim vorherigen Stand: Paket `1c672ef4…`, 600 s Betriebssystemtabellen mit einem Verarbeitungslauf; 100 s mit Netzprotokoll von Chromium | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | 20 814 Stichproben, kein TCP- und kein UDP-Endpunkt. Netzprotokoll: keine Anfrage nach außen; aufgelöst nur `tauri.localhost`; ein UDP-Socket ohne gesendetes Paket; ein Versuch zu `localhost:80`. Kein Bestandteil des Repositorys. |
 | Windows x64 Oberfläche, R-031 | eigenes Startskript, Bedienung per Windows-UI-Automation, Paket `1c672ef4…` und ein Paket gleichen Schalterstands davor | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Nach R-031“ |
 | Cowork-Plugin, Stand der fünften Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `d2da4689` (Produktstand `56d7c744`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `832397b1…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderung berührt das Plugin nicht (Fensterkonfiguration der Standalone-App, Prüfskripte). |
 | Headless nach dem Workflow-Eintrag | `node tests/run-product-suite.js headless` auf `0f35696e` | Windows x64 | `PASS`, 0 | 365 Dateien; 15:44–16:34 am 24.11. Geändert sind gegenüber `56d7c744` nur Startprobe, Workflow, zwei Tests und ein Dokument. |
@@ -673,10 +713,10 @@ früheren Stände fest.
 | Gegenprüfung R-028 bis R-030 | zwei unabhängige Read-only-Läufe (Datenschutz- und Laufzeit-Prüfer) auf dem Arbeitsstand vor den Commits, mit eigenen Skripten und einzelnen Node-Tests | Windows x64 | keine Aufweichung der Schutzgrenze, nichts durchgelassen; neun Einwände | Beide am Schrittlimit beendet, Berichte auf Nachfrage. Einwände und ihr Ergebnis in BEFUNDE.md. Die danach eingearbeiteten Änderungen sind nicht erneut gegengeprüft. |
 | Dokumentation, Stand der vierten Übergabe | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `0b99529c` | Windows x64 | je `PASS`, 0 | — |
 | Konverter, Stand der vierten Übergabe | `npm run test:standalone:conversion` auf `0b99529c` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt Ordner `.tmp-standalone-package-*` im Repository-Root, von mir entfernt |
-| Windows x64 Paket, Stand der vierten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs` auf `b71439b2`; `node tests/test-standalone-package-smoke.mjs` auf `0b99529c` gegen dasselbe Paket | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `cec20d6e528dec4e039f8dac058b036a2e5fa5e1c574ad363e4b94d8d38b2346`, 113 627 095 Bytes, 1 203 Einträge, Build `b4466f2a`. Das Paket des Vorstands (`b30c5511…`) wurde vorher aus `dist/` verschoben. |
+| Windows x64 Paket, Stand der vierten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs` auf `b71439b2`; `node tests/test-standalone-package-smoke.mjs` auf `0b99529c` gegen dasselbe Paket | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `cec20d6e528dec4e039f8dac058b036a2e5fa5e1c574ad363e4b94d8d38b2346`, 113 627 095 Bytes, 1 203 Einträge, Build `b4466f2a`. Das Paket des vorherigen Stands (`b30c5511…`) wurde vorher aus `dist/` verschoben. |
 | Windows x64 Start, alte Probe | instrumentierte Kopie von `tests/manual/standalone-native-windows-launch.ps1` am Stand `e92d5b12`, `-Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence`, 11 Läufe gegen das Paket `b30c5511…` | Windows x64 | 8 `FAIL` (`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`), 3 `PASS` | In allen acht Fällen dieselben Merkmale: WebView2-Netzwerkdienst, gültige Microsoft-Signatur, `own_profile: false` wegen `…\webview\main\EBWebView` (R-029). Die Kopie liegt außerhalb des Repositorys. |
 | Windows x64 Start, Stand der vierten Übergabe | dieselbe Probe am Stand `0b99529c`, 14 Läufe gegen das Paket `cec20d6e…`; davor 12 Läufe einer Vorfassung gegen `b30c5511…` | Windows x64 | 14 von 14 `PASS`, 0; Vorfassung 12 von 12 | Kein TCP-Listener (er hätte die Probe abgebrochen); in 4 der 14 Läufe ein zugeordneter UDP-Endpunkt (`["msedgewebview2.exe"]`), sonst keiner. Abbau-Wartezeit 138 bis 273 ms von 20 000 ms. |
-| Windows x64 Messung | `tests/manual/measure-standalone-native-windows.ps1 -Archive … -ExpectedSha256 cec20d6e… -Iterations 10 -AssertNoListeners` am Stand `0b99529c` | Windows x64 | `PASS`, 0; am Stand `b11a6131` `FAIL` in Wiederholung 1 | p50 1 993 ms, p95 2 015 ms, 0 TCP-Listener, kein UDP-Endpunkt in dieser Serie. Der Fehlschlag davor ist der zweite Teil von R-030 (Zeile der App auf dem Fehlerkanal). Die Messung mit 30 Starts habe ich nicht ausgeführt. |
+| Windows x64 Messung, Stand der vierten Übergabe | `tests/manual/measure-standalone-native-windows.ps1 -Archive … -ExpectedSha256 cec20d6e… -Iterations 10 -AssertNoListeners` am Stand `0b99529c` | Windows x64 | `PASS`, 0; am Stand `b11a6131` `FAIL` in Wiederholung 1 | p50 1 993 ms, p95 2 015 ms, 0 TCP-Listener, kein UDP-Endpunkt in dieser Serie. Der Fehlschlag davor ist der zweite Teil von R-030 (Zeile der App auf dem Fehlerkanal). Die Messung mit 30 Starts habe ich nicht ausgeführt. |
 | Windows x64 Oberfläche, R-028 | eigenes Startskript nach dem Muster von `tests/manual/standalone-native-workspace-gui.ps1` mit einem Halterprozess (Löschzugriff auf einen Ordner des Testprofils), Bedienung per Windows-UI-Automation, Pakete `b30c5511…` und `cec20d6e…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“, Abschnitt „Nach R-028 bis R-030“ |
 | Cowork-Plugin, Stand der vierten Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `14e3d87b` (Produktstand `0b99529c`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `5c669b7c…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. Die Änderungen dieser Runde berühren das Plugin nicht (Rust-Shell, Standalone-Oberfläche, Prüfskripte). |
 | Netzverkehr, Stand der vierten Übergabe | Scratch-Skript: Paket `cec20d6e…` im isolierten Profil, Betriebssystemtabellen für TCP und UDP je Prozess rund alle 23 ms, Positivkontrolle je Lauf; 600 s unverändert, 280 s mit Netzprotokoll von Chromium, je ein Versuch mit zwei und mit fünf zusätzlichen Startschaltern (100 s und 150 s) | Windows x64, online mit IPv6, WebView2 158.0.4370.33 | beobachtet, keine Abnahme | Unverändert: HTTPS zu `config.edge.skype.com` (2 Anfragen beim Start) und `edge.microsoft.com` (8 Anfragen des Komponenten-Updaters in 280 s), Auflösung von `wpad`; Shell und Core ohne Verbindung. Mit den Schaltern keine Anfrage nach außen, App arbeitsbereit, mit fünf Schaltern ein Verarbeitungslauf abgeschlossen. Kein Bestandteil des Repositorys. R-031. |
@@ -685,22 +725,22 @@ früheren Stände fest.
 | Headless, Stand der zweiten Übergabe | derselbe Befehl auf `ffab4fa7` | Windows x64 | `PASS`, 0 | 364 Dateien; 20:25–21:19, parallel lief der Differenzlauf |
 | Headless auf `d5992265` | derselbe Befehl auf `d5992265` | Windows x64 | `PASS`, 0 | 364 Dateien. Die Suite meldete den Fehler der Zuordnung nicht, den `ffab4fa7` behebt. |
 | Headless auf `a0d3e340` | derselbe Befehl | Windows x64 | abgebrochen, kein Ergebnis | Von mir nach rund elf Minuten gestoppt, als die Regressionen sichtbar wurden. Für diesen Stand gibt es keinen vollständigen Lauf. |
-| Golden | `node tests/make-fixtures.js && node tests/test-pii-regression.js` auf dem Stand von `283e6ed9` | Windows x64 | `PASS`, 0 | 164 Fälle. Am Stand `a0d3e340`: 163 bestanden, 1 fehlgeschlagen. |
-| Gezielt | `tests/test-privacy-inline-credentials.js` (7), `test-privacy-name-variants.js` (10), `test-privacy-time-periods.js` (1), `test-privacy-inflected-names.js` (3), `test-privacy-repeated-phones.js` (2), `test-markdown-retention.js` (15) | Windows x64 | je `PASS`, 0 | Die erste Datei enthält die Gegenfälle der vier widerlegten Fassungen von R-027. Sechs der zehn Fälle der zweiten Datei schlagen am Stand `a0d3e340` fehl, einer am Stand `d5992265`; geprüft an Kopien dieser Stände. |
-| Differenzlauf | Scratch-Skript: Kern von RC178 gegen den Kern von `283e6ed9`, 18 600 synthetische Fälle (93 Satzmuster, darunter 16 mit Zugangsdaten), fünf Profile, einzeln und als Zwei-Dokument-Lauf | Windows x64 | kein neuer Stopp, 10 gewollte Abweichungen (R-024) | 420 Fälle, die RC178 stoppte, laufen durch. Zahlen in BEFUNDE.md. Kein Bestandteil des Repositorys. |
+| Feste Regressionssammlung, Stand der dritten Übergabe | `node tests/make-fixtures.js && node tests/test-pii-regression.js` auf dem Stand von `283e6ed9` | Windows x64 | `PASS`, 0 | 164 Fälle. Am Stand `a0d3e340`: 163 bestanden, 1 fehlgeschlagen. |
+| Gezielt, Stand der dritten Übergabe | `tests/test-privacy-inline-credentials.js` (7), `test-privacy-name-variants.js` (10), `test-privacy-time-periods.js` (1), `test-privacy-inflected-names.js` (3), `test-privacy-repeated-phones.js` (2), `test-markdown-retention.js` (15) | Windows x64 | je `PASS`, 0 | Die erste Datei enthält die Gegenfälle der vier widerlegten Fassungen von R-027. Sechs der zehn Fälle der zweiten Datei schlagen am Stand `a0d3e340` fehl, einer am Stand `d5992265`; geprüft an Kopien dieser Stände. |
+| Differenzlauf, Stand der dritten Übergabe | Scratch-Skript: Kern von RC178 gegen den Kern von `283e6ed9`, 18 600 synthetische Fälle (93 Satzmuster, darunter 16 mit Zugangsdaten), fünf Profile, einzeln und als Zwei-Dokument-Lauf | Windows x64 | kein neuer Stopp, 10 gewollte Abweichungen (R-024) | 420 Fälle, die RC178 stoppte, laufen durch. Zahlen in BEFUNDE.md. Kein Bestandteil des Repositorys. |
 | Fünfte Gegenprüfung zu R-027 | unabhängiger Read-only-Lauf mit eigenen Skripten auf `283e6ed9`: 3 915 handgeschriebene Fälle, 66 000 Zufallsläufe, 1 050 gezielte Fälle | Windows x64 | kein zusätzlich sichtbarer Klartext, kein neuer Stopp, keine Ausnahme | Am Schrittlimit beendet, Bericht auf Nachfrage. Drei Beobachtungen und die nicht mehr geprüften Punkte in BEFUNDE.md; vier davon habe ich selbst nachgeprüft (1 500, 400 und 400 Fälle, Laufzeit). |
-| Dokumentation | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `ebe526ec` | Windows x64 | je `PASS`, 0 | — |
-| Konverter | `npm run test:standalone:conversion` auf `ebe526ec` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt zwei `.tmp-standalone-package-*`-Ordner im Repository-Root, von mir entfernt |
+| Dokumentation, Stand der dritten Übergabe | `npm run test:docs`, `node tests/test-current-document-links.js`, `node tests/test-current-documentation-contract.js` auf `ebe526ec` | Windows x64 | je `PASS`, 0 | — |
+| Konverter, Stand der dritten Übergabe | `npm run test:standalone:conversion` auf `ebe526ec` | Windows x64 | `PASS`, 0 | echte isolierte Konverterkinder; hinterlässt zwei `.tmp-standalone-package-*`-Ordner im Repository-Root, von mir entfernt |
 | Rust / Clippy, Stand der dritten Übergabe | `cargo test --locked` und `cargo clippy --all-targets --locked -- -D warnings` in `apps/datasecure-standalone/tauri-contract` auf `283e6ed9` | Windows x64 | je `PASS`, 0 | 326 bestanden, 0 fehlgeschlagen, 3 ignoriert. Nur das Windows-Ziel. R-027 ändert keinen Rust-Code. |
 | macOS-Typcheck | `cargo check --locked --all-targets --target aarch64-apple-darwin` auf `a0d3e340` | Windows x64 als Host | `BLOCKED` | 42 Abhängigkeiten geprüft; das Build-Skript des Projekts verlangt den freigegebenen statischen macOS-Core, der hier fehlt. Nicht umgangen. |
-| Cowork-Plugin | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `85fdecf2` (Produktstand `ebe526ec`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `6d9bc082…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. |
-| Windows x64 Paket | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `ebe526ec` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `b30c5511405bfc05fc09b2f14a04f5ff7155f3d54f281411853cc17cb5e37ffc`, 113 625 220 Bytes, 1 203 Einträge, Build `043e3b81`. Der Paketbau überschreibt nie; das Paket des Vorstands (`bddfe85a…`) wurde vorher aus `dist/` verschoben. |
+| Cowork-Plugin, Stand der dritten Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `85fdecf2` (Produktstand `ebe526ec`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `6d9bc082…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem ersten Berichtscommit. |
+| Windows x64 Paket, Stand der dritten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `ebe526ec` | Windows x64 | je `PASS`, 0 | ZIP-SHA-256 `b30c5511405bfc05fc09b2f14a04f5ff7155f3d54f281411853cc17cb5e37ffc`, 113 625 220 Bytes, 1 203 Einträge, Build `043e3b81`. Der Paketbau überschreibt nie; das Paket des vorherigen Stands (`bddfe85a…`) wurde vorher aus `dist/` verschoben. |
 | Windows x64 Start, Stand der dritten Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertWorkspace -AssertNoListeners -EmitEvidence`, sieben Versuche am 24.11. zwischen 00:24 und 00:37 | Windows x64 | Versuche 1 und 2 `FAIL` (`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`), 3 `FAIL` (Entpacken: Pfad nicht gefunden), 4 und 5 `FAIL` (`STANDALONE_NATIVE_WEBVIEW_INITIALIZATION_TIMEOUT`), 6 und 7 `PASS`, 0 | Versuche 1 und 2: R-029, ohne Parallelbetrieb; die Ursache ist seit `dbf98cbf` bekannt und behoben. Versuche 3 bis 5: In dieser Zeit hielt ein fremder Prozess den Temp-Ordner mit Löschzugriff offen; auch das Paket vom Vortag startete dann nicht (R-028). Versuche 6 und 7 nach Ende der Sperre: Start 1,9 s und 1,8 s, 9 Prozesse, 0 TCP-Listener, 0 UDP-Endpunkte. Am Vortag: `d5992265` im ersten Versuch bestanden, `ffab4fa7` im zweiten. |
-| Windows x64 Oberfläche | `tests/manual/standalone-native-workspace-gui.ps1 -Archive …`, Bedienung per Windows-UI-Automation, Builds `0dac7e18`, `1803bce7` und `043e3b81` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“ |
+| Windows x64 Oberfläche, Stand der dritten Übergabe | `tests/manual/standalone-native-workspace-gui.ps1 -Archive …`, Bedienung per Windows-UI-Automation, Builds `0dac7e18`, `1803bce7` und `043e3b81` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nativer Windows-Lauf“ |
 | macOS Apple Silicon | — | — | `BLOCKED` (kein Mac) | Baseline-Beleg RC178: [Lauf 44744144419](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/44744144419), Runner `macos-15`, Commit `13ed39ff` |
 | macOS Intel | — | — | `BLOCKED` (kein Mac) | derselbe Lauf, Runner `macos-15-intel` |
 | iOS-Simulator | — | — | `BLOCKED` (kein Xcode) | — |
-| `git diff --check` | `git diff --check 3908a921 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| `git diff --check`, Stand der dritten Übergabe | `git diff --check 3908a921 HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
 | Baseline Dokumentation | `npm run test:docs` auf `e88f1b8d` | Windows x64 | `PASS`, 0 | — |
 | Baseline Headless | `node tests/run-product-suite.js headless` auf `e88f1b8d` | Windows x64 | `PASS` in zwei Abschnitten: Dateien 1–294 von 357 im Runner, 295–357 fortgesetzt; je Exit 0 | Erster Abschnitt brach an `tests/test-standalone-native-export.js` ab, weil die vorbereitete Laufzeit fehlte. Kein Produktfehler. |
 | Reproduktion vor Fix | Scratch-Skripte gegen eine Kopie des Kerns von `dfed2d4e` | Windows x64 | Befunde reproduziert | „Müllers Auto“ und die zweite Telefonnummer bleiben stehen. |
@@ -726,7 +766,9 @@ stehen dort alle sechs Voraussetzungen.
 ### Nativer Windows-Lauf über die Oberfläche
 
 Vom Anwender am 23.11.2026 ausdrücklich freigegeben. Technische Beobachtung,
-keine E1/E2/E3-Abnahme. Nur erfundene Dateien.
+keine E1/E2/E3-Abnahme. Nur erfundene Dateien. In den Runden bis zum 24.11.
+meint „Endstand“ den Stand am Ende der jeweiligen Runde (Paket und Build in
+der Überschrift), nicht den Endstand dieses Berichts.
 
 **Erste Runde** (Build `5496fabe`, vier Dateien: TXT, DOCX, XLSX)
 
@@ -855,13 +897,13 @@ erfundenen Zugangsdaten; danach eine Textdatei im geführten Lauf)
 
 **Nach R-028 bis R-030** (Build `b4466f2a` aus `b71439b2`, Paket
 `cec20d6e…`, 24.11.2026 zwischen 09:27 und 09:38; Vergleich mit dem Paket
-`b30c5511…` des Vorstands)
+`b30c5511…` des vorherigen Stands)
 
 - **Sperre nachgestellt** – Ein eigener Hilfsprozess öffnet einen Ordner des
   Testprofils mit Löschzugriff und voller Freigabe und hält ihn, bis eine
   Freigabedatei erscheint. Der echte Temp-Ordner und echte Profilordner
   wurden nicht gehalten.
-- **Vorstand, Ordner über dem Datenordner gehalten** – Meldung wie am 24.11.
+- **Vorheriger Stand, Ordner über dem Datenordner gehalten** – Meldung wie am 24.11.
   beobachtet: „Der interne App-Datenordner konnte nicht sicher geöffnet oder
   neu angelegt werden … Installation mit der IT prüfen
   (STANDALONE_DATA_ROOT_UNSAFE)“. Nach Freigabe und **Verbindung und
@@ -894,7 +936,7 @@ erfundenen Zugangsdaten; danach eine Textdatei im geführten Lauf)
   bestehen, 4 davon mit einem zugeordneten WebView2-Endpunkt; Abbau-Wartezeit
   138 bis 273 ms. Messung über zehn Starts: p50 1 993 ms, p95 2 015 ms,
   0 TCP-Listener, kein UDP-Endpunkt in dieser Serie. Die unkorrigierte Probe
-  scheiterte zuvor in 8 von 11 Läufen gegen das Paket des Vorstands.
+  scheiterte zuvor in 8 von 11 Läufen gegen das Paket des vorherigen Stands.
 - **Nicht beobachtet** – eine Belegung durch ein echtes Sicherungs- oder
   Schutzprogramm; eine Belegung während eines laufenden Stapels oder einer
   Ergebnisbereitstellung; mehr als ein Fenster; „Selbst entscheiden“ in
@@ -902,9 +944,9 @@ erfundenen Zugangsdaten; danach eine Textdatei im geführten Lauf)
 
 **Nach R-031** (Paket `1c672ef4…`, Build `9fe7076e` aus `56d7c744`,
 24.11.2026 zwischen 14:00 und 14:30; Vergleich mit dem Paket `cec20d6e…` des
-Vorstands)
+vorherigen Stands)
 
-- **Vorstand, zehn Minuten** – Nur der Netzwerkdienst von WebView2 hat
+- **Vorheriger Stand, zehn Minuten** – Nur der Netzwerkdienst von WebView2 hat
   Verbindungen: HTTPS zu Microsoft-Adressen bei 0,3 s, 1,3 s, 60 s, 150 s
   und 220 s. Das Netzprotokoll von Chromium nennt `config.edge.skype.com`
   (zwei Anfragen beim Start) und `edge.microsoft.com/componentupdater`
@@ -922,7 +964,7 @@ Vorstands)
   abgeschlossen“. Damit ist nach „Beibehalten“ auch „Ersetzen“ einmal nativ
   bedient.
 - **Startprobe mit `-AssertNoOutbound`** – Endstand besteht mit Haupt- und
-  mit Prüffenster; der Vorstand scheitert mit
+  mit Prüffenster; der vorherige Stand scheitert mit
   `STANDALONE_NATIVE_NETWORK_OUTBOUND_DETECTED` (WebView2, IPv6, Port 443).
 - **Umgebungsvariable** – Mit gesetztem
   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` trägt der Browserprozess die
@@ -1156,14 +1198,14 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 | Dimension | Urteil | Befunde | Abdeckung (geprüft / teilgeprüft / offen) und Grenze |
 | --- | --- | --- | --- |
 | Fachlichkeit und Formatqualität | Text und CSV solide; die belegten stillen Verluste in DOCX, XLSX und CSV sind behoben oder als Hinweis sichtbar, bis auf den Zustand alter Formular-Kontrollkästchen. Listen bleiben Tabellen. Ein Lebenslauf mit Namenslink ist jetzt automatisch verarbeitbar. | R-003 bis R-006, R-018, R-026 | 5 / 277 / 603. PDF, Scan-PDF, Bild-OCR und Office-OCR im Review nicht ausgeführt; Diagramme, SmartArt, Formeln nur über die Suite. |
-| Anonymisierung und Zuordnungen | Neu am 25.11. abends: Name hinter einer Rolle, Namensliste unter einem Label und derselbe Name an weiteren Stellen werden ersetzt (R-033b bis d); der dadurch häufiger erreichte Stopp bei `Label Name Nummer` ist behoben (`0bd5e26f`): Redaktion und Schlussprüfung lesen Platzhalter jetzt gleich. Neu am 25.11.: Aus Word blieben Telefonnummern, Namen hinter Titeln, Geburtsdaten und Kennungen stehen, weil der Kern den maskierten Punkt nicht las (R-033, für fünf Regeln behoben); drei Erkennungslücken unabhängig vom Format sind offen (R-033b bis R-033d). Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung außer den zehn gewollten Fällen von R-024. Zugangsdaten mitten in der Zeile werden für ein Wort ersetzt (R-027, Teil). Offen: die dokumentierten Grenzen von R-027 und der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027 | 10 / 241 / 453. Eine geführte Entscheidung nativ ausgeführt, sonst keine; `privacy/entities.js`, `credentials.js`, `person-ambiguities.js` nicht gelesen. |
-| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist mehrfach nativ bedient (Ersetzen, Beibehalten, Später entscheiden und Wiederaufnahme); die Zähltexte haben ihre Einzahl. Schließen während eines Laufs führt über eine Rückfrage zur Pause; nativ bedient sind die Rückfrage, Bleiben, Pausieren und Jetzt schließen (R-032). | R-008, R-009, R-020, R-025, R-032 | 11 / 243 / 0. Die 46 offenen Einheiten waren die frühere Oberfläche; sie sind entfernt, nicht geprüft. Quelltext plus Windows-Läufe; kein Screenreader, kein Zoom, kein WKWebView. |
+| Anonymisierung und Zuordnungen | Neu am 25.11. abends: Name hinter einer Rolle, Namensliste unter einem Label und derselbe Name an weiteren Stellen werden ersetzt (R-033b bis d); der dadurch häufiger erreichte Stopp bei `Label Name Nummer` ist behoben (`0bd5e26f`): Redaktion und Schlussprüfung lesen Platzhalter jetzt gleich. Neu am 25.11.: Aus Word blieben Telefonnummern, Namen hinter Titeln, Geburtsdaten und Kennungen stehen, weil der Kern den maskierten Punkt nicht las (R-033, für fünf Regeln behoben). Offen bleiben vier Formen unabhängig vom Format: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung außer den zehn gewollten Fällen von R-024. Zugangsdaten mitten in der Zeile werden für ein Wort ersetzt (R-027, Teil). Offen: die dokumentierten Grenzen von R-027 und der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027, R-033 | 10 / 241 / 453. Geführte Entscheidungen nur in einzelnen nativen Läufen; `privacy/entities.js`, `credentials.js` und `person-ambiguities.js` nur in Teilen gelesen (laut Register 23 von 113 Einheiten teilgeprüft). |
+| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist mehrfach nativ bedient (Ersetzen, Beibehalten, Später entscheiden und Wiederaufnahme); die Zähltexte haben ihre Einzahl. Schließen während eines Laufs führt über eine Rückfrage zur Pause; nativ bedient sind die Rückfrage, Bleiben, Pausieren und Jetzt schließen (R-032). Fehlermeldungen der geladenen Oberfläche nennen seit `8cf5dd93` und `d474a579` die Ursache und die betroffenen Dateien; der Hinweis auf einen Ergebnisordner im Netzwerk (DS-080) erscheint (R-034 bis R-036). | R-008, R-009, R-020, R-025, R-032, R-034 bis R-036 | 11 / 243 / 0. Die 46 offenen Einheiten waren die frühere Oberfläche; sie sind entfernt, nicht geprüft. Quelltext plus Windows-Läufe; kein Screenreader, kein WKWebView; Seitenzoom nur unter Windows beobachtet. |
 | Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Fünf Befunde der Rust-Shell behoben oder eingegrenzt, zuletzt die Startverweigerung bei belegter Ordnerkette. | R-011 bis R-014, R-022, R-028, R-032 | 25 / 755 / 546. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
-| Implementierung und Wartbarkeit | `main.rs` (rund 4 400 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, zwei ungenutzte Commands). Die zweite Runde hat `main.rs` um rund 280 Zeilen vergrößert. | — (Verbesserungen, nicht als Befund geführt) | 1 / 207 / 675. Kein systematischer Durchgang. |
+| Implementierung und Wartbarkeit | `main.rs` (rund 4 500 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, vier native Befehle ohne Aufrufer in der geladenen Oberfläche). Seit RC178 ist `main.rs` um rund 420 Zeilen gewachsen. | — (Verbesserungen, nicht als Befund geführt) | 1 / 207 / 675. Kein systematischer Durchgang. |
 | Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. Shell und Core bauen keine Verbindungen auf. Die WebView2-Komponente meldete sich bis zum vierten Übergabestand regelmäßig bei Microsoft; am Endstand ist in zehn Minuten keine Verbindung mehr zu beobachten. | R-010, R-012, R-031 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
 | Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. Verwaiste Vorbereitungen werden bereinigt; eine laufende Veröffentlichung schützt allein ihr Alter. | R-007, R-010, R-022 (Hypothese), R-032 | 0 / 157 / 450. Wiederaufnahme nach „Später entscheiden“ einmal, nach „Pausieren und schließen“ und nach „Jetzt schließen“ je einmal nativ beobachtet; Absturzpfade, Beenden durch das Betriebssystem und voller Datenträger nicht untersucht. |
-| Leistung und Ressourcen | Nur ein Vorher-nachher-Vergleich des Datenschutzkerns: 109 KB Prosa 0,86 s zu 0,89 s, 328 KB 5,9 s zu 5,7 s. Der Kern skaliert schon in RC178 überlinear. | — | Dazu Startzeit und Suite-Laufzeiten. BL-047.5 bleibt ohne Zielhostmessung. |
-| Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. Die Windows-Startprobe konnte einen WebView2-Endpunkt nicht zuordnen, ihr Abbau wartete auf keinen Prozess, und ihr Messskript lief auf diesem Host nicht durch, ohne dass ein Test es zeigte; behoben. | R-019, R-029, R-030 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
+| Leistung und Ressourcen | Keine Lastmessung, nur Vorher-nachher-Vergleiche des Datenschutzkerns: nach der zweiten Runde 109 KB Prosa 0,86 s zu 0,89 s und 328 KB 5,9 s zu 5,7 s; seit R-027 für Dokumente mit vielen Zugangsdaten-Labels 26 bis 45 % länger; seit `0bd5e26f` bei vielen Platzhaltern das 1,3- bis 1,6-Fache. Der Kern skaliert schon in RC178 überlinear. | — | Dazu Startzeit und Suite-Laufzeiten. BL-047.5 bleibt ohne Zielhostmessung. |
+| Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. Die Windows-Startprobe konnte einen WebView2-Endpunkt nicht zuordnen, ihr Abbau wartete auf keinen Prozess, und ihr Messskript lief auf diesem Host nicht durch, ohne dass ein Test es zeigte; behoben. Die Tests der früheren Oberfläche prüften Code, den kein Fenster lud, und verdeckten R-034 bis R-036; sie sind entfernt. Von ihren 52 Verhalten sind an der geladenen Oberfläche 38 nicht oder nur zum Teil geprüft (ABGLEICH-ALTE-OBERFLAECHE.md). | R-019, R-029, R-030, R-034 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
 | Abhängigkeiten, CI und Lieferkette | Locks, Pins und Rechte sauber; paketierte JavaScript-Abhängigkeiten lokal ohne bekannten Befund. Nachweis für Windows und Schutz von Tag und Release fehlen. | R-015, R-016, R-023 | 0 / 73 / 219. Paketinhalte der Release-Assets nicht geprüft; `cargo audit` am 25.11. ausgeführt, zwei Befunde angehoben, zehn Hinweise bleiben. |
 | Dokumentation und Nachvollziehbarkeit | Mehrere Drifts korrigiert, darunter Testvoraussetzungen, Formatverhalten und Release-Herkunft. | R-007, R-015, R-016, R-021 | Gruppe `TEILGEPRÜFT`. BACKLOG, CURRENT_STATE und TRACEABILITY nur über Suche. |
 
@@ -1172,7 +1214,8 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 Auf Nachfrage des Anwenders. Zahlen per Mustersuche, also Größenordnungen.
 Umfang und Laufzeit wurden am Stand der ersten Runde (`e1afef0f`, 361
 Dateien) erhoben; die zweite Runde ergänzt drei Dateien auf 364, R-027 eine
-weitere auf 365.
+weitere auf 365. Am Stand `d474a579` sind es 366: Zwei Testdateien für R-033
+kamen hinzu, der Test der früheren Oberfläche entfiel.
 
 - **Umfang** – 361 Dateien im Headless-Profil, rund 124 000 Testzeilen,
   5 400 Testfälle, 31 000 Prüfaussagen. Der Produktcode (Server und
@@ -1210,7 +1253,7 @@ weitere auf 365.
   - Auch die Befunde der zweiten Runde hat sie nicht gezeigt; zwei davon
     (R-024, R-025) kamen aus dem nativen Lauf, die übrigen aus dem Lesen.
   - Von meinen eigenen Fehlern der zweiten Runde hätte sie einen gemeldet
-    (ein Fall der Golden-Regression). Die beiden Lecks, die neuen Stopps und
+    (ein Fall von `tests/test-pii-regression.js`). Die beiden Lecks, die neuen Stopps und
     die fehlende Person in der Zuordnung meldet sie nicht: Sie bestand am
     Stand `d5992265` vollständig, obwohl die Zuordnung dort fehlerhaft war.
 - **Urteil** – Die Zahl der Dateien ist nicht das Problem: zwei Drittel
@@ -1224,7 +1267,9 @@ weitere auf 365.
   `tests/test-result-generations.js` untersuchen; ein schnelles Profil für
   den gemeinsamen Kern anbieten; einen kleinen fachlichen Korpus mit
   unabhängigen Sollwerten je Format aufbauen (BL-049.2); die Tests der alten
-  Oberfläche auf `workspace.js` umstellen oder entfernen. Für den letzten
+  Oberfläche auf `workspace.js` umstellen oder entfernen (erledigt: seit
+  `1d908311` entfernt; was dabei ungeprüft blieb, steht in
+  ABGLEICH-ALTE-OBERFLAECHE.md). Für den letzten
   Punkt bindet `tests/test-standalone-loaded-frontend-contract.js` seit der
   zweiten Runde den Quelltextvertrag an die geladenen Dateien. Dazu kommt
   aus der dritten Prüfung ein fünfter Punkt: ein Vergleichslauf des
@@ -1236,7 +1281,7 @@ weitere auf 365.
 
 | Ebene | Apple Silicon | Intel |
 | --- | --- | --- |
-| Quelltext in diesem Review | gelesen und in der zweiten Runde geändert, nicht übersetzt | gelesen und geändert, nicht übersetzt |
+| Quelltext in diesem Review | gelesen und seit der zweiten Runde geändert, nicht übersetzt | gelesen und geändert, nicht übersetzt |
 | CI-Runner (RC178, `13ed39ff`) | `macos-15`: Paket, Start, Konvertierung aus dem ZIP | `macos-15-intel`: ebenso |
 | CI-Runner für den geänderten Stand | `NOT_RUN` (keine Actions gestartet) | `NOT_RUN` |
 | Reales Gerät | `NOT_RUN` | `NOT_RUN` |
@@ -1244,8 +1289,13 @@ weitere auf 365.
 Die erste Runde änderte nur den gemeinsamen JavaScript-Kern und das Frontend.
 Die zweite Runde ändert zusätzlich fünf Rust-Dateien (`main.rs`,
 `export_directory.rs`, `native_export_broker.rs`, `native_export_channel.rs`,
-`diagnostic_bundle.rs`). Der neue Code ist plattformneutral geschrieben, mit
-einer Ausnahme: `parse_names_seen` liegt im Windows-Zweig des
+`diagnostic_bundle.rs`). Spätere Runden ändern drei weitere:
+`private_namespace.rs` (R-028, Code unter `cfg(windows)`), `close_prompt.rs`
+(neu) und `ipc_transport.rs` (beide R-032); dazu `tauri.conf.json`,
+`capabilities/main.json`, `permissions/commands.toml`, die erzeugten Schemas
+und `Cargo.lock` (`git diff --stat e1afef0f d474a579 --
+apps/datasecure-standalone/tauri-contract`). Der Code der zweiten Runde ist
+plattformneutral geschrieben, mit einer Ausnahme: `parse_names_seen` liegt im Windows-Zweig des
 Verzeichnislistings. Den macOS-Zweig desselben Listings habe ich nicht
 angefasst; er hat dieselbe Signatur und prüft Duplikate schon bisher linear
 (`export_directory.rs:1005-1038`).
@@ -1258,7 +1308,8 @@ Projekts, weil der freigegebene statische macOS-Core
 ist gewollt; ich habe sie nicht umgangen. Der Rust-Code der Shell ist damit
 für macOS weder übersetzt noch typgeprüft. Ob der Stand auf macOS übersetzt
 und die Rust-Tests dort bestehen, ist der erste Prüfpunkt für einen
-Mac-Runner. Ob die zweispurige
+Mac-Runner, und zwar für die Änderungen aller Runden: Der Typcheck oben lief
+auf `a0d3e340`. Ob die zweispurige
 Vorbereitung auf macOS aktiv wird, hängt an `os.freemem()` (R-022) und ist
 nur auf einem Zielgerät zu klären.
 
@@ -1271,7 +1322,7 @@ hat einen iOS-Job.
 
 | Ansatz | Wiederverwendbarer Core | Plattformbindung und Grenzen | Prüfbarer Nachweis | Aufwand und Entscheidung |
 | --- | --- | --- | --- | --- |
-| Native Aufnahme mit portierbarem Fachkern (SwiftUI-Hülle, JS-Kern in verstecktem WKWebView) | `privacy/*` (20 Dateien, 353 KB, nur SHA-256 und `net.isIP` als Node-Bindung), reine `core`-Teile (rund 170 KB), OOXML-Leser mit Adaptern für `zlib`, `path`, `Buffer` | Dateiaufnahme über Dokumentpicker und zugriffsgebundene URLs; OCR über Apple Vision oder Tesseract-WASM; ein Prozess statt Sandbox-Kind; Speicher- und Hintergrundgrenzen des Systems | Simulator: gleicher Markdown-Hash wie am Desktop für ein synthetisches Korpus | mittel; bevorzugt für eine Voruntersuchung |
+| Native Aufnahme mit portierbarem Fachkern (SwiftUI-Hülle, JS-Kern in verstecktem WKWebView) | `privacy/*` (21 Dateien, am Endstand rund 400 KB, nur SHA-256 und `net.isIP` als Node-Bindung), reine `core`-Teile (rund 170 KB), OOXML-Leser mit Adaptern für `zlib`, `path`, `Buffer` | Dateiaufnahme über Dokumentpicker und zugriffsgebundene URLs; OCR über Apple Vision oder Tesseract-WASM; ein Prozess statt Sandbox-Kind; Speicher- und Hintergrundgrenzen des Systems | Simulator: gleicher Markdown-Hash wie am Desktop für ein synthetisches Korpus | mittel; bevorzugt für eine Voruntersuchung |
 | Wiederverwendung der UI über Tauri v2 iOS | Frontend und derselbe JS-Kern | Kein Sidecar (Shell-Plugin erlaubt auf iOS nur das Öffnen von URLs), kein Ordnerpicker im Dialog-Plugin, Signierung verlangt laut Tauri das Developer Program; von der Rust-Shell bleibt praktisch nichts übersetzbar | `tauri ios dev` im Simulator | hoch, ohne Vorteil gegenüber dem ersten Ansatz; nicht verfolgen |
 
 Verworfen: nodejs-mobile (Node-18-Basis) und eine Portierung nach Rust oder
@@ -1309,33 +1360,30 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 ## Übergabenachricht zum Weiterreichen
 
 ```text
-Claude-Code-Review für DataSecure RC178, zweite Runde mit dritter Prüfung, R-027, R-028 bis R-033, Nacharbeit und Erkennungslücken aus R-033, abgeschlossen.
+Claude-Code-Review für DataSecure RC178, Stand nach dreizehn Übergaben (Befunde R-001 bis R-036), abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
 Geprüfter Produktstand: d474a57916229aaebf89e5dd54cd8533e283ef6c (spätere Commits nur tasks/rc178-claude-review/)
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
-Für Codex zuerst prüfen:
-000000. R-035 und R-036, Commit d474a579: frontend/workspace.js (configure: Hinweis bei
+Für Codex zuerst prüfen (die jüngste Änderung zuerst):
+1. R-035 und R-036, Commit d474a579: frontend/workspace.js (configure: Hinweis bei
    network_folder_notice; errorDetails, sourceDetailText, admissionHints, showError mit drittem
    Argument; fünf Texte in reasons) und workspace.css (.notice mit white-space:pre-line). Test:
    tests/test-standalone-workspace.js, fünf Tests am Dateiende. Zu prüfen: (a) der Core erkennt ein
    Netzlaufwerk nur am UNC-Pfad (gateway/result-folder-config.js, isNetworkResultFolder); zugeordnete
-   Laufwerksbuchstaben und /Volumes lösen den Hinweis nicht aus. (b) Nichts davon ist nativ
+   Laufwerksbuchstaben und /Volumes lösen den Hinweis nicht aus; der Anwender hat entschieden, das
+   vorerst so zu belassen. (b) Nichts davon ist nativ
    beobachtet. (c) Die Meldung nennt höchstens zehn Namen; Namen mit Richtungs- oder
    Zeilentrennzeichen werden gezählt, nicht gezeigt (im Dateibaum weiterhin gezeigt, Rest von R-020).
    (d) Die Korrekturen nach der Gegenprüfung sind nur getestet.
-00000. R-035 und R-036, vor der Behebung beschrieben, aus dem Einzelabgleich der 52 entfallenen Tests
-   (tasks/rc178-claude-review/ABGLEICH-ALTE-OBERFLAECHE.md). R-035: frontend/workspace.js liest
-   network_folder_notice nicht (Core: standalone/application-service.js:1557); der Hinweis nach DS-080
-   auf einen Ergebnisordner im Netzwerk erscheint nicht. R-036: errorCode() in workspace.js verwirft
-   die Details eines Fehlers; ohne eigenen Text sind SOURCE_SELECTION_REJECTED, SOURCE_ARTIFACT_IGNORED,
-   MARKDOWN_CONVERSION_NOT_READY, STANDALONE_DROP_MIXED und SOURCE_SNAPSHOT_CHANGED; ignored_artifact_count
-   und already_selected_count werden nicht angezeigt. Beides gilt auch für den Tag v3.2.0-rc178. Dazu
-   drei nicht belegte Punkte (Prüfstart-Fehler erreicht den Anwender nur als allgemeiner Satz; keine
-   Rückmeldung nach erfolgreichem Öffnen; möglicher Wettlauf zwischen Leeren der Auswahl und Drop) und
-   38 Verhalten ohne oder mit nur teilweisem Test an der geladenen Oberfläche.
-0000. R-019 und R-034, Commits 8cf5dd93 und 1d908311, vom 25.11. nachts, auf Entscheidung des Anwenders:
+   Die Befunde stammen aus dem Einzelabgleich der 52 entfallenen Tests
+   (tasks/rc178-claude-review/ABGLEICH-ALTE-OBERFLAECHE.md) und gelten auch für den Tag v3.2.0-rc178.
+   Aus dem Abgleich bleiben drei nicht belegte Punkte (ein Fehler beim Start der Prüfung erreicht den
+   Anwender nur als allgemeiner Satz; keine Rückmeldung nach erfolgreichem Öffnen; möglicher Wettlauf
+   zwischen Leeren der Auswahl und Drop) und 38 Verhalten ohne oder mit nur teilweisem Test an der
+   geladenen Oberfläche.
+2. R-019 und R-034, Commits 8cf5dd93 und 1d908311, vom 25.11. nachts, auf Entscheidung des Anwenders:
    frontend/index.html, app.js und styles.css sind entfernt, ebenso tests/test-standalone-frontend.js
    (52 Tests nur für app.js) und tests/manual/standalone-ui-browser.mjs. Das Fenster lud nur
    workspace.html. tests/test-standalone-desktop-contract.js liest jetzt die geladenen Skripte;
@@ -1344,12 +1392,12 @@ Für Codex zuerst prüfen:
    STANDALONE_NO_ADMISSION, BATCH_PSEUDONYM_CAPACITY_EXCEEDED und
    STANDALONE_RESULT_BINDING_UNAVAILABLE (vorher nur app.js). Zu prüfen: (a) ob von den 52
    entfallenen Tests ein Verhalten für die neue Oberfläche ungeprüft bleibt (nicht Test für Test
-   abgeglichen; nachgeholt, siehe Punkt 00000); (b) die vier nativen Befehle ohne Aufrufer in der geladenen Oberfläche
+   abgeglichen; nachgeholt, siehe Punkt 1); (b) die vier nativen Befehle ohne Aufrufer in der geladenen Oberfläche
    (remove_admitted_source, open_review_window, open_local_ledger, shutdown) samt dem getrennten
    Prüffenster und capabilities/review.json; (c) der Mac- und Linux-Build (der eingebettete Ordner
    ändert sich dort ebenso; Rust-Quellen sind unverändert); (d) docs/canonical/TRACEABILITY.md nennt
    die entfernten Dateien an 18 älteren Stellen, die nicht einzeln nachgezogen sind.
-000. R-033, Commit 0bd5e26f, vom 25.11. spät: privacy/structured.js (findStructuredSpans: zweiter Blick
+3. R-033, Commit 0bd5e26f, vom 25.11. spät: privacy/structured.js (findStructuredSpans: zweiter Blick
    über maskPlaceholders, wie scanResidual den Text liest; Spannen, die einen Platzhalter oder eine
    Spanne des ersten Blicks berühren, werden verworfen) und gateway/privacy-text-operation.js
    (weitere Stellen eines Kandidatennamens werden wieder reserviert). Behebt den Stopp RESIDUAL_PII
@@ -1364,14 +1412,14 @@ Für Codex zuerst prüfen:
    (d) Laufzeit des Kerndurchlaufs bei vielen Platzhaltern 1,3- bis 1,6-fach. Eine Gegenprüfung mit
    rund 1 800 gezielten und 30 000 Zufallsfällen fand keinen Fall mit mehr Klartext und keinen neuen
    Stopp.
-00. R-033b bis d, Commit 1c8e971c, vom 25.11. abends: privacy/person-ambiguities.js (ROLE_CUE,
+4. R-033b bis d, Commit 1c8e971c, vom 25.11. abends: privacy/person-ambiguities.js (ROLE_CUE,
    roleLabelNameSpans, withoutFollowingWords, labelledNameListSpans, die Ausweitung in
    personProseCandidateSpans mit der Marke "further" und ihr Überspringen in personProseAmbiguities),
    gateway/privacy-text-operation.js (weitere Stellen werden nicht reserviert; reviewOf liest erst die
    Restfunde), privacy/base.js (Rückruf unter/an), privacy/entities.js (contactAfter). Nur Standalone,
-   bis auf das Telefonlabel. Test: tests/test-privacy-role-labels-and-name-lists.js. Drei
+   bis auf das Telefonlabel und die maskierte Klammer. Test: tests/test-privacy-role-labels-and-name-lists.js. Drei
    Gegenprüfungen; verworfen wurden Rollen als Personenfelder, eine Regel für "Name hat … Partizip"
-   und eine für den Geburtsnamen. Zu prüfen: (a) [behoben in 0bd5e26f, siehe Punkt 000] der Stopp RESIDUAL_PII bei "Label Name Nummer"
+   und eine für den Geburtsnamen. Zu prüfen: (a) [behoben in 0bd5e26f, siehe Punkt 3] der Stopp RESIDUAL_PII bei "Label Name Nummer"
    ("Tel. Hans Müller 030 …", auch Steuer-ID, Aktenzeichen, Geburtsdatum, Personalnr., Notfallkontakt,
    Mobil), sobald der Name an anderer Stelle Personenhinweis ist; vorher gab der Kern dort Name und
    Nummer frei, und RC178 stoppt bei "Name: Hans Müller" plus dieser Zeile genauso. Die Ursache liegt
@@ -1383,7 +1431,7 @@ Für Codex zuerst prüfen:
    (e) Die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig gegengeprüft.
    Offen bleibt die eigentliche Lücke: voller Name in Prosa ohne Hinweisverb, einzelner Nachname,
    Telefonnummer ohne Label, Geburtsname. Der Kern kennt Namen nur an der Form.
-0. R-033, Commit 3ba2b8fb, neu am 25.11. und schon in RC178 vorhanden: Markdown aus Office- und
+5. R-033, Commit 3ba2b8fb, neu am 25.11. und schon in RC178 vorhanden: Markdown aus Office- und
    PDF-Quellen schreibt jeden Punkt als "\."; die Regeln für "Tel."/"Fax.", Titel ("Dr."), "geb.",
    "z. Hd." und abgekürzte Nummernlabels ("Personalnr.", "Az.") lasen das nicht. Aus einem
    Word-Dokument blieben Telefonnummer, Name hinter dem Titel, Geburtsdatum und Kennung im
@@ -1394,32 +1442,33 @@ Für Codex zuerst prüfen:
    Text). Die maskierte Klammer hinter einem Namen liest seit 1c8e971c contactAfter. Offen: getippte
    maskierte Listen- und Hervorhebungszeichen, XLSX/PPTX/PDF nicht einzeln ausgeführt. Tragfähig
    wäre eine einheitliche unmaskierte Sicht des Kerns auf solches Markdown statt Regel für Regel.
-   R-033b bis d: siehe Punkt 00. Derselbe Commit enthält R-027: Zugangsdaten in
+   R-033b bis d: siehe Punkt 4. Derselbe Commit enthält R-027: Zugangsdaten in
    Anführungszeichen werden ganz ersetzt, mit Rückfall auf das erste Wort.
-1. R-027, Commit 283e6ed9: privacy/base.js (CREDENTIAL_INLINE_FIELD_RE), privacy/structured.js
+6. R-027, Commit 283e6ed9: privacy/base.js (CREDENTIAL_INLINE_FIELD_RE), privacy/structured.js
    (findInlineCredentialSpans, getrennt von findStructuredSpans) und gateway/privacy-text-operation.js
    (prepareTextPrivacyReview: Ersetzung nach dem Kern, nur wenn die Prüfung danach dieselben offenen
    Entscheidungen ergibt). Vier frühere Fassungen haben Namen freigegeben oder Dokumente gestoppt;
-   die Gegenfälle stehen in tests/test-privacy-inline-credentials.js. Bewusst eng: ein Wort je Label.
-2. privacy/engine.js, Commits cfee417a bis ffab4fa7 als Ganzes, nicht einzeln: Die Zwischenstände
+   die Gegenfälle stehen in tests/test-privacy-inline-credentials.js. Bewusst eng: ein Wort je Label
+   (seit 3ba2b8fb ein Wert in Anführungszeichen ganz, Punkt 5).
+7. privacy/engine.js, Commits cfee417a bis ffab4fa7 als Ganzes, nicht einzeln: Die Zwischenstände
    bis a0d3e340 enthalten zwei Lecks (Aufzählung voller Namen, E-Mail-Adresse mit Namen in der Domain).
    Endstand: linkIdentityHits, asciiNameSpellings, matchOnly, forwardFullNames und die Link-Schleife
    der drei strengen Profile. Neu bekannt: „Meier, Anna Schmidt“ bei bekannter Anna Meier wird als
    umgestellter Name gelesen. Ein eigener Vergleich RC178-Kern gegen diesen Kern mit fremdem Korpus
    wäre der beste Gegenbeleg.
-3. Rust-Shell (5f8bf47b bis 22688d75, d5992265): nur für Windows übersetzt und getestet. Auf einem
+8. Rust-Shell (5f8bf47b bis 22688d75, d5992265): nur für Windows übersetzt und getestet. Auf einem
    Mac-Runner zuerst cargo test und clippy; 8c0dd30b und b30a6dbc übersetzen für sich nicht.
-4. R-028, Commit b71439b2: private_namespace.rs (is_contention, open_waiting) und main.rs
+9. R-028, Commit b71439b2: private_namespace.rs (is_contention, open_waiting) und main.rs
    (namespace_bootstrap_code, release_unspawned_generation). Die Freigabe der Ordnerkette ist
    unverändert; neu sind die Ursache STANDALONE_DATA_ROOT_BUSY, ein Warten von höchstens rund zwei
    Sekunden vor dem Anlegen und dass ein solcher Versuch nicht gegen die 16 Startversuche zählt.
    Zu prüfen: ob ein Rückgeben der Generation an anderer Stelle der Wiederanlauf-Logik stört, und
    der Mac-Build (der Code ist cfg(windows), übersetzt wurde nur Windows).
-5. R-029 und R-030, Commits dbf98cbf, b11a6131, 0b99529c: Die Startprobe verglich den WebView2-
+10. R-029 und R-030, Commits dbf98cbf, b11a6131, 0b99529c: Die Startprobe verglich den WebView2-
    Profilordner ohne den Unterordner EBWebView; ihr Abbau hat deshalb nie auf WebView2 gewartet und
    tut es jetzt. Im Release-Workflow und in scripts/run-pkg-04.ps1 läuft das zum ersten Mal wirklich.
-   Der UDP-Endpunkt, an dem die alte Probe scheiterte, gehört zum Verkehr aus Punkt 6.
-6. R-031, Commits 1c3f36af und 56d7c744: Bis 0b99529c (also auch in RC178) fragte die WebView2-
+   Der UDP-Endpunkt, an dem die alte Probe scheiterte, gehört zum Verkehr aus Punkt 11.
+11. R-031, Commits 1c3f36af und 56d7c744: Bis 0b99529c (also auch in RC178) fragte die WebView2-
    Komponente beim Start config.edge.skype.com ab und meldete sich danach alle 20 bis 40 Sekunden bei
    edge.microsoft.com/componentupdater, dazu eine Proxy-Suche (wpad). Jetzt starten beide Fenster
    WebView2 mit --disable-background-networking --disable-component-update --no-proxy-server
@@ -1431,7 +1480,7 @@ Für Codex zuerst prüfen:
    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS aus seiner Umgebung entfernen soll. Die Kontrolle des
    Beobachters läuft seit 1db8c744 und 98b426dd auch über seinen Hintergrundthread; der Zweig für
    Hosts ohne IPv6 ist nicht ausgeführt.
-7. R-032, Commits 5f670a20 und 2ce74b9f, auf Entscheidung des Anwenders (DECISIONS.md, Präzisierung
+12. R-032, Commits 5f670a20 und 2ce74b9f, auf Entscheidung des Anwenders (DECISIONS.md, Präzisierung
    DS-110 vom 25.11.2026): Schließen des Hauptfensters fragt bei arbeitendem Lauf und pausiert über
    das vorhandene pause_batch. Hülle: close_prompt.rs, main.rs (request_native_close,
    acknowledge_close_request, decline_close_request, confirm_close), ipc_transport.rs (ExitGate::begun),
@@ -1445,14 +1494,14 @@ Für Codex zuerst prüfen:
    (workBegins/workReturns statt markWorkStarting; Klick auf "Pausieren und schließen" nach
    Verbindungsverlust). Die Rückfrage "Aufbewahrung 0 Tage" ist im Paket nicht erreichbar, weil
    configure_core_environment EU_PRIVACY_RETENTION_DAYS nicht weiterreicht.
-8. R-025, Commits 907efc14, 8c452ac4, 1126dc36 und e66bab8f: nur Texte der Oberfläche. 8c452ac4 hatte
+13. R-025, Commits 907efc14, 8c452ac4, 1126dc36 und e66bab8f: nur Texte der Oberfläche. 8c452ac4 hatte
    eine Verbform verdorben und rund fünfzehn Texte übersehen (zweite Gegenprüfung), danach fehlten
    noch zwei (dritte Gegenprüfung).
    Zu prüfen: ob weitere Zähltexte fehlen (der Wächter in tests/test-standalone-workspace.js kennt
    nur eine Wortliste und drei Satzformen), die Einzahlsätze in workspace.js und document-review.js auf
    Lesbarkeit;
    app.js (alte Oberfläche) ist seit 1d908311 entfernt.
-Weitere Commits der letzten Runde: 49add216 und b755e208 (Diagnosepaket listet bis 2 048 Einträge),
+Weitere Commits der Runde vom 25.11. nachmittags: 49add216 und b755e208 (Diagnosepaket listet bis 2 048 Einträge),
 52dee47c (Cargo.lock: url 2.5.9, cookie 0.18.3 nach cargo audit; nur für Windows übersetzt), fc10973e und
 927fb3bd (audit:standalone prüft die Rust-Crates), 405eb370 (Seitenzoom unter Windows über WebView2,
 ohne neue Berechtigung), 39f2b3aa mit 22c34dcb (Formular-Kontrollkästchen ausgegeben und wieder
@@ -1460,6 +1509,8 @@ zurückgenommen, weil das Zeichen die Erkennung eines Namens dahinter verhindert
 Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
 R-015, R-022; R-032 beim Beenden durch das Betriebssystem und bei Absturz; R-028 bei langer Belegung; R-031 hängt an nicht zugesicherten WebView2-Schaltern; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
 Überschriften, Tabellen und Links); vier Commit-Nachrichten mit falschem Backlogposten (siehe Bericht);
-Rest von R-003 (Kontrollkästchen) und von R-033 (siehe Punkte 000 und 00); Entscheidungen zu Protokollaufbewahrung, den vier nativen Befehlen ohne Aufrufer und
-Seitenzoom unter macOS/Linux; rund 61 % der Einheiten im Register offen.
+Rest von R-003 (Kontrollkästchen) und von R-033 (siehe Punkte 3 und 4); Entscheidungen zu Protokollaufbewahrung, den vier nativen Befehlen ohne Aufrufer
+(remove_admitted_source, open_review_window, open_local_ledger, shutdown) und Seitenzoom unter macOS/Linux;
+die Erkennung eines Netzlaufwerks nur am UNC-Pfad (nach Entscheidung des Anwenders vorerst belassen);
+38 Verhalten der geladenen Oberfläche ohne oder mit nur teilweisem Test; rund 61 % der Einheiten im Register offen.
 ```
