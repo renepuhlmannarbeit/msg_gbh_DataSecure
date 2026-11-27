@@ -6100,6 +6100,13 @@ testAsync('the history offers neither repair nor abandonment while the worker of
   h.model.state = { ...h.model.state, state: 'export_pending', delivering: false }; await h.poll();
   assert.ok(h.el(`history-${A}-delivery`)); assert.ok(h.el(`history-${A}-abandon-export`));
   assert.equal(h.el(`history-${A}-state`).textContent, 'Bereitstellung offen');
+  // The history can report the decided run one status read early: a run the status still sees processing gets no repair.
+  h.model.state = { ...h.model.state, state: 'processing' }; await h.poll();
+  assert.equal(h.el(`history-${A}-delivery`), undefined);
+  assert.equal(h.el(`history-${A}-state`).textContent, deliveringText);
+  assert.ok(h.el(`history-${B}-delivery`), 'another run keeps its repair while this one is processing');
+  h.model.state = { ...h.model.state, state: 'export_pending' }; await h.poll();
+  assert.ok(h.el(`history-${A}-delivery`));
   // And back: a delivery that begins after the row was drawn removes the repair again, also for a continued run.
   h.model.state = { ...h.model.state, delivering: true }; await h.poll();
   assert.equal(h.el(`history-${A}-delivery`), undefined);

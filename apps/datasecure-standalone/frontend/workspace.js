@@ -20,6 +20,9 @@
     Number.isSafeInteger(state.selected_count) && state.selected_count > 0 &&
     !(Number.isSafeInteger(state.failed_count) && state.failed_count >= state.selected_count);
   const DELIVERING = 'Ergebnisse werden bereitgestellt';
+  // The history can show a decided run one status read before the status says
+  // so. A run the last status still saw processing is not open for repair either.
+  const deliveryOwner = state => state && (delivering(state) || state.state === 'processing') ? state.batch_id || null : null;
   const reasons = {
     PROCESS_IDENTITY_UNAVAILABLE: 'Der lokale Verarbeitungsprozess konnte nicht eindeutig zugeordnet werden. Der nächste Verarbeitungsschritt wurde vorsichtshalber nicht gestartet. Bitte die Diagnose sichern und den Laufstatus prüfen.',
     PROCESS_IDENTITY_ACCESS_DENIED: 'Das Betriebssystem verweigert die Abfrage zur sicheren Prozesszuordnung. Bitte die Diagnose sichern und mit der IT prüfen; keine Schutzfunktion abschalten.',
@@ -1677,7 +1680,7 @@
       $('history-status').textContent = data.entries.length ? 'Die letzten 5 Verarbeitungen · neueste zuerst' : 'Keine Verarbeitungen in den letzten 5 Verlaufseinträgen sichtbar.';
       if (data.history_degraded === true) $('history-status').textContent += ' Einige alte Dateistände sind momentan nicht bestätigbar. Die übrigen Laufdaten bleiben sichtbar; es werden keine fehlenden Dateien automatisch neu angelegt.';
       const signature = JSON.stringify([data.entries, job?.batchId || null, reconnecting, contextRequired, detailsBatchId, includeHiddenHistory,
-        delivering(current) ? current.batch_id || null : null]);
+        deliveryOwner(current)]);
       // Polling must not replace focused controls or expanded file details
       // when the history did not change. Changes retain their explicit state.
       if (signature === historySignature) return;
@@ -1705,7 +1708,7 @@
         const failedFiles = count(entry.failed_count);
         // The worker of this very run is still providing its results (R-040).
         const providing = !reconnecting && !contextRequired && entry.status === 'export_pending' &&
-          delivering(current) && current.batch_id === entry.batch_id;
+          deliveryOwner(current) === entry.batch_id;
         // The durable history summary outlives the journal that supplies the
         // optional reason breakdown. Missing reasons must not become invented
         // technical errors after journal retention.
