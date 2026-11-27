@@ -126,7 +126,10 @@ export async function runPackagedMarkdownScenario({ request: initialRequest, res
       const response = await request({ schema: 'datasecure-standalone-private-ipc/1',
         request_id: (++sequence).toString(16).padStart(16, '0'), action: 'resolve_history_results', batch_id: batchId });
       if (response.ok) { target = response.result; break; }
-      assert.ok(['STANDALONE_RESULTS_MISSING', 'RESULT_PUBLICATION_PENDING'].includes(response.error_code),
+      // The document control is shared by all runs. While another holder has it,
+      // for example the worker just after the run reports completion, Busy is
+      // the designed answer. The deadline of this loop still bounds the wait.
+      assert.ok(['STANDALONE_RESULTS_MISSING', 'RESULT_PUBLICATION_PENDING', 'STANDALONE_BUSY'].includes(response.error_code),
         `initial readiness never retries a conflict: ${JSON.stringify(response)}`);
       if (Date.now() >= exportDeadline) {
         const status = await send('get_public_state'), context = await send('get_ui_context');

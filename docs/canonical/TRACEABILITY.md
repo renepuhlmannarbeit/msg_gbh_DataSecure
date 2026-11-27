@@ -53,7 +53,10 @@ Freigabe entfernt. Dasselbe gilt für den synchronen Weg derselben Funktion
 (`gateway/standalone-history-store.js`, `notice-summary.lock`).
 `test-standalone-document-control.js` prüft Wartezeit, Fortsetzung, ihre
 Grenzen und den Schutz eines späteren Eintrags. Unverändert ist
-`gateway/batch-lock-release.js` (Stapelsperre, vier Wartezeiten).
+`gateway/batch-lock-release.js` (Stapelsperre, vier Wartezeiten). R-037: Die
+Testhelfer `standalone-packaged-markdown.mjs`,
+`standalone-packaged-anonymized-ocr.mjs` und `standalone-packaged-ocr-review.mjs`
+lassen beim Warten auf den Ergebnisordner auch `STANDALONE_BUSY` zu.
 
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor

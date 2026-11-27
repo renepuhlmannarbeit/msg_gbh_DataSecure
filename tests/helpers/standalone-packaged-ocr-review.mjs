@@ -123,7 +123,10 @@ export async function runPackagedOcrSkipScenario({ request, sourceDirectory }) {
     assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_VISIBLE_EXPORT_TIMEOUT');
     if (response.ok === true) { output = response.result; break; }
     assert.equal(response.ok, false);
-    assert.ok(['STANDALONE_RESULTS_MISSING', 'RESULT_PUBLICATION_PENDING'].includes(response.error_code),
+    // The document control is shared by all runs. While another holder has it,
+    // for example the worker just after the run reports completion, Busy is
+    // the designed answer. The deadline of this loop still bounds the wait.
+    assert.ok(['STANDALONE_RESULTS_MISSING', 'RESULT_PUBLICATION_PENDING', 'STANDALONE_BUSY'].includes(response.error_code),
       `initial readiness never retries a conflict: ${JSON.stringify(response)}`);
     await new Promise(resolve => setTimeout(resolve, 100));
   }
