@@ -132,8 +132,9 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-034 | niedrig | Oberfläche, alle | Die geladene Oberfläche erklärt vier Fehlercodes nicht, die der Core weiter liefert (`SOURCE_FOLDER_UNSUPPORTED_FILES`, `STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED`, `STANDALONE_RESULT_BINDING_UNAVAILABLE`), und zeigt dafür einen allgemeinen Satz. Erklärt hat sie nur die frühere Oberfläche; der Vertragstest prüfte dort und bestand. Beim Umbinden des Tests gefunden; in RC178 gleich. | BL-050.6 | behoben (`8cf5dd93`) |
 | R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | behoben (`d474a579`) für den Fall, den der Core erkennt; ein zugeordneter Laufwerksbuchstabe und ein Mount unter `/Volumes` gelten dem Core nicht als Netzlaufwerk (vorbestehend; nach Entscheidung des Anwenders vorerst belassen). In Standalone unter Windows ist der Hinweis nicht erreichbar, siehe R-038 |
 | R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | behoben (`d474a579`, `6e10ac80`); für eine Office-Sperrdatei nativ beobachtet |
-| R-037 | niedrig bis mittel | Tests und Betrieb, alle | Die Ergebnisabfrage direkt nach Laufende wurde in einem Lauf der Suite mit `STANDALONE_BUSY` beantwortet statt mit „Veröffentlichung läuft noch“; der Test lässt das nicht zu, die Suite brach ab. Einmal beobachtet, nicht reproduziert. Core und Test sind seit RC178 unverändert. | BL-050.6 | Hypothese |
+| R-037 | niedrig | Tests und Orakel, alle | Drei Testhelfer fragen den Ergebnisordner direkt nach dem gemeldeten Laufende ab und lassen als Antwort nur „fehlt noch“ und „Veröffentlichung läuft noch“ zu. Der Arbeitsprozess nimmt die Sperre der Dokumentkontrolle kurz nach dem gemeldeten Ende noch einmal für rund 50 ms; trifft die Abfrage diese Zeit, antwortet der Core wie vorgesehen `STANDALONE_BUSY`, und die Suite bricht ab. Am 27.11. abends nachgestellt (drei von drei Durchgängen, wenn die Abfrage direkt beim gemeldeten Ende kommt). Core und Test sind seit RC178 unverändert. | BL-050.6 | geklärt: Fehler des Tests, kein Fehler des Produkts; nichts geändert, Entscheidung steht aus |
 | R-038 | mittel | Fachlichkeit und Plattform, Standalone Windows (Core-Teil auch Cowork) | Ein Ergebnisordner im Netzwerk wird abgelehnt, obwohl `PRODUCT.md` ihn ausdrücklich erlaubt: über den UNC-Pfad von der Hülle (sie lässt nur Laufwerksbuchstaben zu), über einen zugeordneten Laufwerksbuchstaben vom Core (Windows löst ihn zum UNC-Namen auf). Die Meldung nennt den Grund nicht; der Hinweis aus R-035 ist in Standalone unter Windows nicht erreichbar. Nativ beobachtet; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | Ablehnung bleibt nach Entscheidung des Anwenders; Meldung nennt die mögliche Ursache und Produktaussage für Standalone unter Windows eingeschränkt (`8a167b09`). Netzordner zu unterstützen bleibt offen |
+| R-039 | hoch | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Öffnet der Anwender im Verlauf den Ergebnisordner eines fertigen Laufs, während ein anderer Lauf arbeitet, kann die Sperre der Dokumentkontrolle hängen bleiben: Die Abfrage nimmt die Sperre, kann sie nach 185 ms vergeblicher Versuche nicht freigeben und lässt sie stehen. Danach antworten jede weitere Abfrage und auch „Fortsetzen“ mit „Ein lokaler Vorgang ist bereits aktiv. Bitte warten.“, und der laufende Stapel bleibt stehen (im ersten Versuch bei 65 von 80 Dateien). Erst ein Neustart der App löst die Sperre. Zweimal in zwei Versuchen beobachtet, beim vierten und beim zehnten Klick. Kein Datenverlust, Originale unverändert. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | offen; Entscheidung des Anwenders steht aus |
 
 ## Einzelbefunde
 
@@ -2522,7 +2523,12 @@ Fingerprints.
   der Sidecar-Test lädt keine Oberfläche. Während des Laufs liefen auf dem
   Rechner kleine eigene Skripte (Lesezugriffe, zwei kurze Testdateien). Dass
   sie das Zeitverhalten verschoben haben, kann ich nicht ausschließen.
-- **Status:** Hypothese, nicht reproduziert, nichts geändert. BL-050.6.
+- **Status am Mittag:** Hypothese, nicht reproduziert, nichts geändert.
+  BL-050.6.
+- **Nachtrag vom Abend:** geklärt und nachgestellt, siehe „Nachtrag vom
+  27.11. abends · R-037 geklärt, neuer Befund R-039“. Dort steht auch die
+  Berichtigung: Die Sperre gilt für alle Läufe, nicht für einen, und die
+  Auswirkung für den Anwender beschreibt R-039.
 
 ### Grenzen
 
@@ -2695,6 +2701,196 @@ sie mit `net use /persistent:yes` zurückgestellt und die Zuordnung `Z:`
 entfernt; `net use` zeigt danach wieder „Neue Verbindungen werden
 gespeichert“ und keine Einträge.
 
+## Nachtrag vom 27.11. abends · R-037 geklärt, neuer Befund R-039
+
+Auftrag des Anwenders: R-037 gezielt nachstellen und klären, ohne das Produkt
+zu ändern. Geprüft am Produktstand `8a167b09` (Paket `28c6f7ce…`, Build
+`d9999cb0`). Am Produkt und an den Tests ist nichts geändert.
+
+### Vorgehen
+
+- **Proben am Core:** vorübergehende, nicht eingecheckte Kopien von
+  `tests/test-standalone-sidecar.js` (nur der Ablauf
+  „content-format-workflow“) und von
+  `tests/helpers/standalone-packaged-markdown.mjs`. Sie starten denselben
+  projizierten Core mit Sidecar und Arbeitsprozess wie der Test und ändern
+  nur, wann und wie oft `resolve_history_results` gefragt wird. Nach den
+  Läufen gelöscht; `git status` war danach leer.
+- **Messung der Sperre:** Ein dritter Prozess listet den Ordner
+  `document-reviews` rund 30 000-mal je Sekunde und hält fest, wann
+  `control.lock` erscheint und verschwindet. Er öffnet die Datei nicht. Eine
+  Belegung, die ganz in einer eigenen Anfrage der Probe liegt, gehört dem
+  Sidecar; jede andere dem Arbeitsprozess.
+- **Echte App:** das Paket im isolierten Testprofil, Bedienung über
+  Windows-UI-Automation, 81 erfundene Textdateien.
+
+### R-037 · geklärt: Drei Testhelfer lassen eine vorgesehene Antwort nicht zu
+
+- **Ort:** `tests/helpers/standalone-packaged-markdown.mjs:125-136`,
+  `tests/helpers/standalone-packaged-anonymized-ocr.mjs:100-109` und
+  `tests/helpers/standalone-packaged-ocr-review.mjs:118-129` (jeweils die
+  Prüfung „initial readiness never retries a conflict“). Im Core:
+  `gateway/standalone-document-review-store.js:115-131` (eine Sperrdatei
+  `control.lock` für alle Läufe), `:156-159` und `:2352-2373`
+  (`resolveResultsGeneration` nimmt sie),
+  `gateway/standalone-document-control.js:41-42` (belegt wird zu
+  `STANDALONE_BUSY`, ohne Wiederholung),
+  `gateway/prepublication-error.js:23-34` (der Arbeitsprozess wiederholt bei
+  `STANDALONE_BUSY` bis zu 50-mal im Abstand von 100 ms).
+- **Reproduktion:**
+  1. Ein zweiter Prozess hält die Sperre mit dem Code des Produkts
+     (`createBatchActiveLock(...).acquireActiveLock`); dann fragen. Fünf von
+     fünf Antworten `STANDALONE_BUSY`. Nach der Freigabe wieder
+     `RESULT_PUBLICATION_PENDING`, dann der Ordner.
+  2. Ohne fremden Halter, nur früher fragen: `get_run_history` alle 5 ms
+     statt alle 150 ms, und die Abfrage sofort stellen, wenn der Lauf als
+     fertig gemeldet ist, ohne `get_run_failures` davor. Drei von drei
+     Durchgängen `STANDALONE_BUSY`. Die Messung zeigt jedes Mal eine
+     Belegung durch den Arbeitsprozess: Sie beginnt zwischen 15 ms vor und
+     7 ms nach dem Zeitpunkt, zu dem der Lauf als fertig gemeldet ist, und
+     endet 38 bis 64 ms danach.
+  3. Im Rhythmus des Tests (ein Durchgang): Die letzte Belegung durch den
+     Arbeitsprozess endete 193 ms vor der ersten Abfrage; kein Abbruch.
+- **Ist:** Der Arbeitsprozess nimmt die Sperre während des Laufs oft (in
+  einem Durchgang 32-mal, zusammen 3,8 s, längste Belegung 222 ms) und noch
+  einmal kurz nach dem Zeitpunkt, zu dem der Verlauf den Lauf als fertig
+  meldet. Zwischen dieser Meldung und der ersten Abfrage des Tests liegen
+  nur der Abstand der Verlaufsabfrage und eine Anfrage von rund 60 ms. Fällt
+  die Abfrage in die Belegung, antwortet der Core `STANDALONE_BUSY`.
+- **Soll:** `STANDALONE_BUSY` ist an dieser Stelle die vorgesehene Antwort
+  des Core; der Arbeitsprozess rechnet umgekehrt damit und wiederholt. Der
+  Test müsste sie wie „Veröffentlichung läuft noch“ behandeln und erneut
+  fragen. Seine Meldung „never retries a conflict“ meint
+  `RESULT_PUBLICATION_CONFLICT` (Commit `852a2462`), nicht „belegt“.
+- **Auswirkung:** niedrig. Die Suite bricht selten ab, ohne dass das Produkt
+  einen Fehler hat; ein Abbruch kostet einen Lauf von 50 Minuten. In diesem
+  Review einmal beobachtet. Unter Last wird es wahrscheinlicher, weil die
+  Belegung dann länger dauert.
+- **Abgrenzung:** In diesem Fenster bietet die Oberfläche den Ergebnisordner
+  des eben fertigen Laufs nicht an (Zustand `export_pending`,
+  `results_available` falsch). Der Anwender erreicht diesen Fall nicht. Was
+  er erreicht, beschreibt R-039.
+- **Status:** geklärt, nichts geändert. Vorschlag: Die drei Helfer fragen
+  bei `STANDALONE_BUSY` innerhalb ihrer vorhandenen Frist erneut. BL-050.6.
+
+### R-039 · Sperre der Dokumentkontrolle bleibt hängen, ein laufender Stapel bleibt stehen
+
+- **Ort:** `gateway/standalone-document-control.js:9` (vier Wartezeiten von
+  10, 25, 50 und 100 ms) und `:62-81` (`releaseAsync` gibt danach auf und
+  lässt den eigenen Eintrag stehen); `gateway/batch-active-lock.js:369-372`
+  (ein vorhandener Eintrag eines lebenden Prozesses gilt als belegt) und
+  `:410-423` (erst ein neuer Start räumt den Eintrag der früheren Sitzung);
+  `gateway/standalone-document-review-store.js:129` (als Besitzer steht der
+  Prozess der Hülle im Eintrag; er lebt, solange die App läuft).
+  Auslöser in der Oberfläche: `frontend/workspace.js:1883-1885` und `:1926`
+  („Ergebnisordner öffnen“ ist für einen fertigen Lauf auch dann bedienbar,
+  wenn ein anderer Lauf arbeitet). Die Hülle reicht die Antwort ohne
+  Wiederholung durch (`tauri-contract/src/main.rs:2819-2859`). Der Test
+  `tests/test-standalone-document-control.js:241-258` schreibt das
+  Stehenlassen fest („leaves only its exact owned record“).
+- **Reproduktion in der echten App (zwei Versuche, je ein neues
+  Testprofil):**
+  1. „Nur umwandeln“, eine Textdatei, Lauf abwarten.
+  2. „Nur umwandeln“, Ordner mit 80 Textdateien, starten.
+  3. In den Verlauf wechseln und für den ersten Lauf „Ergebnisordner öffnen“
+     wählen, mehrmals im Abstand von 1 bis 3 Sekunden.
+- **Ist, erster Versuch (Protokoll des Core):**
+  - Klick 1: `STANDALONE_BUSY` nach 21 ms. Klick 2: beantwortet nach 281 ms,
+    der Ordner öffnet sich. Klick 3: `STANDALONE_BUSY`.
+  - Klick 4: nach 518 ms `OWNERSHIP_GUARD_BUSY`, in der Oberfläche „Ein
+    anderer lokaler Vorgang sichert gerade seinen Zustand. …
+    (STANDALONE_OWNERSHIP_CONTROL_BUSY)“. Die Sperrdatei trägt den
+    Zeitstempel dieses Klicks, die Kennung des ersten Laufs und die
+    Prozessnummer der Hülle. Sie bleibt liegen.
+  - Danach 94 Klicks in zwei Minuten: jedes Mal „Ein lokaler Vorgang ist
+    bereits aktiv. Bitte warten. (STANDALONE_BUSY)“.
+  - Der zweite Lauf bleibt bei 65 von 80 Dateien stehen und endet 109
+    Sekunden nach dem vierten Klick mit „Fortsetzung möglich“. Im Journal
+    tragen die 15 offenen Dateien den Fehler `STANDALONE_BUSY`.
+  - „Fortsetzen“ ohne Neustart: dieselbe Meldung; nach drei Minuten weiter
+    65 Ergebnisse.
+  - Nach dem Schließen liegt die Sperrdatei noch da, nach dem nächsten Start
+    ist sie weg. „Fortsetzen“ verarbeitet die 15 Dateien in 22 Sekunden (80
+    von 80), beide Ergebnisordner öffnen sich.
+- **Ist, zweiter Versuch:** zwei Klicks beantwortet, sechs
+  `STANDALONE_BUSY`, einer beantwortet, der zehnte nach 510 ms
+  `OWNERSHIP_GUARD_BUSY`. Die Sperrdatei mit dem Zeitstempel des zehnten
+  Klicks bleibt liegen; 30 Sekunden später tragen vier Dateien des laufenden
+  Stapels `STANDALONE_BUSY`.
+- **Ursache, aus Code und Protokoll:** Die Abfrage nimmt die Sperre und muss
+  sie nach ihrer Arbeit wieder freigeben. Dafür braucht sie kurz die
+  gemeinsame Betriebssystemsperre des Datenordners. Hält der Arbeitsprozess
+  diese gerade, versucht die Abfrage es über zusammen 185 ms erneut und gibt
+  dann auf. Der Eintrag bleibt stehen, und nichts versucht die Freigabe
+  später noch einmal.
+- **Soll:** Nach DS-086 ist ein Klick im Verlauf an seinen Lauf gebunden,
+  und nicht zulässige Aktionen sind mit Grund deaktiviert. Eine angebotene
+  Leseaktion darf einen anderen Lauf nicht anhalten, und „Bitte warten“ muss
+  enden, ohne dass der Anwender die App neu startet. Eine ausdrückliche
+  Regel für „während ein anderer Lauf arbeitet“ habe ich in `PRODUCT.md` und
+  `DECISIONS.md` nicht gefunden.
+- **Auswirkung:** hoch für den Betrieb. Ein Klick auf einen bedienbaren
+  Knopf hält einen laufenden Stapel an; die Meldung nennt weder Ursache noch
+  Ausweg; „Fortsetzen“ hilft nicht. Kein Datenverlust: Fertige Ergebnisse
+  und der Zwischenstand bleiben, die Originale sind unverändert, nach einem
+  Neustart läuft der Rest durch. Bei einem großen Stapel fällt der
+  Stillstand erst auf, wenn jemand nachsieht.
+- **Reichweite, nur gelesen:** Dieselbe Freigabe nutzen vier weitere
+  Abläufe in `standalone-document-review-store.js` (`:2241`
+  `publishResults`, `:2375` `exportNativeApproved`, `:2437`, `:2454`). Ohne
+  einen zweiten arbeitenden Prozess gibt es keinen Wettbewerb um die
+  Betriebssystemsperre. In RC178 ist der Code derselbe. macOS und das
+  Cowork-Plugin sind nicht geprüft.
+- **Status:** offen, nichts geändert; die Entscheidung des Anwenders steht
+  aus. BL-010.13 (DS-086), BL-050.6.
+
+### Was die Probe am Core dazu zeigt
+
+Der Test startet den Core ohne den nativen Kanal und damit ohne die
+Betriebssystemsperre. Dort bleibt keine Sperre hängen; sichtbar ist nur der
+gewöhnliche Wettbewerb: Während ein zweiter Lauf arbeitete, wurden 25 von 74
+Abfragen für den fertigen ersten Lauf mit `STANDALONE_BUSY` beantwortet (14
+von 36 und 11 von 38). Der zweite Lauf lief dabei durch. Auch ohne R-039
+scheitert „Ergebnisordner öffnen“ während eines anderen Laufs also öfter mit
+„Bitte warten“.
+
+Eine dichte Abfrage ohne Pause taugt für die Frage nicht: In sechs
+Durchgängen kam unter 175 Antworten kein `STANDALONE_BUSY`, weil die Abfrage
+die Sperre dann selbst fast durchgehend hält.
+
+### Weitere Beobachtung
+
+Startet die Probe einen zweiten Lauf ohne Pause, sobald der Ergebnisordner
+des ersten bereit ist, nimmt der Core den Start an. Der neue Lauf endet nach
+weniger als einer Sekunde als fehlgeschlagen und nicht fortsetzbar
+(`INTERNAL_FAILURE`, 0 von 12 Dateien), in drei von drei Durchgängen. Mit
+0,5 und 2 Sekunden Abstand läuft er durch. Über die Oberfläche ist ein so
+kurzer Abstand nicht zu erreichen; nicht weiter untersucht.
+
+### Eigene Fehler dieser Runde
+
+- Die erste Fassung von R-037 nannte die Sperre „die Sperre des Laufs“ und
+  die Auswirkung für den Anwender niedrig. Es ist eine Sperre für alle
+  Läufe, und der Fall, den der Anwender erreicht, ist R-039.
+- Als in der Probe ein zweiter Lauf abbrach, hielt ich zuerst meine Abfrage
+  für die Ursache. Der Kontrollversuch ohne Abfrage brach genauso ab; die
+  Ursache war der fehlende Abstand zwischen den Läufen.
+- Mein erstes Skript für die echte App fand die Schaltfläche nicht und
+  versuchte danach, das Fenster zu schließen. Die App fragte nach; ich habe
+  „Weiter verarbeiten“ gewählt. Der Lauf arbeitete danach weiter, bis zum
+  vierten Klick.
+
+### Grenzen
+
+- R-039 ist zweimal beobachtet, beide Male mit 80 kleinen Textdateien in
+  „Nur umwandeln“. Wie oft es bei anderen Stapeln eintritt, ist nicht
+  gemessen; in beiden Versuchen innerhalb der ersten zehn Klicks.
+- Die Klicks kamen über die Automationsschnittstelle, öfter als von Hand.
+- Die vier weiteren Abläufe mit derselben Freigabe sind nur gelesen.
+- Eine Behebung ist nicht entworfen und nicht getestet.
+- Die Prüfsummen der 81 Originale sind verglichen, während der zweite Lauf
+  arbeitete (unverändert), nicht noch einmal nach dem Neustart.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -2753,6 +2949,9 @@ gespeichert“ und keine Einträge.
 | A-053 | Leeren der Auswahl und Hineinziehen können sich überholen (Abgleich Nr. 43). | In der Oberfläche allein ist der Ablauf möglich. | Die Hülle nimmt für `cancel_admission`, die Dateidialoge und das Hineinziehen dieselbe Sperre. | `main.rs`, `selection_guard` | Für das Produkt widerlegt. |
 | A-054 | ERGEBNIS.md beschreibt nach dreizehn Übergaben überall den Endstand. | Jede Runde hat Kopf, Übersicht und Nachricht ergänzt. | Ältere Abschnitte wurden nicht mitgezogen: fehlende Commit-Tabellen, veraltete Urteile, zwei widersprüchliche Punkte der Nachricht. | unabhängiger Read-only-Lauf, 32 Meldungen | Widerlegt; berichtigt in `84474ffe`. |
 | A-055 | Der Hinweis aus R-035 erscheint, sobald der Anwender in Standalone einen Ergebnisordner im Netzwerk wählt. | Der Core liefert `network_folder_notice` für einen UNC-Pfad, die Oberfläche zeigt ihn; mit nachgebildeter Antwort getestet. | Die Hülle nimmt unter Windows keinen UNC-Pfad an, und der Core lehnt einen zugeordneten Laufwerksbuchstaben ab. Die Antwort entsteht dort nie. | nativer Lauf mit `\\localhost\C$` und vorübergehendem Laufwerk `Z:`; Gegenprobe an `inspectRoot` | Widerlegt für Standalone unter Windows; neuer Befund R-038. |
+| A-056 | Die Sperre, die die Ergebnisabfrage nimmt, gehört dem einen Lauf (so die erste Fassung von R-037). | Der Aufruf übergibt die Kennung des Laufs. | Die Sperrdatei ist eine für den ganzen Prüfspeicher; die Kennung steht nur im Eintrag. | Lesen von `controlGate`; Messung der Sperrdatei über einen ganzen Lauf | Widerlegt. Daraus folgt, dass eine Abfrage für einen fertigen Lauf mit einem arbeitenden Lauf um dieselbe Sperre konkurriert (R-039). |
+| A-057 | Ein Fehler, der direkt nach meiner Abfrage auftritt, kommt von der Abfrage. | Der zweite Lauf der Probe brach 8 ms nach der Antwort ab. | Die Probe startete den zweiten Lauf ohne Abstand nach dem ersten. | Kontrollversuch ohne Abfrage; Versuche mit 0,5 und 2 s Abstand | Widerlegt für die Probe am Core. In der echten App hält dagegen eine Abfrage den Lauf an; dort belegen es Sperrdatei, Protokoll und Journal (R-039). |
+| A-058 | Ein Test, der ein Verhalten festschreibt, schreibt ein gewolltes Verhalten fest. | `tests/test-standalone-document-control.js:241-258` verlangt, dass der Eintrag nach vier Versuchen stehen bleibt. | Der Test prüft die Funktion allein. Was der stehen gebliebene Eintrag in der laufenden App bewirkt, prüft kein Test. | nativer Lauf, zwei Versuche | Eingegrenzt: Das Stehenlassen ist als sichere Seite gewollt; die Folge, ein Stillstand bis zum Neustart, ist nicht abgefangen. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung
