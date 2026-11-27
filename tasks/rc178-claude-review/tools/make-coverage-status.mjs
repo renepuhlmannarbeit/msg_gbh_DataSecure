@@ -69,6 +69,12 @@ part('Laufzeit', [
   [`${srv}gateway/standalone-pause.js`, 'bis Z. 157'],
   [`${srv}standalone/convert-next.js`, 'Z. 30-130']
 ]);
+// Sechzehnte und siebzehnte Übergabe: Dokumentkontrolle und ihre Sperren (R-039), von der Hauptsession gelesen.
+full('R-039', ['gateway/standalone-document-control.js', 'gateway/batch-active-lock.js', 'gateway/batch-lock-release.js',
+  'gateway/synchronous-ownership-admission.js', 'gateway/process-liveness.js', 'gateway/prepublication-error.js',
+  'core/ownership-control.js'].map((file) => srv + file), ['R-039']);
+// Aus standalone-document-review-store.js, standalone-history-store.js und run-history.js sind dafür nur je
+// 60 bis 90 Zeilen gelesen; das trägt keinen Lesestand für die ganze Datei, sie bleiben offen.
 
 full('Konvertierungs', ['document-parser.js', 'standalone/markdown-extractor.js', 'standalone/markdown-contract.js',
   'standalone/markdown-output-profile.js', 'standalone/readable-markdown.js', 'standalone/conversion-feedback.js',
@@ -416,6 +422,22 @@ sym(`${srv}ooxml.js`, 'wordSymbolText', {
 sym(`${app}frontend/workflow-presentation.js`, 'failureAdvice', { status: 'TEILGEPRÜFT',
   purpose: 'Handlungshinweis zu einem Stoppgrund; Aufrufer Ergebnisdarstellung',
   evidence: 'tests/test-workflow-presentation.js', findings: ['R-018', 'R-025'], remark: 'geändert in 2726675a' });
+// Siebzehnte Übergabe: Freigabe der Dokumentkontrolle (R-039).
+const controlEvidence = 'tests/test-standalone-document-control.js (27 Tests; vier schlagen am Code von 8a167b09 fehl); ' +
+  'tests/test-native-standalone-pause-control.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu; ' +
+  'zwei native Versuche am Paket 5f347413; unabhängige Gegenprüfung';
+for (const [name, purpose, invariant] of [
+  ['withDocumentControl', 'Dokumentkontrolle für eine asynchrone oder synchrone Aktion halten; Aufrufer standalone-document-review-store.js (lockedAsync) und standalone-history-store.js',
+    'die Aktion läuft einmal; freigegeben wird nur mit der vor der Aktion erfassten Berechtigung; kein Fehler der Aktion wird überdeckt'],
+  ['releaseAsync', 'Freigabe nach einer asynchronen Aktion; Aufrufer withDocumentControl',
+    'nur OWNERSHIP_GUARD_BUSY wird wiederholt, rund zwei Sekunden; danach erhält der Aufrufer die Ablehnung und die Fortsetzung beginnt'],
+  ['release', 'Freigabe nach einer synchronen Aktion; Aufrufer withDocumentControl',
+    'ein Versuch, kein Warten; bei OWNERSHIP_GUARD_BUSY beginnt die Fortsetzung'],
+  ['recoverRelease', 'Freigabe nach belegter Betriebssystemsperre fortsetzen; Aufrufer release und releaseAsync',
+    'höchstens 2400 Versuche im Abstand von 250 ms; endet bei wahr, falsch, harter Ablehnung, verlorener Berechtigung oder gescheitertem Zeitgeber; entfernt den Eintrag nie selbst']
+]) sym(`${srv}gateway/standalone-document-control.js`, name, { purpose, invariant,
+  trust: 'Sperrobjekt und Laufkennung vom Prüfspeicher; Antworten der Betriebssystemsperre',
+  evidence: controlEvidence, findings: ['R-039'], remark: 'geändert in 8ff4979a; nur unter Windows ausgeführt' });
 
 Object.assign(groups, {
   'G-FRONTEND-STATIC': { status: 'TEILGEPRÜFT', findings: ['R-008', 'R-020'],

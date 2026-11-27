@@ -188,6 +188,55 @@
       "findings": [],
       "remark": "im Laufzeit-Review nur teilweise gelesen (Z. 30-130); Einheiten außerhalb sind faktisch offen"
     },
+    "plugins/data-secure/server/gateway/standalone-document-control.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-039"
+      ],
+      "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/batch-active-lock.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-039"
+      ],
+      "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/batch-lock-release.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-039"
+      ],
+      "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/synchronous-ownership-admission.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-039"
+      ],
+      "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/process-liveness.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-039"
+      ],
+      "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/prepublication-error.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-039"
+      ],
+      "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/core/ownership-control.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-039"
+      ],
+      "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
     "plugins/data-secure/server/document-parser.js": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
@@ -1484,6 +1533,52 @@
           "R-025"
         ],
         "remark": "geändert in 2726675a"
+      }
+    },
+    "plugins/data-secure/server/gateway/standalone-document-control.js": {
+      "withDocumentControl": {
+        "status": "GEPRÜFT",
+        "purpose": "Dokumentkontrolle für eine asynchrone oder synchrone Aktion halten; Aufrufer standalone-document-review-store.js (lockedAsync) und standalone-history-store.js",
+        "invariant": "die Aktion läuft einmal; freigegeben wird nur mit der vor der Aktion erfassten Berechtigung; kein Fehler der Aktion wird überdeckt",
+        "trust": "Sperrobjekt und Laufkennung vom Prüfspeicher; Antworten der Betriebssystemsperre",
+        "evidence": "tests/test-standalone-document-control.js (27 Tests; vier schlagen am Code von 8a167b09 fehl); tests/test-native-standalone-pause-control.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu; zwei native Versuche am Paket 5f347413; unabhängige Gegenprüfung",
+        "findings": [
+          "R-039"
+        ],
+        "remark": "geändert in 8ff4979a; nur unter Windows ausgeführt"
+      },
+      "releaseAsync": {
+        "status": "GEPRÜFT",
+        "purpose": "Freigabe nach einer asynchronen Aktion; Aufrufer withDocumentControl",
+        "invariant": "nur OWNERSHIP_GUARD_BUSY wird wiederholt, rund zwei Sekunden; danach erhält der Aufrufer die Ablehnung und die Fortsetzung beginnt",
+        "trust": "Sperrobjekt und Laufkennung vom Prüfspeicher; Antworten der Betriebssystemsperre",
+        "evidence": "tests/test-standalone-document-control.js (27 Tests; vier schlagen am Code von 8a167b09 fehl); tests/test-native-standalone-pause-control.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu; zwei native Versuche am Paket 5f347413; unabhängige Gegenprüfung",
+        "findings": [
+          "R-039"
+        ],
+        "remark": "geändert in 8ff4979a; nur unter Windows ausgeführt"
+      },
+      "release": {
+        "status": "GEPRÜFT",
+        "purpose": "Freigabe nach einer synchronen Aktion; Aufrufer withDocumentControl",
+        "invariant": "ein Versuch, kein Warten; bei OWNERSHIP_GUARD_BUSY beginnt die Fortsetzung",
+        "trust": "Sperrobjekt und Laufkennung vom Prüfspeicher; Antworten der Betriebssystemsperre",
+        "evidence": "tests/test-standalone-document-control.js (27 Tests; vier schlagen am Code von 8a167b09 fehl); tests/test-native-standalone-pause-control.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu; zwei native Versuche am Paket 5f347413; unabhängige Gegenprüfung",
+        "findings": [
+          "R-039"
+        ],
+        "remark": "geändert in 8ff4979a; nur unter Windows ausgeführt"
+      },
+      "recoverRelease": {
+        "status": "GEPRÜFT",
+        "purpose": "Freigabe nach belegter Betriebssystemsperre fortsetzen; Aufrufer release und releaseAsync",
+        "invariant": "höchstens 2400 Versuche im Abstand von 250 ms; endet bei wahr, falsch, harter Ablehnung, verlorener Berechtigung oder gescheitertem Zeitgeber; entfernt den Eintrag nie selbst",
+        "trust": "Sperrobjekt und Laufkennung vom Prüfspeicher; Antworten der Betriebssystemsperre",
+        "evidence": "tests/test-standalone-document-control.js (27 Tests; vier schlagen am Code von 8a167b09 fehl); tests/test-native-standalone-pause-control.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu; zwei native Versuche am Paket 5f347413; unabhängige Gegenprüfung",
+        "findings": [
+          "R-039"
+        ],
+        "remark": "geändert in 8ff4979a; nur unter Windows ausgeführt"
       }
     }
   },
