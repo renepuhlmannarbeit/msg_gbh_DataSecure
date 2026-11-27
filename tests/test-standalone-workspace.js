@@ -49,7 +49,10 @@ function harness(options = {}) {
     assert.equal(selector, 'button:not(.nav-tab), input');
     return nodes.filter(node => node.isConnected && (node.tagName === 'INPUT' || node.tagName === 'BUTTON' && !node.className.includes('nav-tab')));
   };
-  const model = { catalogue: [], revision: 0, entries: [], state: { state: 'ready', external_disclosure: false } };
+  const windowEvents = new Map();
+  // initialCatalogue: a selection the Core still holds when the window loads.
+  const model = { catalogue: options.initialCatalogue || [], revision: options.initialCatalogue ? 1 : 0, entries: [],
+    state: { state: 'ready', external_disclosure: false } };
   let nativeReviewGeneration = 0;
   const invoke = async (command, args) => {
     calls.push({ command, args });
@@ -86,8 +89,10 @@ function harness(options = {}) {
     };
     return options.invoke ? options.invoke(command, args, fallback, model) : fallback();
   };
-  const window = { __TAURI__: { core: { invoke }, event: { listen: async (name, callback) => { listeners.set(name, callback); return () => listeners.delete(name); } } },
-    addEventListener() {} };
+  const window = { __TAURI__: { core: { invoke }, event: { listen: async (name, callback) => {
+    if (options.listenFails?.includes(name)) throw Error('listener unavailable');
+    listeners.set(name, callback); return () => listeners.delete(name); } } },
+    addEventListener(name, callback) { windowEvents.set(name, callback); } };
   const context = vm.createContext({ window, document: doc, requestAnimationFrame: options.requestAnimationFrame || (fn => fn()),
     crypto: require('node:crypto').webcrypto,
     setTimeout: (fn, ms) => { timers.add(fn); options.onSchedule?.(ms); return fn; }, clearTimeout: fn => timers.delete(fn),
@@ -98,7 +103,7 @@ function harness(options = {}) {
     { filename: 'text-positions.js' });
   if (options.documentRenderer) vm.runInContext(fs.readFileSync(path.join(base, 'document-review.js'), 'utf8'), context,
     { filename: 'document-review.js' });
-  return { el, doc, window, calls, model, listeners, nodes,
+  return { el, doc, window, calls, model, listeners, nodes, windowEvents, timers,
     async act(node, event = 'click') { if (typeof node === 'string') node = el(node); assert.ok(node, 'actual rendered target exists');
       doc.activeElement = node; node.events.get(event)?.({ preventDefault() {} }); await tick(); },
     async poll() { const fn = [...timers][0]; timers.delete(fn); await fn?.(); await tick(); } };
@@ -6337,6 +6342,14 @@ testAsync('a refused selection names the files that are the reason, bounded and 
   await tick(); await folder.act('select-files');
   assert.match(folder.el('feedback').textContent, /\(SOURCE_FOLDER_UNSUPPORTED_FILES\)\nNicht unterstützt \(2\):\n• Akte\/a\.zip\n• b\.exe$/u);
 
+  // One refused file: its sentence stands once, the list adds the name only
+  // (seen doubled in a native run with an Office lock file).
+  const single = refused(JSON.stringify({ code: 'SOURCE_ARTIFACT_IGNORED',
+    details: { selection_files: [{ name: '~$Bericht.docx', reason_code: 'SOURCE_ARTIFACT_IGNORED' }], selection_count: 1 } }));
+  await tick(); await single.act('select-files');
+  assert.equal(single.el('feedback').textContent, 'Temporäre Office-Sperrdateien sind keine Dokumente. Bitte die eigentliche Word-, Excel- oder ' +
+    'PowerPoint-Datei auswählen. (SOURCE_ARTIFACT_IGNORED)\nNicht aufgenommen (1):\n• ~$Bericht.docx');
+
   // Details that are out of bounds, or that come with another code, add nothing.
   for (const payload of [
     { code: 'SOURCE_SELECTION_REJECTED', details: { selection_files: [{ name: 'a.txt', reason_code: 'SOURCE_FILE_EMPTY' }], selection_count: 0 } },
@@ -6402,6 +6415,7 @@ testAsync('an accepted selection says what it left out: files already selected a
   drop({ payload: { phase: 'accepted', result: { ui_context: { local_ui_only: true, external_disclosure: false, source_catalogue: catalogue(), catalogue_revision: 1 },
     ignored_artifact_count: 1 } } }); await tick();
   assert.equal(dropped.el('feedback').textContent, 'Auswahl aufgenommen. 1 bekannte Begleitdatei übersprungen.');
+  await tick();
   // Many companion files: five names and the count, never two hundred names.
   const crowd = harness({ invoke(command, args, fallback) {
     return command === 'select_files' ? { ...fallback(), ignored_artifact_count: 200,
@@ -6409,6 +6423,183 @@ testAsync('an accepted selection says what it left out: files already selected a
   await tick(); await crowd.act('select-files');
   assert.equal(crowd.el('feedback').textContent, 'Dateien aufgenommen. Häkchen prüfen und dann starten. 200 bekannte Begleitdateien übersprungen: ' +
     'Ordner-0/.DS_Store, Ordner-1/.DS_Store, Ordner-2/.DS_Store, Ordner-3/.DS_Store, Ordner-4/.DS_Store und weitere.');
+});
+
+// RC178 review, comparison of the 52 removed tests of the earlier interface
+// (tasks/rc178-claude-review/ABGLEICH-ALTE-OBERFLAECHE.md). The behaviours
+// below exist in the loaded interface and had no test of their own.
+const buttonsNamed = (node, label) => descendants(node, child => child.tagName === 'BUTTON' && child.textContent === label);
+
+testAsync('a refused continuation in front of the review names its cause and opens no review', async () => {
+  for (const [code, sentence] of [['LOCAL_REVIEW_START_MISSING', /Laufzeit oder Prüfkomponente wurde nicht gefunden/u],
+    ['LOCAL_REVIEW_START_DENIED', /Betriebssystem hat den Start der lokalen Prüfkomponente verweigert/u],
+    ['LOCAL_REVIEW_START_ARCHITECTURE', /passt nicht zur Architektur/u], ['LOCAL_REVIEW_START_FAILED', /konnte nicht gestartet werden/u]]) {
+    const h = harness({ invoke(command, args, fallback) {
+      if (command === 'continue_history_batch' || command === 'continue_current_batch') throw code; // eslint-disable-line no-throw-literal
+      return fallback(); } });
+    await selectAndStart(h);
+    h.model.state = { ...h.model.state, state: 'review_required', review_count: 3 };
+    h.model.entries = [{ batch_id: A, processing_mode: 'markdown-only', selected_count: 3, status: 'review_required', resumable: true }];
+    await h.poll(); await h.act('job-action-review');
+    const text = h.el('feedback').textContent;
+    assert.match(text, sentence, code);
+    assert.match(text, new RegExp(`Die Prüfung wurde nicht geöffnet; der Lauf bleibt im Verlauf erhalten\\. \\(${code}\\)$`, 'u'));
+    assert.doesNotMatch(text, /Der lokale Vorgang konnte nicht abgeschlossen werden/u);
+    assert.equal(h.calls.some(call => call.command === 'open_embedded_review'), false, 'no review is opened after a refused continuation');
+    assert.notEqual(h.el('review-frame').src, 'review.html?embedded=1');
+    assert.equal(h.calls.filter(call => /^continue_/u.test(call.command)).length, 1, 'the continuation is not repeated');
+  }
+});
+
+testAsync('navigation tabs: arrow keys, Home and End move the focus only, and only a click activates', async () => {
+  const h = harness(); await tick();
+  const key = (name, value) => { let prevented = false; h.el(`nav-${name}`).events.get('keydown')({ key: value, preventDefault() { prevented = true; } }); return prevented; };
+  const historyReads = () => h.calls.filter(call => call.command === 'get_run_history').length, before = historyReads();
+  // "Laufdetails" is hidden while no run is selected and is skipped.
+  assert.equal(key('new', 'ArrowRight'), true); assert.equal(h.doc.activeElement, h.el('nav-history'));
+  assert.equal(h.el('nav-history').tabIndex, 0); assert.equal(h.el('nav-new').tabIndex, -1);
+  assert.equal(key('history', 'ArrowRight'), true); assert.equal(h.doc.activeElement, h.el('nav-settings'));
+  assert.equal(key('settings', 'ArrowRight'), true); assert.equal(h.doc.activeElement, h.el('nav-new'), 'the row wraps');
+  assert.equal(key('new', 'ArrowLeft'), true); assert.equal(h.doc.activeElement, h.el('nav-settings'));
+  assert.equal(key('settings', 'Home'), true); assert.equal(h.doc.activeElement, h.el('nav-new'));
+  assert.equal(key('new', 'End'), true); assert.equal(h.doc.activeElement, h.el('nav-settings'));
+  assert.equal(key('settings', 'a'), false, 'another key is left to the browser');
+  await tick();
+  assert.equal(h.el('nav-new').attrs['aria-selected'], 'true', 'moving the focus selects nothing');
+  assert.equal(h.el('new-view').hidden, false); assert.equal(h.el('settings-view').hidden, true); assert.equal(h.el('history-view').hidden, true);
+  assert.equal(historyReads(), before, 'moving the focus reads no history');
+  await h.act('nav-history');
+  assert.equal(h.el('nav-history').attrs['aria-selected'], 'true'); assert.equal(h.el('history-view').hidden, false);
+  assert.ok(historyReads() > before);
+});
+
+testAsync('the history shows five rows and says "the last 5", and each action of a row carries its own run', async () => {
+  const h = harness(); await tick();
+  const run = n => n.toString(16).padStart(64, '0');
+  h.model.entries = Array.from({ length: 7 }, (unused, n) => ({ batch_id: run(n + 1), processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, status: 'completed', results_available: true, result_location: 'available', ledger_available: true, identity_mapping_available: true }));
+  await h.act('nav-history');
+  assert.equal(h.el('history-list').children.length, 5, 'the window caps the list itself, whatever arrives');
+  assert.equal(h.el('history-status').textContent, 'Die letzten 5 Verarbeitungen · neueste zuerst');
+  assert.match(h.el('history-visibility-status').textContent, /Der Verlauf berücksichtigt nur die letzten 5 Läufe\./u);
+  for (const id of ['history-status', 'history-visibility-status']) assert.doesNotMatch(h.el(id).textContent, /\b20\b/u);
+  const third = run(3), row = h.el('history-list').children[2];
+  for (const [label, command] of [['Dateizuordnung öffnen', 'open_history_ledger'], ['Basiszuordnung öffnen', 'open_history_identity_mapping']]) {
+    const [button] = buttonsNamed(row, label); assert.ok(button, label);
+    await h.act(button);
+    assert.deepEqual(JSON.parse(JSON.stringify(h.calls.at(-1))), { command, args: { batchId: third } });
+  }
+  // The private mappings can be opened; nothing in the row deletes them.
+  assert.equal(descendants(row, node => node.tagName === 'BUTTON' && /lösch|entfern/iu.test(node.textContent)).length, 0);
+  assert.equal(h.calls.some(call => /^open_current_|^open_local_ledger$|delete/u.test(call.command)), false,
+    'a history row never uses a command that is not bound to its run');
+});
+
+testAsync('partial file details say that they are partial; a failed read offers one local retry and restarts nothing', async () => {
+  let reply;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command !== 'get_run_failures') return fallback();
+    if (reply instanceof Error) throw reply;
+    return reply; } });
+  await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', selected_count: 7, failed_count: 3, result_count: 2, status: 'stopped' }];
+  reply = { local_ui_only: true, external_disclosure: false, available: false, total: 3,
+    files: [{ name: 'Akte/a.pdf', reason_code: 'PARSE_FAILED' }, { name: '../geheim.txt', reason_code: 'PARSE_FAILED' }], pending_files: [{ name: 'Akte/wartet.txt' }] };
+  await h.act('nav-history');
+  const toggle = `history-${B}-problems`, list = () => h.el(`history-${B}-files`);
+  await h.act(toggle);
+  assert.match(list().textContent, /Akte\/a\.pdf/u);
+  assert.doesNotMatch(list().textContent, /geheim/u, 'an unsafe label is dropped');
+  assert.match(list().textContent, /Akte\/wartet\.txt – noch nicht gestartet, kein nachgewiesener Dokumentfehler\./u);
+  assert.match(list().textContent, /Für 1 weitere Datei sind die lokalen Dateidetails nicht mehr verfügbar\. Keine vollständige Fehlerliste ableitbar\./u);
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls.filter(call => call.command === 'get_run_failures').at(-1).args)), { batchId: B });
+  // An envelope that is not marked local-only is not shown at all.
+  await h.act(toggle);
+  reply = { local_ui_only: false, external_disclosure: false, files: [{ name: 'Akte/a.pdf', reason_code: 'PARSE_FAILED' }] };
+  await h.act(toggle);
+  assert.doesNotMatch(list().textContent, /Akte/u);
+  assert.match(list().textContent, /^Die Dateiliste konnte nicht geladen werden\. Der Lauf wird nicht erneut gestartet\./u);
+  // The same for a failed read; the retry is one explicit click.
+  await h.act(toggle); reply = Object.assign(new Error('STANDALONE_IPC_TIMEOUT'), {}); await h.act(toggle);
+  const reads = () => h.calls.filter(call => call.command === 'get_run_failures').length, failed = reads();
+  await h.poll(); await h.poll();
+  assert.equal(reads(), failed, 'no automatic retry');
+  const [retry] = buttonsNamed(list(), 'Dateiliste erneut laden'); assert.ok(retry);
+  reply = { local_ui_only: true, external_disclosure: false, available: true, total: 1, files: [{ name: 'Akte/a.pdf', reason_code: 'PARSE_FAILED' }] };
+  await h.act(retry);
+  assert.equal(reads(), failed + 1); assert.match(list().textContent, /Akte\/a\.pdf/u);
+  assert.equal(h.calls.some(call => /^(?:start_admitted_batch|continue_)/u.test(call.command)), false, 'reading details never restarts the run');
+});
+
+testAsync('after the window is closing, a late answer renders nothing and no further status read is armed', async () => {
+  let answer;
+  const late = new Promise(resolve => { answer = resolve; });
+  const h = harness({ invoke(command, args, fallback) { return command === 'get_run_failures' ? late : fallback(); } });
+  await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', selected_count: 7, failed_count: 1, result_count: 2, status: 'stopped' }];
+  await h.act('nav-history'); await h.act(`history-${B}-problems`);
+  assert.equal(h.el(`history-${B}-files`).textContent, 'Dateiliste wird geladen …');
+  assert.ok(h.listeners.size > 0, 'premise: listeners are registered');
+  h.windowEvents.get('beforeunload')();
+  assert.equal(h.listeners.size, 0, 'every listener is removed');
+  assert.equal(h.el('review-frame').src, 'about:blank');
+  const reads = h.calls.length;
+  answer({ local_ui_only: true, external_disclosure: false, available: true, total: 1, files: [{ name: 'Akte/a.pdf', reason_code: 'PARSE_FAILED' }] });
+  await tick(); await tick();
+  assert.equal(h.el(`history-${B}-files`).textContent, 'Dateiliste wird geladen …', 'the late answer is not rendered');
+  await h.poll(); await h.poll();
+  assert.equal(h.calls.length, reads, 'no command is sent after closing');
+});
+
+testAsync('a selection the Core still holds is shown again when the window loads, without a purpose and without a start', async () => {
+  const h = harness({ initialCatalogue: catalogue() }); await tick(); await tick();
+  assert.equal(h.el('catalogue').hidden, false); assert.equal(h.el('drop-zone').hidden, true);
+  assert.equal(h.el('selection-count').textContent, '3 von 3 ausgewählt');
+  assert.equal(h.el('mode-markdown').checked, false); assert.equal(h.el('mode-anonymize').checked, false);
+  assert.equal(h.el('start').attrs['aria-disabled'], 'true');
+  assert.equal(h.calls.some(call => ['select_files', 'select_folder', 'start_admitted_batch'].includes(call.command)), false);
+  const ready = h.calls.find(call => call.command === 'frontend_ready');
+  assert.equal(ready.args.nativeDropReady, true);
+  // Without the drop listener the window says so and reports it; the pickers stay.
+  const noDrop = harness({ listenFails: ['datasecure-native-drop'] }); await tick(); await tick();
+  assert.equal(noDrop.calls.find(call => call.command === 'frontend_ready').args.nativeDropReady, false);
+  await noDrop.act('select-files');
+  assert.equal(noDrop.el('catalogue').hidden, false, 'the picker still admits files');
+});
+
+testAsync('a refused folder keeps its reason through status reads until a valid selection replaces it', async () => {
+  let refuse = true;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'select_folder' && refuse) throw 'SOURCE_FORMAT_SIZE_LIMIT'; // eslint-disable-line no-throw-literal
+    return fallback(); } });
+  await tick(); await h.act('select-folder');
+  const refusal = 'Die Datei überschreitet die Einzeldateigrenze ihres Formats. (SOURCE_FORMAT_SIZE_LIMIT)';
+  assert.equal(h.el('feedback').textContent, refusal); assert.equal(h.el('feedback').attrs.role, 'alert');
+  assert.equal(h.el('catalogue').hidden, true);
+  await h.poll(); await h.poll();
+  assert.equal(h.el('feedback').textContent, refusal, 'an idle status read does not clear the refusal');
+  refuse = false; await h.act('select-folder');
+  assert.equal(h.el('feedback').textContent, 'Dateien aufgenommen. Häkchen prüfen und dann starten.');
+  assert.equal(h.el('catalogue').hidden, false);
+});
+
+testAsync('a status answer requested before selection and start cannot repaint the run that was started meanwhile', async () => {
+  let hold = false, release;
+  const held = new Promise(resolve => { release = resolve; });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state' && hold) { hold = false; return held.then(() => ({ state: 'ready', external_disclosure: false })); }
+    return fallback(); } });
+  await tick();
+  hold = true; const stale = h.poll(); await tick();
+  assert.equal(hold, false, 'premise: the status read is under way');
+  await h.act('select-folder'); h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change'); await h.act('start');
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  const title = h.el('job-title').textContent, count = h.el('job-count').textContent;
+  assert.equal(h.el('job').hidden, false);
+  release(); await stale; await tick(); await tick();
+  assert.equal(h.el('job').hidden, false, 'the old "ready" does not hide the new run');
+  assert.equal(h.el('job-title').textContent, title); assert.equal(h.el('job-count').textContent, count);
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
 });
 
 done();
