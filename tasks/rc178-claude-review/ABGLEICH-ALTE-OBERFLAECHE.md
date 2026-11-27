@@ -58,6 +58,14 @@ den Stand davor; dasselbe gilt für die Teile der Zeilen 7, 8, 28, 33, 34 und
 48, die fehlende Namen, Texte oder Hinweise nennen. Die Tabelle selbst ist
 nicht nachgezogen.
 
+**Zweiter Nachtrag:** Seit `3b85e395` haben die neun als ungeprüft geführten
+Verhalten (Zeilen 11, 14, 19, 20, 21, 22, 29, 32 und 40) einen eigenen Test an
+der geladenen Oberfläche; Zeile 15 ist um die Zahl der Verlaufszeilen ergänzt.
+Zeile 6 ist bestätigt und in `6e10ac80` behoben, Zeile 43 für das Produkt
+widerlegt (die Hülle sperrt Leeren und Hineinziehen gegeneinander), Zeile 27
+als Tatsache bestätigt und unverändert. Damit sind 11 Verhalten gedeckt und 29
+nur zum Teil geprüft. Einzelheiten in BEFUNDE.md, „Nachprüfung · Geführte Prüfung, native Meldung, offene Punkte des Abgleichs“.
+
 Die Tabelle beurteilt die Tests, nicht die Bedienbarkeit. Ob ein Verhalten im
 Fenster wirklich so wirkt, zeigt nur ein nativer Lauf.
 

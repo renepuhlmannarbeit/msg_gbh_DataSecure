@@ -114,7 +114,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-016 | mittel | Lieferkette | Die paketierten Drittanbieterhinweise nennen `emf-converter` nicht und beschreiben die macOS-Laufzeit unzutreffend. | BL-050.6 | behoben (`03c621a4`, `871daa7f`) |
 | R-017 | mittel | Anonymisierung, alle | Drei weitere Unterredaktionsmuster: Einzelnachname in Folgedokumenten, Name im Linkziel, „Nachname, Vorname“. | BL-050.6, BL-021.1 | teilweise behoben (`cfee417a`, `ac74cf71`, nachgebessert in `3e4a1be1`, `d4740dd6`, `e07ca2e6`); einzelner Nachname ohne Personenkontext im Folgedokument bleibt dokumentierte Grenze |
 | R-018 | mittel | Formatqualität CSV, alle | Eine einzelne Zeile abweichender Breite lässt die Trennzeichenerkennung still auf eine Spalte fallen, mit Abdeckung „vollständig“. | BL-049.2 | behoben (`803acbb9`, Hinweistexte in `2726675a`) |
-| R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | behoben (`7e9e0530`, `1d908311`): Vertrag an die geladene Oberfläche gebunden; die frühere Oberfläche und ihre Tests sind auf Entscheidung des Anwenders entfernt |
+| R-019 | mittel | Tests und Orakel | Mehrere Standalone-Tests prüfen die nicht mehr geladene Oberfläche `app.js` oder nur Quelltext per Muster. | BL-050.6 | behoben (`7e9e0530`, `1d908311`): Vertrag an die geladene Oberfläche gebunden; die frühere Oberfläche und ihre Tests sind auf Entscheidung des Anwenders entfernt; neun bis dahin ungeprüfte Verhalten der geladenen Oberfläche haben seit `3b85e395` einen Test |
 | R-020 | mittel bis niedrig | Accessibility, alle | Sammelbefund: Live-Regionen per `hidden`, Rahmenkontrast 1,46:1, fehlender Seitenzoom, Fokusverlust, ARIA-Mängel. | BL-010.53 | teilweise behoben (`c62bb1dd`, `2726675a`, `405eb370`): Seitenzoom unter Windows; offen sind Seitenzoom unter macOS und Linux (Entscheidung), versteckte Live-Regionen (nur mit Screenreader prüfbar) und Bidi-Steuerzeichen (bewusst nicht geändert) |
 | R-021 | niedrig | Dokumentation | Sammelbefund Dokumentationsdrift (Startanleitung, Register, Traceability, Testzahlen). | BL-050.6 | behoben (`e1afef0f`, `2e34d532`) |
 | R-022 | mittel | Plattform macOS | Vier Annahmen, die nur ein Zielgerät klären kann. | BL-050.6 | Hypothese |
@@ -131,7 +131,8 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`, `0bd5e26f`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Der als Folge häufiger erreichte Stopp bei `Label Name Nummer` ist in `0bd5e26f` behoben |
 | R-034 | niedrig | Oberfläche, alle | Die geladene Oberfläche erklärt vier Fehlercodes nicht, die der Core weiter liefert (`SOURCE_FOLDER_UNSUPPORTED_FILES`, `STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED`, `STANDALONE_RESULT_BINDING_UNAVAILABLE`), und zeigt dafür einen allgemeinen Satz. Erklärt hat sie nur die frühere Oberfläche; der Vertragstest prüfte dort und bestand. Beim Umbinden des Tests gefunden; in RC178 gleich. | BL-050.6 | behoben (`8cf5dd93`) |
 | R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | behoben (`d474a579`) für den Fall, den der Core erkennt; ein zugeordneter Laufwerksbuchstabe und ein Mount unter `/Volumes` gelten dem Core nicht als Netzlaufwerk (vorbestehend; nach Entscheidung des Anwenders vorerst belassen) |
-| R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | behoben (`d474a579`); nicht nativ beobachtet |
+| R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | behoben (`d474a579`, `6e10ac80`); für eine Office-Sperrdatei nativ beobachtet |
+| R-037 | niedrig bis mittel | Tests und Betrieb, alle | Die Ergebnisabfrage direkt nach Laufende wurde in einem Lauf der Suite mit `STANDALONE_BUSY` beantwortet statt mit „Veröffentlichung läuft noch“; der Test lässt das nicht zu, die Suite brach ab. Einmal beobachtet, nicht reproduziert. Core und Test sind seit RC178 unverändert. | BL-050.6 | Hypothese |
 
 ## Einzelbefunde
 
@@ -2250,7 +2251,8 @@ nachgesehen.
 - **Auswirkung:** niedrig bis mittel. Der Anwender erfährt bei einer
   abgelehnten Auswahl nicht, welche Datei der Grund ist, etwa eine
   Office-Sperrdatei `~$…`. Kein Datenschutzrisiko.
-- **Status:** behoben in `d474a579`, siehe „R-035 und R-036 · Umsetzung“.
+- **Status:** behoben in `d474a579` und `6e10ac80`, siehe „R-035 und R-036 ·
+  Umsetzung“ und „Nachprüfung · Geführte Prüfung, native Meldung, offene Punkte des Abgleichs“.
   Vier Codes derselben Art sind als R-034 schon ergänzt;
   diese fünf und die Details hat erst der Einzelabgleich gezeigt. Welche der
   Codes im Ablauf mit dem Quellenkatalog praktisch noch auftreten, habe ich
@@ -2359,6 +2361,178 @@ Dateien sind auf solche Zeichen durchsucht und enthalten keine.
   Auswahl) und die 38 nicht oder nur zum Teil getesteten Verhalten sind
   unverändert.
 
+## Nachprüfung · Geführte Prüfung, native Meldung, offene Punkte des Abgleichs
+
+Nach der Übergabe von R-035 und R-036 hat der Anwender gefragt, ob etwas
+Wichtiges fehlt. Es fehlte etwas, und zwar von mir: Die geführte Prüfung war
+seit den Erkennungsregeln aus R-033 nie angesehen worden; alle nativen Läufe
+und Vergleichsläufe liefen im automatischen Modus. Der Anwender hat diese
+Prüfung und vier weitere Arbeiten beauftragt. Ergebnis sind die Commits
+`6e10ac80` und `3b85e395`.
+
+### Geführte Prüfung mit den Personenhinweisen aus R-033
+
+- **Frage:** Seit `1c8e971c` gilt ein Personenhinweis an bis zu 500 weiteren
+  Stellen desselben Namens. Ein Name, der 200-mal vorkommt, ergibt 201
+  Hinweise statt einem. Muss der Anwender in der geführten Prüfung 201-mal
+  entscheiden?
+- **Antwort: nein.** Der Prüfentwurf fasst Personenhinweise mit derselben
+  Schreibweise zu einer Entscheidung zusammen
+  (`core/local-review-model.js`, `decisionGroups`); das Prüffenster zeigt je
+  Gruppe eine Zeile. Gemessen am Kern: 403 Hinweise ergeben 3 sichtbare
+  Entscheidungen.
+- **Nativ bedient:** am Paket `f641f720…` der dreizehnten Übergabe (der
+  Endstand ändert danach nur Fehlertexte der Arbeitsfläche) ein erfundenes
+  Protokoll mit einer Rollenzeile, einer Namensliste und 30 Sätzen, in denen zwei der Namen stehen. Das Fenster zeigt
+  „0 von 63 Fundstellen vorgemerkt“ und drei Zeilen: `Hans Müller 31
+  Fundstellen`, `Anna Sommer 31 Fundstellen`, `Erika Beispiel 1 Fundstelle`,
+  dazu „Diese Entscheidung gilt für 31 nachweislich gleiche Fundstellen in
+  diesem Stapel“. Alle drei Zeilen angehakt, **Als Person / sensible Angabe
+  ersetzen** gewählt, **63 Entscheidungen speichern und fortfahren**: Der Lauf
+  endet mit einem Ergebnis, in dem kein Name mehr steht und jede Person an
+  allen Stellen dasselbe Pseudonym trägt.
+- **Grenze, jetzt genauer:** Die 500 weiteren Stellen werden in der
+  Reihenfolge der Namen vergeben. Kommen zwei Namen je 500-mal vor, erhält der
+  erste alle 500, der zweite keine: Er hat eine Zeile mit einer Fundstelle,
+  und seine übrigen Vorkommen bleiben nach der Entscheidung lesbar. Vor R-033
+  blieben alle lesbar; es ist die schon genannte Grenze, aber ungleich
+  verteilt.
+
+### R-036 im echten Fenster
+
+- **Beobachtet:** Eine Office-Sperrdatei (`~$Bericht.docx`) neben einem
+  gültigen Word-Dokument, zusammen mit einer Textdatei über den Dateidialog
+  gewählt. Das Fenster zeigt in eigenen Zeilen: „Diese Dateiauswahl konnte
+  nicht übernommen werden. Die bisherige Auswahl bleibt unverändert.
+  (SOURCE_SELECTION_REJECTED)“, „Nicht aufgenommen (1):“ und
+  „• ~$Bericht.docx: Temporäre Office-Sperrdateien sind keine Dokumente. …“.
+  Damit ist der Weg Core, Hülle, Oberfläche einmal nativ gesehen, samt
+  Zeilenumbruch.
+- **Dabei gefunden und behoben:** Wird nur die Sperrdatei gewählt, trägt die
+  Datei denselben Code wie die Meldung, und der Satz stand zweimal da. Die
+  Liste nennt jetzt nur den Namen (`6e10ac80`). Am Paket des Endstands
+  erneut beobachtet: „Temporäre Office-Sperrdateien sind keine Dokumente. …
+  (SOURCE_ARTIFACT_IGNORED)“, „Nicht aufgenommen (1):“, „• ~$Bericht.docx“.
+- **Auch gelernt:** Der Core hält eine Datei `~$…` nur dann für eine
+  Sperrdatei, wenn sie klein ist, selbst kein Office-Dokument ist und daneben
+  ein größeres gültiges Dokument liegt. Ohne dieses Dokument führt der
+  Quellenkatalog sie als gewöhnliche, auswählbare Zeile.
+
+### Die drei nicht belegten Punkte des Abgleichs
+
+| Punkt | Ergebnis |
+| --- | --- |
+| Nr. 43, Wettlauf zwischen Leeren der Auswahl und Hineinziehen | **Für das Produkt widerlegt.** Die Hülle nimmt für `cancel_admission` und für das Hineinziehen dieselbe Sperre (`selection_guard` in `main.rs`); ein Drop während des Leerens wird abgelehnt. In der Oberfläche allein wäre der Ablauf möglich; die Hülle lässt ihn nicht zu. Keine Änderung. |
+| Nr. 6, Fehler beim Start der Prüfung | **Bestätigt und behoben.** Der Core lehnt das Fortsetzen mit einer von vier Ursachen ab (`LOCAL_REVIEW_START_MISSING`, `_DENIED`, `_ARCHITECTURE`, `_FAILED`; `tests/test-standalone-continuation.js`). Die Prüfung öffnet dann nicht, und die Arbeitsfläche zeigte den allgemeinen Satz. Die vier Sätze stehen jetzt auch dort (`6e10ac80`), mit Test. Gehört zu R-036. |
+| Nr. 27, keine Rückmeldung nach erfolgreichem Öffnen | **Als Tatsache bestätigt, nicht geändert.** `perform` meldet nur Fehler; die Antwort `handoff_confirmed` des Core wertet die Arbeitsfläche nicht aus. Eine dokumentierte Anforderung an eine solche Rückmeldung habe ich nicht gefunden; ob sie gewünscht ist, ist eine Entscheidung. |
+
+### Tests für bisher ungeprüftes Verhalten
+
+Neun Verhalten der geladenen Oberfläche hatten laut Abgleich keinen Test. Dazu
+gibt es jetzt sieben Tests in `tests/test-standalone-workspace.js`
+(`3b85e395`); ein achter gilt dem Prüfstart-Fehler (Nr. 6). Die Datei hat
+damit 548 Tests:
+
+| Nr. im Abgleich | Verhalten | Test |
+| --- | --- | --- |
+| 14 | Pfeiltasten, Pos1 und Ende versetzen nur den Fokus der Navigation; erst ein Klick aktiviert | „navigation tabs: arrow keys …“ |
+| 15, 20, 22 | fünf Verlaufszeilen im Fenster, die Texte „letzte 5“, Zuordnungen öffnen mit der Lauf-ID der Zeile, keine Löschaktion | „the history shows five rows …“ |
+| 11, 21 | Teil-Dateiliste als unvollständig gezeigt, unsicherer Name verworfen, ungültiger Umschlag nicht gezeigt, genau ein ausdrückliches erneutes Laden | „partial file details …“ |
+| 19 | nach dem Schließen wird eine späte Antwort nicht gezeigt und kein Befehl mehr gesendet | „after the window is closing …“ |
+| 29 | eine Auswahl, die der Core noch hält, erscheint beim Laden wieder, ohne Zweck und ohne Start; fehlt der Drop-Empfänger, bleibt der Dialog | „a selection the Core still holds …“ |
+| 32 | eine abgelehnte Ordnerwahl behält ihren Grund über Statusabfragen, bis eine gültige Auswahl sie ersetzt | „a refused folder keeps its reason …“ |
+| 40 | eine vor Auswahl und Start angeforderte Statusantwort übermalt den neuen Lauf nicht | „a status answer requested before …“ |
+
+Das Testgerüst hält dafür die Fensterereignisse fest, kann mit einer vom Core
+gehaltenen Auswahl beginnen und einen Empfänger scheitern lassen.
+
+**Verfälschungsprobe:** 16 gezielte Änderungen an einer Kopie von
+`workspace.js` (Fokus wird nicht versetzt, 50 statt 5 Zeilen, Zuordnung ohne
+Lauf-ID, späte Antwort wird gezeigt, Hinweis auf Netzlaufwerk immer, keine
+Obergrenze der Namen und weitere). Die Tests erkennen alle 16.
+
+Von den 52 Verhalten des Abgleichs sind damit 11 gedeckt statt 2. Die 29 nur
+zum Teil geprüften sind unverändert.
+
+### Entscheidung zum Netzlaufwerk (R-035, Grenze)
+
+Der Core erkennt einen Ergebnisordner nur am UNC-Pfad als Netzlaufwerk; bei
+einem zugeordneten Laufwerksbuchstaben und unter `/Volumes` bleibt der Hinweis
+nach DS-080 aus. Der Anwender hat nach der dreizehnten Übergabe gefragt, wofür
+das wichtig ist, und entschieden, es vorerst so zu belassen. Der Hinweis
+informiert; die Verarbeitung läuft mit und ohne ihn gleich. Die Übersicht führt
+den Punkt deshalb nicht mehr als offen, sondern als belassen.
+
+### Gegenlesen von ERGEBNIS.md
+
+Auf Auftrag hat ein unabhängiger Read-only-Lauf ERGEBNIS.md vollständig gegen
+das Repository und diese Datei gelesen und 32 Stellen gemeldet. Die
+wichtigsten:
+
+- Die Tabellen „Änderungen je Thema“ endeten bei `2ce74b9f`; 18 spätere
+  Codecommits fehlten dort.
+- Vier Urteile je Prüfdimension beschrieben einen früheren Stand (R-033b bis d
+  als offen, „kein Zoom“, eine einzige Laufzeitmessung, kein Wort zu R-034 bis
+  R-036).
+- Die Übergabenachricht hatte zwei Punkte zu R-035 und R-036, einen vor und
+  einen nach der Behebung, und Nummern von `000000` bis `8`.
+- R-019 stand als teilweise behoben, R-033 fehlte in dieser Liste; vier Zeilen
+  nannten den Paket-Smoke-Test mit der Endung `.js` statt `.mjs`.
+- Der Abschnitt „Mac-Status“ nannte fünf geänderte Rust-Dateien; es sind acht.
+
+Ich habe jede Meldung am Repository nachgeprüft und berichtigt, was zutraf
+(`84474ffe`). Nicht übernommen: eine Neugliederung des Dokuments. Der Lauf
+endete am Schrittlimit und hat seinen Bericht auf Nachfrage geliefert; nicht
+geprüft hat er die Testzahlen der Tabelle, die Paket-Hashes und die
+Fingerprints.
+
+### R-037 · Ergebnisabfrage direkt nach Laufende einmal mit „belegt“ beantwortet
+
+- **Ort:** `tests/helpers/standalone-packaged-markdown.mjs:126-130` (Prüfung
+  „initial readiness never retries a conflict“), aufgerufen aus
+  `tests/test-standalone-sidecar.js:828`. Im Core:
+  `standalone/application-service.js:942-949` (`resolveHistoryResults`),
+  `gateway/standalone-document-review-store.js:156-159` und `2352`
+  (`resolveResultsGeneration` unter `lockedAsync`),
+  `gateway/standalone-document-control.js:41-42` (eine belegte Sperre wird zu
+  `STANDALONE_BUSY`).
+- **Beobachtet:** Der erste Lauf der Headless-Suite am Endstand (27.11., 12:15
+  bis 12:27 Uhr) brach in `tests/test-standalone-sidecar.js` ab. Nach dem
+  gemeldeten Abschluss eines Laufs „Nur umwandeln“ beantwortete der Core
+  `resolve_history_results` mit `STANDALONE_BUSY`. Der Test lässt an dieser
+  Stelle nur `STANDALONE_RESULTS_MISSING` und `RESULT_PUBLICATION_PENDING` zu.
+- **Reproduktion:** nicht gelungen. Dieselbe Testdatei allein dreimal
+  hintereinander: bestanden (je rund 205 s). Dieselbe Testdatei viermal gleichzeitig: alle vier bestanden (257 s). Der
+  zweite Lauf der Suite (12:39 bis 13:29 Uhr) bestand vollständig. In keinem
+  früheren vollständigen Suite-Lauf dieses Reviews trat der Abbruch auf.
+- **Ist, aus dem Code gelesen:** Die Abfrage nimmt die Sperre des Laufs. Hält
+  der Arbeitsprozess sie noch, lautet die Antwort „belegt“ statt
+  „Veröffentlichung läuft noch“. Der Test nennt das Zeitfenster selbst
+  („Technical completion may precede the worker's result-directory copy“).
+- **Soll:** Laut Test wird die erste Bereitschaft nie als Konflikt
+  beantwortet.
+- **Auswirkung:** für den Anwender niedrig: Wer die Ergebnisse im Augenblick
+  des Abschlusses öffnet, kann „belegt“ sehen; an der Oberfläche habe ich das
+  nicht beobachtet. Für die Freigabe mittel: Die Suite bricht beim ersten
+  Fehler ab, ein solcher Abbruch kostet einen Lauf von 50 Minuten.
+- **Abgrenzung:** Core, Test und Helfer sind seit `v3.2.0-rc178` unverändert
+  (`git diff --stat v3.2.0-rc178 HEAD` für die genannten Dateien ist leer).
+  Die Commits dieser Runde ändern nur `frontend/workspace.js` und seinen Test;
+  der Sidecar-Test lädt keine Oberfläche. Während des Laufs liefen auf dem
+  Rechner kleine eigene Skripte (Lesezugriffe, zwei kurze Testdateien). Dass
+  sie das Zeitverhalten verschoben haben, kann ich nicht ausschließen.
+- **Status:** Hypothese, nicht reproduziert, nichts geändert. BL-050.6.
+
+### Grenzen
+
+- Die geführte Prüfung ist mit einem Dokument und drei Namen bedient. Eine
+  Prüfung über mehrere Dokumente, „Beibehalten“ und „Als Unternehmen
+  anonymisieren“ habe ich in diesem Lauf nicht gewählt.
+- Die native Meldung ist für eine Sperrdatei gesehen, nicht für einen Ordner
+  mit nicht unterstützten Dateien und nicht für gemischtes Hineinziehen
+  (Ziehen lässt sich hier nicht automatisieren).
+- Die Texte zum Prüfstart-Fehler sind getestet, nicht nativ ausgelöst.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -2413,6 +2587,9 @@ Dateien sind auf solche Zeichen durchsucht und enthalten keine.
 | A-049 | Was die 52 Tests der früheren Oberfläche prüften, prüfen die 535 Tests der neuen ebenfalls (so meine Einschätzung beim Entfernen). | Die neue Oberfläche hat die größere Testdatei. | Die Tests der neuen Oberfläche sind um ihre eigenen Abläufe gebaut; niemand hat die alten Fälle übertragen. | Einzelabgleich in vier unabhängigen Durchgängen, Lücken selbst nachgeprüft | Widerlegt: 2 von 52 gedeckt, 29 teilweise, 9 ungeprüft; zwei Verhalten fehlen der geladenen Oberfläche (R-035, R-036). |
 | A-050 | Eine Meldung mit den Namen der abgelehnten Dateien ist so groß, wie Core und Hülle sie begrenzen. | Beide begrenzen auf 200 Namen. | 200 Namen zu je 1 024 Zeichen sind eine einzige angesagte Meldung von rund 210 000 Zeichen. | Gegenprüfung (read-only) mit ausgeführtem Fall | Widerlegt; die Oberfläche zeigt höchstens zehn Namen und zählt den Rest. |
 | A-051 | Was ich in eine Quelldatei schreibe, steht dort so, wie ich es geschrieben habe. | Die Werkzeuge melden Erfolg. | Escape-Schreibweisen für unsichtbare Zeichen kamen als die Zeichen selbst an; ein regulärer Ausdruck in `workspace.js` war damit kein gültiges JavaScript mehr. | Testlauf ohne Ergebniszeile; Suche nach den Codepunkten in beiden Dateien | Widerlegt; vor dem Commit behoben. Seitdem Syntaxprüfung und Zeichensuche nach solchen Änderungen. |
+| A-052 | Die nativen Läufe im automatischen Modus zeigen auch, wie sich die Personenhinweise aus R-033 in der geführten Prüfung verhalten. | Beide Modi nutzen dieselben Hinweise. | Die geführte Prüfung legt Hinweise zur Entscheidung vor; ob 201 Hinweise 201 Entscheidungen sind, hatte ich nach `1c8e971c` nicht geprüft. | Messung am Kern (403 Hinweise, 3 Entscheidungen) und nativer Lauf mit 63 Fundstellen | Nachgeholt am 27.11.: Die Prüfung fragt je Name. Neu bekannt: Die 500 weiteren Stellen werden in der Reihenfolge der Namen vergeben. |
+| A-053 | Leeren der Auswahl und Hineinziehen können sich überholen (Abgleich Nr. 43). | In der Oberfläche allein ist der Ablauf möglich. | Die Hülle nimmt für `cancel_admission`, die Dateidialoge und das Hineinziehen dieselbe Sperre. | `main.rs`, `selection_guard` | Für das Produkt widerlegt. |
+| A-054 | ERGEBNIS.md beschreibt nach dreizehn Übergaben überall den Endstand. | Jede Runde hat Kopf, Übersicht und Nachricht ergänzt. | Ältere Abschnitte wurden nicht mitgezogen: fehlende Commit-Tabellen, veraltete Urteile, zwei widersprüchliche Punkte der Nachricht. | unabhängiger Read-only-Lauf, 32 Meldungen | Widerlegt; berichtigt in `84474ffe`. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung
