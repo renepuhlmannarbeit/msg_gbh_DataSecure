@@ -58,6 +58,25 @@ Testhelfer `standalone-packaged-markdown.mjs`,
 `standalone-packaged-anonymized-ocr.mjs` und `standalone-packaged-ocr-review.mjs`
 lassen beim Warten auf den Ergebnisordner auch `STANDALONE_BUSY` zu.
 
+RC178-Review R-040 (BL-010.13, DS-086; BL-010.14, DS-110) → Nach der letzten
+Datei stellt der Arbeitsprozess die Ergebnisse bereit und endet erst danach
+(`gateway/batch-worker.js`). Der Zustand des Core hieß in dieser Zeit bei
+einem neuen Lauf `preparing` und bei einem fortgesetzten `export_pending`.
+`standalone/application-service.js` (`status`) meldet sie jetzt zusätzlich als
+`delivering: true`: beobachteter Lauf entschieden, nichts in Verarbeitung,
+Annahme offen oder Arbeitsprozess dieses Core noch am Leben. Die Zustandsnamen
+und die Annahmeprüfung der Hülle sind unverändert. `frontend/workspace.js`
+richtet sich nach dem Merkmal: Laufkarte und Verlaufszeile heißen dann
+„Ergebnisse werden bereitgestellt“, es gibt für diesen Lauf weder
+„Bereitstellung erneut prüfen“ noch das Aufgeben der Bereitstellung noch
+„Neue Verarbeitung“, und Schließen führt zu einer Rückfrage, die die
+Bereitstellung nennt. Endet der Arbeitsprozess mit offener Bereitstellung,
+erscheinen die Aktionen wie bisher. Ein Lauf ohne ein einziges Ergebnis behält
+die bisherige Anzeige. Nach einem Neustart der App mit noch laufendem
+Arbeitsprozess kennt der Core diesen nicht; dort gilt die bisherige Anzeige.
+`test-standalone.js` prüft das Merkmal, `test-standalone-workspace.js` die
+drei Stellen der Oberfläche.
+
 RC178-Review R-041 (BL-010.14, BL-050.6) → `gateway/batch-lock-release.js`
 (`releaseOwnedEpochWithBusyRetry`) wartet bei belegter Betriebssystemsperre
 jetzt rund zwei Sekunden statt 185 ms, bevor die Freigabe der Stapelsperre

@@ -686,6 +686,57 @@ test('Standalone reports an incomplete visible export instead of a false finishe
   assert.strictEqual(status.export_pending_count, 2);
 });
 
+test('a decided run whose worker still lives is reported as delivering its results (R-040)', () => {
+  const batchId = 'a'.repeat(64);
+  const decided = { selected_count: 2, completed_count: 2, failed_count: 0, review_count: 0, review_ready: false,
+    result_count: 0, export_pending_count: 2, processing: false, resumable: false, complete: true };
+  const statusOf = ({ intake = false, worker = false, active = false, latest = decided, observed = batchId, bound = batchId }) => {
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      localWorkerActive: () => worker,
+      publicStatusSnapshot: () => ({
+        current: { engine_ready: true, local_intake_pending: intake, batch_processing_active: active,
+          recoverable_batches: 0, batches_awaiting_resume: 0 },
+        latest, observed_batch_id: observed, observed_is_active: false, observed_recoverable: false
+      })
+    }) });
+    service.observedBatchId = bound;
+    return service.status({ localUi: true });
+  };
+  // A fresh run: the intake stays pending until the worker has ended.
+  const fresh = statusOf({ intake: true, worker: true });
+  assert.strictEqual(fresh.state, 'preparing'); assert.strictEqual(fresh.preparing, true);
+  assert.strictEqual(fresh.batch_complete, true); assert.strictEqual(fresh.delivering, true);
+  // A continued run has no pending intake; its live worker is the only sign.
+  const continued = statusOf({ worker: true });
+  assert.strictEqual(continued.state, 'export_pending'); assert.strictEqual(continued.preparing, false);
+  assert.strictEqual(continued.delivering, true);
+  // The worker has ended: the same journal is an open delivery, nothing more.
+  const open = statusOf({});
+  assert.strictEqual(open.state, 'export_pending'); assert.strictEqual(Object.hasOwn(open, 'delivering'), false);
+  // Not a delivery: undecided documents, work in progress, a run that is not the observed one,
+  // a finished delivery, and a real preparation before any journal exists.
+  for (const [name, options, state] of [
+    ['documents left', { intake: true, worker: true, latest: { ...decided, completed_count: 1, complete: false } }, 'preparing'],
+    ['processing', { worker: true, active: true }, 'processing'],
+    ['another run', { intake: true, worker: true, observed: 'b'.repeat(64) }, 'preparing'],
+    ['delivered', { worker: true, latest: { ...decided, result_count: 2, export_pending_count: 0 } }, 'results_available'],
+    ['no journal yet', { intake: true, worker: true, latest: null, observed: null }, 'preparing']
+  ]) {
+    const status = statusOf(options);
+    assert.strictEqual(status.state, state, name);
+    assert.strictEqual(Object.hasOwn(status, 'delivering'), false, name);
+  }
+  // The token-free public status carries the same fact and still no run identity.
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    localWorkerActive: () => true,
+    publicStatusSnapshot: () => ({ current: { engine_ready: true, local_intake_pending: true, batch_processing_active: false,
+      recoverable_batches: 0, batches_awaiting_resume: 0 }, latest: decided, observed_batch_id: batchId,
+      observed_is_active: false, observed_recoverable: false })
+  }) });
+  service.observedBatchId = batchId;
+  assert.strictEqual(service.status().delivering, true); assert.strictEqual(service.status().batch_id, undefined);
+});
+
 test('export abandonment uses a fresh action reader before any mutating leaf', () => {
   const batchId='e'.repeat(64);let projections=0,actions=0,writes=0;
   const refusal=Object.assign(new Error('invalid private source header'),{code:'STANDALONE_HISTORY_UNAVAILABLE'});

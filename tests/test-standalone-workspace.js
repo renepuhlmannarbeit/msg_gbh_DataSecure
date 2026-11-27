@@ -6001,6 +6001,110 @@ testAsync('a run that is still being prepared is named as not yet pausable, and 
   assert.equal(failed.h.el('close-dialog').dataset.kind, 'unpausable'); assert.equal(failed.h.el('close-dialog').dataset.reason, 'state');
   assert.equal(failed.h.el('close-dialog-text').textContent, `In diesem Zustand ist keine Pause möglich. ${closeAnyway}`);
 });
+// After the last file the worker still provides the results; the Core reports
+// that time as `delivering`, with the state "preparing" for a fresh run and
+// "export_pending" for a continued one (R-040).
+const deliveringText = 'Ergebnisse werden bereitgestellt';
+testAsync('while the results are being provided the close question says so and leaves with the finished run (R-040)', async () => {
+  const { h, requestClose, commands } = closeHarness(); await selectAndStart(h);
+  h.model.state = { ...h.model.state, state: 'preparing', batch_complete: true, delivering: true, selected_count: 3, completed_count: 3 }; await h.poll();
+  await requestClose(31);
+  const dialog = h.el('close-dialog');
+  assert.equal(dialog.open, true); assert.equal(dialog.dataset.kind, 'unpausable'); assert.equal(dialog.dataset.reason, 'delivering');
+  assert.equal(h.el('close-dialog-title').textContent, 'Dieser Lauf lässt sich gerade nicht pausieren.');
+  assert.equal(h.el('close-dialog-text').textContent, `Alle Dateien sind verarbeitet. Die Ergebnisse werden gerade im Ergebnisordner bereitgestellt; dabei ist keine Pause möglich. Warte kurz und schließe dann erneut. ${closeAnyway}`);
+  assert.doesNotMatch(h.el('close-dialog-text').textContent, /vorbereitet/u);
+  assert.equal(commands('pause_batch').length, 0);
+  // The delivery ends while the question is open. The user had not answered: the window stays.
+  h.model.state = { ...h.model.state, state: 'results_available', delivering: false, results_available: true, result_count: 3 }; await h.poll();
+  assert.equal(dialog.open, false);
+  assert.deepEqual(commands('decline_close_request').map(call => call.args), [{ request: 31 }]);
+  assert.equal(commands('confirm_close').length, 0);
+  // A preparation that turns into a delivery renews the open question instead of keeping the old sentence.
+  const later = closeHarness(); await selectAndStart(later.h);
+  later.h.model.state = { ...later.h.model.state, state: 'preparing' }; await later.h.poll();
+  await later.requestClose(32);
+  assert.equal(later.h.el('close-dialog').dataset.reason, 'preparing');
+  later.h.model.state = { ...later.h.model.state, batch_complete: true, delivering: true }; await later.h.poll();
+  assert.equal(later.h.el('close-dialog').dataset.reason, 'delivering');
+  await later.h.act('close-dialog-leave');
+  assert.deepEqual(later.commands('confirm_close').map(call => call.args), [{ request: 32 }], '"Trotzdem schließen" still closes');
+  // A continued run delivers under the state "export_pending": the window asks as well instead of closing at once.
+  const resumed = closeHarness(); await selectAndStart(resumed.h);
+  resumed.h.model.state = { ...resumed.h.model.state, state: 'export_pending', batch_complete: true, delivering: true, completed_count: 2 };
+  await resumed.h.poll(); await resumed.requestClose(33);
+  assert.equal(resumed.h.el('close-dialog').open, true); assert.equal(resumed.h.el('close-dialog').dataset.reason, 'delivering');
+  assert.equal(resumed.commands('confirm_close').length, 0);
+  // The same state without a live worker is an open delivery; nothing is working and the window closes.
+  const open = closeHarness(); await selectAndStart(open.h);
+  open.h.model.state = { ...open.h.model.state, state: 'export_pending', batch_complete: true, completed_count: 2 };
+  await open.h.poll(); await open.requestClose(34);
+  assert.deepEqual(open.commands('confirm_close').map(call => call.args), [{ request: 34 }]);
+});
+testAsync('after the last file the job card names the delivery of the results, not a preparation (R-040)', async () => {
+  const h = harness(); await selectAndStart(h);
+  h.model.state = { ...h.model.state, state: 'preparing', batch_complete: false, selected_count: 3, completed_count: 0 }; await h.poll();
+  assert.equal(h.el('job-title').textContent, 'Wird vorbereitet', 'a run that has not begun is still being prepared');
+  h.model.state = { ...h.model.state, state: 'processing', completed_count: 2 }; await h.poll();
+  assert.match(h.el('job-description').textContent, /^2 von 3 Dateien abgeschlossen\./u);
+  const region = h.el('job-announcement'), before = region.textUpdates;
+  h.model.state = { ...h.model.state, state: 'preparing', batch_complete: true, delivering: true, completed_count: 3 }; await h.poll();
+  assert.equal(h.el('job-title').textContent, deliveringText);
+  assert.equal(h.el('job-description').textContent,
+    'Alle Dateien sind verarbeitet. Die Ergebnisse werden jetzt im Ergebnisordner bereitgestellt; er ist erst danach vollständig. Bitte warten.');
+  assert.equal(region.textContent, `${deliveringText}. Die Verarbeitung bleibt lokal.`);
+  assert.equal(region.textUpdates, before + 1, 'the change is announced once');
+  for (const id of ['job-action-pause', 'job-action-results', 'job-action-new']) assert.equal(h.el(id), undefined, id);
+  await h.poll(); await h.poll();
+  assert.equal(region.textUpdates, before + 1, 'an unchanged delivery is not announced again');
+  // A run in which no file produced a result has nothing to deliver.
+  h.model.state = { ...h.model.state, failed_count: 3 }; await h.poll();
+  assert.equal(h.el('job-title').textContent, 'Wird vorbereitet');
+  h.model.state = { ...h.model.state, failed_count: 1 }; await h.poll();
+  assert.equal(h.el('job-title').textContent, deliveringText, 'one stopped file among results does not change the delivery');
+  // A continued run delivers under the state "export_pending": same card, no repair, no abandonment, no new run.
+  h.model.state = { ...h.model.state, state: 'export_pending', processing_mode: 'markdown-and-anonymize', export_pending_count: 2 }; await h.poll();
+  assert.equal(h.el('job-title').textContent, deliveringText);
+  assert.match(h.el('job-description').textContent, /^Alle Dateien sind verarbeitet\. Die Ergebnisse werden jetzt im Ergebnisordner bereitgestellt/u);
+  for (const id of ['job-action-abandon-export', 'job-action-new', 'job-action-results']) assert.equal(h.el(id), undefined, id);
+  assert.equal(h.el('job-action-history').textContent, 'Im Verlauf ansehen');
+  // The worker has ended and the delivery is still open: the card offers what it offered before.
+  h.model.state = { ...h.model.state, delivering: false }; await h.poll();
+  assert.equal(h.el('job-title').textContent, 'Bereitstellung offen');
+  assert.equal(h.el('job-action-history').textContent, 'Bereitstellung im Verlauf prüfen');
+  assert.ok(h.el('job-action-abandon-export')); assert.ok(h.el('job-action-new'));
+  // "preparing" without the delivery flag keeps its old name.
+  h.model.state = { ...h.model.state, state: 'preparing', batch_complete: false }; await h.poll();
+  assert.equal(h.el('job-title').textContent, 'Wird vorbereitet');
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+});
+testAsync('the history offers neither repair nor abandonment while the worker of that run provides the results (R-040)', async () => {
+  const h = harness(); await selectAndStart(h);
+  const pending = { processing_mode: 'markdown-and-anonymize', status: 'export_pending', selected_count: 3, result_count: 3, failed_count: 0 };
+  h.model.entries = [{ batch_id: A, ...pending }, { batch_id: B, ...pending }];
+  h.model.state = { ...h.model.state, processing_mode: 'markdown-and-anonymize', state: 'preparing', batch_complete: true, delivering: true,
+    selected_count: 3, completed_count: 3 };
+  await h.poll(); await h.act('nav-history');
+  assert.equal(h.el(`history-${A}-delivery`), undefined);
+  assert.equal(h.el(`history-${A}-abandon-export`), undefined);
+  assert.equal(h.el(`history-${A}-state`).textContent, deliveringText);
+  const row = h.el(`history-${A}-state`).parent.parent;
+  assert.equal(row.attrs['aria-busy'], 'true');
+  assert.match(row.textContent, /Die Ergebnisse werden gerade im Ergebnisordner bereitgestellt/u);
+  assert.doesNotMatch(row.textContent, /Bereitstellung erneut prüfen/u);
+  // Another run's open delivery is its own matter and stays repairable.
+  assert.ok(h.el(`history-${B}-delivery`)); assert.ok(h.el(`history-${B}-abandon-export`));
+  assert.equal(h.el(`history-${B}-state`).textContent, 'Bereitstellung offen');
+  assert.equal(h.calls.some(call => call.args?.recoverExports === true), false);
+  // The worker has ended and the delivery is still open: the unchanged entry is drawn again, now with the repair.
+  h.model.state = { ...h.model.state, state: 'export_pending', delivering: false }; await h.poll();
+  assert.ok(h.el(`history-${A}-delivery`)); assert.ok(h.el(`history-${A}-abandon-export`));
+  assert.equal(h.el(`history-${A}-state`).textContent, 'Bereitstellung offen');
+  // And back: a delivery that begins after the row was drawn removes the repair again, also for a continued run.
+  h.model.state = { ...h.model.state, delivering: true }; await h.poll();
+  assert.equal(h.el(`history-${A}-delivery`), undefined);
+  assert.equal(h.el(`history-${A}-state`).textContent, deliveringText);
+});
 testAsync('an acknowledgement the shell refuses or cannot take leaves no question behind and closes nothing', async () => {
   for (const acknowledge of [{ ok: false }, Error('STANDALONE_OPERATION_FAILED')]) {
     const { h, requestClose, commands } = closeHarness({ acknowledge }); await selectAndStart(h);

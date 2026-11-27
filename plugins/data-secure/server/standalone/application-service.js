@@ -701,6 +701,13 @@ class StandaloneApplicationService {
             : latest?.complete === false
               ? 'failed'
             : 'ready';
+    // After the last document the worker still provides the results and ends
+    // only then (batch-worker.js). Without this fact a fresh run reads as
+    // "preparing" and a continued one as an open delivery, although nothing is
+    // being prepared and nothing needs repair yet (R-040). Observation for the
+    // local UI only: it neither admits nor refuses any command.
+    const delivering = ['preparing', 'export_pending'].includes(state) && currentRunObserved &&
+      latest?.complete === true && (intakePending || this.deps.localWorkerActive?.() === true);
     const presentationGeneration = intakeFailure
       ? (intakeFailure.rendered ? null : intakeFailure.generation)
       : currentBatchId || !snapshot
@@ -744,6 +751,7 @@ class StandaloneApplicationService {
       ...(latest?.termination_unconfirmed === true ? { termination_unconfirmed: true } : {}),
       preparing,
       processing,
+      ...(delivering ? { delivering: true } : {}),
       ...(latest?.pause_requested === true ? { pause_requested: true } : {}),
       batch_complete: latest?.complete === true,
       review_required: reviewReady,

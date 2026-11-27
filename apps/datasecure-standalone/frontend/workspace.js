@@ -10,6 +10,16 @@
     results_available: 'Verarbeitung abgeschlossen', completed_without_results: 'Keine Ergebnisse erstellt',
     export_pending: 'Bereitstellung offen', export_abandoned: 'Bereitstellung aufgegeben',
     failed: 'Verarbeitung unterbrochen', blocked: 'Nicht bereit' };
+  // After the last document the worker still provides the results and ends only
+  // then. The Core reports that time as `delivering`; its state then reads
+  // "preparing" for a fresh run and "export_pending" for a continued one
+  // (R-040). Nothing is being prepared; a delivery that is still running is
+  // neither open nor repairable. A run in which no file produced a result has
+  // nothing to deliver and keeps the previous wording.
+  const delivering = state => Boolean(state) && state.delivering === true &&
+    Number.isSafeInteger(state.selected_count) && state.selected_count > 0 &&
+    !(Number.isSafeInteger(state.failed_count) && state.failed_count >= state.selected_count);
+  const DELIVERING = 'Ergebnisse werden bereitgestellt';
   const reasons = {
     PROCESS_IDENTITY_UNAVAILABLE: 'Der lokale Verarbeitungsprozess konnte nicht eindeutig zugeordnet werden. Der nächste Verarbeitungsschritt wurde vorsichtshalber nicht gestartet. Bitte die Diagnose sichern und den Laufstatus prüfen.',
     PROCESS_IDENTITY_ACCESS_DENIED: 'Das Betriebssystem verweigert die Abfrage zur sicheren Prozesszuordnung. Bitte die Diagnose sichern und mit der IT prüfen; keine Schutzfunktion abschalten.',
@@ -813,7 +823,7 @@
     const tooLarge = chosen.length > 200 || bytes > 500 * 1024 * 1024;
     const hint = bootstrapFailure ? 'Der lokale Core ist nicht bereit. Bitte Diagnose und Startursache prüfen.'
       : reconnecting ? 'Die lokale Verbindung wird wiederhergestellt. Bitte warten.' : busy ? 'Ein lokaler Vorgang ist aktiv. Bitte warten.'
-      : ['preparing', 'processing'].includes(current?.state) || current?.intake_failure?.worker_active === true ? 'Ein Lauf ist noch nicht abgeschlossen. Öffne seine Laufdetails und warte auf den Abschluss oder pausiere ihn ausdrücklich.'
+      : ['preparing', 'processing'].includes(current?.state) || delivering(current) || current?.intake_failure?.worker_active === true ? 'Ein Lauf ist noch nicht abgeschlossen. Öffne seine Laufdetails und warte auf den Abschluss oder pausiere ihn ausdrücklich.'
       : !mode && !chosen.length ? 'Bitte Aufgabe und Dateien auswählen.'
       : !mode ? 'Bitte zuerst eine Aufgabe auswählen.' : !chosen.length ? 'Bitte mindestens eine geeignete Datei anhaken.'
       : tooLarge ? 'Auswahl zu groß.' : resultFolderUnavailable ? 'Der bisherige Ergebnisordner ist nicht verfügbar. Stelle ihn wieder bereit oder wähle unten „Ordner ändern“.'
@@ -1071,7 +1081,7 @@
     else { showView('details', entry.batch_id); await refresh(); $('job-title').focus(); }
   }
   async function newJob() {
-    if (busy || ['preparing', 'processing'].includes(current?.state) || current?.intake_failure?.worker_active === true) return;
+    if (busy || ['preparing', 'processing'].includes(current?.state) || delivering(current) || current?.intake_failure?.worker_active === true) return;
     if (!await perform('cancel_admission')) return;
     job = null; catalogue = []; knownIds.clear(); selected.clear(); mode = ''; current = null; generation++;
     announcedTerminalPhases.clear();
@@ -1231,7 +1241,7 @@
 
   function renderJob(state, announcementView = view) {
     if (!job) return;
-    if (state.batch_id !== job.batchId || !['preparing', 'processing'].includes(state.state)) workingActionSignature = null;
+    if (state.batch_id !== job.batchId || !(['preparing', 'processing'].includes(state.state) || delivering(state))) workingActionSignature = null;
     reconcileFeedback(state);
     refreshRunGuide();
     // Only replace focus that this render actually removes. Background updates
@@ -1309,12 +1319,12 @@
     if (signature === lastJobSignature) { acknowledgeRenderedNotice(state); return; }
     lastJobSignature = signature;
     $('job-progress').hidden = false;
-    const working = ['preparing', 'processing'].includes(state.state);
+    const providing = delivering(state), working = ['preparing', 'processing'].includes(state.state) || providing;
     const rawResults = state.processing_mode === 'markdown-only', anonymousResults = state.processing_mode === 'markdown-and-anonymize';
     const needsRepair = anonymousResults && state.state === 'results_available' && !working && (reviewProjection?.phase === 'result_repair_required' ||
       window.__DATASECURE_PRESENTATION__?.resultPublication(state.result_publication)?.state === 'repair_required');
-    const resultBlocked = needsRepair || ['result_pending', 'results_unavailable'].includes(reviewProjection?.phase) ||
-      ['pending','conflict','unavailable'].includes(window.__DATASECURE_PRESENTATION__?.resultPublication(state.result_publication)?.state);
+    const resultBlocked = !providing && (needsRepair || ['result_pending', 'results_unavailable'].includes(reviewProjection?.phase) ||
+      ['pending','conflict','unavailable'].includes(window.__DATASECURE_PRESENTATION__?.resultPublication(state.result_publication)?.state));
     const summary = window.__DATASECURE_PRESENTATION__?.conversionSummary(state);
     const completedAnonymous = anonymousResults && state.state === 'results_available';
     const contentNotices = window.__DATASECURE_PRESENTATION__?.contentNoticeSummary(state);
@@ -1330,7 +1340,7 @@
     $('job-title').textContent = needsRepair ? 'Gespeicherte Anonymisierung sicher nachbearbeiten' : resultBlocked ? reviewProjection?.heading || 'Ergebnisbereitstellung nicht bestätigt' : summary?.heading || (state.state === 'results_available'
       ? rawResults ? 'Textübernahme abgeschlossen' : anonymousResults ? anonymousAttention
         ? 'Anonymisierungslauf abgeschlossen mit Hinweisen' : 'Anonymisierungslauf abgeschlossen' : 'Verarbeitungszweck nicht bestätigt'
-      : states[state.state] || 'Status wird geprüft');
+      : (providing ? DELIVERING : states[state.state]) || 'Status wird geprüft');
     const total = count(state.selected_count) || job.selectedCount, done = count(state.completed_count), failed = count(state.failed_count), reviews = count(state.review_count);
     $('job-description').className = reviewProjection?.not_processed_count ? 'run-notice' : 'muted';
     $('job-description').textContent = resultBlocked ? reviewProjection?.next || (needsRepair
@@ -1338,7 +1348,7 @@
       : 'Der aktuelle Ergebnisordner ist nicht bestätigt. Den gespeicherten Stand in der Nachbearbeitung prüfen; keine Änderung blind wiederholen.') : summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
       ? `${reviews} Datei${reviews === 1 ? ' wartet' : 'en warten'} auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
-      : working ? state.pause_requested ? `Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.${closeAfterPause ? ' DataSecure schließt danach von selbst.' : ''}` : `${done} von ${total} ${total === 1 ? 'Datei' : 'Dateien'} abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
+      : working ? state.pause_requested ? `Pause angefordert. Die aktuelle Datei wird fertiggestellt. Bereits gestartete Umwandlungen werden sicher beendet, bevor der Lauf pausiert.${closeAfterPause ? ' DataSecure schließt danach von selbst.' : ''}` : providing ? 'Alle Dateien sind verarbeitet. Die Ergebnisse werden jetzt im Ergebnisordner bereitgestellt; er ist erst danach vollständig. Bitte warten.' : `${done} von ${total} ${total === 1 ? 'Datei' : 'Dateien'} abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
       : state.state === 'results_available' ? `${count(state.result_count)} ${count(state.result_count) === 1 ? rawResults ? 'Markdown-Ergebnis (nicht anonymisiert)' : anonymousResults ? 'technisch geprüftes anonymisiertes Ergebnis' : 'Ergebnis mit unbestätigtem Verarbeitungszweck' : rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
       : state.state === 'stopped' ? 'Der lokale Zwischenstand ist gespeichert. Fortsetzen verarbeitet nur noch offene Schritte.'
       : state.state === 'paused' ? 'Der Lauf ist pausiert. Fortsetzen verarbeitet nur offene Dateien. Die privaten Arbeitskopien unterliegen weiterhin der eingestellten Aufbewahrung.'
@@ -1355,7 +1365,7 @@
     $('job-current').textContent = safeLabel(state.current_file) ? state.current_file : '';
     // Stable live region: announce meaningful phase changes and the first
     // failure, not every filename/count update. No synthetic percentage.
-    const announcement = `${job.batchId}:${state.state}:${Boolean(state.pause_requested)}:${Boolean(failed)}${working ? '' : `:${done}:${failed}:${reviews}:${count(state.result_count)}:${contentNotices?.count}:${contentNotices?.complete}:${JSON.stringify(reviewProjection)}`}`;
+    const announcement = `${job.batchId}:${state.state}${providing ? ':delivering' : ''}:${Boolean(state.pause_requested)}:${Boolean(failed)}${working ? '' : `:${done}:${failed}:${reviews}:${count(state.result_count)}:${contentNotices?.count}:${contentNotices?.complete}:${JSON.stringify(reviewProjection)}`}`;
     if (announceJob && announcement !== lastJobAnnouncement) {
       lastJobAnnouncement = announcement; lastJobAnnouncementTerminal = terminalAnnouncement;
       if (terminalAnnouncement) announcedTerminalPhases.add(state.state);
@@ -1382,16 +1392,16 @@
     if (state.processing_mode === 'markdown-only' && state.state === 'review_required')
       actions.append(action('skip-ocr', 'Ohne diesen Vergleich fortfahren', () => offerSkipOcrContactReview(job.batchId)));
     if (['stopped', 'paused'].includes(state.state)) actions.append(action('resume', 'Verarbeitung fortsetzen', async () => { if (await perform('continue_current_batch')) { lastJobSignature = ''; await refresh(); } }, true));
-    if (state.state === 'export_pending') actions.append(action('history', 'Bereitstellung im Verlauf prüfen', () => showView('history'), true));
+    if (state.state === 'export_pending' && !providing) actions.append(action('history', 'Bereitstellung im Verlauf prüfen', () => showView('history'), true));
     if (state.state === 'results_available' && state.results_available && !working && !resultBlocked) actions.append(action('results', 'Ergebnisordner öffnen', () => perform('open_history_results', { batchId: job.batchId }), true));
     if (state.state === 'results_available' && !working && needsRepair) actions.append(action('documents', 'Gespeicherte Texte nachbearbeiten', () => openDocuments(job.batchId), true));
     else if (state.state === 'results_available' && state.results_available && !working) secondary.append(action('documents', rawResults ? 'Markdown nachkorrigieren (optional)' : 'Nachbearbeitung öffnen (optional)', () => openDocuments(job.batchId)));
-    if (state.state === 'export_pending' && anonymousResults) secondary.append(action('abandon-export', 'Bereitstellung aufgeben …', () =>
+    if (state.state === 'export_pending' && anonymousResults && !providing) secondary.append(action('abandon-export', 'Bereitstellung aufgeben …', () =>
       offerAbandonResultExport({ batch_id: job.batchId, status: state.state, processing_mode: state.processing_mode,
         result_count: state.result_count, failed_count: state.failed_count,
         exported_count: state.exported_count, export_pending_count: state.export_pending_count })));
     if (!working) actions.append(action('new', 'Neue Verarbeitung', newJob));
-    if (state.state !== 'export_pending') secondary.append(action('history', 'Im Verlauf ansehen', () => showView('history')));
+    if (state.state !== 'export_pending' || providing) secondary.append(action('history', 'Im Verlauf ansehen', () => showView('history')));
     $('job-more').hidden = !secondary.children.length;
     restoreActionFocus();
     }
@@ -1666,7 +1676,8 @@
       if (recovering) recoveryFeedback(data.export_recovery, recoverBatchId);
       $('history-status').textContent = data.entries.length ? 'Die letzten 5 Verarbeitungen · neueste zuerst' : 'Keine Verarbeitungen in den letzten 5 Verlaufseinträgen sichtbar.';
       if (data.history_degraded === true) $('history-status').textContent += ' Einige alte Dateistände sind momentan nicht bestätigbar. Die übrigen Laufdaten bleiben sichtbar; es werden keine fehlenden Dateien automatisch neu angelegt.';
-      const signature = JSON.stringify([data.entries, job?.batchId || null, reconnecting, contextRequired, detailsBatchId, includeHiddenHistory]);
+      const signature = JSON.stringify([data.entries, job?.batchId || null, reconnecting, contextRequired, detailsBatchId, includeHiddenHistory,
+        delivering(current) ? current.batch_id || null : null]);
       // Polling must not replace focused controls or expanded file details
       // when the history did not change. Changes retain their explicit state.
       if (signature === historySignature) return;
@@ -1692,6 +1703,9 @@
         const raw = entry.processing_mode === 'markdown-only', anonymous = entry.processing_mode === 'markdown-and-anonymize';
         const contentNotices = window.__DATASECURE_PRESENTATION__?.contentNoticeSummary(entry);
         const failedFiles = count(entry.failed_count);
+        // The worker of this very run is still providing its results (R-040).
+        const providing = !reconnecting && !contextRequired && entry.status === 'export_pending' &&
+          delivering(current) && current.batch_id === entry.batch_id;
         // The durable history summary outlives the journal that supplies the
         // optional reason breakdown. Missing reasons must not become invented
         // technical errors after journal retention.
@@ -1707,7 +1721,7 @@
         const unknownStops = anonymous && !reasonBreakdownValid ? failedFiles : 0;
         const stateLabel = element('p', conversion?.heading || (entry.status === 'results_available' ? entry.processing_mode === 'markdown-only'
           ? 'Textübernahme abgeschlossen · nicht anonymisiert' : anonymous ? 'Verarbeitung abgeschlossen · Ergebnisdateien bereit' : 'Technisch verarbeitet · Verarbeitungszweck nicht bestätigt'
-          : states[entry.status] || 'Nicht verfügbar'), 'history-meta');
+          : (providing ? DELIVERING : states[entry.status]) || 'Nicht verfügbar'), 'history-meta');
         stateLabel.id = `history-${entry.batch_id}-state`;
         detail.append(element('p', `${raw ? 'Markdown-Konvertierung' : anonymous ? 'Anonymisierung' : 'Verarbeitungszweck nicht bestätigt'} · ${dateLabel}`, 'history-title'),
           element('p', conversion?.counts || (anonymous && reasonBreakdownValid
@@ -1730,8 +1744,9 @@
         }
         if (entry.status === 'export_abandoned') detail.append(element('p',
           `${count(entry.exported_count) === 1 ? '1 Datei wurde' : `${count(entry.exported_count)} Dateien wurden`} zuvor sichtbar kopiert; ${count(entry.export_pending_count) === 1 ? '1 fehlende Datei wird' : `${count(entry.export_pending_count)} fehlende Dateien werden`} nicht mehr automatisch ergänzt. Teilkopien bleiben unverändert. Keine vollständige Freigabe zur Weitergabe.`, 'history-next'));
-        if (entry.status === 'export_pending') detail.append(element('p',
-          '„Bereitstellung erneut prüfen“ kann fehlende Ergebnisdateien dieses Laufs lokal ergänzen. Es startet keinen neuen Verarbeitungslauf und erstellt keinen Export.', 'history-next'));
+        if (entry.status === 'export_pending') detail.append(element('p', providing
+          ? 'Alle Dateien sind verarbeitet. Die Ergebnisse werden gerade im Ergebnisordner bereitgestellt; er ist erst danach vollständig. Bitte warten.'
+          : '„Bereitstellung erneut prüfen“ kann fehlende Ergebnisdateien dieses Laufs lokal ergänzen. Es startet keinen neuen Verarbeitungslauf und erstellt keinen Export.', 'history-next'));
         const runIdentity = element('p', `Lauf ${entry.batch_id.slice(0, 8)}`, 'history-run-id path');
         runIdentity.id = identityId; detail.append(runIdentity);
         const disclosure = element('details', undefined, 'history-disclosure');
@@ -1847,7 +1862,7 @@
         const connected = !reconnecting && !contextRequired;
         const active = connected && working && entry.batch_id === job?.batchId;
         row.dataset.current = String(active);
-        row.setAttribute('aria-busy', String(connected && working));
+        row.setAttribute('aria-busy', String(connected && working || providing));
         if (working) {
           const activity = element('p', undefined, 'history-activity');
           const icon = element('span', connected ? '⚙' : '!', 'history-work-icon'); icon.setAttribute('aria-hidden', 'true');
@@ -1875,6 +1890,7 @@
           run: () => { showView('details', entry.batch_id); $('job-title').focus(); } }
           : entry.resumable ? { key: 'continue', label: entry.status === 'review_required' ? 'Jetzt prüfen' : 'Fortsetzen',
           primary: true, run: () => resumeRun(entry, entry.status === 'review_required') }
+          : providing ? null
           : entry.status === 'export_pending' ? { key: 'delivery', label: 'Bereitstellung erneut prüfen', primary: true,
             run: async () => { deliveryFeedback(entry.batch_id); await refreshHistory(false, entry.batch_id); await refresh(); } }
           : entry.status === 'export_abandoned' ? null
@@ -1935,7 +1951,7 @@
         }
         if (raw && entry.status === 'review_required' && entry.resumable)
           addExtra('skip-ocr', 'Ohne E-Mail-/Telefonvergleich fortfahren', () => offerSkipOcrContactReview(entry.batch_id, count(entry.selected_count)));
-        if (anonymous && entry.status === 'export_pending' && !working)
+        if (anonymous && entry.status === 'export_pending' && !working && !providing)
           addExtra('abandon-export', 'Unvollständige Bereitstellung aufgeben …', () => offerAbandonResultExport(entry));
         // Summary data may improve the next action, but never supersedes an
         // active worker or unprocessed work. File exceptions remain directly
@@ -2230,7 +2246,7 @@
         flight.read = null; refreshing = null;
         // An early Ready timer may already have encountered this held slot.
         // Replan only its actual newer epoch after this physical read settles.
-        schedule(newEpochReadPending ? 50 : ['processing', 'preparing'].includes(current?.state) ? 1200 : 5000);
+        schedule(newEpochReadPending ? 50 : ['processing', 'preparing'].includes(current?.state) || delivering(current) ? 1200 : 5000);
       }
     }
   }
@@ -2414,7 +2430,7 @@
   // active file is finished, no further file begins, the run stays resumable.
   // A question the user withdraws is told to the shell, so that this request
   // can no longer close the app.
-  const runWorking = state => Boolean(state) && (['preparing', 'processing'].includes(state.state) || state.intake_failure?.worker_active === true);
+  const runWorking = state => Boolean(state) && (['preparing', 'processing'].includes(state.state) || delivering(state) || state.intake_failure?.worker_active === true);
   // What this window knows about work that closing would leave without a window.
   function closeQuestion() {
     if (bootstrapFailure) return null; // No core is connected; there is nothing this window could pause.
@@ -2423,7 +2439,7 @@
     if (!runWorking(current)) return null;
     if (current.pause_requested === true || closeAfterPause) return { kind: 'pausing', reason: '' };
     if (current.state === 'processing' && validBatchId(current.batch_id)) return { kind: 'working', reason: '' };
-    return { kind: 'unpausable', reason: current.state === 'preparing' ? 'preparing' : 'state' };
+    return { kind: 'unpausable', reason: delivering(current) ? 'delivering' : current.state === 'preparing' ? 'preparing' : 'state' };
   }
   function hideCloseDialog() { if ($('close-dialog').open) $('close-dialog').close(); }
   async function confirmClose() {
@@ -2460,6 +2476,8 @@
       $('close-dialog-title').textContent = 'Dieser Lauf lässt sich gerade nicht pausieren.';
       $('close-dialog-text').textContent = reason === 'retention'
         ? `Bei sofortiger Löschung der Arbeitskopien ist keine Pause möglich. Wenn du jetzt schließt, läuft der Lauf ohne Fenster weiter. Wird er dabei unterbrochen, etwa durch Abmelden oder Herunterfahren, müssen die offenen Dateien neu ausgewählt werden. ${windowless}`
+        : reason === 'delivering'
+          ? `Alle Dateien sind verarbeitet. Die Ergebnisse werden gerade im Ergebnisordner bereitgestellt; dabei ist keine Pause möglich. Warte kurz und schließe dann erneut. ${anyway}`
         : reason === 'preparing'
           ? `Die Dateien werden gerade vorbereitet; in diesem Moment ist noch keine Pause möglich. Warte kurz und schließe dann erneut. ${anyway}`
           : reason === 'refused'
@@ -2499,7 +2517,7 @@
     // The run stopped working while the question was open. The user had not
     // answered; the window stays and shows what the run reached.
     if (!question) { void withdrawClose(); return; }
-    const transient = dialog.dataset.kind === 'unknown' || dialog.dataset.reason === 'preparing';
+    const transient = dialog.dataset.kind === 'unknown' || ['preparing', 'delivering'].includes(dialog.dataset.reason);
     if (transient && (question.kind !== dialog.dataset.kind || question.reason !== dialog.dataset.reason)) presentClose(question.kind, question.reason);
   }
   function stayOpen() {
