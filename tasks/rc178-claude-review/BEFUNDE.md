@@ -130,9 +130,10 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-032 | mittel bis niedrig | Architektur und Betrieb; Oberfläche; Windows | Wer das Fenster während eines Laufs schließt, beendet die Verarbeitung nicht: Die Hülle endet, Arbeitsprozesse des Core laufen weiter und legen die Ergebnisse im Ergebnisordner ab. Die Oberfläche fragt nicht nach und sagt es nicht. Im nativen Lauf beobachtet (sechs Dateien, rund 75 s nach dem Schließen). | BL-010.14, BL-010.11 | behoben mit Grenzen (`5f670a20`, `2ce74b9f`, `d41a042b`, `34de4509`) nach Entscheidung des Anwenders: Rückfrage beim Schließen, Pausieren über die vorhandene Dateigrenzen-Pause. Beenden durch das Betriebssystem, Absturz und Arbeit, die die Oberfläche nicht als arbeitenden Lauf kennt, bleiben wie zuvor; macOS nicht geprüft. Die Rückfrage „Aufbewahrung 0 Tage“ ist im Standalone-Paket nicht erreichbar |
 | R-033 | hoch | Anonymisierung; alle Ziele | Aus Word bleiben eine Telefonnummer hinter „Tel.“, ein Name hinter einem Titel, ein Geburtsdatum hinter „geb.“, ein Name hinter „z. Hd.“ und eine Kennung hinter „Personalnr.“ im freigegebenen Markdown stehen, weil die Umwandlung jeden Punkt als `\.` schreibt und diese Regeln das nicht lasen. Im nativen Lauf gefunden; in RC178 gleich. Dazu drei Erkennungslücken unabhängig vom Format (R-033b bis R-033d). | BL-050.6, BL-021.1 | teilweise behoben (`3ba2b8fb`, `1c8e971c`, `0bd5e26f`): maskierte Punkte und Klammern aus Word; Name hinter einer Rolle, Namensliste unter einem Label, `Rückruf unter`, derselbe Name an weiteren Stellen des Dokuments. Offen: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Der als Folge häufiger erreichte Stopp bei `Label Name Nummer` ist in `0bd5e26f` behoben |
 | R-034 | niedrig | Oberfläche, alle | Die geladene Oberfläche erklärt vier Fehlercodes nicht, die der Core weiter liefert (`SOURCE_FOLDER_UNSUPPORTED_FILES`, `STANDALONE_NO_ADMISSION`, `BATCH_PSEUDONYM_CAPACITY_EXCEEDED`, `STANDALONE_RESULT_BINDING_UNAVAILABLE`), und zeigt dafür einen allgemeinen Satz. Erklärt hat sie nur die frühere Oberfläche; der Vertragstest prüfte dort und bestand. Beim Umbinden des Tests gefunden; in RC178 gleich. | BL-050.6 | behoben (`8cf5dd93`) |
-| R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | behoben (`d474a579`) für den Fall, den der Core erkennt; ein zugeordneter Laufwerksbuchstabe und ein Mount unter `/Volumes` gelten dem Core nicht als Netzlaufwerk (vorbestehend; nach Entscheidung des Anwenders vorerst belassen) |
+| R-035 | mittel | Oberfläche, alle | Wählt der Anwender einen Ergebnisordner auf einem Netzlaufwerk, zeigt die geladene Oberfläche den zugesicherten Hinweis nicht; der Core liefert ihn, kein geladenes Skript liest ihn. Den Hinweis hatte nur die frühere Oberfläche. Beim Einzelabgleich der entfallenen Tests gefunden; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | behoben (`d474a579`) für den Fall, den der Core erkennt; ein zugeordneter Laufwerksbuchstabe und ein Mount unter `/Volumes` gelten dem Core nicht als Netzlaufwerk (vorbestehend; nach Entscheidung des Anwenders vorerst belassen). In Standalone unter Windows ist der Hinweis nicht erreichbar, siehe R-038 |
 | R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | behoben (`d474a579`, `6e10ac80`); für eine Office-Sperrdatei nativ beobachtet |
 | R-037 | niedrig bis mittel | Tests und Betrieb, alle | Die Ergebnisabfrage direkt nach Laufende wurde in einem Lauf der Suite mit `STANDALONE_BUSY` beantwortet statt mit „Veröffentlichung läuft noch“; der Test lässt das nicht zu, die Suite brach ab. Einmal beobachtet, nicht reproduziert. Core und Test sind seit RC178 unverändert. | BL-050.6 | Hypothese |
+| R-038 | mittel | Fachlichkeit und Plattform, Standalone Windows (Core-Teil auch Cowork) | Ein Ergebnisordner im Netzwerk wird abgelehnt, obwohl `PRODUCT.md` ihn ausdrücklich erlaubt: über den UNC-Pfad von der Hülle (sie lässt nur Laufwerksbuchstaben zu), über einen zugeordneten Laufwerksbuchstaben vom Core (Windows löst ihn zum UNC-Namen auf). Die Meldung nennt den Grund nicht; der Hinweis aus R-035 ist in Standalone unter Windows nicht erreichbar. Nativ beobachtet; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | offen |
 
 ## Einzelbefunde
 
@@ -2533,6 +2534,123 @@ Fingerprints.
   (Ziehen lässt sich hier nicht automatisieren).
 - Die Texte zum Prüfstart-Fehler sind getestet, nicht nativ ausgelöst.
 
+## Nachtrag vom 27.11. · Netzlaufwerk (R-038) und drei native Beobachtungen
+
+Nach der vierzehnten Übergabe hat der Anwender Entscheidungsvorlagen zu den
+offenen Punkten verlangt und danach beauftragt, das Netzlaufwerk und die noch
+nicht nativ gesehenen Stellen zu prüfen. Am Produkt ist dabei nichts geändert;
+der Produktstand bleibt `3b85e395`, Paket `a4f7a0e6…`, Build `4b88b0db`.
+
+### R-038 · Standalone unter Windows nimmt keinen Ergebnisordner im Netzwerk an
+
+- **Ort:** `apps/datasecure-standalone/tauri-contract/src/export_directory.rs:1146-1149`
+  (`open_directory` lässt als Pfadanfang nur einen Laufwerksbuchstaben zu);
+  `plugins/data-secure/server/gateway/result-folder-config.js:53-63`
+  (`inspectRoot` vergleicht den gewählten Pfad mit `fs.realpathSync.native`)
+  und `396-400` (`isNetworkResultFolder`).
+- **Soll:** `docs/canonical/PRODUCT.md:270-274`: „Ein sichtbarer Ergebnisordner
+  darf ausdrücklich auf einem Netzlaufwerk liegen“, mit einmaligem Hinweis,
+  ohne Sperre (DS-080).
+- **Reproduktion, nativ am Paket des Endstands:** In den Einstellungen **Ordner
+  ändern**, im Ordnerdialog einen leeren Ordner wählen,
+  - einmal über den UNC-Pfad `\\localhost\C$\…\netz-unc` (die lokale
+    Verwaltungsfreigabe, ohne Systemänderung erreichbar),
+  - einmal über einen dafür vorübergehend zugeordneten Laufwerksbuchstaben
+    `Z:\…\netz-buchstabe` (`net use Z: \\localhost\C$`, danach wieder entfernt).
+- **Ist:**
+  - UNC-Pfad: „Der gewählte Ergebnisordner konnte nicht sicher vorbereitet
+    werden. Die bisherige Einstellung bleibt unverändert. … (AI_EXPORT_CONFLICT)“.
+    Die lokale Diagnose nennt `native_configure_failed`, Stufe `public_open`,
+    Fehlerart `Other` ohne Systemcode; das ist `EXPORT_DIRECTORY_UNSAFE` aus
+    `open_directory`.
+  - Laufwerksbuchstabe: „Der lokale Vorgang konnte nicht abgeschlossen werden.
+    Bitte Diagnose und aktuellen Laufstatus prüfen. (STANDALONE_OPERATION_FAILED)“.
+    Die Ablehnung kommt aus dem Core: `fs.realpathSync.native` liefert für
+    `Z:\…` den UNC-Namen, `inspectRoot` wirft `RESULT_ROOT_UNSAFE`.
+  - In beiden Fällen bleibt der bisherige Ordner eingestellt.
+- **Gegenprobe am Core ohne App:** `inspectRoot` nimmt denselben Ordner als
+  `C:\…` an, ebenso als `\\localhost\C$\…` (und erkennt ihn dann als
+  Netzlaufwerk); als `Z:\…` lehnt er ab.
+- **Folgen:**
+  - In Standalone unter Windows gibt es keinen Weg, einen Ergebnisordner im
+    Netzwerk zu wählen. Der Hinweis nach DS-080, den R-035 in die geladene
+    Oberfläche gebracht hat, ist dort nicht erreichbar: Der einzige Pfad, den
+    der Core als Netzlaufwerk erkennt, wird von der Hülle abgelehnt.
+  - Der Core gilt auch für das Cowork-Plugin: Dort ist ein UNC-Pfad möglich,
+    ein zugeordneter Laufwerksbuchstabe nach dieser Gegenprobe nicht. Im
+    Plugin selbst habe ich das nicht ausgeführt.
+  - Keine der beiden Meldungen sagt dem Anwender, dass es am Netzlaufwerk
+    liegt; die zweite empfiehlt, Diagnose und Laufstatus zu prüfen.
+- **Auswirkung:** mittel. Kein Datenabfluss und kein Datenverlust; die App
+  bleibt beim bisherigen Ordner. Wer seine Ergebnisse auf einem Netzlaufwerk
+  ablegen will, wie es die Produktbeschreibung zusagt, kann es nicht und
+  erfährt den Grund nicht.
+- **Abgrenzung:** `open_directory` und `result-folder-config.js` sind seit
+  `v3.2.0-rc178` unverändert. Geprüft mit der lokalen Freigabe
+  `\\localhost\C$`, nicht mit einem Dateiserver; beide Ablehnungen hängen an
+  der Schreibweise des Pfads, nicht am Server. macOS (`/Volumes/…`) nicht
+  geprüft: Dort nimmt `inspectRoot` den Pfad nach dem Code an, und der Hinweis
+  bleibt aus, weil `isNetworkResultFolder` nur `//…` erkennt.
+- **Status:** offen, nichts geändert. Zu entscheiden ist, ob Standalone
+  Netzordner unterstützen soll (Hülle und Core ändern, mit Tests auf einem
+  echten Netzlaufwerk und auf macOS) oder ob die Produktaussage für
+  Standalone eingeschränkt und die Ablehnung verständlich erklärt wird.
+  BL-002, BL-040.5 (DS-080).
+- **Berichtigung zu R-035:** Meine Behebung ist dort nur mit einer
+  nachgebildeten Antwort des Core getestet. Dass diese Antwort in Standalone
+  unter Windows nie entsteht, hatte ich nicht geprüft.
+
+### Ordner mit nicht unterstützten Dateien
+
+- **Beobachtet:** Über **Ordner auswählen** einen Ordner mit einer Textdatei,
+  einer Datei `.xyz` und einer Datei `.zip` gewählt. Der Dateibaum zeigt alle
+  drei: die Textdatei angehakt („1 von 1 ausgewählt“), die beiden anderen als
+  nicht auswählbare Zeilen mit „Dieses Dateiformat wird nicht unterstützt.“
+  Keine Fehlermeldung, die Auswahl wird nicht abgelehnt.
+- **Einordnung:** Mit dem Quellenkatalog tritt `SOURCE_FOLDER_UNSUPPORTED_FILES`
+  in diesem Ablauf nicht auf; der Text aus R-034 dazu bleibt für andere Wege.
+
+### Manuelle Maskierung in der Nachbearbeitung
+
+- **Beobachtet:** Automatischer Lauf über einen erfundenen Vermerk mit „Petra
+  Koch hat den Vertrag am 12.03.2026 unterschrieben.“ (der Name bleibt lesbar,
+  wie in R-033 beschrieben). Danach **Weitere Aktionen**, **Nachbearbeitung
+  öffnen (optional)**, **Vermerk.txt: vergleichen**. Im rechten Text „Petra
+  Koch“ markiert: „10 Zeichen in dieser Datei ausgewählt. Nur diese Stelle wird
+  beim Speichern durch [MANUAL_REDACTION] ersetzt.“ Mit Tab zur Schaltfläche
+  **Maskierung speichern**, Leertaste: „Vermerk.txt: Zusätzliche Maskierung in
+  Stand 1 gespeichert und aktueller Ergebnisstand bereitgestellt.“
+- **Ergebnis auf dem Datenträger:** ein neuer Ordner
+  `DataSecure-KI-Export\Ergebnisse-…` mit „[MANUAL_REDACTION] hat den Vertrag
+  …“ und eigenen Zuordnungsdateien. Die Datei des ersten Stands unter
+  `DataSecure-Output\Lauf-…` bleibt unverändert liegen und enthält den Namen
+  weiter. Die Oberfläche sagt das („frühere Ergebnisstände bleiben
+  unverändert“); wer den Ordner des Laufs schon weitergegeben hat oder dort
+  nachsieht, findet den Namen noch.
+- **Nicht gelungen über die Fernbedienung:** Dasselbe Speichern über die
+  Automationsschnittstelle der Schaltfläche (UI-Automation „Invoke“, zweimal
+  versucht) und über einen nachgestellten Mausklick hat nichts gespeichert
+  und keine Meldung gezeigt; danach war die Markierung verworfen. Ob das an
+  meiner Fernbedienung liegt oder Hilfstechnik betrifft, die Schaltflächen so
+  auslöst, habe ich nicht geklärt. Eine Markierung mit der Tastatur
+  (Umschalt und Pfeiltasten) kam über die Fernbedienung nicht an. Das gehört
+  zur offenen Prüfung mit einem Screenreader (R-020).
+
+### Nicht nachgeholt
+
+- Gemischtes Hineinziehen (Datei und Ordner zusammen): lässt sich hier nicht
+  fernbedienen; von Hand in einer Minute prüfbar.
+- Die vier Sätze zum abgelehnten Prüfstart: nur mit einer beschädigten
+  Installation auslösbar.
+
+### Nebenwirkung auf dem Prüfrechner
+
+`net use … /persistent:no` hat die Voreinstellung des Benutzers für neue
+Netzverbindungen von „gespeichert“ auf „nicht gespeichert“ gestellt. Ich habe
+sie mit `net use /persistent:yes` zurückgestellt und die Zuordnung `Z:`
+entfernt; `net use` zeigt danach wieder „Neue Verbindungen werden
+gespeichert“ und keine Einträge.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -2590,6 +2708,7 @@ Fingerprints.
 | A-052 | Die nativen Läufe im automatischen Modus zeigen auch, wie sich die Personenhinweise aus R-033 in der geführten Prüfung verhalten. | Beide Modi nutzen dieselben Hinweise. | Die geführte Prüfung legt Hinweise zur Entscheidung vor; ob 201 Hinweise 201 Entscheidungen sind, hatte ich nach `1c8e971c` nicht geprüft. | Messung am Kern (403 Hinweise, 3 Entscheidungen) und nativer Lauf mit 63 Fundstellen | Nachgeholt am 27.11.: Die Prüfung fragt je Name. Neu bekannt: Die 500 weiteren Stellen werden in der Reihenfolge der Namen vergeben. |
 | A-053 | Leeren der Auswahl und Hineinziehen können sich überholen (Abgleich Nr. 43). | In der Oberfläche allein ist der Ablauf möglich. | Die Hülle nimmt für `cancel_admission`, die Dateidialoge und das Hineinziehen dieselbe Sperre. | `main.rs`, `selection_guard` | Für das Produkt widerlegt. |
 | A-054 | ERGEBNIS.md beschreibt nach dreizehn Übergaben überall den Endstand. | Jede Runde hat Kopf, Übersicht und Nachricht ergänzt. | Ältere Abschnitte wurden nicht mitgezogen: fehlende Commit-Tabellen, veraltete Urteile, zwei widersprüchliche Punkte der Nachricht. | unabhängiger Read-only-Lauf, 32 Meldungen | Widerlegt; berichtigt in `84474ffe`. |
+| A-055 | Der Hinweis aus R-035 erscheint, sobald der Anwender in Standalone einen Ergebnisordner im Netzwerk wählt. | Der Core liefert `network_folder_notice` für einen UNC-Pfad, die Oberfläche zeigt ihn; mit nachgebildeter Antwort getestet. | Die Hülle nimmt unter Windows keinen UNC-Pfad an, und der Core lehnt einen zugeordneten Laufwerksbuchstaben ab. Die Antwort entsteht dort nie. | nativer Lauf mit `\\localhost\C$` und vorübergehendem Laufwerk `Z:`; Gegenprobe an `inspectRoot` | Widerlegt für Standalone unter Windows; neuer Befund R-038. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

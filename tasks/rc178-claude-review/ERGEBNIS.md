@@ -61,7 +61,9 @@ geführte Prüfung mit den neuen Personenhinweisen anzusehen, fehlende Tests
 nachzuziehen, drei nicht belegte Punkte zu klären, R-036 nativ zu beobachten
 und diesen Bericht gegenzulesen: die Commits `6e10ac80` und `3b85e395` und die
 Berichtigungen dieses Dokuments (`84474ffe`). Dieser Bericht beschreibt
-den Endstand `3b85e395`.
+den Endstand `3b85e395`. Ein Nachtrag vom selben Tag hält native
+Beobachtungen zum Netzlaufwerk fest (neuer Befund R-038); am Produkt ist
+dabei nichts geändert.
 
 ## Identität und Umfang
 
@@ -439,6 +441,9 @@ aber den Build-Fingerprint `4b88b0db…`.
       zugeordneten Laufwerksbuchstaben und am Mac unter `/Volumes` bleibt
       der Hinweis aus. Das war schon vorher so. Der Anwender hat nach der
       dreizehnten Übergabe entschieden, es vorerst dabei zu belassen.
+    - **Nachtrag:** In Standalone unter Windows ist der Hinweis nicht
+      erreichbar, weil dort kein Netzordner angenommen wird (Punkt 13,
+      R-038).
     - **Nicht nativ beobachtet:** der Hinweis auf ein Netzlaufwerk (keines im
       Testprofil). Die abgelehnte Auswahl ist inzwischen nativ gesehen
       (Punkt 12).
@@ -483,7 +488,32 @@ aber den Build-Fingerprint `4b88b0db…`.
     - **Nicht erneut ausgeführt:** Rust-Tests, Konverter und die
       Differenzläufe des Datenschutzkerns; seit `0bd5e26f` ist kein Core- und
       seit `927fb3bd` kein Rust-Code geändert.
-13. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
+13. **Nachtrag am 27.11.: Netzlaufwerk und drei native Beobachtungen**
+    (Einzelheiten in BEFUNDE.md, Abschnitt „Nachtrag vom 27.11. · Netzlaufwerk
+    (R-038) und drei native Beobachtungen“)
+    - **Neu, R-038, offen:** Standalone unter Windows nimmt keinen
+      Ergebnisordner im Netzwerk an, obwohl `PRODUCT.md` ihn ausdrücklich
+      erlaubt. Über den UNC-Pfad lehnt die Hülle ab, über einen
+      zugeordneten Laufwerksbuchstaben der Core. Beide Meldungen nennen den
+      Grund nicht. Nativ beobachtet mit der lokalen Freigabe
+      `\\localhost\C$`; in RC178 gleich.
+    - **Folge für R-035:** Der dort eingebaute Hinweis kann in Standalone
+      unter Windows nicht erscheinen. Meine Behebung war nur mit einer
+      nachgebildeten Antwort getestet.
+    - **Ordner mit nicht unterstützten Dateien:** Der Dateibaum zeigt sie
+      als nicht auswählbare Zeilen mit Grund; keine Ablehnung.
+    - **Manuelle Maskierung:** Ein vom Kern nicht erkannter Name lässt sich
+      in der Nachbearbeitung markieren und durch `[MANUAL_REDACTION]`
+      ersetzen (per Tastatur gespeichert). Der neue Stand liegt in einem
+      eigenen Ordner; die Datei des ersten Stands mit dem Namen bleibt
+      liegen.
+    - **Nicht geklärt:** Dasselbe Speichern über die
+      Automationsschnittstelle der Schaltfläche hat nichts gespeichert und
+      nichts gemeldet. Das gehört zur offenen Prüfung mit einem
+      Screenreader.
+    - **Nicht nachgeholt:** gemischtes Hineinziehen, die vier Sätze zum
+      abgelehnten Prüfstart.
+14. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
 
 ## Änderungen je Thema
 
@@ -637,8 +667,13 @@ Befund“):
   Nachname, Telefonnummer ohne Label, Geburtsname. Der Kern erkennt Namen an
   der Form; jede weitere Regel tauscht Unterredaktion gegen Überredaktion.
   Produktentscheidung.
+- **R-038, Ergebnisordner im Netzwerk** – offen. Zu entscheiden: Netzordner
+  in Standalone unterstützen (Hülle und Core, mit Tests auf einem echten
+  Netzlaufwerk und auf macOS) oder die Produktaussage für Standalone
+  einschränken und die Ablehnung verständlich erklären.
 - **R-035, Netzlaufwerk nur am UNC-Pfad** – vorbestehendes Verhalten des
-  Core; nach Entscheidung des Anwenders vorerst belassen.
+  Core; nach Entscheidung des Anwenders vorerst belassen. Durch R-038 neu zu
+  bewerten.
 - **Vier native Befehle ohne Aufrufer** (`remove_admitted_source`,
   `open_review_window`, `open_local_ledger`, `shutdown`) – sie zu entfernen
   ändert die Hülle für drei Betriebssysteme; eigene Entscheidung.
@@ -677,6 +712,7 @@ Produktstand (`1d908311`); die zwölfte hat nur den Bericht ergänzt.
 | Konverter, Endstand | nicht erneut ausgeführt | — | — | Kein Konverter- und kein Core-Code geändert; zuletzt am Stand `1d908311` ausgeführt. |
 | Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `3b85e395` | Windows x64 | je `PASS`, 0 | Paket `a4f7a0e6a89f8dcf2e6afae3f6c02e3095dc5a119d8865f7e97de29921ba03c7`, 113 618 797 Bytes, 1 203 Einträge, Build `4b88b0db`. Der Smoke-Test lief ungestört. |
 | Windows x64 Start mit Außenverbindungsprüfung, Endstand | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `a4f7a0e6…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 846 ms; 76 874 ms beobachtet, 4 868 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. Die WebView2-Laufzeit des Hosts ist inzwischen 158.0.4370.45; die Probe besteht auch damit. |
+| Windows x64 Oberfläche, Nachtrag am Endstand | eigene Startskripte, Bedienung per Windows-UI-Automation und Tastatur, Paket `a4f7a0e6…`; für einen Teil vorübergehend `net use Z: \\localhost\C$` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Nachtrag vom 27.11.“ unter dem nativen Lauf: Ergebnisordner über UNC-Pfad und über Laufwerksbuchstaben abgelehnt (R-038); Ordner mit nicht unterstützten Dateien; manuelle Maskierung. Dazu eine Gegenprobe an `inspectRoot` des Core ohne App. Kein Suite-Lauf, weil nur `tasks/rc178-claude-review/` geändert ist. |
 | Windows x64 Oberfläche, Endstand | eigene Startskripte, Bedienung per Windows-UI-Automation, Pakete `a4f7a0e6…` und `f641f720…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde vom 27.11.“ unter dem nativen Lauf. |
 | Gegenlesen des Berichts, Endstand | ein unabhängiger Read-only-Lauf über ERGEBNIS.md gegen das Repository und BEFUNDE.md | — | 32 Meldungen | Am Schrittlimit beendet, Bericht auf Nachfrage geliefert. Jede Meldung nachgeprüft; Berichtigungen in `84474ffe`. |
 | Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `56eb9881` (Stand `3b85e395`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `80b67a94…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem Berichtscommit. Die Oberfläche gehört nicht zum Plugin. |
@@ -1302,6 +1338,38 @@ Windows-UI-Automation. Beobachtung, keine Abnahme.
   ein Dokument. Außerdem wie bisher: „Nur in Markdown umwandeln“ in dieser
   Runde, macOS.
 
+#### Nachtrag vom 27.11. (Paket `a4f7a0e6…`, Build `4b88b0db`)
+
+Ein isoliertes Testprofil, nur erfundene Dateien, Bedienung per
+Windows-UI-Automation und Tastatur. Beobachtung, keine Abnahme.
+
+- **Ergebnisordner über UNC-Pfad** – Einstellungen, **Ordner ändern**,
+  `\\localhost\C$\…\netz-unc`: „Der gewählte Ergebnisordner konnte nicht
+  sicher vorbereitet werden. Die bisherige Einstellung bleibt unverändert. …
+  (AI_EXPORT_CONFLICT)“. Kein Hinweis auf ein Netzlaufwerk.
+- **Ergebnisordner über Laufwerksbuchstaben** – dieselbe Freigabe
+  vorübergehend als `Z:` zugeordnet, `Z:\…\netz-buchstabe`: „Der lokale
+  Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen
+  Laufstatus prüfen. (STANDALONE_OPERATION_FAILED)“. Der bisherige Ordner
+  bleibt in beiden Fällen eingestellt (R-038).
+- **Ordner mit nicht unterstützten Dateien** – **Ordner auswählen** mit
+  einer Textdatei, einer `.xyz` und einer `.zip`: „1 von 1 ausgewählt“, die
+  beiden anderen als Zeilen mit „Dieses Dateiformat wird nicht
+  unterstützt.“
+- **Manuelle Maskierung** – automatischer Lauf über einen Vermerk, in dem
+  „Petra Koch“ lesbar bleibt; **Nachbearbeitung öffnen (optional)**,
+  **Vermerk.txt: vergleichen**, Name rechts markiert („10 Zeichen in dieser
+  Datei ausgewählt“), mit Tab und Leertaste **Maskierung speichern**:
+  „Zusätzliche Maskierung in Stand 1 gespeichert“. Neuer Ordner
+  `DataSecure-KI-Export\Ergebnisse-…` mit `[MANUAL_REDACTION]`; die Datei
+  des ersten Stands unter `DataSecure-Output\Lauf-…` enthält den Namen
+  weiter. Original unverändert.
+- **Nicht gelungen** – das Speichern über die Automationsschnittstelle der
+  Schaltfläche (zweimal) und über einen nachgestellten Mausklick: nichts
+  gespeichert, keine Meldung. Ursache nicht geklärt.
+- **Nicht beobachtet** – gemischtes Hineinziehen, die vier Sätze zum
+  abgelehnten Prüfstart, ein echter Dateiserver, macOS.
+
 ## Urteil je Prüfdimension
 
 Zahlen aus ABDECKUNG.tsv am Stand `3b85e395`, nur Einzeleinheiten. Das
@@ -1313,9 +1381,9 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 
 | Dimension | Urteil | Befunde | Abdeckung (geprüft / teilgeprüft / offen) und Grenze |
 | --- | --- | --- | --- |
-| Fachlichkeit und Formatqualität | Text und CSV solide; die belegten stillen Verluste in DOCX, XLSX und CSV sind behoben oder als Hinweis sichtbar, bis auf den Zustand alter Formular-Kontrollkästchen. Listen bleiben Tabellen. Ein Lebenslauf mit Namenslink ist jetzt automatisch verarbeitbar. | R-003 bis R-006, R-018, R-026 | 5 / 277 / 603. PDF, Scan-PDF, Bild-OCR und Office-OCR im Review nicht ausgeführt; Diagramme, SmartArt, Formeln nur über die Suite. |
+| Fachlichkeit und Formatqualität | Text und CSV solide; die belegten stillen Verluste in DOCX, XLSX und CSV sind behoben oder als Hinweis sichtbar, bis auf den Zustand alter Formular-Kontrollkästchen. Listen bleiben Tabellen. Ein Lebenslauf mit Namenslink ist jetzt automatisch verarbeitbar. | R-003 bis R-006, R-018, R-026, R-038 | 5 / 277 / 603. PDF, Scan-PDF, Bild-OCR und Office-OCR im Review nicht ausgeführt; Diagramme, SmartArt, Formeln nur über die Suite. |
 | Anonymisierung und Zuordnungen | Neu am 25.11. abends: Name hinter einer Rolle, Namensliste unter einem Label und derselbe Name an weiteren Stellen werden ersetzt (R-033b bis d); der dadurch häufiger erreichte Stopp bei `Label Name Nummer` ist behoben (`0bd5e26f`): Redaktion und Schlussprüfung lesen Platzhalter jetzt gleich. Neu am 25.11.: Aus Word blieben Telefonnummern, Namen hinter Titeln, Geburtsdaten und Kennungen stehen, weil der Kern den maskierten Punkt nicht las (R-033, für fünf Regeln behoben). Offen bleiben vier Formen unabhängig vom Format: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung außer den zehn gewollten Fällen von R-024. Zugangsdaten mitten in der Zeile werden für ein Wort ersetzt (R-027, Teil). Offen: die dokumentierten Grenzen von R-027 und der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027, R-033 | 10 / 241 / 453. Geführte Entscheidungen nur in einzelnen nativen Läufen, zuletzt am 27.11. drei Entscheidungen für 63 Fundstellen oft genannter Namen; `privacy/entities.js`, `credentials.js` und `person-ambiguities.js` nur in Teilen gelesen (laut Register 23 von 113 Einheiten teilgeprüft). |
-| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist mehrfach nativ bedient (Ersetzen, Beibehalten, Später entscheiden und Wiederaufnahme); die Zähltexte haben ihre Einzahl. Schließen während eines Laufs führt über eine Rückfrage zur Pause; nativ bedient sind die Rückfrage, Bleiben, Pausieren und Jetzt schließen (R-032). Fehlermeldungen der geladenen Oberfläche nennen seit `8cf5dd93` und `d474a579` die Ursache und die betroffenen Dateien; der Hinweis auf einen Ergebnisordner im Netzwerk (DS-080) erscheint (R-034 bis R-036). | R-008, R-009, R-020, R-025, R-032, R-034 bis R-036 | 11 / 243 / 0. Die 46 offenen Einheiten waren die frühere Oberfläche; sie sind entfernt, nicht geprüft. Quelltext plus Windows-Läufe; kein Screenreader, kein WKWebView; Seitenzoom nur unter Windows beobachtet. |
+| Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist mehrfach nativ bedient (Ersetzen, Beibehalten, Später entscheiden und Wiederaufnahme); die Zähltexte haben ihre Einzahl. Schließen während eines Laufs führt über eine Rückfrage zur Pause; nativ bedient sind die Rückfrage, Bleiben, Pausieren und Jetzt schließen (R-032). Fehlermeldungen der geladenen Oberfläche nennen seit `8cf5dd93` und `d474a579` die Ursache und die betroffenen Dateien; der Hinweis auf einen Ergebnisordner im Netzwerk (DS-080) ist eingebaut (R-034 bis R-036), in Standalone unter Windows aber nicht erreichbar, weil dort kein Netzordner angenommen wird (R-038). | R-008, R-009, R-020, R-025, R-032, R-034 bis R-036 | 11 / 243 / 0. Die 46 offenen Einheiten waren die frühere Oberfläche; sie sind entfernt, nicht geprüft. Quelltext plus Windows-Läufe; kein Screenreader, kein WKWebView; Seitenzoom nur unter Windows beobachtet. |
 | Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Fünf Befunde der Rust-Shell behoben oder eingegrenzt, zuletzt die Startverweigerung bei belegter Ordnerkette. | R-011 bis R-014, R-022, R-028, R-032 | 25 / 755 / 546. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
 | Implementierung und Wartbarkeit | `main.rs` (rund 4 500 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, vier native Befehle ohne Aufrufer in der geladenen Oberfläche). Seit RC178 ist `main.rs` um rund 420 Zeilen gewachsen. | — (Verbesserungen, nicht als Befund geführt) | 1 / 207 / 675. Kein systematischer Durchgang. |
 | Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. Shell und Core bauen keine Verbindungen auf. Die WebView2-Komponente meldete sich bis zum vierten Übergabestand regelmäßig bei Microsoft; am Endstand ist in zehn Minuten keine Verbindung mehr zu beobachten. | R-010, R-012, R-031 | 0 / 13 / 175. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
@@ -1476,7 +1544,7 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 ## Übergabenachricht zum Weiterreichen
 
 ```text
-Claude-Code-Review für DataSecure RC178, Stand nach vierzehn Übergaben (Befunde R-001 bis R-037), abgeschlossen.
+Claude-Code-Review für DataSecure RC178, Stand nach vierzehn Übergaben (Befunde R-001 bis R-038), abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
 Geprüfter Produktstand: 3b85e395704f5dbb6746a37e70db17276340b750 (spätere Commits nur tasks/rc178-claude-review/)
@@ -1501,6 +1569,16 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    "initial readiness never retries a conflict"): resolve_history_results antwortete direkt nach Laufende
    mit STANDALONE_BUSY (resolveResultsGeneration nimmt die Sperre des Laufs; standalone-document-control.js:41-42).
    Nicht reproduziert (sieben weitere Läufe der Testdatei bestanden, vier davon gleichzeitig); zweiter Lauf der Suite bestanden; Code seit RC178 unverändert.
+   (g) R-038, offen, aus einem Nachtrag vom selben Tag, nativ beobachtet: Standalone unter Windows nimmt
+   keinen Ergebnisordner im Netzwerk an, entgegen docs/canonical/PRODUCT.md:270-274. UNC-Pfad:
+   tauri-contract/src/export_directory.rs:1146-1149 (open_directory lässt nur Prefix::Disk zu) ergibt
+   AI_EXPORT_CONFLICT. Zugeordneter Laufwerksbuchstabe: gateway/result-folder-config.js:53-63 (inspectRoot
+   vergleicht mit fs.realpathSync.native, das den UNC-Namen liefert) ergibt RESULT_ROOT_UNSAFE, sichtbar als
+   STANDALONE_OPERATION_FAILED. Der Hinweis aus Punkt 2 ist dort deshalb nicht erreichbar. Der Core-Teil
+   gilt auch für das Cowork-Plugin (dort nicht ausgeführt). Geprüft mit \\localhost\C$, nicht mit einem
+   Dateiserver; macOS nicht geprüft. (h) Manuelle Maskierung in der Nachbearbeitung nativ per Tastatur
+   gespeichert; über UI-Automation Invoke und einen nachgestellten Mausklick wurde nichts gespeichert und
+   nichts gemeldet (Ursache offen, document-review.js: currentTextSelection, Klick auf document-redact).
 2. R-035 und R-036, Commit d474a579: frontend/workspace.js (configure: Hinweis bei
    network_folder_notice; errorDetails, sourceDetailText, admissionHints, showError mit drittem
    Argument; fünf Texte in reasons) und workspace.css (.notice mit white-space:pre-line). Test:
@@ -1646,5 +1724,6 @@ Rest von R-003 (Kontrollkästchen) und von R-033 (siehe Punkte 4 und 5); Entsche
 (remove_admitted_source, open_review_window, open_local_ledger, shutdown) und Seitenzoom unter macOS/Linux;
 die Erkennung eines Netzlaufwerks nur am UNC-Pfad (nach Entscheidung des Anwenders vorerst belassen);
 29 Verhalten der geladenen Oberfläche mit nur teilweisem Test; keine Rückmeldung nach erfolgreichem Öffnen
-(Entscheidung); Vergabe der 500 weiteren Stellen eines Namens in Reihenfolge der Namen (Punkt 1); R-037 (seltener Abbruch der Suite, nicht reproduziert); rund 61 % der Einheiten im Register offen.
+(Entscheidung); Vergabe der 500 weiteren Stellen eines Namens in Reihenfolge der Namen (Punkt 1); R-037 (seltener Abbruch der Suite, nicht reproduziert); R-038 (kein Ergebnisordner im Netzwerk unter
+Windows, Entscheidung); rund 61 % der Einheiten im Register offen.
 ```
