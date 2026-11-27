@@ -75,6 +75,15 @@ full('R-039', ['gateway/standalone-document-control.js', 'gateway/batch-active-l
   'core/ownership-control.js'].map((file) => srv + file), ['R-039']);
 // Aus standalone-document-review-store.js, standalone-history-store.js und run-history.js sind dafür nur je
 // 60 bis 90 Zeilen gelesen; das trägt keinen Lesestand für die ganze Datei, sie bleiben offen.
+// Achtzehnte Übergabe: Laufende (R-040) und Stapelsperre (R-041), von der Hauptsession gelesen.
+// worker-terminal-presentation.js und product-terminal-notice.js sind ebenfalls gelesen, stehen aber nicht im Register.
+full('R-040', [`${srv}gateway/batch-processing-admission.js`]);
+files[`${srv}gateway/batch-worker.js`].findings = ['R-040'];
+files[`${srv}standalone/application-service.js`].findings = ['R-040'];
+files[`${srv}gateway/batch-executor.js`].findings = ['R-022', 'R-040'];
+files[`${srv}gateway/batch-lock-release.js`] = { ...files[`${srv}gateway/batch-lock-release.js`], findings: ['R-039', 'R-041'] };
+files[`${srv}gateway/batch-processing-orchestrator.js`].findings = ['R-041'];
+files[`${srv}gateway/batch-executor-runner.js`].findings = ['R-041'];
 
 full('Konvertierungs', ['document-parser.js', 'standalone/markdown-extractor.js', 'standalone/markdown-contract.js',
   'standalone/markdown-output-profile.js', 'standalone/readable-markdown.js', 'standalone/conversion-feedback.js',

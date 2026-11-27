@@ -134,7 +134,10 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-036 | niedrig bis mittel | Oberfläche, alle | Die geladene Oberfläche verwirft die Details eines Fehlers und hat für fünf Codes keinen eigenen Text (`SOURCE_SELECTION_REJECTED`, `SOURCE_ARTIFACT_IGNORED`, `MARKDOWN_CONVERSION_NOT_READY`, `STANDALONE_DROP_MIXED`, `SOURCE_SNAPSHOT_CHANGED`). Bei einer abgelehnten Auswahl erfährt der Anwender nicht, welche Datei der Grund ist. Beim Einzelabgleich gefunden; in RC178 gleich. | BL-010.46 | behoben (`d474a579`, `6e10ac80`); für eine Office-Sperrdatei nativ beobachtet |
 | R-037 | niedrig | Tests und Orakel, alle | Drei Testhelfer fragen den Ergebnisordner direkt nach dem gemeldeten Laufende ab und lassen als Antwort nur „fehlt noch“ und „Veröffentlichung läuft noch“ zu. Der Arbeitsprozess nimmt die Sperre der Dokumentkontrolle kurz nach dem gemeldeten Ende noch einmal für rund 50 ms; trifft die Abfrage diese Zeit, antwortet der Core wie vorgesehen `STANDALONE_BUSY`, und die Suite bricht ab. Am 27.11. abends nachgestellt (drei von drei Durchgängen, wenn die Abfrage direkt beim gemeldeten Ende kommt). Core und Test sind seit RC178 unverändert. | BL-050.6 | behoben in `e89069eb` (nur Testcode): Die drei Helfer lassen `STANDALONE_BUSY` zu und bleiben an ihre Frist gebunden |
 | R-038 | mittel | Fachlichkeit und Plattform, Standalone Windows (Core-Teil auch Cowork) | Ein Ergebnisordner im Netzwerk wird abgelehnt, obwohl `PRODUCT.md` ihn ausdrücklich erlaubt: über den UNC-Pfad von der Hülle (sie lässt nur Laufwerksbuchstaben zu), über einen zugeordneten Laufwerksbuchstaben vom Core (Windows löst ihn zum UNC-Namen auf). Die Meldung nennt den Grund nicht; der Hinweis aus R-035 ist in Standalone unter Windows nicht erreichbar. Nativ beobachtet; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | Ablehnung bleibt nach Entscheidung des Anwenders; Meldung nennt die mögliche Ursache und Produktaussage für Standalone unter Windows eingeschränkt (`8a167b09`). Netzordner zu unterstützen bleibt offen |
-| R-039 | hoch | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Öffnet der Anwender im Verlauf den Ergebnisordner eines fertigen Laufs, während ein anderer Lauf arbeitet, kann die Sperre der Dokumentkontrolle hängen bleiben: Die Abfrage nimmt die Sperre, kann sie nach 185 ms vergeblicher Versuche nicht freigeben und lässt sie stehen. Danach antworten jede weitere Abfrage und auch „Fortsetzen“ mit „Ein lokaler Vorgang ist bereits aktiv. Bitte warten.“, und der laufende Stapel bleibt stehen (im ersten Versuch bei 65 von 80 Dateien). Erst ein Neustart der App löst die Sperre. Zweimal in zwei Versuchen beobachtet, beim vierten und beim zehnten Klick. Kein Datenverlust, Originale unverändert. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | behoben in `8ff4979a`: Die Freigabe wartet rund zwei Sekunden und fragt danach mit derselben Berechtigung bis zu zehn Minuten weiter; in der echten App nachgeprüft. Offen bleiben die Stapelsperre gleicher Bauart und „Bitte warten“ beim gewöhnlichen Wettbewerb |
+| R-039 | hoch | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Öffnet der Anwender im Verlauf den Ergebnisordner eines fertigen Laufs, während ein anderer Lauf arbeitet, kann die Sperre der Dokumentkontrolle hängen bleiben: Die Abfrage nimmt die Sperre, kann sie nach 185 ms vergeblicher Versuche nicht freigeben und lässt sie stehen. Danach antworten jede weitere Abfrage und auch „Fortsetzen“ mit „Ein lokaler Vorgang ist bereits aktiv. Bitte warten.“, und der laufende Stapel bleibt stehen (im ersten Versuch bei 65 von 80 Dateien). Erst ein Neustart der App löst die Sperre. Zweimal in zwei Versuchen beobachtet, beim vierten und beim zehnten Klick. Kein Datenverlust, Originale unverändert. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | behoben in `8ff4979a`: Die Freigabe wartet rund zwei Sekunden und fragt danach mit derselben Berechtigung bis zu zehn Minuten weiter; in der echten App nachgeprüft. Offen bleiben die Stapelsperre gleicher Bauart (R-041) und „Bitte warten“ beim gewöhnlichen Wettbewerb |
+| R-040 | mittel | Oberfläche und Zustandsmodell; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Nach der letzten Datei stellt der Arbeitsprozess die Ergebnisse bereit (bei 80 kleinen Textdateien rund 20 Sekunden in „Nur umwandeln“, rund zwei Minuten beim Anonymisieren). In dieser Zeit heißt der Lauf „Wird vorbereitet“, der Verlauf bietet „Bereitstellung erneut prüfen“ an (ein Klick darauf meldet „Die Bereitstellung konnte nicht bestätigt werden“), und Schließen führt zur Rückfrage „Die Dateien werden gerade vorbereitet“. Kein Datenverlust. Zustand und Schaltfläche sind in RC178 gleich; der Satz der Rückfrage stammt aus `5f670a20` dieses Reviews. | BL-010.13 (DS-086), BL-010.14 (DS-110) | offen; Entscheidung des Anwenders steht aus |
+| R-041 | niedrig | Nebenläufigkeit und Betrieb; Standalone (Core, dem Code nach alle Ziele mit nativer Sperre) | Die Stapelsperre gibt ihre Freigabe nach 185 ms vergeblicher Versuche auf (dieselbe Bauart wie R-039 vor der Behebung). Der Arbeitsprozess beendet dann den Lauf; der nächste Prozess übernimmt den liegen gebliebenen Eintrag, ein Neustart ist nicht nötig. Nur in einer Probe mit der echten Betriebssystemsperre aufgetreten (16 von 77 Freigaben, wenn ein dritter Prozess die Sperre zu 75 % belegt; 0 von 88 mit den Abfragen des Core allein), in der echten App nie. In RC178 ist der Code derselbe. | BL-010.14, BL-050.6 | offen; Entscheidung des Anwenders steht aus |
+| R-042 | mittel | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele mit nativer Sperre) | Am Ende eines Anonymisierungslaufs mit 80 Dateien scheitern die Statusabfragen über eine Minute lang, jede nach fünf Sekunden Wartezeit auf die Betriebssystemsperre (in zwei von zwei Läufen elf Abfragen nacheinander, rund 69 Sekunden). Die Anzeige bleibt solange bei „79 von 80“ stehen, ohne Hinweis; in der Wartezeit beantwortet der Core keine andere Anfrage. Der Lauf endet regulär. In „Nur umwandeln“ dauert dieselbe Stelle einmal je Lauf rund zwei Sekunden. Welcher Schritt des Arbeitsprozesses die Sperre hält, ist nicht bestimmt. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | offen; Entscheidung des Anwenders steht aus |
 
 ## Einzelbefunde
 
@@ -3041,6 +3044,9 @@ kommt, habe ich denselben Ablauf ohne Klicks mit dem alten Paket
   und nicht als Befund geführt; wie lange der Ergebnisordner eines Laufs mit
   80 Dateien nach „Lauf abgeschlossen“ auf sich warten lässt, habe ich nicht
   gemessen.
+- **Nachtrag vom 27.11. nachts:** Inzwischen untersucht. Die erste
+  Beobachtung war falsch gelesen: Der Lauf war zu dem Zeitpunkt noch nicht
+  als abgeschlossen gemeldet (R-040, folgender Abschnitt).
 
 ### Eigene Fehler dieser Runde
 
@@ -3088,6 +3094,294 @@ kommt, habe ich denselben Ablauf ohne Klicks mit dem alten Paket
   Klicks über die Automationsschnittstelle, zwei Versuche. Die vier weiteren
   Abläufe mit derselben Freigabe und der synchrone Weg sind nur über Tests
   und die Probe geprüft, nicht in der echten App.
+- **macOS** nicht ausgeführt.
+
+## Nachtrag vom 27.11. nachts · Laufende (R-040, R-042) und Stapelsperre (R-041) geprüft
+
+Auftrag des Anwenders: „Ja, beide prüfen“. Gemeint sind zwei offene Punkte
+der siebzehnten Übergabe: das Verhalten kurz nach dem Laufende und die
+Stapelsperre gleicher Bauart wie R-039. Daraus sind drei Befunde
+entstanden. Am Produkt ist nichts geändert; der geprüfte Produktstand
+bleibt `e89069eb`.
+
+### Vorgehen
+
+- **Fünf Läufe in der echten App** (Paket `5f347413…`, Build `c92aba02`), je
+  mit neuem isoliertem Testprofil und denselben 81 erfundenen Textdateien
+  wie bisher: zuerst ein Lauf mit einer Datei, dann einer mit 80. Ein
+  Skript liest rund einmal je Sekunde die Anzeige, die Prozesse des
+  Testprofils, die Sperrdateien und die Zahl der Markdown-Dateien im
+  Ergebnisordner.
+  - (a) Verlauf, „Nur umwandeln“, nur beobachten.
+  - (b) Verlauf, „Nur umwandeln“, nach „80 von 80“ alle drei Sekunden ein
+    Schließversuch; auf jede Rückfrage „Fenster offen lassen“.
+  - (c) Laufkarte, „Nur umwandeln“, Schließversuche alle sechs Sekunden.
+  - (d) Verlauf, „Anonymisieren“ mit automatischer Maskierung, ein Klick auf
+    „Bereitstellung erneut prüfen“, sobald die Schaltfläche erscheint.
+  - (e) wie (d), aber ohne Klick und ohne jede Messung im Testprofil: Das
+    Skript liest nur alle 15 Sekunden die Anzeige. Kontrolllauf zu R-042.
+- **Zeiten der App selbst:** die inhaltsfreien Ablaufereignisse im
+  Testprofil (`diagnostics\workflow-events`).
+- **Gelesen:** `gateway/batch-worker.js:142-215`,
+  `gateway/batch-executor.js:50-186` und `:630-859`,
+  `standalone/application-service.js:633-747` und `:801-820`,
+  `gateway/batch-recovery.js:126-274`,
+  `gateway/worker-terminal-presentation.js`,
+  `gateway/product-terminal-notice.js`,
+  `gateway/batch-processing-admission.js`, `gateway/batch-lock-release.js`,
+  `gateway/batch-processing-orchestrator.js:27-161`,
+  `gateway/batch-executor-runner.js:44-84` und `:123-248`,
+  `standalone/run-history.js:155-179`, in der Oberfläche
+  `workspace.js:1300-1407`, `:1690-1904` und `:2410-2536`.
+- **Probe für die Stapelsperre:** eigenes Skript mit der echten
+  Betriebssystemsperre, siehe R-041.
+
+### R-040 · Nach der letzten Datei meldet die App „Wird vorbereitet“ und bietet „Bereitstellung erneut prüfen“ an
+
+Nach der letzten Datei stellt der Arbeitsprozess die Ergebnisse im
+Ergebnisordner bereit. Bei 80 kleinen Textdateien dauert das in „Nur
+umwandeln“ rund 20 Sekunden, beim Anonymisieren rund zwei Minuten. In
+dieser Zeit beschreibt die App den Lauf falsch.
+
+Ablauf in „Nur umwandeln“, Zeit gerechnet ab dem ersten „80 von 80“ in der
+Anzeige:
+
+| Zeit | Anzeige und Zustand |
+| --- | --- |
+| 0 s | Verlaufszeile: „80 Dateien · 80 Ergebnisse · 0 Probleme“. Die Zeile „Wird verarbeitet · 80 von 80 Dateien abgeschlossen“ entfällt; statt „Verarbeitung anzeigen“ steht dort „Bereitstellung erneut prüfen“. |
+| 0,6 s | Die Stapelsperre `active-processing.json` ist weg. Der Arbeitsprozess läuft weiter. |
+| 1,2 bis 1,3 s | Statusmeldung: „Wird vorbereitet. Die Verarbeitung bleibt lokal.“ Auf der Laufkarte lautet der Titel „Wird vorbereitet“. |
+| 5 bis 18,7 s | Die Markdown-Dateien erscheinen im Ergebnisordner (Lauf b: 2, 12, 23, 34, 45, 56, 67, 77, 81). |
+| 19,1 s (a), 20,8 s (b), 19,9 s (c) | „Lauf abgeschlossen“, „Ergebnisordner öffnen“ erscheint, der Arbeitsprozess ist beendet. |
+
+Beim Anonymisieren (Lauf d) dauert dieselbe Phase 120,9 Sekunden. In den
+ersten 98 Sekunden erscheint keine Ergebnisdatei; danach kommen die 80
+Dateien in 18 Sekunden. Die Ablaufereignisse nennen für das Planen der
+Bereitstellung 46,4 s und für das Kopieren 19,2 s. Im Kontrolllauf (e)
+sind es ebenfalls rund 120 Sekunden (Anzeige nur alle 15 Sekunden gelesen;
+Planen 45,7 s, Kopieren 18,7 s).
+
+- **Schließen in dieser Zeit:** In Lauf (b) sechs Versuche zwischen 1,6 und
+  18,0 s, in Lauf (c) drei zwischen 1,6 und 14,3 s. Jedes Mal fragt die App
+  nach: „Dieser Lauf lässt sich gerade nicht pausieren. Die Dateien werden
+  gerade vorbereitet; in diesem Moment ist noch keine Pause möglich. Warte
+  kurz und schließe dann erneut. Wenn du trotzdem jetzt schließt, kann ein
+  Lauf ohne Fenster weiterlaufen. Den Stand siehst du beim nächsten Öffnen
+  im Verlauf.“ Der nächste Versuch nach 21,4 s (b) und 20,4 s (c) schließt
+  das Fenster in 0,2 Sekunden.
+- **Was die App in der Zeit tut** (Ablaufereignisse aus Lauf c):
+  Bereitstellung planen 1,3 s, 80 Dateien kopieren 12,0 s (150 ms je
+  Datei), Empfang bestätigen 0,2 s, Inventar prüfen 1,8 s.
+- **Klick auf „Bereitstellung erneut prüfen“** (Lauf d, 0,1 s nach dem
+  Erscheinen der Schaltfläche): Der Core lehnt die Anfrage nach 73 ms mit
+  `STANDALONE_BUSY` ab. Die App meldet: „Die Bereitstellung konnte nicht
+  bestätigt werden. Den aktuellen Laufstatus und die Diagnose prüfen;
+  keinen zweiten Lauf oder Export blind starten.“ (`workspace.js:2077`).
+  Die Bereitstellung lief dabei weiter; der Lauf endete mit 80 von 80.
+- **Ursache im Core:** Der Zustand heißt „wird vorbereitet“, solange eine
+  Annahme offen ist und nichts verarbeitet wird
+  (`standalone/application-service.js:665-688`). Die Annahme gilt als offen,
+  bis der Arbeitsprozess beendet ist (`gateway/batch-executor.js:667-672`,
+  `:688`, `:1014`). Der Arbeitsprozess stellt die Ergebnisse aber erst nach
+  der Verarbeitung bereit und endet danach
+  (`gateway/batch-worker.js:172`, `:215`). Dazwischen trifft die Bedingung
+  zu, obwohl nichts mehr vorbereitet wird.
+- **Folge in der Oberfläche:** Titel und Meldung aus `workspace.js:8`, ein
+  Balken ohne Wert (`:1353`). Die Verlaufszeile liest den gespeicherten
+  Stand des Laufs; der lautet „Bereitstellung offen“, und dafür ist die
+  Schaltfläche „Bereitstellung erneut prüfen“ vorgesehen (`:1878-1879`,
+  Hinweis `:1733-1734`). Die Rückfrage beim Schließen nimmt denselben
+  Zustand als Vorbereitung (`:2417-2426`, Text `:2463-2464`).
+- **Ist:** Ein Lauf, dessen Dateien alle fertig sind, heißt bis zum Ende der
+  Bereitstellung „Wird vorbereitet“. Der Verlauf bietet für die laufende
+  Bereitstellung eine Schaltfläche an, die für eine hängen gebliebene
+  gedacht ist. Die Rückfrage beim Schließen spricht von Dateien, die
+  vorbereitet werden.
+- **Soll:** Die App sagt in dieser Zeit, dass die Ergebnisse bereitgestellt
+  werden. Eine Prüfung der Bereitstellung bietet sie erst an, wenn der
+  Arbeitsprozess beendet ist und die Bereitstellung trotzdem offen blieb.
+- **Auswirkung:** irreführend, kein Datenverlust; Originale unverändert. Wer
+  die angebotene Schaltfläche anklickt, bekommt eine Meldung, die nach
+  einem Fehler klingt. Die Dauer wächst mit der Zahl der Dateien (150 bis
+  240 ms je kopierter Datei, dazu Plan und Inventar). Für größere Stapel
+  nicht gemessen; bei 1 000 Dateien wären es allein für das Kopieren
+  mehrere Minuten.
+- **Zuordnung:** BL-010.13 (DS-086; „ein interner Abschluss ohne sichtbaren
+  Export bleibt `export_pending`“), für die Rückfrage BL-010.14 (DS-110).
+- **RC178:** Die vier Core-Dateien sind seit dem Tag `v3.2.0-rc178`
+  unverändert (`git diff --stat v3.2.0-rc178 HEAD` nennt
+  `application-service.js`, `batch-executor.js`, `batch-worker.js` und
+  `batch-recovery.js` nicht); „Wird vorbereitet“ und die Schaltfläche gibt
+  es dort genauso. Die Rückfrage beim Schließen stammt aus diesem Review
+  (`5f670a20`, 25.11.); davor schloss das Fenster in diesem Zeitraum sofort.
+  Der unpassende Satz der Rückfrage ist also ein Fehler meiner Änderung.
+- **Status:** offen, nichts geändert.
+
+### R-042 · Am Ende eines Anonymisierungslaufs scheitern die Statusabfragen, die Anzeige bleibt stehen
+
+Die lange Statusabfrage der siebzehnten Übergabe hat eine Ursache, und im
+Anonymisierungslauf ist ihre Folge größer als dort gesehen.
+
+- **Ursache der Wartezeit:** Jede Statusabfrage liest für einen laufenden
+  Standalone-Stapel die Pausenmarke, und zwar unter der
+  Betriebssystemsperre des Datenordners (`gateway/batch-progress.js:20`,
+  `gateway/standalone-pause.js:90-114`). Ist die Sperre belegt, wartet der
+  Core bis zu fünf Sekunden in Schritten von 10 ms, und zwar blockierend:
+  In dieser Zeit beantwortet er keine andere Anfrage. Danach gibt er
+  `OWNERSHIP_GUARD_BUSY` zurück, nach außen
+  `STANDALONE_OWNERSHIP_CONTROL_BUSY` (`core/desktop-error-contract.js:49`).
+- **„Nur umwandeln“ (Läufe a bis c):** In jedem Lauf dauert genau eine
+  Statusabfrage rund zwei Sekunden (2 560, 2 211 und 1 945 ms; in den
+  sechs Läufen der siebzehnten Übergabe 1 494 bis 2 862 ms), alle übrigen
+  meist rund 93 ms. Sie ist die erste nach dem Ende der Verarbeitung. Die
+  Abfrage gelingt jeweils; der Arbeitsprozess hält die Sperre an dieser
+  Stelle also rund zwei Sekunden.
+- **„Anonymisieren“ (Lauf d), Protokoll des Core, Zeit ab Start des Laufs:**
+  - bis 699,6 s: Statusabfragen in 68 bis 209 ms.
+  - 705,9 bis 768,5 s: elf Statusabfragen nacheinander scheitern nach je
+    rund 5 050 ms mit `STANDALONE_OWNERSHIP_CONTROL_BUSY`. Dazwischen keine
+    einzige erfolgreiche Antwort, rund 69 Sekunden lang.
+  - 772,1 s: eine Statusabfrage gelingt nach 2 384 ms; ab da zeigt die App
+    „80 von 80“.
+  - 861,2 und 867,5 s: zwei weitere scheitern nach je rund 5 040 ms, kurz
+    bevor die Ergebnisdateien erscheinen.
+- **Anzeige in dieser Zeit:** 78 Sekunden lang unverändert „Wird verarbeitet
+  · 79 von 80 Dateien abgeschlossen“. Die Oberfläche fragt bei dieser
+  Antwort still erneut und meldet nichts (`workspace.js:2203-2213`).
+- **Kontrolllauf (e)**, ohne Klick und ohne Messung im Testprofil: dasselbe
+  Bild. Elf Statusabfragen nacheinander scheitern zwischen 685,4 und
+  748,1 s nach je rund 5 055 ms, zwei weitere bei 837,3 und 843,6 s. Die
+  Anzeige wechselt danach auf „80 Ergebnisse“ und rund zwei Minuten später
+  auf „Ergebnisordner öffnen“. Der Lauf endet mit 80 von 80.
+- **Ist:** Der Arbeitsprozess hält die Betriebssystemsperre am Ende eines
+  Anonymisierungslaufs mit 80 Dateien über eine Minute nahezu durchgehend.
+  Solange scheitert jede Statusabfrage nach fünf Sekunden, und jede andere
+  Anfrage an den Core wartet hinter ihr.
+- **Soll:** Die Anzeige eines laufenden Stapels hängt nicht an einer Sperre,
+  die der Arbeitsprozess lange hält; im gewöhnlichen Betrieb scheitert
+  keine Statusabfrage.
+- **Auswirkung:** Die Anzeige steht über eine Minute, ohne Hinweis. Der
+  Lauf selbst endete mit 80 von 80 Dateien; kein Datenverlust beobachtet.
+  Nicht geprüft: was „Pausieren“, „Ergebnisordner öffnen“ oder Schließen in
+  dieser Zeit tun, und ob die Hülle eine Statusabfrage nach ihren fünf
+  Sekunden abbricht. Welcher Schritt des Arbeitsprozesses die Sperre hält,
+  ist nicht eingegrenzt; ob die Dauer mit der Zahl der Dateien wächst,
+  nicht gemessen.
+- **Zuordnung:** BL-010.13 (DS-086), BL-050.6. `standalone-pause.js`,
+  `batch-progress.js`, `batch.js` und `result-export.js` sind seit
+  `v3.2.0-rc178` unverändert.
+- **Berichtigung:** Die Aussage der siebzehnten Übergabe, die Statusabfrage
+  laufe im Core ohne Warten ab, war falsch.
+- **Status:** offen, nichts geändert.
+
+### R-041 · Stapelsperre gibt die Freigabe nach 185 ms auf, der Lauf stoppt dann
+
+Offener Rest aus R-039: `gateway/batch-lock-release.js` hat dieselbe Bauart
+wie die Freigabe der Dokumentkontrolle vor `8ff4979a`. Untersucht mit einer
+eigenen Probe an der echten Betriebssystemsperre; in der echten App nicht
+aufgetreten.
+
+- **Stelle:** `gateway/batch-lock-release.js:25-50`
+  (`releaseOwnedEpochWithBusyRetry`, vier Pausen von 10, 25, 50 und 100 ms).
+  Aufrufer: `gateway/batch-processing-orchestrator.js:140-148` nach jeder
+  Datei und `gateway/batch-review-orchestrator.js:295-302`. Beide laufen in
+  Arbeitsprozessen (`batch-worker.js`, `review-worker.js`), nicht im
+  dauerhaften Core der Desktop-App; in `standalone/` ruft niemand sie auf.
+- **Ist:** Ist die Betriebssystemsperre bei allen fünf Versuchen belegt,
+  erhält der Aufrufer `STANDALONE_OWNERSHIP_CONTROL_BUSY`. Der Eintrag
+  `batches\active-processing.json` bleibt liegen. Der Fehler beendet die
+  Verarbeitungsschleife (`gateway/batch-executor-runner.js:198-206`) und den
+  Arbeitsprozess (`gateway/batch-worker.js:216-247`). Dem Code nach steht
+  der Lauf danach als unterbrochen im Verlauf; in der App nicht beobachtet.
+- **Was danach gilt:** Der liegen gebliebene Eintrag trägt die Nummer des
+  beendeten Arbeitsprozesses. Der nächste Prozess erkennt ihn als verwaist
+  und übernimmt ihn (`gateway/batch-active-lock.js:369-377`). Ein Neustart
+  der App ist nicht nötig. Das ist der Unterschied zu R-039: Dort gehörte
+  der Eintrag dem dauerhaften Core.
+- **Soll:** Eine vorübergehend belegte Betriebssystemsperre beendet keinen
+  Lauf, dessen Datei schon fertig verarbeitet ist.
+- **Auswirkung:** Der Lauf bleibt mitten im Stapel stehen und muss über
+  „Fortsetzen“ weitergeführt werden. Die Freigabe folgt erst nach der
+  fertigen Verarbeitung der Datei (`batch-processing-orchestrator.js:134-150`);
+  ein Datenverlust ist daraus nicht zu erwarten. Ob die Bedingung in der
+  echten App eintritt, ist offen (siehe Einordnung).
+- **Zuordnung:** BL-010.14, BL-050.6. In RC178 ist der Code derselbe.
+
+Probe (`batchlock.js`, nur im Arbeitsverzeichnis der Sitzung): ein
+Arbeitsprozess nimmt die Stapelsperre, arbeitet 40 bis 440 ms ohne
+Betriebssystemsperre und gibt sie mit dem unveränderten Produktcode frei.
+Gegenspieler nach Spalte.
+
+| Gegenspieler | Freigaben | gescheitert | Eintrag blieb liegen |
+| --- | --- | --- | --- |
+| nur „Ergebnisordner öffnen“ alle 50 ms (neue Dokumentkontrolle), 30 s | 88 | 0 | 0 |
+| dritter Prozess hält die Sperre 150 ms, 50 ms frei, 40 s | 77 | 16 | 16 |
+| dritter Prozess hält die Sperre 300 ms, 50 ms frei, 40 s | 67 | 22 | 22 |
+
+Folge im Einzelfall: Sperre vier Sekunden belegt, die Freigabe scheitert
+nach 239 ms und fünf Versuchen, der Prozess endet, die Datei bleibt liegen;
+ein neuer Prozess nimmt die Sperre danach beim ersten Versuch und gibt sie
+frei.
+
+- **Einordnung:** Die Freigabe scheitert nur, wenn die Betriebssystemsperre
+  über 185 ms bei jedem der fünf Versuche belegt ist. Mit den Abfragen des
+  Core allein kam das in der Probe nicht vor. In der echten App ist in
+  dieser Prüfung kein Lauf deshalb stehen geblieben, auch nicht in dem
+  Versuch mit 59 Klicks während eines Laufs. Wer die Sperre dort länger
+  hält, ist weiterhin nicht festgestellt (A-059).
+- **Meine erste Messung war zu günstig:** Mit fester Arbeitszeit von 120 ms
+  fiel die Freigabe immer in dieselbe Phase des Gegenspielers, und keine
+  von 58 scheiterte. Erst mit zufälliger Arbeitszeit zeigt sich die Quote
+  oben.
+- **Status:** offen, nichts geändert. Zwei Tests und eine native Prüfung
+  schreiben die vier Pausen fest (`tests/test-batch-epoch-release-busy.js`,
+  `tests/test-batch-review-orchestrator.js`,
+  `tests/test-native-ownership-epoch-release.js`).
+
+### Berichtigungen zur siebzehnten Übergabe
+
+- **„Rund acht Sekunden nach ‚Lauf abgeschlossen‘ fehlt die Schaltfläche“**
+  war falsch gelesen. Das „Lauf abgeschlossen“, das mein Skript fand,
+  gehörte zur Zeile des ersten Laufs. Der zweite Lauf war zu diesem
+  Zeitpunkt nicht als abgeschlossen gemeldet; er stand in der oben
+  beschriebenen Bereitstellung.
+- **„Knapp eine Minute später schließt das Fenster sofort“** nannte nur den
+  Zeitpunkt meines nächsten Versuchs. Gemessen endet das Zeitfenster rund
+  20 Sekunden nach der letzten Datei.
+- **Zur Stapelsperre** stand dort, es sei nicht untersucht, wessen
+  Prozessnummer der Eintrag trägt und wie lange er blockiert. Antwort: die
+  des Arbeitsprozesses, und nur bis zu dessen Ende (R-041).
+
+### Eigene Fehler dieser Runde
+
+- Die erste Messung der Stapelsperre war zu günstig, weil die Arbeitszeit
+  in der Probe fest war (siehe R-041).
+- In Lauf (b) hat mein Skript die Laufkarte nicht geöffnet und den Text der
+  Rückfrage nicht gelesen; Lauf (c) holt beides nach.
+- Für Lauf (d) war mein Messfenster zu kurz, weil das Anonymisieren rund
+  neun Sekunden je Datei braucht. Ich habe das Messskript bei Datei 32
+  beendet und ein neues mit längerem Fenster an die laufende App gehängt.
+  Die Aufzeichnung der Anzeige beginnt deshalb bei Datei 32; das Protokoll
+  des Core ist vollständig.
+- Ein Hilfsskript verlor beim Schreiben einen Rückstrich im Pfad des
+  Ergebnisordners; vor dem Lauf bemerkt und berichtigt.
+
+### Grenzen
+
+- **Ein Fall:** 80 kleine Textdateien, Bedienung über die
+  Automationsschnittstelle, nur Windows. Wie lange die Bereitstellung bei
+  großen Dateien, vielen Dateien oder einem langsamen Ergebnisordner
+  dauert, ist nicht gemessen.
+- **R-042** steht auf zwei Anonymisierungsläufen mit automatischer
+  Maskierung. Die geführte Prüfung, andere Formate und größere Stapel sind
+  nicht geprüft; der Schritt, der die Sperre hält, ist nicht bestimmt.
+- **„Trotzdem schließen“** in diesem Zeitfenster habe ich nicht gewählt;
+  ob die Bereitstellung ohne Fenster zu Ende läuft, ist hier nicht
+  beobachtet.
+- **„Bereitstellung erneut prüfen“:** ein Klick in einem Lauf.
+- **R-041** ist nur in der Probe aufgetreten. Dass der Lauf danach als
+  unterbrochen im Verlauf steht und sich fortsetzen lässt, ist aus dem Code
+  gelesen und nicht in der App beobachtet.
 - **macOS** nicht ausgeführt.
 
 ## Annahmen und Revalidierung
@@ -3154,6 +3448,10 @@ kommt, habe ich denselben Ablauf ohne Klicks mit dem alten Paket
 | A-059 | Scheitert die Freigabe, hält der Arbeitsprozess die Betriebssystemsperre (so der Bericht vom Abend). | Der Arbeitsprozess arbeitete zur selben Zeit. | Die Sperre gilt als belegt, sobald irgendein Prozess ihre Datei geöffnet hat (`native/ownership-guard/ownership-guard.c:210-219`). | Probe mit echter Sperre: mit dem Arbeitsprozess allein blieb kein Eintrag liegen, mit einem dritten Prozess schon | Nicht belegt. Wer die Sperre in der echten App hielt, ist offen; die Behebung hängt nicht davon ab. |
 | A-060 | Eine längere Wartezeit des Aufrufers bei der Freigabe schadet nicht. | Zulassung und Arbeitsprozess warten ebenfalls bis zu fünf Sekunden. | Der Core der Desktop-App beantwortet Anfragen nacheinander; eine Statusabfrage der Hülle wartet höchstens fünf Sekunden. | unabhängige Gegenprüfung; `desktop-sidecar.js:330-335`, `main.rs:1614-1623` gelesen | Widerlegt. Wartezeit auf rund zwei Sekunden gekürzt; den Rest übernimmt die Fortsetzung. |
 | A-061 | Die Meldung unter einem Klick im Verlauf gehört zu diesem Klick. | Mein Skript las sie 1,5 Sekunden nach dem Klick. | Nach einem geöffneten Ordner stand dort teils noch die Meldung des vorigen Klicks. | Vergleich mit dem Protokoll des Core | Widerlegt. Die Zahlen des nativen Laufs stammen aus dem Protokoll des Core. |
+| A-062 | Das „Lauf abgeschlossen“, das mein Skript nach „80 von 80“ im Verlauf fand, gehört zum Lauf mit 80 Dateien (so die siebzehnte Übergabe). | Die Zeile „80 Dateien · 80 Ergebnisse“ stand direkt daneben. | Der Verlauf zeigt beide Läufe; der erste war längst abgeschlossen. | Anzeige je Verlaufszeile mit Laufkennung gelesen, vier Läufe | Widerlegt. Der zweite Lauf war noch in der Bereitstellung; daraus wurde R-040. |
+| A-063 | Eine feste Arbeitszeit in der Probe der Stapelsperre verfälscht die Quote nicht. | Erste Messung: 0 von 58 Freigaben gescheitert. | Arbeitszeit und Takt des Gegenspielers waren beide fest; die Freigabe fiel immer in dieselbe Phase. | Wiederholung mit zufälliger Arbeitszeit (40 bis 440 ms) | Widerlegt. Mit zufälliger Arbeitszeit 16 von 77. |
+| A-064 | Eine liegen gebliebene Stapelsperre blockiert wie bei R-039 bis zum Neustart der App. | Gleiche Bauart der Freigabe. | Der Eintrag trägt die Nummer des Arbeitsprozesses, und der endet nach dem Fehler; verwaiste Einträge werden übernommen (`gateway/batch-active-lock.js:369-377`). | Probe: neuer Prozess nimmt die Sperre nach dem Ende des ersten | Widerlegt. Der Lauf stoppt, die Sperre nicht. |
+| A-065 | Die Statusabfrage läuft im Core ohne Warten ab; die lange Antwort am Laufende kommt nicht aus ihr (so die siebzehnte Übergabe). | `status` in `application-service.js` ist synchron und enthält keine Wartezeit. | Sie ruft den Fortschritt des Stapels ab, und der liest die Pausenmarke unter der Betriebssystemsperre mit bis zu fünf Sekunden blockierender Wartezeit (`gateway/standalone-pause.js:90-114`). | Aufrufkette gelesen; Protokoll des Core in Lauf d: elf Abfragen je rund 5 050 ms | Widerlegt. Daraus wurde R-042. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

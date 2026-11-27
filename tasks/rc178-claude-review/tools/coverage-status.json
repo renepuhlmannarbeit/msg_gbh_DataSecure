@@ -138,17 +138,23 @@
     },
     "plugins/data-secure/server/gateway/batch-processing-orchestrator.js": {
       "symbolStatus": "TEILGEPRÜFT",
-      "findings": [],
+      "findings": [
+        "R-041"
+      ],
       "remark": "Datei im Laufzeit-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
     "plugins/data-secure/server/gateway/batch-executor-runner.js": {
       "symbolStatus": "TEILGEPRÜFT",
-      "findings": [],
+      "findings": [
+        "R-041"
+      ],
       "remark": "Datei im Laufzeit-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
     "plugins/data-secure/server/gateway/batch-worker.js": {
       "symbolStatus": "TEILGEPRÜFT",
-      "findings": [],
+      "findings": [
+        "R-040"
+      ],
       "remark": "Datei im Laufzeit-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
     "plugins/data-secure/server/gateway/batch-item-processor.js": {
@@ -158,7 +164,9 @@
     },
     "plugins/data-secure/server/standalone/application-service.js": {
       "symbolStatus": "TEILGEPRÜFT",
-      "findings": [],
+      "findings": [
+        "R-040"
+      ],
       "remark": "im Laufzeit-Review nur teilweise gelesen (Z. 160-800, 930-1109, 1300-1589); Einheiten außerhalb sind faktisch offen"
     },
     "plugins/data-secure/server/standalone/desktop-ipc.js": {
@@ -169,7 +177,8 @@
     "plugins/data-secure/server/gateway/batch-executor.js": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
-        "R-022"
+        "R-022",
+        "R-040"
       ],
       "remark": "im Laufzeit-Review nur teilweise gelesen (Z. 1-40, 239-370, 608-859); Einheiten außerhalb sind faktisch offen"
     },
@@ -205,7 +214,8 @@
     "plugins/data-secure/server/gateway/batch-lock-release.js": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
-        "R-039"
+        "R-039",
+        "R-041"
       ],
       "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
@@ -236,6 +246,11 @@
         "R-039"
       ],
       "remark": "Datei im R-039-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/batch-processing-admission.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [],
+      "remark": "Datei im R-040-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
     "plugins/data-secure/server/document-parser.js": {
       "symbolStatus": "TEILGEPRÜFT",
