@@ -40,6 +40,21 @@ mögliche Ursache; `test-standalone-workspace.js` prüft das. Die Zusage in
 `PRODUCT.md` ist für Standalone unter Windows eingeschränkt (Präzisierung
 DS-080 vom 27.11.2026). Der Hinweis aus R-035 ist dort nicht erreichbar.
 
+RC178-Review R-039 (BL-010.13, DS-086, BL-050.6) → Die Sperre der
+Dokumentkontrolle (`document-reviews/control.lock`, eine Datei für alle Läufe)
+blieb liegen, wenn ihre Freigabe viermal hintereinander auf eine belegte
+Betriebssystemsperre traf; in der Desktop-App galt sie dann bis zum Neustart
+als belegt und hielt einen arbeitenden Stapel an.
+`gateway/standalone-document-control.js` wartet bei der Freigabe jetzt rund
+zwei Sekunden statt 185 ms und fragt danach mit derselben, vor der Aktion
+erfassten Berechtigung bis zu zehn Minuten weiter. Der Aufrufer erhält seine
+Ablehnung wie bisher; der Eintrag wird weiterhin nie ohne bestätigte eigene
+Freigabe entfernt. Dasselbe gilt für den synchronen Weg derselben Funktion
+(`gateway/standalone-history-store.js`, `notice-summary.lock`).
+`test-standalone-document-control.js` prüft Wartezeit, Fortsetzung, ihre
+Grenzen und den Schutz eines späteren Eintrags. Unverändert ist
+`gateway/batch-lock-release.js` (Stapelsperre, vier Wartezeiten).
+
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor
 `sidecar_entry`/Ready. Der aktuelle lokale `tauri-contract/src/main.rs`

@@ -238,23 +238,114 @@ test('thenable rejection retains its primary while exact epoch cleanup retries o
   assert.ok(f.attempts.every(proof => proof === f.attempts[0])); assert.equal(fs.existsSync(lockPath), false);
 });
 
-test('persistent Busy stops after four asynchronous backoffs and leaves only its exact owned record', async () => {
+// The caller's own wait: the four original pauses, then 100 ms until about
+// two seconds have passed. Recovery afterwards asks every 250 ms.
+const CALLER_PAUSES = Object.freeze([10, 25, 50, 100, ...Array(18).fill(100)]);
+const turns = async (count = 20) => { for (let turn = 0; turn < count; turn++) await new Promise(resolve => setImmediate(resolve)); };
+async function untilReleased() {
+  for (let turn = 0; fs.existsSync(lockPath); turn++) {
+    assert.ok(turn < 1000, 'recovery must release the record');
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+// Holds the first recovery pause, so the state the refused caller sees can be
+// inspected before any recovery attempt runs.
+function heldRecovery(f) {
+  let open;
+  const held = new Promise(resolve => { open = resolve; });
+  return { open: () => open(), options: { async delay(milliseconds) {
+    await f.options.delay(milliseconds);
+    if (milliseconds === 250) await held;
+  } } };
+}
+
+test('persistent Busy refuses the caller after its bounded wait; the same capability then releases the exact record', async () => {
+  assert.equal(CALLER_PAUSES.reduce((sum, value) => sum + value, 0), 1985);
   for (const primary of [null, undefined, Error('primary stays primary')]) {
     const f = epochReleaseFixture(), busy = Object.assign(Error('persistent kernel busy'), { code: 'OWNERSHIP_GUARD_BUSY' });
-    f.refuse(busy, 5); let actions = 0;
+    const recovery = heldRecovery(f);
+    f.refuse(busy, CALLER_PAUSES.length + 1 + 7); let actions = 0;
     const pending = withDocumentControl(f.gate, token, () => {
       actions++; return primary === null ? Promise.resolve('native publication completed') : Promise.reject(primary);
-    }, f.options);
+    }, recovery.options);
     if (primary === null) await assert.rejects(pending, error => error === busy);
     else { let caught = false; try { await pending; } catch (error) { caught = true; assert.equal(error, primary); } assert.equal(caught, true); }
-    assert.equal(actions, 1); assert.equal(f.captures(), 1); assert.equal(f.attempts.length, 5);
-    assert.deepEqual(f.delays, [10, 25, 50, 100]);
-    assert.ok(f.attempts.every(proof => proof === f.attempts[0]));
+    await turns();
+    // The refused caller leaves its record blocking. Nothing was force-deleted,
+    // and no attempt ran while the recovery pause was still pending.
+    assert.equal(actions, 1); assert.equal(f.captures(), 1); assert.equal(f.attempts.length, CALLER_PAUSES.length + 1);
+    assert.deepEqual(f.delays, [...CALLER_PAUSES, 250]);
     assert.equal(fs.existsSync(lockPath), true);
-    // A successful assertion does not grant PID adoption or broad cleanup.
-    // Release only the capability this test actually captured and retained.
-    assert.equal(f.actual.releaseOwnedEpoch(f.attempts[0]), true);
+    assert.throws(() => withDocumentControl(gate(), 'b'.repeat(64), () => assert.fail('record still blocks')), code('STANDALONE_BUSY'));
+    recovery.open(); await untilReleased();
+    assert.equal(actions, 1, 'recovery never replays the action'); assert.equal(f.captures(), 1);
+    assert.equal(f.attempts.length, CALLER_PAUSES.length + 1 + 8);
+    assert.deepEqual(f.delays, [...CALLER_PAUSES, ...Array(8).fill(250)]);
+    assert.ok(f.attempts.every(proof => proof === f.attempts[0]));
+    await turns();
+    assert.equal(f.attempts.length, CALLER_PAUSES.length + 1 + 8, 'a released capability is not asked again');
+    assert.equal(withDocumentControl(gate(), 'b'.repeat(64), () => 'next'), 'next');
   }
+});
+
+test('recovery ends on false, a hard refusal, a lost epoch or a failed timer and never removes the record itself', async () => {
+  const busy = Object.assign(Error('persistent kernel busy'), { code: 'OWNERSHIP_GUARD_BUSY' });
+  for (const final of [false, 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'BATCH_OWNERSHIP_CHANGED',
+    'STANDALONE_OWNERSHIP_CONTROL_BUSY', ACTIVE_LOCK_BUSY, 'EIO', 'timer']) {
+    const f = epochReleaseFixture(); let proof, attempts = 0, recoveryPauses = 0;
+    const controlled = { ...f.gate, releaseOwnedEpoch(epoch) {
+      proof = epoch; attempts++;
+      if (attempts <= CALLER_PAUSES.length + 2) throw busy; // the caller's wait and one recovery attempt
+      if (final === false) return false;
+      throw Object.assign(Error('fixed final refusal'), { code: final });
+    } };
+    const options = { async delay(milliseconds) {
+      await f.options.delay(milliseconds);
+      if (milliseconds === 250 && ++recoveryPauses === 2 && final === 'timer') throw Error('timer refused');
+    } };
+    await assert.rejects(withDocumentControl(controlled, token, () => Promise.resolve('done'), options), error => error === busy);
+    await turns(40);
+    assert.equal(attempts, CALLER_PAUSES.length + (final === 'timer' ? 2 : 3));
+    assert.equal(recoveryPauses, 2);
+    assert.equal(fs.existsSync(lockPath), true, 'only a confirmed exact release removes the record');
+    assert.equal(f.actual.releaseOwnedEpoch(proof), true);
+  }
+});
+
+test('recovery is bounded and cannot release a later epoch of the same token', async () => {
+  const busy = Object.assign(Error('persistent kernel busy'), { code: 'OWNERSHIP_GUARD_BUSY' });
+  const endless = epochReleaseFixture(); let proof, attempts = 0;
+  const controlled = { ...endless.gate, releaseOwnedEpoch(epoch) { proof = epoch; attempts++; throw busy; } };
+  await assert.rejects(withDocumentControl(controlled, token, () => Promise.resolve('done'), endless.options), error => error === busy);
+  for (let turn = 0, before = -1; before !== attempts; turn++) { assert.ok(turn < 1000); before = attempts; await turns(); }
+  assert.equal(attempts, CALLER_PAUSES.length + 1 + 2400, 'ten further minutes at 250 ms, then the record simply stays');
+  assert.equal(fs.existsSync(lockPath), true); assert.equal(endless.actual.releaseOwnedEpoch(proof), true);
+
+  const f = epochReleaseFixture(), recovery = heldRecovery(f);
+  f.refuse(busy, CALLER_PAUSES.length + 1);
+  await assert.rejects(withDocumentControl(f.gate, token, () => Promise.resolve('old operation completed'), recovery.options), error => error === busy);
+  await turns();
+  assert.equal(f.actual.releaseOwnedEpoch(f.attempts[0]), true);
+  f.actual.acquireActiveLock(token); const next = f.actual.captureOwnedEpoch(token), replacement = fs.readFileSync(lockPath);
+  recovery.open(); await turns(40);
+  assert.equal(f.attempts.length, CALLER_PAUSES.length + 2); assert.ok(f.attempts.every(value => value === f.attempts[0]));
+  assert.deepEqual(fs.readFileSync(lockPath), replacement, 'the old capability returned false and changed nothing');
+  assert.equal(f.actual.releaseOwnedEpoch(next), true);
+
+  // The old capability was never consumed: its record vanished without it and
+  // the same gate acquired the same token again. Only the acquisition and file
+  // identity can tell the two epochs apart.
+  const g = epochReleaseFixture(), later = heldRecovery(g);
+  g.refuse(busy, CALLER_PAUSES.length + 1);
+  await assert.rejects(withDocumentControl(g.gate, token, () => Promise.resolve('old operation completed'), later.options), error => error === busy);
+  await turns();
+  fs.unlinkSync(lockPath); // exact own synthetic record of this test only
+  g.actual.acquireActiveLock(token); const successor = g.actual.captureOwnedEpoch(token), current = fs.readFileSync(lockPath);
+  later.open(); await turns(40);
+  assert.equal(g.attempts.length, CALLER_PAUSES.length + 2); assert.ok(g.attempts.every(value => value === g.attempts[0]));
+  assert.deepEqual(fs.readFileSync(lockPath), current, 'an unconsumed old capability cannot release its successor');
+  assert.equal(g.actual.assertOwnedEpoch(successor), true);
+  assert.equal(g.actual.releaseOwnedEpoch(successor), true);
 });
 
 test('false and hard epoch-release errors never retry, preserve hard identity, and never mask a primary', async () => {
@@ -330,14 +421,25 @@ test('accessor and Proxy release causes cannot mint Busy or replace a primary th
   assert.equal(traps, 0);
 });
 
-test('synchronous compatibility never becomes a Promise or sleeps, and still uses only its captured epoch', () => {
+test('synchronous compatibility never becomes a Promise or sleeps, and still uses only its captured epoch', async () => {
   const f = epochReleaseFixture(), value = { ok: true };
   assert.equal(withDocumentControl(f.gate, token, () => value, f.options), value);
   assert.equal(f.captures(), 1); assert.equal(f.attempts.length, 1); assert.deepEqual(f.delays, []);
   assert.equal(fs.existsSync(lockPath), false);
-  const busy = Object.assign(Error('kernel busy'), { code: 'OWNERSHIP_GUARD_BUSY' }); f.refuse(busy, 1);
-  assert.throws(() => withDocumentControl(f.gate, token, () => value, f.options), error => error === busy);
-  assert.deepEqual(f.delays, []); assert.equal(f.actual.releaseOwnedEpoch(f.attempts.at(-1)), true);
+  const busy = Object.assign(Error('kernel busy'), { code: 'OWNERSHIP_GUARD_BUSY' });
+  for (const primary of [null, Error('primary stays primary')]) {
+    f.refuse(busy, 2); // the caller's single attempt and the first recovery attempt
+    assert.throws(() => withDocumentControl(f.gate, token, () => { if (primary) throw primary; return value; }, f.options),
+      error => error === (primary || busy));
+    // The refused synchronous caller neither slept nor lost its record.
+    assert.deepEqual(f.delays, []); assert.equal(fs.existsSync(lockPath), true);
+    // Afterwards the same captured epoch asks again, outside the caller.
+    await untilReleased();
+    assert.deepEqual(f.delays, [250, 250]);
+    assert.ok(f.attempts.slice(-3).every(proof => proof === f.attempts.at(-1)));
+    f.delays.length = 0;
+  }
+  assert.equal(f.captures(), 3); assert.equal(f.attempts.length, 1 + 3 + 3);
 });
 
 test('a failed capture prevents the action and cannot fall back to token-based cleanup', () => {
