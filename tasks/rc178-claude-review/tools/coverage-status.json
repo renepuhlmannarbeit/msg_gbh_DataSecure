@@ -146,7 +146,8 @@
     "plugins/data-secure/server/gateway/batch-executor-runner.js": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
-        "R-041"
+        "R-041",
+        "R-042"
       ],
       "remark": "Datei im Laufzeit-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
@@ -255,6 +256,34 @@
       "remark": "Datei im R-040-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
     "plugins/data-secure/server/gateway/batch-terminal-evidence.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-042"
+      ],
+      "remark": "Datei im R-042-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/batch-delivery.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-042"
+      ],
+      "remark": "Datei im R-042-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/batch-evidence.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-042"
+      ],
+      "remark": "Datei im R-042-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/standalone-anonymized-batch.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-042"
+      ],
+      "remark": "Datei im R-042-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/batch-progress.js": {
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [
         "R-042"

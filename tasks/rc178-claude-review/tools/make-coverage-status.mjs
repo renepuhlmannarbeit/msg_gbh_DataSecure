@@ -87,6 +87,10 @@ files[`${srv}gateway/batch-executor-runner.js`].findings = ['R-041'];
 // Neunzehnte Übergabe: Abschlussnachweis und Pausenmarke (R-042), von der Hauptsession gelesen.
 full('R-042', [`${srv}gateway/batch-terminal-evidence.js`], ['R-042']);
 files[`${srv}gateway/standalone-pause.js`].findings = ['R-042'];
+// Zwanzigste Übergabe: Messung und Vorschlag zu R-042, von der Hauptsession gelesen.
+full('R-042', ['gateway/batch-delivery.js', 'gateway/batch-evidence.js', 'gateway/standalone-anonymized-batch.js',
+  'gateway/batch-progress.js'].map((file) => srv + file), ['R-042']);
+files[`${srv}gateway/batch-executor-runner.js`].findings = ['R-041', 'R-042'];
 
 full('Konvertierungs', ['document-parser.js', 'standalone/markdown-extractor.js', 'standalone/markdown-contract.js',
   'standalone/markdown-output-profile.js', 'standalone/readable-markdown.js', 'standalone/conversion-feedback.js',

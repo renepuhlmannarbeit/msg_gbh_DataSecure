@@ -137,7 +137,7 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-039 | hoch | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Öffnet der Anwender im Verlauf den Ergebnisordner eines fertigen Laufs, während ein anderer Lauf arbeitet, kann die Sperre der Dokumentkontrolle hängen bleiben: Die Abfrage nimmt die Sperre, kann sie nach 185 ms vergeblicher Versuche nicht freigeben und lässt sie stehen. Danach antworten jede weitere Abfrage und auch „Fortsetzen“ mit „Ein lokaler Vorgang ist bereits aktiv. Bitte warten.“, und der laufende Stapel bleibt stehen (im ersten Versuch bei 65 von 80 Dateien). Erst ein Neustart der App löst die Sperre. Zweimal in zwei Versuchen beobachtet, beim vierten und beim zehnten Klick. Kein Datenverlust, Originale unverändert. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | behoben in `8ff4979a`: Die Freigabe wartet rund zwei Sekunden und fragt danach mit derselben Berechtigung bis zu zehn Minuten weiter; in der echten App nachgeprüft. Offen bleiben die Stapelsperre gleicher Bauart (R-041) und „Bitte warten“ beim gewöhnlichen Wettbewerb |
 | R-040 | mittel | Oberfläche und Zustandsmodell; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Nach der letzten Datei stellt der Arbeitsprozess die Ergebnisse bereit (bei 80 kleinen Textdateien rund 20 Sekunden in „Nur umwandeln“, rund zwei Minuten beim Anonymisieren). In dieser Zeit heißt der Lauf „Wird vorbereitet“, der Verlauf bietet „Bereitstellung erneut prüfen“ an (ein Klick darauf meldet „Die Bereitstellung konnte nicht bestätigt werden“), und Schließen führt zur Rückfrage „Die Dateien werden gerade vorbereitet“. Kein Datenverlust. Zustand und Schaltfläche sind in RC178 gleich; der Satz der Rückfrage stammt aus `5f670a20` dieses Reviews. | BL-010.13 (DS-086), BL-010.14 (DS-110) | behoben in `8399045b` und `8369f727`: Der Core meldet die laufende Bereitstellung; die Oberfläche benennt sie, bietet für diesen Lauf weder Reparatur noch Aufgeben noch eine neue Verarbeitung an und fragt beim Schließen passend. In der echten App nachgeprüft, auch nach Pause und Fortsetzen. Grenzen im Nachtrag vom 27.11. spätnachts |
 | R-041 | niedrig | Nebenläufigkeit und Betrieb; Standalone (Core, dem Code nach alle Ziele mit nativer Sperre) | Die Stapelsperre gibt ihre Freigabe nach 185 ms vergeblicher Versuche auf (dieselbe Bauart wie R-039 vor der Behebung). Der Arbeitsprozess beendet dann den Lauf; der nächste Prozess übernimmt den liegen gebliebenen Eintrag, ein Neustart ist nicht nötig. Nur in einer Probe mit der echten Betriebssystemsperre aufgetreten (16 von 77 Freigaben, wenn ein dritter Prozess die Sperre zu 75 % belegt; 0 von 88 mit den Abfragen des Core allein), in der echten App nie. In RC178 ist der Code derselbe. | BL-010.14, BL-050.6 | behoben in `2795fa32`: Die Freigabe wartet rund zwei Sekunden statt 185 ms. Länger belegt, stoppt der Lauf wie zuvor |
-| R-042 | mittel | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele mit nativer Sperre) | Am Ende eines Anonymisierungslaufs mit 80 Dateien scheitern die Statusabfragen über eine Minute lang, jede nach fünf Sekunden Wartezeit auf die Betriebssystemsperre (in zwei von zwei Läufen elf Abfragen nacheinander, rund 69 Sekunden). Die Anzeige bleibt solange bei „79 von 80“ stehen, ohne Hinweis; in der Wartezeit beantwortet der Core keine andere Anfrage. Der Lauf endet regulär. In „Nur umwandeln“ dauert dieselbe Stelle einmal je Lauf rund zwei Sekunden. Welcher Schritt des Arbeitsprozesses die Sperre hält, ist nicht bestimmt. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | offen. Eingegrenzt: Dem Code nach hält der Abschlussnachweis die Sperre, rund 0,86 Sekunden je Datei; nicht instrumentiert. Entscheidung des Anwenders steht aus |
+| R-042 | mittel | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele mit nativer Sperre) | Am Ende eines Anonymisierungslaufs mit 80 Dateien scheitern die Statusabfragen über eine Minute lang, jede nach fünf Sekunden Wartezeit auf die Betriebssystemsperre (in zwei von zwei Läufen elf Abfragen nacheinander, rund 69 Sekunden). Die Anzeige bleibt solange bei „79 von 80“ stehen, ohne Hinweis; in der Wartezeit beantwortet der Core keine andere Anfrage. Der Lauf endet regulär. In „Nur umwandeln“ dauert dieselbe Stelle einmal je Lauf rund zwei Sekunden. Die Sperre hält die Übergabe der letzten Datei, über den ganzen Abschlussnachweis (gemessen am 28.11.). In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | offen. Gemessen am 28.11.: vier Prüfdurchgänge über alle Ergebnisse unter einer durchgehend belegten Sperre, rund 0,87 Sekunden je Datei. Ein Vorschlag in zwei Schritten liegt vor; Entscheidung des Anwenders steht aus |
 
 ## Einzelbefunde
 
@@ -3204,8 +3204,10 @@ Planen 45,7 s, Kopieren 18,7 s).
   die angebotene Schaltfläche anklickt, bekommt eine Meldung, die nach
   einem Fehler klingt. Die Dauer wächst mit der Zahl der Dateien (150 bis
   240 ms je kopierter Datei, dazu Plan und Inventar). Für größere Stapel
-  nicht gemessen; bei 1 000 Dateien wären es allein für das Kopieren
-  mehrere Minuten.
+  nicht gemessen; bei 200 Dateien, mehr nimmt eine Verarbeitung nicht an,
+  wären es allein für das Kopieren rechnerisch 30 bis 48 Sekunden
+  (berichtigt am 28.11.; zuvor stand hier eine Hochrechnung auf 1 000
+  Dateien).
 - **Zuordnung:** BL-010.13 (DS-086; „ein interner Abschluss ohne sichtbaren
   Export bleibt `export_pending`“), für die Rückfrage BL-010.14 (DS-110).
 - **RC178:** Die vier Core-Dateien sind seit dem Tag `v3.2.0-rc178`
@@ -3277,6 +3279,9 @@ Anonymisierungslauf ist ihre Folge größer als dort gesehen.
 - **Status am 27.11. nachts:** offen, nichts geändert.
 - **Nachtrag:** weiter offen; der Schritt ist eingegrenzt, siehe „Nachtrag
   vom 27.11. spätnachts“.
+- **Nachtrag vom 28.11.:** weiter offen; die Ursache ist gemessen, ein
+  Vorschlag zur Behebung in zwei Schritten liegt vor, siehe „Nachtrag vom
+  28.11. vormittags“.
 
 ### R-041 · Stapelsperre gibt die Freigabe nach 185 ms auf, der Lauf stoppt dann
 
@@ -3406,8 +3411,10 @@ die Ursache von R-042 eingrenzen. Commits `2795fa32` (R-041) und `8399045b`
   Statusabfragen nacheinander (348,9 bis 373,9 s nach dem Start), die
   nächste gelingt nach 2 957 ms; die Sperre ist rund 34 Sekunden belegt.
   Bei 80 Dateien waren es elf Abfragen und rund 69 Sekunden. Das sind in
-  beiden Fällen rund 0,86 Sekunden je Datei. Zwei Messpunkte; bei 1 000
-  Dateien wären es rechnerisch rund 14 Minuten.
+  beiden Fällen rund 0,86 Sekunden je Datei. Zwei Messpunkte; bei 200
+  Dateien, mehr nimmt eine Verarbeitung nicht an, wären es rechnerisch
+  knapp drei Minuten (berichtigt am 28.11.; zuvor stand hier eine
+  Hochrechnung auf 1 000 Dateien).
 - **Was in dieser Zeit geschieht:** Im Datenordner ändert sich 33 Sekunden
   lang nur die Sperre der Dokumentkontrolle
   (`document-reviews\control.lock`): rund zehn Sperrzyklen je Sekunde, ohne
@@ -3427,6 +3434,9 @@ die Ursache von R-042 eingrenzen. Commits `2795fa32` (R-041) und `8399045b`
   dazwischen keine Lücke.
 - **Nicht belegt:** Ich habe die Stelle nicht instrumentiert. Die Zuordnung
   beruht auf der Reihenfolge der Schreibvorgänge und auf dem Code.
+- **Nachtrag vom 28.11.:** inzwischen gemessen. Die Aufrufstelle ist eine
+  andere (`gateway/batch-delivery.js:301`), und es sind vier Durchgänge;
+  siehe „Nachtrag vom 28.11. vormittags“.
 - **In der Bereitstellung danach** laufen dieselben Sperrzyklen weiter;
   dort gelingen die Statusabfragen bis auf eine (40 Dateien) oder zwei (80
   Dateien).
@@ -3582,6 +3592,221 @@ daraus wurde:
   über die Automationsschnittstelle. Größere Stapel, andere Formate, die
   geführte Prüfung und macOS nicht.
 
+## Nachtrag vom 28.11. vormittags · R-042 gemessen, Vorschlag zur Behebung
+
+Auftrag des Anwenders: „Ja, Vorschlag“ (einen Vorschlag zur Behebung von
+R-042 ausarbeiten). Am Produkt ist nichts geändert; Produktstand weiter
+`8369f727`, Paket `aa93cefb…` (Build `d5e7df68`).
+
+### Ergebnis
+
+- **Die Ursache ist jetzt gemessen, nicht mehr nur geschlossen.** Die
+  Übergabe der letzten Datei hält die Betriebssystemsperre über den ganzen
+  Abschlussnachweis, und in dieser Zeit wird jedes Ergebnis viermal
+  geprüft.
+- **Vorschlag, Schritt 1 (empfohlen):** Die Statusabfrage liest die
+  Pausenmarke nicht mehr, wenn alle Dateien des Laufs entschieden sind.
+  Dann braucht sie die Sperre in dieser Zeit nicht, und die Anzeige läuft
+  weiter. Im Modell antwortet sie bei belegter Sperre in 166 ms statt nach
+  5 077 ms zu scheitern.
+- **Vorschlag, Schritt 2 (getrennt zu entscheiden):** die Haltezeit selbst
+  verkürzen, zuerst durch zwei statt vier Prüfdurchgänge.
+- **Zwei frühere Aussagen dieses Berichts waren falsch** und sind
+  berichtigt: die Aufrufstelle des Abschlussnachweises und die Hochrechnung
+  auf 1 000 Dateien (eine Verarbeitung nimmt höchstens 200 an).
+
+### Messlauf p in der echten App
+
+- **Vorgehen:** „Anonymisieren“ mit automatischer Maskierung, 40 erfundene
+  Textdateien, neues isoliertes Testprofil. Neben der App laufen zwei
+  Aufzeichner:
+  - die Aufzeichnung der Dateinamen wie in Lauf f;
+  - eine Sperrprobe: Ein dritter Prozess fragt alle 200 ms mit der echten
+    Betriebssystemsperre, ob sie frei ist, und gibt sie sofort zurück.
+- **Sperrprobe über den ganzen Lauf:** 2 084 Versuche in 452 Sekunden, davon
+  1 115 erfolgreich.
+- **Längste Strecke ohne einen einzigen Erfolg:** 34,7 Sekunden, 161
+  Versuche nacheinander abgelehnt (343,1 bis 377,9 s nach Beginn der
+  Aufzeichnung). In den 30 Sekunden davor gelangen 82 von 138 Versuchen, in
+  den 30 Sekunden danach 88 von 138.
+- **Core-Protokoll in dieser Strecke:** fünf Statusabfragen scheitern
+  nacheinander nach je rund 5 055 ms mit
+  `STANDALONE_OWNERSHIP_CONTROL_BUSY`; die nächste gelingt nach 4 719 ms.
+- **Dateinamen in dieser Strecke:** 163 Zyklen der Sperre der
+  Dokumentkontrolle, das sind 4,1 je Datei, einer alle 213 ms. Sonst ändert
+  sich bis kurz vor dem Ende nichts.
+- **Danach, bis das Kopieren beginnt:** rund 195 weitere Sperrzyklen in 42
+  Sekunden (4,9 je Datei). Die Betriebssystemsperre ist dabei zeitweise
+  frei (112 von 191 Versuchen gelingen), die Statusabfragen gelingen.
+- **Zweite Strecke ohne Erfolg:** 7,4 Sekunden während der Bereitstellung
+  (419,7 bis 427,1 s, 35 Versuche). Eine weitere Statusabfrage scheitert
+  dort nach 5 038 ms. Welcher Schritt das ist, habe ich nicht bestimmt.
+- **Während der gewöhnlichen Verarbeitung** gelingen 903 von 1 581
+  Versuchen der Probe; die Sperre ist also zu rund 43 % der Zeitpunkte
+  belegt. Die gelungenen Statusabfragen des ganzen Laufs brauchen im Median
+  73 ms, jede zehnte über 291 ms.
+- **Der Lauf endet regulär** mit 40 von 40 Ergebnissen.
+
+### Warum die Sperre so lange belegt ist
+
+- **Aufrufkette für die letzte Datei:** Der Arbeitsprozess schließt jede
+  Datei in `finishLocalDelivery` ab
+  (`gateway/batch-delivery.js:259-315`). Im Standalone läuft das als eine
+  synchrone Transaktion unter einer einzigen Betriebssystemsperre
+  (`gateway/batch.js:430-432` und `:900`,
+  `gateway/batch-active-lock.js:475-483`).
+- **Was diese Transaktion bei der letzten Datei zusätzlich tut:**
+  - Sie berechnet den Fortschritt mit voller Ergebnisprüfung
+    (`batch-delivery.js:299`): ein Durchgang über alle Ergebnisse.
+  - Sie schreibt den Abschlussnachweis (`batch-delivery.js:301`), und der
+    prüft alle Ergebnisse dreimal
+    (`gateway/batch-terminal-evidence.js:87-94`).
+- **Vier Durchgänge, dazu passt die Zählung:** 4,1 Sperrzyklen je Datei;
+  jede einzelne Prüfung nimmt die Dokumentkontrolle genau einmal
+  (`gateway/standalone-anonymized-batch.js:44-74`).
+- **Die Betriebssystemsperre wird dazwischen nie frei:** Die inneren
+  Sperrzyklen laufen unter der äußeren Transaktion
+  (`core/ownership-control.js:65-71`).
+- **Danach prüft der Arbeitsprozess weiter:** Nach der Schleife folgen drei
+  weitere Durchgänge (`gateway/batch-executor-runner.js:240-244`), jetzt
+  ohne äußere Transaktion. Rund zwei weitere vor dem Kopieren habe ich
+  keiner Stelle zugeordnet.
+- **Zusammen** vergehen bei 40 Dateien zwischen der letzten Datei und dem
+  Beginn des Kopierens rund 77 Sekunden mit rund neun Prüfdurchgängen über
+  dieselben Ergebnisse.
+
+### Nachmessung der einzelnen Schritte
+
+Auf dem fertigen Testprofil des Laufs p, App geschlossen, mit der echten
+Betriebssystemsperre und dem unveränderten Produktcode. Das Skript ruft nur
+die lesenden Prüfungen auf und schreibt weder Nachweis noch Laufzustand.
+
+| Schritt | Dauer für 40 Ergebnisse | je Ergebnis |
+| --- | --- | --- |
+| Ein Prüfdurchgang unter einer äußeren Sperre | 7 716 ms | 193 ms |
+| Ein Prüfdurchgang, jede Prüfung nimmt die Sperre selbst | 7 832 ms | 196 ms |
+| Fortschritt mit voller Ergebnisprüfung | 7 606 ms | 190 ms |
+| Fortschritt ohne Ergebnisprüfung | 8 ms | 0,2 ms |
+| Nachweis erstellen | 7 630 ms | 191 ms |
+
+- **Modell der Transaktion** (Fortschritt, davor, erstellen, danach):
+  30,7 Sekunden. Gemessen in der App: 34,7 Sekunden. Den Rest erklären die
+  beiden Schreibvorgänge des Laufzustands und die laufende App; nicht
+  einzeln gemessen.
+- **Woraus eine Prüfung besteht**, je Ergebnis:
+  - Zugehörigkeit zum Lauf prüfen: 42 ms, und das zweimal je Prüfung
+    (`standalone-anonymized-batch.js:25` und `:53`).
+  - Erwartete Veröffentlichung lesen, unter der Dokumentkontrolle: 71 ms.
+    Der Sperrzyklus allein braucht davon rund 20 ms.
+  - Ergebnis lesen und Prüfsumme bilden: 22 ms.
+- **Auffällig:** Je Prüfung fallen rund 2 400 Pfadprüfungen an
+  (`lstat`). Die Zeit steckt überwiegend dort, nicht im Lesen der
+  Ergebnisse.
+
+### Vorschlag, Schritt 1: Die Anzeige hängt nicht mehr an der Sperre
+
+- **Änderung:** `gateway/batch-progress.js`, `publicProgress`. Die
+  Pausenmarke wird nur noch gelesen, wenn mindestens eine Datei des Laufs
+  noch nicht entschieden ist. Rund drei Zeilen.
+- **Warum das dasselbe Ergebnis liefert:** Die Auswertung verwirft die
+  Pausenmarke schon heute, sobald der Lauf vollständig entschieden ist
+  (`core/batch-progress.js:78`). Gelesen wird sie trotzdem, und nur dafür
+  braucht die Statusabfrage die Sperre
+  (`gateway/standalone-pause.js:90-114`).
+- **Warum das den Befund trifft:** Der Laufzustand mit der letzten Datei ist
+  geschrieben, bevor der Abschlussnachweis beginnt
+  (`batch-delivery.js:297`). In der ganzen Strecke ist der Lauf also schon
+  vollständig entschieden.
+- **Modell** (fertiges Testprofil; ein Hilfsprozess hält die echte Sperre 16
+  Sekunden am Stück; der Statuspfad des Core für den gewählten Lauf; die
+  Änderung nur im Speicher, nichts im Repository):
+
+  | Fall | Antwort |
+  | --- | --- |
+  | wie ausgeliefert, Sperre frei | 40 von 40, nach 162 ms |
+  | wie ausgeliefert, Sperre belegt | `OWNERSHIP_GUARD_BUSY` nach 5 077 ms |
+  | mit Änderung, Sperre belegt | 40 von 40, nach 166 ms |
+  | mit Änderung, Sperre belegt, eine Datei im Speicher auf „offen“ gesetzt | `OWNERSHIP_GUARD_BUSY` nach 5 049 ms, wie bisher |
+
+- **Erwartete Wirkung in der App:** Ab der letzten Datei zeigt die Anzeige
+  „40 von 40“ und mit der Behebung von R-040 „Ergebnisse werden
+  bereitgestellt“, statt bei „39 von 40“ zu stehen (bei 40 Dateien rund 35
+  Sekunden). Dem Modell nach gilt das auch für die zweite Strecke in der
+  Bereitstellung.
+- **Was sich nicht ändert:** die Pausenlogik laufender Stapel (vierte Zeile
+  der Tabelle), der Besitzschutz, der Abschlussnachweis, Cowork (die Stelle
+  gilt nur für Standalone-Stapel).
+- **Was sich ändert und zu entscheiden ist:** Eine beschädigte Pausenmarke
+  eines fertigen Laufs lässt die Statusabfrage heute scheitern; mit der
+  Änderung wird sie für fertige Läufe nicht mehr gelesen.
+- **Grenzen:**
+  - Die Sperre bleibt so lange belegt wie bisher. Andere Anfragen, die sie
+    brauchen, warten oder antworten mit „Bitte warten“.
+  - Das Modell läuft auf einem fertigen Lauf ohne lebenden Arbeitsprozess.
+    Ob im laufenden Betrieb eine weitere Stelle der Statusabfrage die
+    Sperre braucht, zeigt erst ein Lauf in der echten App.
+- **Nachweis bei Umsetzung:** neuer Test für `publicProgress`; Suite,
+  Dokumenttests, die vier nativen Sperrprüfungen, Paket; ein
+  Anonymisierungslauf in der echten App mit der Erwartung „keine
+  gescheiterte Statusabfrage am Laufende“; Plugin-Prüfungen, weil die Datei
+  im gemeinsamen Core liegt.
+- **Zuordnung:** BL-010.13 (DS-086), BL-050.6.
+
+### Vorschlag, Schritt 2: Die Sperre kürzer halten
+
+Getrennt zu entscheiden; jede Variante greift in die Nachweisführung ein.
+
+| Variante | Änderung | Wirkung | Urteil |
+| --- | --- | --- | --- |
+| 2a | Nur im Standalone-Pfad: Die Übergabe der letzten Datei berechnet den Fortschritt ohne Ergebnisprüfung (`batch-delivery.js:299`). Der Arbeitsprozess liest aus dieser Antwort nur Zähler (`batch-executor-runner.js:161-196`); die Bereitstellung macht es schon so (`batch.js:765-771`). | ein Durchgang von vier weniger | empfohlen, nach Schritt 1 |
+| 2b | Der Nachweis entsteht aus der Erfassung „davor“, statt jedes Ergebnis für das Erstellen ein weiteres Mal zu lesen (`batch-terminal-evidence.js:87-94`). Der Vergleich davor gegen danach bleibt. | ein weiterer Durchgang weniger | empfohlen, zusammen mit 2a |
+| 2c | Ein Prüfdurchgang nimmt die Dokumentkontrolle einmal für alle Ergebnisse und liest das Laufverzeichnis einmal. Der Prüfspeicher liest an anderer Stelle schon bis zu 200 Dokumente unter einer Sperre (`standalone-document-review-store.js:1099-1150`). | deutlich weniger Pfadprüfungen je Ergebnis; nicht gemessen | zurückstellen, Entwurf für Codex |
+| 2d | Der Abschlussnachweis entsteht außerhalb der Übergabe; die Stelle am Ende des Arbeitsprozesses ruft ihn schon auf (`batch-executor-runner.js:240-244`). Braucht Warten und Wiederholen, wenn die Sperre belegt ist. | keine durchgehend belegte Sperre mehr | nicht empfohlen; größter Eingriff, nach Schritt 1 wenig zusätzlicher Nutzen |
+
+- **2a und 2b zusammen**, gerechnet aus der Nachmessung: zwei statt vier
+  Durchgänge, bei 40 Dateien rund 17 statt 35 Sekunden, bei 200 Dateien
+  rund anderthalb statt knapp drei Minuten. Nicht gemessen.
+- **Weitere Durchgänge nach der Übergabe** (rund fünf) verlängern das
+  Laufende bei 40 Dateien um rund 40 Sekunden, ohne die Anzeige anzuhalten.
+  Einzeln zu prüfen; nicht Teil dieses Vorschlags.
+
+### Berichtigungen an früheren Aussagen
+
+- **Aufrufstelle:** Im Nachtrag vom 27.11. spätnachts steht, der
+  Abschlussnachweis werde über
+  `gateway/batch-processing-orchestrator.js:69-79` aufgerufen. Das gilt nur,
+  wenn keine Datei mehr offen ist. Für die letzte Datei eines gewöhnlichen
+  Laufs ist es `gateway/batch-delivery.js:301`, innerhalb der Übergabe.
+- **Zahl der Prüfungen:** dort „dreimal“; es sind vier Durchgänge in der
+  belegten Strecke.
+- **Hochrechnung:** dort und bei R-040 „bei 1 000 Dateien“. Eine
+  Verarbeitung nimmt höchstens 200 Dateien an (`resource-limits.js:12`).
+  Rechnerisch steht die Anzeige bei 200 Dateien knapp drei Minuten; nicht
+  gemessen.
+- **„In der Bereitstellung laufen dieselben Sperrzyklen weiter“:** Diese
+  Zyklen liegen vor dem Kopieren und sind weitere Prüfdurchgänge.
+
+### Eigene Fehler dieser Runde
+
+- Die Berichtigungen oben. Die Aufrufstelle und die Hochrechnung hatte
+  ich aus dem Code geschlossen, ohne sie nachzuprüfen.
+- Die Nachmessung lief zuerst gegen den falschen Lauf des Testprofils (den
+  mit einer Datei) und brach ab; mit der richtigen Laufkennung wiederholt.
+- Die Sperrprobe belegt die Sperre selbst kurz (rund 10 ms je Erfolg, fünf
+  Versuche je Sekunde). Ein Kontrolllauf ohne Probe fehlt in dieser Runde;
+  die Dauer der Strecke stimmt aber mit Lauf f ohne Probe überein (rund 34
+  Sekunden bei 40 Dateien).
+
+### Grenzen
+
+- **Nichts am Produkt geändert**; beide Schritte sind Vorschläge.
+- **Schritt 1 ist im Modell geprüft**, nicht in der echten App.
+- **Die Wirkung von Schritt 2** ist gerechnet, nicht gemessen.
+- **Ein Lauf, 40 kleine Textdateien, Windows.** Größere Stapel, andere
+  Formate, die geführte Prüfung und macOS nicht.
+- **Nicht untersucht** bleiben die sofort scheiternden Statusabfragen nach
+  Pause und Fortsetzen und der Schritt der zweiten Strecke.
+
 ## Annahmen und Revalidierung
 
 | ID | Annahme und Entscheidung | Evidenz dafür | Stärkster Gegenfall oder alternative Erklärung | Perspektiven und Prüfer | Ergebnis und Auswirkung |
@@ -3652,7 +3877,10 @@ daraus wurde:
 | A-065 | Die Statusabfrage läuft im Core ohne Warten ab; die lange Antwort am Laufende kommt nicht aus ihr (so die siebzehnte Übergabe). | `status` in `application-service.js` ist synchron und enthält keine Wartezeit. | Sie ruft den Fortschritt des Stapels ab, und der liest die Pausenmarke unter der Betriebssystemsperre mit bis zu fünf Sekunden blockierender Wartezeit (`gateway/standalone-pause.js:90-114`). | Aufrufkette gelesen; Protokoll des Core in Lauf d: elf Abfragen je rund 5 050 ms | Widerlegt. Daraus wurde R-042. |
 | A-066 | Zustand `preparing` zusammen mit „alle Dokumente entschieden“ erkennt jede laufende Bereitstellung (erste Fassung der Behebung von R-040). | So war es in fünf Läufen beobachtet. | Ein fortgesetzter Lauf hält keine offene Annahme; sein Zustand lautet in der Bereitstellung `export_pending`. | unabhängige Gegenprüfung; Kontrolllauf am alten Paket (Pause, Fortsetzen) | Widerlegt. Der Core meldet die Bereitstellung jetzt selbst, für beide Zustände. |
 | A-067 | Schließt man während der Bereitstellung trotzdem, läuft sie ohne Fenster zu Ende (so sagt es die Rückfrage). | Der Arbeitsprozess ist ein eigener Prozess. | Die Hülle könnte ihn mit beenden; dann bliebe ein halber Ergebnisordner bis zum nächsten Start. | zwei Läufe: fortgesetzter Lauf am alten Paket, neuer Lauf am neuen Paket | Bestätigt in zwei Läufen: 81 von 81 Dateien, Arbeitsprozess endet von selbst, der Verlauf zeigt den Lauf nach dem Neustart fertig. Nur „Nur umwandeln“, nur Windows. |
-| A-068 | Der Schritt, der am Ende eines Anonymisierungslaufs die Sperre hält, ist der Abschlussnachweis. | Zwischen zwei Schreibvorgängen des Laufzustands ändert sich nur die Sperre der Dokumentkontrolle; dem Code nach liegt dazwischen `createBoundRecord`. | Ein anderer Schritt, der ebenfalls nur über die Dokumentkontrolle liest, sähe von außen gleich aus. | Aufzeichnung der Dateinamen im Datenordner; Code gelesen | Nicht widerlegt, nicht instrumentiert. Die Dauer je Datei ist gemessen, die Zuordnung zur Funktion ist ein Schluss. |
+| A-068 | Der Schritt, der am Ende eines Anonymisierungslaufs die Sperre hält, ist der Abschlussnachweis. | Zwischen zwei Schreibvorgängen des Laufzustands ändert sich nur die Sperre der Dokumentkontrolle; dem Code nach liegt dazwischen `createBoundRecord`. | Ein anderer Schritt, der ebenfalls nur über die Dokumentkontrolle liest, sähe von außen gleich aus. | Aufzeichnung der Dateinamen im Datenordner; Code gelesen | Nicht widerlegt, nicht instrumentiert. Die Dauer je Datei ist gemessen, die Zuordnung zur Funktion ist ein Schluss. Nachtrag vom 28.11.: durch Sperrprobe und Nachmessung bestätigt; die Aufrufstelle war eine andere (A-069). |
+| A-069 | Der Abschlussnachweis wird für die letzte Datei über `gateway/batch-processing-orchestrator.js:69-79` aufgerufen, und er prüft dreimal (so die neunzehnte Übergabe). | Dort steht der Aufruf für den Fall, dass keine Datei mehr offen ist. | Die letzte Datei wird schon in ihrer eigenen Übergabe abgeschlossen; danach ist der Lauf vollständig. | Aufrufkette gelesen; Sperrprobe in der echten App: 34,7 Sekunden ohne freie Sperre; 4,1 Sperrzyklen je Datei | Widerlegt. Der Aufruf liegt in `gateway/batch-delivery.js:301`, innerhalb einer Transaktion unter der Betriebssystemsperre; mit dem Fortschritt davor sind es vier Durchgänge. |
+| A-070 | Die Dauer am Laufende lässt sich auf 1 000 Dateien hochrechnen (so die achtzehnte und die neunzehnte Übergabe). | Zwei Messpunkte, die zueinander passen. | Eine Verarbeitung hat eine Obergrenze. | `resource-limits.js:12`; Meldung in `standalone/application-service.js:1327` | Widerlegt. Höchstens 200 Dateien je Verarbeitung; beide Sätze sind berichtigt. |
+| A-071 | Die Statusabfrage braucht die Pausenmarke auch für einen fertigen Lauf. | Sie wird bei jeder Abfrage gelesen. | Die Auswertung verwirft sie, sobald der Lauf vollständig entschieden ist (`core/batch-progress.js:78`). | Modell mit der echten Betriebssystemsperre: Statuspfad bei belegter Sperre mit und ohne das Lesen | Widerlegt für fertige Läufe; daraus Schritt 1 des Vorschlags. Für laufende Stapel bleibt das Lesen nötig. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung
