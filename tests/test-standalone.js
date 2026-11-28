@@ -737,6 +737,61 @@ test('a decided run whose worker still lives is reported as delivering its resul
   assert.strictEqual(service.status().delivering, true); assert.strictEqual(service.status().batch_id, undefined);
 });
 
+test('the status poll does not fail on the intake reservation while a batch is processed or the guard is briefly kept (R-042)', () => {
+  const { observeIntakePending } = require('../plugins/data-secure/server/standalone/application-service');
+  const confirmed = new WeakSet();
+  const busy = () => { const error = Object.assign(new Error('OWNERSHIP_GUARD_BUSY'), { code: 'OWNERSHIP_GUARD_BUSY' }); confirmed.add(error); return error; };
+  function observe(options) {
+    let clock = 0, reads = 0;
+    const waits = [];
+    const call = () => observeIntakePending({ localIntakeActive: () => options.local === true, processingActive: options.processing,
+      reservationActive() { reads++; return options.read(reads); }, isConfirmedBusy: error => confirmed.has(error),
+      now: () => clock, wait(milliseconds) { waits.push(milliseconds); clock += milliseconds; } });
+    let value, thrown, failed = false;
+    try { value = call(); } catch (error) { thrown = error; failed = true; }
+    return { value, thrown, failed, reads: () => reads, waits };
+  }
+  // An intake of this process and a batch in processing need no guard at all.
+  for (const options of [{ local: true, processing: false }, { local: true, processing: true }, { local: false, processing: true }]) {
+    const result = observe({ ...options, read() { throw busy(); } });
+    assert.strictEqual(result.failed, false); assert.strictEqual(result.value, options.local === true);
+    assert.strictEqual(result.reads(), 0); assert.deepStrictEqual(result.waits, []);
+  }
+  // Without processing the reservation decides, exactly as before.
+  for (const answer of [true, false]) {
+    const result = observe({ processing: false, read: () => answer });
+    assert.strictEqual(result.value, answer); assert.strictEqual(result.reads(), 1); assert.deepStrictEqual(result.waits, []);
+  }
+  for (const processing of [undefined, null, 1, 'true']) assert.strictEqual(observe({ processing, read: () => true }).reads(), 1);
+  // A guard kept for a moment is asked again outside any guard, ten milliseconds apart.
+  const brief = observe({ processing: false, read(attempt) { if (attempt <= 3) throw busy(); return true; } });
+  assert.strictEqual(brief.value, true); assert.strictEqual(brief.reads(), 4); assert.deepStrictEqual(brief.waits, [10, 10, 10]);
+  // A guard kept for longer still fails the poll, after about half a second and with the last refusal itself.
+  let last;
+  const kept = observe({ processing: false, read() { last = busy(); throw last; } });
+  assert.strictEqual(kept.failed, true); assert.strictEqual(kept.thrown, last);
+  assert.strictEqual(kept.waits.length, 50); assert.strictEqual(kept.reads(), 51);
+  // Only a confirmed refusal before the read qualifies: the same code from inside the read, a hard
+  // refusal and an uncoded failure are returned at once and never repeated.
+  for (const error of [Object.assign(new Error('OWNERSHIP_GUARD_BUSY'), { code: 'OWNERSHIP_GUARD_BUSY' }),
+    Object.assign(new Error('OWNERSHIP_GUARD_CLOSE_UNCONFIRMED'), { code: 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED' }), new Error('PRIVATE')]) {
+    const result = observe({ processing: false, read() { throw error; } });
+    assert.strictEqual(result.thrown, error); assert.strictEqual(result.reads(), 1); assert.deepStrictEqual(result.waits, []);
+  }
+  // Both status adapters take the answer from this observation and hand it the processing fact of the same scan.
+  const source = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/application-service.js'), 'utf8');
+  assert.strictEqual(source.split('intakeReservation.intakeReservationActive').length, 2, 'one reader, inside the observation');
+  assert.ok(source.includes('local_intake_pending: intakePending(recovery.batch_processing_active)'));
+  assert.ok(source.includes('local_intake_pending: intakePending(snapshot.recovery.batch_processing_active)'));
+  // The omission is sound only while every consumer combines the answer with the processing fact.
+  const uses = source.split('\n').filter(line => /\.local_intake_pending\b/.test(line) && !/^\s*local_intake_pending:/.test(line));
+  assert.strictEqual(uses.length, 10);
+  for (const line of uses) assert.ok(/started\.local_intake_pending/.test(line) || /current\.local_intake_pending === true;/.test(line) ||
+    /local_intake_pending \|\| \w+\.batch_processing_active/.test(line), line.trim());
+  assert.ok(source.includes('const preparing = intakePending && !processing;'));
+  assert.ok(source.includes('const processing = current.batch_processing_active === true || latest?.processing === true;'));
+});
+
 test('export abandonment uses a fresh action reader before any mutating leaf', () => {
   const batchId='e'.repeat(64);let projections=0,actions=0,writes=0;
   const refusal=Object.assign(new Error('invalid private source header'),{code:'STANDALONE_HISTORY_UNAVAILABLE'});

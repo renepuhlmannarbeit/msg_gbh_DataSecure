@@ -99,7 +99,16 @@ Folge: Eine beschädigte Pausenmarke eines entschiedenen Stapels lässt dessen
 Statusabfrage nicht mehr scheitern; sie bleibt unberührt und sperrt weiter jede
 Änderung und die Statusabfrage eines Stapels mit offener Datei. Die Haltezeit
 der Sperre selbst ist unverändert. `test-standalone-pause-control.js` prüft
-beide Fälle.
+beide Fälle. Die Statusabfrage brauchte die Sperre an einer zweiten Stelle:
+Für einen fortgesetzten Lauf prüft sie bei jeder Abfrage, ob eine Dateiannahme
+reserviert ist (`gateway/batch-intake-reservation.js`,
+`intakeReservationActive`), mit genau einem Versuch; am Laufende scheiterte sie
+daran sofort. `standalone/application-service.js` (`observeIntakePending`)
+lässt diese Prüfung jetzt aus, solange ein Stapel verarbeitet wird; jede Stelle,
+die das Ergebnis verwendet, verknüpft es mit genau dieser Angabe. Sonst fragt
+sie bei abgelehnter Sperre bis zu einer halben Sekunde erneut. Eine liegen
+gebliebene Reservierung räumt dadurch erst eine spätere Abfrage auf.
+`test-standalone.js` prüft die Beobachtung und die Form aller Verwendungen.
 
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor

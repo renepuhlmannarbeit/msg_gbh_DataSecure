@@ -36,6 +36,32 @@ const REVIEW_START_FAILURE_CODES = new Set(['LOCAL_REVIEW_START_MISSING',
   'LOCAL_REVIEW_START_DENIED', 'LOCAL_REVIEW_START_ARCHITECTURE', 'LOCAL_REVIEW_START_FAILED']);
 let standaloneStartup;
 
+// Whether an intake is open, as the status poll sees it. The reservation read
+// needs the ownership guard and makes one attempt. Two cases must not fail the
+// poll because of that (R-042):
+// - While a batch is being processed the answer cannot change any decision:
+//   every consumer combines it with batch_processing_active. The worker keeps
+//   the guard for long stretches at the end of a run, so the read is left out;
+//   a stale reservation is then cleaned up by a later poll instead.
+// - Otherwise a refused acquisition is asked again for a moment, outside any
+//   guard. Only a confirmed refusal BEFORE the read qualifies; the read itself
+//   and every other error are never repeated.
+const INTAKE_OBSERVATION_WAIT_MS = 500;
+function observeIntakePending(options) {
+  const now = options.now || (() => performance.now());
+  const wait = options.wait || (milliseconds => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds); });
+  if (options.localIntakeActive()) return true;
+  if (options.processingActive === true) return false;
+  const deadline = now() + INTAKE_OBSERVATION_WAIT_MS;
+  for (;;) {
+    try { return options.reservationActive(); }
+    catch (error) {
+      if (options.isConfirmedBusy(error) !== true || now() >= deadline) throw error;
+      wait(10);
+    }
+  }
+}
+
 function validateChoice(value, allowed, fallback) {
   const selected = value || fallback;
   if (!allowed.has(selected)) throw Object.assign(new Error('Ungültige lokale Auswahl.'), { code: 'STANDALONE_ARGUMENT_INVALID' });
@@ -213,6 +239,10 @@ function defaultDependencies(options = {}) {
   };
   const reviewBroker = require('./review-broker').createReviewBroker();
   const intakeReservation = require('../gateway/batch-intake-reservation');
+  const { isConfirmedOwnershipBusy } = require('../core/ownership-control');
+  const intakePending = processingActive => observeIntakePending({ processingActive,
+    localIntakeActive: batchExecutor.localIntakeActive, reservationActive: intakeReservation.intakeReservationActive,
+    isConfirmedBusy: isConfirmedOwnershipBusy });
   const documentReviews = require('../gateway/standalone-document-review-store').createDocumentReviewStore({
     nativeExport: options.nativeExport, prepareNativeBinding: options.prepareNativeBinding, controlOwnerPid: options.controlOwnerPid,
     controlOwnerGeneration: options.controlOwnerGeneration, retiredControlGenerations: options.retiredControlGenerations });
@@ -311,10 +341,11 @@ function defaultDependencies(options = {}) {
     // full fail-closed readiness transaction; this probe reads only live
     // intake activity and durable batch journals.
     lightweightStatus() {
+      const recovery = recoverableBatchStatus();
       return {
         engine_ready: true,
-        local_intake_pending: batchExecutor.localIntakeActive() || intakeReservation.intakeReservationActive(),
-        ...recoverableBatchStatus()
+        local_intake_pending: intakePending(recovery.batch_processing_active),
+        ...recovery
       };
     },
     publicStatusSnapshot(selectedBatchId) {
@@ -323,7 +354,7 @@ function defaultDependencies(options = {}) {
       return Object.freeze({
         current: Object.freeze({
           engine_ready: true,
-          local_intake_pending: batchExecutor.localIntakeActive() || intakeReservation.intakeReservationActive(),
+          local_intake_pending: intakePending(snapshot.recovery.batch_processing_active),
           ...snapshot.recovery
         }),
         latest: snapshot.latest,
@@ -1679,5 +1710,6 @@ class StandaloneApplicationService {
 
 module.exports = {
   StandaloneApplicationService, SOURCE_KINDS, PROFILES, PRODUCT_CHANNEL,
-  standaloneDataRoot, defaultResultRoot, activateStandaloneNamespace, defaultDependencies
+  standaloneDataRoot, defaultResultRoot, activateStandaloneNamespace, defaultDependencies,
+  observeIntakePending
 };
