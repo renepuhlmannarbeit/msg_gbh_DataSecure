@@ -135,9 +135,9 @@ behoben`, `offen`, `Hypothese` (nicht reproduziert), `verworfen`.
 | R-037 | niedrig | Tests und Orakel, alle | Drei Testhelfer fragen den Ergebnisordner direkt nach dem gemeldeten Laufende ab und lassen als Antwort nur „fehlt noch“ und „Veröffentlichung läuft noch“ zu. Der Arbeitsprozess nimmt die Sperre der Dokumentkontrolle kurz nach dem gemeldeten Ende noch einmal für rund 50 ms; trifft die Abfrage diese Zeit, antwortet der Core wie vorgesehen `STANDALONE_BUSY`, und die Suite bricht ab. Am 27.11. abends nachgestellt (drei von drei Durchgängen, wenn die Abfrage direkt beim gemeldeten Ende kommt). Core und Test sind seit RC178 unverändert. | BL-050.6 | behoben in `e89069eb` (nur Testcode): Die drei Helfer lassen `STANDALONE_BUSY` zu und bleiben an ihre Frist gebunden |
 | R-038 | mittel | Fachlichkeit und Plattform, Standalone Windows (Core-Teil auch Cowork) | Ein Ergebnisordner im Netzwerk wird abgelehnt, obwohl `PRODUCT.md` ihn ausdrücklich erlaubt: über den UNC-Pfad von der Hülle (sie lässt nur Laufwerksbuchstaben zu), über einen zugeordneten Laufwerksbuchstaben vom Core (Windows löst ihn zum UNC-Namen auf). Die Meldung nennt den Grund nicht; der Hinweis aus R-035 ist in Standalone unter Windows nicht erreichbar. Nativ beobachtet; in RC178 gleich. | BL-002, BL-040.5 (DS-080) | Ablehnung bleibt nach Entscheidung des Anwenders; Meldung nennt die mögliche Ursache und Produktaussage für Standalone unter Windows eingeschränkt (`8a167b09`). Netzordner zu unterstützen bleibt offen |
 | R-039 | hoch | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Öffnet der Anwender im Verlauf den Ergebnisordner eines fertigen Laufs, während ein anderer Lauf arbeitet, kann die Sperre der Dokumentkontrolle hängen bleiben: Die Abfrage nimmt die Sperre, kann sie nach 185 ms vergeblicher Versuche nicht freigeben und lässt sie stehen. Danach antworten jede weitere Abfrage und auch „Fortsetzen“ mit „Ein lokaler Vorgang ist bereits aktiv. Bitte warten.“, und der laufende Stapel bleibt stehen (im ersten Versuch bei 65 von 80 Dateien). Erst ein Neustart der App löst die Sperre. Zweimal in zwei Versuchen beobachtet, beim vierten und beim zehnten Klick. Kein Datenverlust, Originale unverändert. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | behoben in `8ff4979a`: Die Freigabe wartet rund zwei Sekunden und fragt danach mit derselben Berechtigung bis zu zehn Minuten weiter; in der echten App nachgeprüft. Offen bleiben die Stapelsperre gleicher Bauart (R-041) und „Bitte warten“ beim gewöhnlichen Wettbewerb |
-| R-040 | mittel | Oberfläche und Zustandsmodell; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Nach der letzten Datei stellt der Arbeitsprozess die Ergebnisse bereit (bei 80 kleinen Textdateien rund 20 Sekunden in „Nur umwandeln“, rund zwei Minuten beim Anonymisieren). In dieser Zeit heißt der Lauf „Wird vorbereitet“, der Verlauf bietet „Bereitstellung erneut prüfen“ an (ein Klick darauf meldet „Die Bereitstellung konnte nicht bestätigt werden“), und Schließen führt zur Rückfrage „Die Dateien werden gerade vorbereitet“. Kein Datenverlust. Zustand und Schaltfläche sind in RC178 gleich; der Satz der Rückfrage stammt aus `5f670a20` dieses Reviews. | BL-010.13 (DS-086), BL-010.14 (DS-110) | offen; Entscheidung des Anwenders steht aus |
-| R-041 | niedrig | Nebenläufigkeit und Betrieb; Standalone (Core, dem Code nach alle Ziele mit nativer Sperre) | Die Stapelsperre gibt ihre Freigabe nach 185 ms vergeblicher Versuche auf (dieselbe Bauart wie R-039 vor der Behebung). Der Arbeitsprozess beendet dann den Lauf; der nächste Prozess übernimmt den liegen gebliebenen Eintrag, ein Neustart ist nicht nötig. Nur in einer Probe mit der echten Betriebssystemsperre aufgetreten (16 von 77 Freigaben, wenn ein dritter Prozess die Sperre zu 75 % belegt; 0 von 88 mit den Abfragen des Core allein), in der echten App nie. In RC178 ist der Code derselbe. | BL-010.14, BL-050.6 | offen; Entscheidung des Anwenders steht aus |
-| R-042 | mittel | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele mit nativer Sperre) | Am Ende eines Anonymisierungslaufs mit 80 Dateien scheitern die Statusabfragen über eine Minute lang, jede nach fünf Sekunden Wartezeit auf die Betriebssystemsperre (in zwei von zwei Läufen elf Abfragen nacheinander, rund 69 Sekunden). Die Anzeige bleibt solange bei „79 von 80“ stehen, ohne Hinweis; in der Wartezeit beantwortet der Core keine andere Anfrage. Der Lauf endet regulär. In „Nur umwandeln“ dauert dieselbe Stelle einmal je Lauf rund zwei Sekunden. Welcher Schritt des Arbeitsprozesses die Sperre hält, ist nicht bestimmt. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | offen; Entscheidung des Anwenders steht aus |
+| R-040 | mittel | Oberfläche und Zustandsmodell; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele) | Nach der letzten Datei stellt der Arbeitsprozess die Ergebnisse bereit (bei 80 kleinen Textdateien rund 20 Sekunden in „Nur umwandeln“, rund zwei Minuten beim Anonymisieren). In dieser Zeit heißt der Lauf „Wird vorbereitet“, der Verlauf bietet „Bereitstellung erneut prüfen“ an (ein Klick darauf meldet „Die Bereitstellung konnte nicht bestätigt werden“), und Schließen führt zur Rückfrage „Die Dateien werden gerade vorbereitet“. Kein Datenverlust. Zustand und Schaltfläche sind in RC178 gleich; der Satz der Rückfrage stammt aus `5f670a20` dieses Reviews. | BL-010.13 (DS-086), BL-010.14 (DS-110) | behoben in `8399045b` und `8369f727`: Der Core meldet die laufende Bereitstellung; die Oberfläche benennt sie, bietet für diesen Lauf weder Reparatur noch Aufgeben noch eine neue Verarbeitung an und fragt beim Schließen passend. In der echten App nachgeprüft, auch nach Pause und Fortsetzen. Grenzen im Nachtrag vom 27.11. spätnachts |
+| R-041 | niedrig | Nebenläufigkeit und Betrieb; Standalone (Core, dem Code nach alle Ziele mit nativer Sperre) | Die Stapelsperre gibt ihre Freigabe nach 185 ms vergeblicher Versuche auf (dieselbe Bauart wie R-039 vor der Behebung). Der Arbeitsprozess beendet dann den Lauf; der nächste Prozess übernimmt den liegen gebliebenen Eintrag, ein Neustart ist nicht nötig. Nur in einer Probe mit der echten Betriebssystemsperre aufgetreten (16 von 77 Freigaben, wenn ein dritter Prozess die Sperre zu 75 % belegt; 0 von 88 mit den Abfragen des Core allein), in der echten App nie. In RC178 ist der Code derselbe. | BL-010.14, BL-050.6 | behoben in `2795fa32`: Die Freigabe wartet rund zwei Sekunden statt 185 ms. Länger belegt, stoppt der Lauf wie zuvor |
+| R-042 | mittel | Nebenläufigkeit und Betrieb; Standalone, nativ unter Windows beobachtet (Core, dem Code nach alle Ziele mit nativer Sperre) | Am Ende eines Anonymisierungslaufs mit 80 Dateien scheitern die Statusabfragen über eine Minute lang, jede nach fünf Sekunden Wartezeit auf die Betriebssystemsperre (in zwei von zwei Läufen elf Abfragen nacheinander, rund 69 Sekunden). Die Anzeige bleibt solange bei „79 von 80“ stehen, ohne Hinweis; in der Wartezeit beantwortet der Core keine andere Anfrage. Der Lauf endet regulär. In „Nur umwandeln“ dauert dieselbe Stelle einmal je Lauf rund zwei Sekunden. Welcher Schritt des Arbeitsprozesses die Sperre hält, ist nicht bestimmt. In RC178 ist der Code derselbe. | BL-010.13 (DS-086), BL-050.6 | offen. Eingegrenzt: Dem Code nach hält der Abschlussnachweis die Sperre, rund 0,86 Sekunden je Datei; nicht instrumentiert. Entscheidung des Anwenders steht aus |
 
 ## Einzelbefunde
 
@@ -3215,7 +3215,9 @@ Planen 45,7 s, Kopieren 18,7 s).
   es dort genauso. Die Rückfrage beim Schließen stammt aus diesem Review
   (`5f670a20`, 25.11.); davor schloss das Fenster in diesem Zeitraum sofort.
   Der unpassende Satz der Rückfrage ist also ein Fehler meiner Änderung.
-- **Status:** offen, nichts geändert.
+- **Status am 27.11. nachts:** offen, nichts geändert.
+- **Nachtrag:** behoben in `8399045b` und `8369f727`, siehe „Nachtrag vom
+  27.11. spätnachts · R-040 und R-041 behoben, R-042 eingegrenzt“.
 
 ### R-042 · Am Ende eines Anonymisierungslaufs scheitern die Statusabfragen, die Anzeige bleibt stehen
 
@@ -3272,7 +3274,9 @@ Anonymisierungslauf ist ihre Folge größer als dort gesehen.
   `v3.2.0-rc178` unverändert.
 - **Berichtigung:** Die Aussage der siebzehnten Übergabe, die Statusabfrage
   laufe im Core ohne Warten ab, war falsch.
-- **Status:** offen, nichts geändert.
+- **Status am 27.11. nachts:** offen, nichts geändert.
+- **Nachtrag:** weiter offen; der Schritt ist eingegrenzt, siehe „Nachtrag
+  vom 27.11. spätnachts“.
 
 ### R-041 · Stapelsperre gibt die Freigabe nach 185 ms auf, der Lauf stoppt dann
 
@@ -3333,10 +3337,13 @@ frei.
   fiel die Freigabe immer in dieselbe Phase des Gegenspielers, und keine
   von 58 scheiterte. Erst mit zufälliger Arbeitszeit zeigt sich die Quote
   oben.
-- **Status:** offen, nichts geändert. Zwei Tests und eine native Prüfung
-  schreiben die vier Pausen fest (`tests/test-batch-epoch-release-busy.js`,
+- **Status am 27.11. nachts:** offen, nichts geändert. Zwei Tests und eine
+  native Prüfung schrieben die vier Pausen fest
+  (`tests/test-batch-epoch-release-busy.js`,
   `tests/test-batch-review-orchestrator.js`,
   `tests/test-native-ownership-epoch-release.js`).
+- **Nachtrag:** behoben in `2795fa32`, siehe „Nachtrag vom 27.11.
+  spätnachts“.
 
 ### Berichtigungen zur siebzehnten Übergabe
 
@@ -3383,6 +3390,197 @@ frei.
   unterbrochen im Verlauf steht und sich fortsetzen lässt, ist aus dem Code
   gelesen und nicht in der App beobachtet.
 - **macOS** nicht ausgeführt.
+
+## Nachtrag vom 27.11. spätnachts · R-040 und R-041 behoben, R-042 eingegrenzt
+
+Auftrag des Anwenders: „Ja, wie empfohlen“, also R-040 und R-041 beheben und
+die Ursache von R-042 eingrenzen. Commits `2795fa32` (R-041) und `8399045b`
+(R-040); R-042 ist nicht geändert.
+
+### R-042 · Eingrenzung: Der Abschlussnachweis hält die Sperre
+
+- **Vorgehen:** Lauf (f), „Anonymisieren“ mit 40 erfundenen Textdateien. Ein
+  zweiter Prozess zeichnet auf, welche Dateinamen sich im Datenordner des
+  Testprofils ändern; er öffnet keine Datei. Dazu das Protokoll des Core.
+- **Dauer wächst mit der Dateizahl:** Bei 40 Dateien scheitern fünf
+  Statusabfragen nacheinander (348,9 bis 373,9 s nach dem Start), die
+  nächste gelingt nach 2 957 ms; die Sperre ist rund 34 Sekunden belegt.
+  Bei 80 Dateien waren es elf Abfragen und rund 69 Sekunden. Das sind in
+  beiden Fällen rund 0,86 Sekunden je Datei. Zwei Messpunkte; bei 1 000
+  Dateien wären es rechnerisch rund 14 Minuten.
+- **Was in dieser Zeit geschieht:** Im Datenordner ändert sich 33 Sekunden
+  lang nur die Sperre der Dokumentkontrolle
+  (`document-reviews\control.lock`): rund zehn Sperrzyklen je Sekunde, ohne
+  Unterbrechung. Unmittelbar davor und unmittelbar danach wird die
+  vertrauliche Identitätszuordnung des Laufs neu geschrieben; sie entsteht
+  bei jedem Schreiben eines vollständig entschiedenen Laufzustands
+  (`gateway/batch.js:212-228`). Zwischen diesen beiden Schreibvorgängen
+  liegt also genau ein Arbeitsschritt.
+- **Welcher Schritt das dem Code nach ist:** der Abschlussnachweis. Nach der
+  letzten Datei ruft die Verarbeitung `writeTerminalEvidence`
+  (`gateway/batch-processing-orchestrator.js:69-79`). Der Nachweis entsteht
+  in `createBoundRecord` (`gateway/batch-terminal-evidence.js:87-94`,
+  Aufruf `:145-152`), und das prüft jedes Ergebnis dreimal gegen seine
+  veröffentlichte Fassung: einmal vor dem Erstellen, einmal beim Erstellen,
+  einmal danach (`captureIdentities`, `:67-77`). Jede Prüfung liest über die
+  Dokumentkontrolle, synchron und ohne Pause; für andere Prozesse bleibt
+  dazwischen keine Lücke.
+- **Nicht belegt:** Ich habe die Stelle nicht instrumentiert. Die Zuordnung
+  beruht auf der Reihenfolge der Schreibvorgänge und auf dem Code.
+- **In der Bereitstellung danach** laufen dieselben Sperrzyklen weiter;
+  dort gelingen die Statusabfragen bis auf eine (40 Dateien) oder zwei (80
+  Dateien).
+- **Weitere Beobachtung, altes und neues Paket gleich:** Nach Pause und
+  Fortsetzen scheitern während der weiteren Verarbeitung 18 (Lauf g) und
+  19 (Lauf n3) Statusabfragen sofort, nach 75 bis 330 ms, mit derselben
+  Meldung; das ist rund jede fünfte. Die Anzeige holt beim nächsten Takt
+  auf. Nicht untersucht.
+- **Ansatzpunkte für eine Behebung, nicht umgesetzt:** (a) die
+  Statusabfrage liest die Pausenmarke ohne die Betriebssystemsperre oder
+  wartet nicht blockierend; (b) der Abschlussnachweis prüft einmal statt
+  dreimal oder gibt die Sperre zwischen zwei Dokumenten ab; (c) die Anzeige
+  nennt den Schritt. Alle drei berühren den Besitzschutz oder die
+  Nachweisführung; Entscheidung.
+
+### R-040 · Behebung
+
+- **Erste Fassung, verworfen:** nur die Oberfläche, mit der Regel „Zustand
+  `preparing` und alle Dokumente entschieden“. Die unabhängige Gegenprüfung
+  hat gezeigt, dass das nur neue Läufe trifft.
+- **Kontrolllauf am alten Paket** (Lauf g, `5f347413…`): Ein Lauf wird nach
+  acht Dateien pausiert und fortgesetzt. Nach der letzten Datei heißt die
+  Laufkarte „Bereitstellung offen“ und bietet „Bereitstellung im Verlauf
+  prüfen“ und „Neue Verarbeitung“ an. Schließen 1,8 Sekunden später beendet
+  die App ohne Rückfrage. Die Bereitstellung lief ohne Fenster weiter; 20
+  Sekunden später lagen alle 81 Markdown-Dateien im Ergebnisordner.
+- **Ursache dafür:** Nur ein neu gestarteter Lauf hält eine offene Annahme
+  (`gateway/batch-executor.js:644-688`). Ein fortgesetzter hat keine; sein
+  Zustand heißt in der Bereitstellung `export_pending`.
+- **Umgesetzt im Core** (`standalone/application-service.js`, `status`): Die
+  Statusantwort trägt `delivering: true`, wenn der beobachtete Lauf
+  vollständig entschieden ist, der Zustand `preparing` oder
+  `export_pending` lautet und entweder die Annahme noch offen ist oder ein
+  Arbeitsprozess dieses Core noch lebt. Die Zustandsnamen sind unverändert;
+  die Hülle wertet für die Annahme neuer Dateien weiter nur sie aus
+  (`main.rs:482-510`).
+- **Umgesetzt in der Oberfläche** (`frontend/workspace.js`), jeweils nur bei
+  diesem Merkmal und nur, wenn der Lauf mindestens ein Ergebnis haben kann:
+  - Laufkarte: Titel „Ergebnisse werden bereitgestellt“, Text „Alle Dateien
+    sind verarbeitet. Die Ergebnisse werden jetzt im Ergebnisordner
+    bereitgestellt; er ist erst danach vollständig. Bitte warten.“ Keine
+    Schaltflächen für das Prüfen oder Aufgeben der Bereitstellung und keine
+    für eine neue Verarbeitung.
+  - Verlaufszeile dieses Laufs: derselbe Titel, ein Satz dazu, weder
+    „Bereitstellung erneut prüfen“ noch „Unvollständige Bereitstellung
+    aufgeben …“. Die Zeile wird neu gezeichnet, wenn die Bereitstellung
+    beginnt oder endet.
+  - Schließen: Rückfrage „Dieser Lauf lässt sich gerade nicht pausieren.
+    Alle Dateien sind verarbeitet. Die Ergebnisse werden gerade im
+    Ergebnisordner bereitgestellt; dabei ist keine Pause möglich. Warte
+    kurz und schließe dann erneut.“, danach der bisherige Satz zum
+    Schließen ohne Fenster.
+  - Endet der Arbeitsprozess mit offener Bereitstellung, erscheinen die
+    bisherigen Schaltflächen wieder.
+- **Tests:** `tests/test-standalone.js` (ein neuer Test, 92 gesamt; am Core
+  von `3137077f` rot): neuer Lauf, fortgesetzter Lauf, beendeter
+  Arbeitsprozess und fünf Fälle ohne Bereitstellung.
+  `tests/test-standalone-workspace.js` (drei neue Tests, 552 gesamt):
+  Laufkarte, Verlaufszeile, Rückfrage, je für beide Zustandsnamen. An der
+  Oberfläche von `3137077f` schlägt der erste fehl; danach bricht die Datei
+  ab, die beiden anderen sind am alten Stand nicht einzeln gelaufen.
+- **In der echten App** (Paket `41429878…`, Build `cdef0dc3`):
+  - Neuer Lauf, Laufkarte (n1): Titel „Ergebnisse werden bereitgestellt“,
+    nur „Weitere Aktionen“. Drei Schließversuche zwischen 1,6 und 14,2 s
+    zeigen die neue Rückfrage; der vierte nach 20,7 s schließt.
+  - Neuer Lauf, Verlauf (n2): 19,1 Sekunden lang keine Schaltfläche
+    „Bereitstellung erneut prüfen“; danach „Ergebnisordner öffnen“.
+  - Fortgesetzter Lauf, Laufkarte (n3): derselbe Titel, keine Schaltfläche
+    zum Prüfen der Bereitstellung, keine für eine neue Verarbeitung. Vier
+    Schließversuche zwischen 1,6 und 20,1 s zeigen die Rückfrage; der
+    fünfte nach 26,6 s schließt.
+  - „Anonymisieren“ mit 40 Dateien, Verlauf (n4): Die Zeile heißt 59,6
+    Sekunden lang „Ergebnisse werden bereitgestellt“ ohne Schaltfläche zum
+    Prüfen; danach „Anonymisierungslauf abgeschlossen“. In den ersten 1,6
+    Sekunden stand dort noch „Bereitstellung offen“ mit der Schaltfläche:
+    Der Verlauf kannte den entschiedenen Lauf einen Statustakt früher als
+    der Status.
+  - Nachgebessert in `8369f727`: Ein Lauf, den der letzte Status noch in
+    Verarbeitung sah, bekommt ebenfalls keine Reparatur angeboten. Im
+    Kontrolllauf am Paket `aa93cefb…`, Build `d5e7df68` (n6, „Nur
+    umwandeln“, Verlauf) steht der neue Titel ab der ersten Anzeige von
+    „80 von 80“, 20,9 Sekunden lang, ohne die Schaltfläche.
+  - „Trotzdem schließen“ (n5): Rückfrage mit dem neuen Satz; nach
+    „Trotzdem schließen“ endet die App in 0,4 Sekunden. Der Arbeitsprozess
+    läuft weiter, die Markdown-Dateien im Ergebnisordner wachsen in 15
+    Sekunden von 1 auf 81, dann endet er. Nach dem Neustart mit demselben
+    Testprofil zeigt der Verlauf den Lauf mit „80 Markdown-Dateien“ und
+    „Ergebnisordner öffnen“.
+
+### R-041 · Behebung
+
+- **Umgesetzt:** `gateway/batch-lock-release.js` wartet bei belegter
+  Betriebssystemsperre durch 22 Pausen, zusammen 1 985 ms, statt durch vier
+  mit 185 ms. Keine Fortsetzung im Hintergrund: Der Eintrag gehört einem
+  Arbeitsprozess und wird nach dessen Ende übernommen (A-064).
+- **Gemessen mit der echten Betriebssystemsperre**, ein dritter Prozess
+  belegt sie zu 75 %, je 40 Sekunden, zwei Durchgänge: alt 14 von 80 und 12
+  von 82 Freigaben gescheitert, neu 0 von 68 und 0 von 64 (längste Freigabe
+  1 315 ms, 15 Versuche). Belegt zu 86 %: neu 0 von 51.
+- **Grenze gemessen:** Ist die Sperre vier Sekunden am Stück belegt,
+  scheitert die Freigabe nach 2 187 ms und 23 Versuchen wie zuvor; der
+  nächste Prozess übernimmt den Eintrag.
+- **Tests:** `tests/test-batch-epoch-release-busy.js` (21),
+  `tests/test-batch-review-orchestrator.js` (47) und die native Prüfung
+  `tests/test-native-ownership-epoch-release.js` (jetzt 280 Prüfungen statt
+  190) erwarten die neue Folge. Die Fälle „viermal belegt, dann frei“ sind
+  unverändert gültig.
+
+### Unabhängige Gegenprüfung
+
+Ein Read-only-Prüfer hat die erste Fassung gelesen. Seine Punkte und was
+daraus wurde:
+
+| Punkt des Prüfers | Ergebnis |
+| --- | --- |
+| Die Behebung von R-040 trifft keinen fortgesetzten Lauf. | Im Kontrolllauf bestätigt; Core und Oberfläche erweitert (oben). |
+| Ein Lauf ganz ohne Ergebnis hieße kurz „Ergebnisse werden bereitgestellt“. | Die Oberfläche nimmt diesen Fall aus; er behält die bisherige Anzeige. |
+| Kein Test hält die Meldung des Core fest, auf der alles beruht. | Core-Test ergänzt. |
+| Zwei Erwartungen der alten Pausenfolge stehen noch in den Tests. | Geprüft: Es sind die Fälle „viermal belegt, dann frei“; sie gelten weiter. |
+| Die Tests zu R-041 prüfen die Folge, keine echte Zeit. | Stimmt. Die echte Zeit steht in der Messung oben, nicht in einem Test. |
+| R-041 ist nur gelindert: Länger als zwei Sekunden belegt, stoppt der Lauf weiter. | Stimmt, so entschieden; gemessen (oben). |
+| Wird ein anderer Lauf mit offener Bereitstellung beobachtet, während ein Arbeitsprozess lebt, gilt er als „in Bereitstellung“. | Nicht behoben. Der Core weiß nicht, zu welchem Lauf ein Arbeitsprozess gehört. Folge: Für diesen Lauf fehlt die Reparatur, bis der Arbeitsprozess endet. Nicht nachgestellt. |
+| Bleibt eine ungültige Annahme-Reservierung liegen, hieße ein entschiedener Lauf dauerhaft „in Bereitstellung“. | Nicht behoben und nicht nachgestellt. Vorher stand in diesem Fall dauerhaft „Wird vorbereitet“. |
+| Während der scheiternden Statusabfragen (R-042) erscheint die neue Anzeige nicht. | Stimmt für den Abschnitt vor „80 von 80“; die Bereitstellung selbst ist davon kaum betroffen. R-042 bleibt offen. |
+
+### Eigene Fehler dieser Runde
+
+- Meine erste Fassung der Behebung von R-040 deckte den fortgesetzten Lauf
+  nicht ab; ich hatte das als Grenze notiert, statt es zu prüfen.
+- Der Prüfer erreichte sein Limit, bevor er berichtete; ich habe den Bericht
+  nachgefordert.
+- Ein Hilfsskript verlor wieder einen Rückstrich (ein Suchmuster in einem
+  Test); vor dem Commit berichtigt.
+- Nach der Startprobe habe ich ihren Nachweisordner gelöscht, während die
+  Probe noch auf das Ende der App wartete. Die Messung war da schon
+  abgeschlossen und gemeldet, die Probe endete mit Exitcode 0.
+- Die neun Testprofile vom 25. und 26.11., die ich bisher „ältere Ordner“
+  genannt habe, sind leere Gerüste ohne eine einzige Datei. Solche legt
+  einer der gezielt ausgeführten Tests an; in dieser Runde entstanden
+  weitere, die ich entfernt habe.
+
+### Grenzen
+
+- **R-042 ist offen.** Am Ende eines Anonymisierungslaufs steht die Anzeige
+  weiter rund 0,86 Sekunden je Datei.
+- **Nach einem Neustart der App** bei noch laufendem Arbeitsprozess kennt
+  der Core diesen nicht; dort gilt die bisherige Anzeige. Nicht geprüft.
+- **Ein Lauf ohne ein einziges Ergebnis** behält die bisherige Anzeige.
+- **Die Schaltfläche zum Aufgeben** liegt unter „Weitere Aktionen“; dass sie
+  während der Bereitstellung fehlt, ist nur im Test geprüft, nicht in der
+  App.
+- **Geprüft** sind 80 und 40 kleine Textdateien unter Windows, Bedienung
+  über die Automationsschnittstelle. Größere Stapel, andere Formate, die
+  geführte Prüfung und macOS nicht.
 
 ## Annahmen und Revalidierung
 
@@ -3452,6 +3650,9 @@ frei.
 | A-063 | Eine feste Arbeitszeit in der Probe der Stapelsperre verfälscht die Quote nicht. | Erste Messung: 0 von 58 Freigaben gescheitert. | Arbeitszeit und Takt des Gegenspielers waren beide fest; die Freigabe fiel immer in dieselbe Phase. | Wiederholung mit zufälliger Arbeitszeit (40 bis 440 ms) | Widerlegt. Mit zufälliger Arbeitszeit 16 von 77. |
 | A-064 | Eine liegen gebliebene Stapelsperre blockiert wie bei R-039 bis zum Neustart der App. | Gleiche Bauart der Freigabe. | Der Eintrag trägt die Nummer des Arbeitsprozesses, und der endet nach dem Fehler; verwaiste Einträge werden übernommen (`gateway/batch-active-lock.js:369-377`). | Probe: neuer Prozess nimmt die Sperre nach dem Ende des ersten | Widerlegt. Der Lauf stoppt, die Sperre nicht. |
 | A-065 | Die Statusabfrage läuft im Core ohne Warten ab; die lange Antwort am Laufende kommt nicht aus ihr (so die siebzehnte Übergabe). | `status` in `application-service.js` ist synchron und enthält keine Wartezeit. | Sie ruft den Fortschritt des Stapels ab, und der liest die Pausenmarke unter der Betriebssystemsperre mit bis zu fünf Sekunden blockierender Wartezeit (`gateway/standalone-pause.js:90-114`). | Aufrufkette gelesen; Protokoll des Core in Lauf d: elf Abfragen je rund 5 050 ms | Widerlegt. Daraus wurde R-042. |
+| A-066 | Zustand `preparing` zusammen mit „alle Dokumente entschieden“ erkennt jede laufende Bereitstellung (erste Fassung der Behebung von R-040). | So war es in fünf Läufen beobachtet. | Ein fortgesetzter Lauf hält keine offene Annahme; sein Zustand lautet in der Bereitstellung `export_pending`. | unabhängige Gegenprüfung; Kontrolllauf am alten Paket (Pause, Fortsetzen) | Widerlegt. Der Core meldet die Bereitstellung jetzt selbst, für beide Zustände. |
+| A-067 | Schließt man während der Bereitstellung trotzdem, läuft sie ohne Fenster zu Ende (so sagt es die Rückfrage). | Der Arbeitsprozess ist ein eigener Prozess. | Die Hülle könnte ihn mit beenden; dann bliebe ein halber Ergebnisordner bis zum nächsten Start. | zwei Läufe: fortgesetzter Lauf am alten Paket, neuer Lauf am neuen Paket | Bestätigt in zwei Läufen: 81 von 81 Dateien, Arbeitsprozess endet von selbst, der Verlauf zeigt den Lauf nach dem Neustart fertig. Nur „Nur umwandeln“, nur Windows. |
+| A-068 | Der Schritt, der am Ende eines Anonymisierungslaufs die Sperre hält, ist der Abschlussnachweis. | Zwischen zwei Schreibvorgängen des Laufzustands ändert sich nur die Sperre der Dokumentkontrolle; dem Code nach liegt dazwischen `createBoundRecord`. | Ein anderer Schritt, der ebenfalls nur über die Dokumentkontrolle liest, sähe von außen gleich aus. | Aufzeichnung der Dateinamen im Datenordner; Code gelesen | Nicht widerlegt, nicht instrumentiert. Die Dauer je Datei ist gemessen, die Zuordnung zur Funktion ist ein Schluss. |
 | A-014 | Die Änderungen der zweiten Runde verlangsamen den Datenschutzkern nicht messbar. | Zusätzliche Muster sind linear. | Die Linkprüfung läuft je Link und je Person. | Vorher-nachher-Messung an drei Texten | Bestätigt für 109 KB und 328 KB Prosa sowie einen bewusst ungünstigen Text; der Kern skaliert unabhängig davon überlinear. |
 
 ## Plan vor der Umsetzung

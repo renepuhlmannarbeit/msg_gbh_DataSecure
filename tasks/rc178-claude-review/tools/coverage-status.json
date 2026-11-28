@@ -189,7 +189,9 @@
     },
     "plugins/data-secure/server/gateway/standalone-pause.js": {
       "symbolStatus": "TEILGEPRÜFT",
-      "findings": [],
+      "findings": [
+        "R-042"
+      ],
       "remark": "im Laufzeit-Review nur teilweise gelesen (bis Z. 157); Einheiten außerhalb sind faktisch offen"
     },
     "plugins/data-secure/server/standalone/convert-next.js": {
@@ -251,6 +253,13 @@
       "symbolStatus": "TEILGEPRÜFT",
       "findings": [],
       "remark": "Datei im R-040-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
+    },
+    "plugins/data-secure/server/gateway/batch-terminal-evidence.js": {
+      "symbolStatus": "TEILGEPRÜFT",
+      "findings": [
+        "R-042"
+      ],
+      "remark": "Datei im R-042-Review vollständig gelesen; kein Einzelurteil je Einheit festgehalten"
     },
     "plugins/data-secure/server/document-parser.js": {
       "symbolStatus": "TEILGEPRÜFT",
@@ -815,6 +824,16 @@
           "R-032"
         ],
         "remark": "neu in d41a042b; ersetzt markWorkStarting aus 2ce74b9f, das ein während des Befehls gelesener Status löste"
+      },
+      "delivering": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "laufende Bereitstellung der Ergebnisse erkennen; Aufrufer Laufkarte, Verlaufszeile, Rückfrage beim Schließen",
+        "trust": "Statusantwort des Core (delivering, selected_count, failed_count)",
+        "evidence": "tests/test-standalone-workspace.js (drei Tests zu R-040); sechs native Läufe",
+        "findings": [
+          "R-040"
+        ],
+        "remark": "neu in 8399045b; nur unter Windows ausgeführt"
       }
     },
     "plugins/data-secure/server/privacy/engine.js": {
@@ -1594,6 +1613,19 @@
           "R-039"
         ],
         "remark": "geändert in 8ff4979a; nur unter Windows ausgeführt"
+      }
+    },
+    "plugins/data-secure/server/gateway/batch-lock-release.js": {
+      "releaseOwnedEpochWithBusyRetry": {
+        "status": "GEPRÜFT",
+        "purpose": "Stapelsperre mit der erfassten Berechtigung freigeben; Aufrufer batch-processing-orchestrator.js und batch-review-orchestrator.js, beide in Arbeitsprozessen",
+        "invariant": "nur OWNERSHIP_GUARD_BUSY wird wiederholt, durch 22 Pausen (1 985 ms); immer dieselbe Berechtigung; falsch und harte Ablehnung beenden sofort",
+        "trust": "Berechtigung vom Aufrufer; Antworten der Betriebssystemsperre",
+        "evidence": "tests/test-batch-epoch-release-busy.js, tests/test-batch-review-orchestrator.js, tests/test-native-ownership-epoch-release.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu",
+        "findings": [
+          "R-041"
+        ],
+        "remark": "geändert in 2795fa32; nur unter Windows ausgeführt"
       }
     }
   },

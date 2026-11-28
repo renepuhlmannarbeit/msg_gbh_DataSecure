@@ -84,6 +84,9 @@ files[`${srv}gateway/batch-executor.js`].findings = ['R-022', 'R-040'];
 files[`${srv}gateway/batch-lock-release.js`] = { ...files[`${srv}gateway/batch-lock-release.js`], findings: ['R-039', 'R-041'] };
 files[`${srv}gateway/batch-processing-orchestrator.js`].findings = ['R-041'];
 files[`${srv}gateway/batch-executor-runner.js`].findings = ['R-041'];
+// Neunzehnte Übergabe: Abschlussnachweis und Pausenmarke (R-042), von der Hauptsession gelesen.
+full('R-042', [`${srv}gateway/batch-terminal-evidence.js`], ['R-042']);
+files[`${srv}gateway/standalone-pause.js`].findings = ['R-042'];
 
 full('Konvertierungs', ['document-parser.js', 'standalone/markdown-extractor.js', 'standalone/markdown-contract.js',
   'standalone/markdown-output-profile.js', 'standalone/readable-markdown.js', 'standalone/conversion-feedback.js',
@@ -447,6 +450,18 @@ for (const [name, purpose, invariant] of [
 ]) sym(`${srv}gateway/standalone-document-control.js`, name, { purpose, invariant,
   trust: 'Sperrobjekt und Laufkennung vom Prüfspeicher; Antworten der Betriebssystemsperre',
   evidence: controlEvidence, findings: ['R-039'], remark: 'geändert in 8ff4979a; nur unter Windows ausgeführt' });
+// Neunzehnte Übergabe: Freigabe der Stapelsperre (R-041) und Anzeige der Bereitstellung (R-040).
+sym(`${srv}gateway/batch-lock-release.js`, 'releaseOwnedEpochWithBusyRetry', {
+  purpose: 'Stapelsperre mit der erfassten Berechtigung freigeben; Aufrufer batch-processing-orchestrator.js und batch-review-orchestrator.js, beide in Arbeitsprozessen',
+  invariant: 'nur OWNERSHIP_GUARD_BUSY wird wiederholt, durch 22 Pausen (1 985 ms); immer dieselbe Berechtigung; falsch und harte Ablehnung beenden sofort',
+  trust: 'Berechtigung vom Aufrufer; Antworten der Betriebssystemsperre',
+  evidence: 'tests/test-batch-epoch-release-busy.js, tests/test-batch-review-orchestrator.js, tests/test-native-ownership-epoch-release.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu',
+  findings: ['R-041'], remark: 'geändert in 2795fa32; nur unter Windows ausgeführt' });
+sym(`${app}frontend/workspace.js`, 'delivering', { status: 'TEILGEPRÜFT',
+  purpose: 'laufende Bereitstellung der Ergebnisse erkennen; Aufrufer Laufkarte, Verlaufszeile, Rückfrage beim Schließen',
+  trust: 'Statusantwort des Core (delivering, selected_count, failed_count)',
+  evidence: 'tests/test-standalone-workspace.js (drei Tests zu R-040); sechs native Läufe', findings: ['R-040'],
+  remark: 'neu in 8399045b; nur unter Windows ausgeführt' });
 
 Object.assign(groups, {
   'G-FRONTEND-STATIC': { status: 'TEILGEPRÜFT', findings: ['R-008', 'R-020'],
