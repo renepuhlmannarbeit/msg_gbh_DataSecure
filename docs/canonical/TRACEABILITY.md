@@ -87,28 +87,39 @@ wird nach dessen Ende vom nächsten Prozess übernommen.
 `test-native-ownership-epoch-release.js` prüfen die neue Folge der Wartezeiten.
 
 RC178-Review R-042 (BL-010.13, DS-086; BL-050.6) → Die Übergabe der letzten
-Datei eines Anonymisierungslaufs hält die Betriebssystemsperre über den ganzen
-Abschlussnachweis (`gateway/batch-delivery.js`, `finishLocalDelivery`), bei 40
-Dateien rund 35 Sekunden. Die Statusabfrage las in dieser Zeit die Pausenmarke
-unter derselben Sperre (`gateway/standalone-pause.js`, `observeRequested`),
-scheiterte nach je fünf Sekunden, und die Anzeige stand.
-`gateway/batch-progress.js` (`publicProgress`) liest die Pausenmarke jetzt nur
-noch, solange der Stapel nicht vollständig entschieden ist; für einen
-entschiedenen Stapel wertet `core/batch-progress.js` sie ohnehin nicht aus.
-Folge: Eine beschädigte Pausenmarke eines entschiedenen Stapels lässt dessen
-Statusabfrage nicht mehr scheitern; sie bleibt unberührt und sperrt weiter jede
-Änderung und die Statusabfrage eines Stapels mit offener Datei. Die Haltezeit
-der Sperre selbst ist unverändert. `test-standalone-pause-control.js` prüft
-beide Fälle. Die Statusabfrage brauchte die Sperre an einer zweiten Stelle:
-Für einen fortgesetzten Lauf prüft sie bei jeder Abfrage, ob eine Dateiannahme
-reserviert ist (`gateway/batch-intake-reservation.js`,
-`intakeReservationActive`), mit genau einem Versuch; am Laufende scheiterte sie
-daran sofort. `standalone/application-service.js` (`observeIntakePending`)
-lässt diese Prüfung jetzt aus, solange ein Stapel verarbeitet wird; jede Stelle,
-die das Ergebnis verwendet, verknüpft es mit genau dieser Angabe. Sonst fragt
-sie bei abgelehnter Sperre bis zu einer halben Sekunde erneut. Eine liegen
-gebliebene Reservierung räumt dadurch erst eine spätere Abfrage auf.
-`test-standalone.js` prüft die Beobachtung und die Form aller Verwendungen.
+Datei eines Anonymisierungslaufs schreibt auch den Abschlussnachweis des
+Stapels und hält die Betriebssystemsperre über alle seine Prüfungen
+(`gateway/batch-delivery.js`, `finishLocalDelivery`), bei 40 Dateien rund 35
+Sekunden. Die Statusabfrage las in dieser Zeit die Pausenmarke unter derselben
+Sperre (`gateway/standalone-pause.js`, `observeRequested`), scheiterte nach je
+fünf Sekunden, und die Anzeige stand. `gateway/batch-progress.js`
+(`publicProgress`) liest die Pausenmarke jetzt nur noch, solange der Stapel
+nicht vollständig entschieden ist; für einen entschiedenen Stapel wertet
+`core/batch-progress.js` sie ohnehin nicht aus. Folge: Eine beschädigte
+Pausenmarke eines entschiedenen Stapels lässt dessen Statusabfrage nicht mehr
+scheitern, und ebenso wenig dessen Abschlussnachweis und Bereitstellung, die
+denselben Fortschritt abfragen. Sie bleibt unberührt und sperrt weiter das
+Verarbeiten, Pausieren und Fortsetzen sowie die Statusabfrage eines Stapels mit
+offener Datei. Die Haltezeit der Sperre selbst ist unverändert.
+`test-standalone-pause-control.js` prüft beide Fälle und dass kein Feld des
+Fortschritts eines entschiedenen Stapels sich ändert. Die Statusabfrage
+brauchte die Sperre an einer zweiten Stelle: Für einen fortgesetzten Lauf prüft
+sie bei jeder Abfrage, ob eine Dateiannahme reserviert ist
+(`gateway/batch-intake-reservation.js`, `intakeReservationActive`), mit genau
+einem Versuch; am Laufende scheiterte sie daran sofort.
+`standalone/application-service.js` (`observeIntakePending`) lässt diese Prüfung
+jetzt aus, solange ein Stapel verarbeitet wird; jede Stelle, die das Ergebnis
+verwendet, verknüpft es mit genau dieser Angabe. Sonst fragt sie bei
+abgelehnter Sperre bis zu einer halben Sekunde erneut und hält den Core solange
+an; ist die Sperre länger belegt, scheitert die Abfrage wie bisher (beobachtet
+in der Bereitstellung eines fortgesetzten Laufs). Eine liegen gebliebene
+Reservierung räumt dadurch erst die erste Abfrage nach der Verarbeitung oder
+die nächste Annahme auf. `lightweightStatus` liest dafür erst die Stapel und
+dann die Annahme, nicht mehr umgekehrt: Gehört der Arbeitsprozess nicht zu
+diesem Core und wechselt er zwischen beiden Blicken von der Annahme in die
+Verarbeitung, sieht eine einzelne Abfrage keins von beiden. `test-standalone.js`
+prüft die Beobachtung, die Form aller Verwendungen und dass die Statusantwort
+während einer Verarbeitung dieselbe bleibt.
 
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor
