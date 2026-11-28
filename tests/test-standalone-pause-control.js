@@ -246,6 +246,45 @@ test('a fully decided batch is reported without observing the pause marker; any 
   }, true);
 });
 
+test('leaving the marker unread changes no field of a decided batch, with or without a live executor (R-042)', () => {
+  const core = require('../plugins/data-secure/server/core/batch-progress');
+  const { emptyGradeCounts, emptyOmissionCounts } = require('../plugins/data-secure/server/gateway/batch-result-projection');
+  const statuses = { deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+    mappingPendingStatus: 'mapping_pending', preflightMappingPendingStatus: 'preflight_mapping_pending' };
+  const batch = (...items) => ({ ...state(), items: items.map(status => typeof status === 'string' ? { status } : status) });
+  const decided = [batch('released'), batch('released', 'released'), batch('released', 'stopped'), batch('stopped', 'stopped'),
+    batch('released', { status: 'stopped', local_mapping_exported: true })];
+  const open = [batch('released', 'pending'), batch('released', 'processing'), batch('released', 'retryable'),
+    batch('released', 'delivery_pending'), batch('released', 'mapping_pending'), batch('released', 'deferred_review'),
+    batch('released', { status: 'stopped', local_mapping_exported: false }), batch()];
+  // Completeness is a fact of the files alone: neither the live executor nor a requested pause enters it.
+  for (const value of [...decided, ...open]) for (const live of [false, true]) for (const requested of [false, true]) {
+    assert.equal(core.progressFacts({ ...value, ...(requested ? { standalone_pause_requested: true } : {}) }, statuses, live).complete,
+      decided.includes(value));
+  }
+  for (const live of [false, true]) {
+    let observed = 0;
+    const progress = createBatchProgress({ ...statuses, liveLocalExecutor: () => live,
+      observePauseRequested() { observed++; return true; } });
+    for (const value of decided) for (const carried of [false, true]) {
+      const current = carried ? { ...value, standalone_pause_requested: true } : value;
+      // What the code before the change computed when the marker was present.
+      const before = core.finalizeProgress(core.progressFacts({ ...current, standalone_pause_requested: true }, statuses, live),
+        { grade_counts: emptyGradeCounts(current.items.length), omission_counts: emptyOmissionCounts(), grades_verified: false });
+      assert.deepEqual(progress.publicProgress(current, { skipResultProjection: true }), before);
+      assert.equal(before.pause_requested, false); assert.equal(before.paused, false);
+    }
+    assert.equal(observed, 0);
+    // A batch with an open file still takes the observed marker into its facts.
+    for (const value of open) {
+      const before = core.finalizeProgress(core.progressFacts({ ...value, standalone_pause_requested: true }, statuses, live),
+        { grade_counts: emptyGradeCounts(value.items.length), omission_counts: emptyOmissionCounts(), grades_verified: false });
+      assert.deepEqual(progress.publicProgress(value, { skipResultProjection: true }), before);
+    }
+    assert.equal(observed, open.length);
+  }
+});
+
 test('observer retries only pre-callback kernel Busy, outside the guard and without logical writes', () => {
   const original = fixed('OWNERSHIP_GUARD_BUSY');
   const transient = fixture({ beforeOuter(attempt) { if (attempt === 1) throw original; },

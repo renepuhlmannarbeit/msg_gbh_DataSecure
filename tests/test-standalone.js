@@ -790,6 +790,36 @@ test('the status poll does not fail on the intake reservation while a batch is p
     /local_intake_pending \|\| \w+\.batch_processing_active/.test(line), line.trim());
   assert.ok(source.includes('const preparing = intakePending && !processing;'));
   assert.ok(source.includes('const processing = current.batch_processing_active === true || latest?.processing === true;'));
+  // Behaviour, not only form: while a batch is processed the whole status answer is the same
+  // whether the reservation would have said yes or was left unread.
+  const batchId = 'c'.repeat(64);
+  const latests = [
+    { selected_count: 3, completed_count: 1, failed_count: 0, review_count: 0, review_ready: false, result_count: 0,
+      export_pending_count: 0, processing: true, resumable: false, complete: false },
+    { selected_count: 3, completed_count: 1, failed_count: 0, review_count: 0, review_ready: false, result_count: 0,
+      export_pending_count: 0, processing: true, pause_requested: true, paused: false, resumable: false, complete: false },
+    { selected_count: 3, completed_count: 3, failed_count: 0, review_count: 0, review_ready: false, result_count: 0,
+      export_pending_count: 3, processing: true, resumable: false, complete: true },
+    { selected_count: 3, completed_count: 3, failed_count: 1, review_count: 0, review_ready: false, result_count: 2,
+      export_pending_count: 0, processing: false, resumable: false, complete: true },
+    null
+  ];
+  const statusOf = (latest, intake, worker, observed) => {
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      localWorkerActive: () => worker,
+      publicStatusSnapshot: () => ({
+        current: { engine_ready: true, local_intake_pending: intake, batch_processing_active: true,
+          recoverable_batches: 0, batches_awaiting_resume: 0 },
+        latest, observed_batch_id: observed ? batchId : null, observed_is_active: observed, observed_recoverable: false })
+    }) });
+    if (observed) service.observedBatchId = batchId;
+    return service.status({ localUi: true });
+  };
+  for (const latest of latests) for (const worker of [false, true]) for (const observed of [false, true]) {
+    const read = statusOf(latest, true, worker, observed), unread = statusOf(latest, false, worker, observed);
+    assert.deepStrictEqual(unread, read);
+    assert.ok(!['preparing', 'export_pending'].includes(read.state)); assert.notStrictEqual(read.delivering, true);
+  }
 });
 
 test('export abandonment uses a fresh action reader before any mutating leaf', () => {
