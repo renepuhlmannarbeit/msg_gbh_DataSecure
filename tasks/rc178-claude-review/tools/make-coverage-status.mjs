@@ -461,6 +461,19 @@ sym(`${srv}gateway/batch-lock-release.js`, 'releaseOwnedEpochWithBusyRetry', {
   trust: 'Berechtigung vom Aufrufer; Antworten der Betriebssystemsperre',
   evidence: 'tests/test-batch-epoch-release-busy.js, tests/test-batch-review-orchestrator.js, tests/test-native-ownership-epoch-release.js; eigene Probe mit echter Betriebssystemsperre alt gegen neu',
   findings: ['R-041'], remark: 'geändert in 2795fa32; nur unter Windows ausgeführt' });
+// Einundzwanzigste Übergabe: Statusabfrage eines entschiedenen Stapels (R-042, Schritt 1).
+sym(`${srv}gateway/batch-progress.js`, 'publicProgress', { status: 'TEILGEPRÜFT',
+  purpose: 'Fortschritt eines Stapels für Status, Arbeitsprozess und Übergabe berechnen; liest für Standalone-Stapel die Pausenmarke',
+  invariant: 'die Pausenmarke wird nur gelesen, solange der Stapel nicht vollständig entschieden ist; für jeden Stapel mit offener Datei unverändert, Fehler beim Lesen bleiben Fehler',
+  trust: 'Laufzustand aus dem Journal; Antwort der Betriebssystemsperre beim Lesen der Marke',
+  evidence: 'tests/test-standalone-pause-control.js (32, zwei neu, der erste am Code von d74f19f7 rot); native Sperrprüfung der Pause; Läufe in der echten App',
+  findings: ['R-042'], remark: 'geändert in ad621ae6; die Ergebnisprüfung im selben Aufruf ist nicht einzeln beurteilt; nur unter Windows ausgeführt' });
+sym(`${srv}standalone/application-service.js`, 'observeIntakePending', {
+  purpose: 'für die Statusabfrage feststellen, ob eine Dateiannahme offen ist; Aufrufer lightweightStatus und publicStatusSnapshot',
+  invariant: 'während einer Verarbeitung wird die Reservierung nicht gelesen; sonst wird nur eine bestätigte Ablehnung vor dem Lesen wiederholt, höchstens 500 ms; jeder andere Fehler sofort',
+  trust: 'Angabe zur Verarbeitung aus derselben Abfrage der Stapel; Antwort der Betriebssystemsperre',
+  evidence: 'tests/test-standalone.js (93, einer neu); zwei native Läufe am Endstand, ein Vergleichslauf am alten Paket; unabhängige Gegenprüfung am Quelltext',
+  findings: ['R-042'], remark: 'neu in 1b4382c7; nur unter Windows ausgeführt' });
 sym(`${app}frontend/workspace.js`, 'delivering', { status: 'TEILGEPRÜFT',
   purpose: 'laufende Bereitstellung der Ergebnisse erkennen; Aufrufer Laufkarte, Verlaufszeile, Rückfrage beim Schließen',
   trust: 'Statusantwort des Core (delivering, selected_count, failed_count)',

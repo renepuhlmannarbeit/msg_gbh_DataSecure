@@ -1656,6 +1656,32 @@
         ],
         "remark": "geändert in 2795fa32; nur unter Windows ausgeführt"
       }
+    },
+    "plugins/data-secure/server/gateway/batch-progress.js": {
+      "publicProgress": {
+        "status": "TEILGEPRÜFT",
+        "purpose": "Fortschritt eines Stapels für Status, Arbeitsprozess und Übergabe berechnen; liest für Standalone-Stapel die Pausenmarke",
+        "invariant": "die Pausenmarke wird nur gelesen, solange der Stapel nicht vollständig entschieden ist; für jeden Stapel mit offener Datei unverändert, Fehler beim Lesen bleiben Fehler",
+        "trust": "Laufzustand aus dem Journal; Antwort der Betriebssystemsperre beim Lesen der Marke",
+        "evidence": "tests/test-standalone-pause-control.js (32, zwei neu, der erste am Code von d74f19f7 rot); native Sperrprüfung der Pause; Läufe in der echten App",
+        "findings": [
+          "R-042"
+        ],
+        "remark": "geändert in ad621ae6; die Ergebnisprüfung im selben Aufruf ist nicht einzeln beurteilt; nur unter Windows ausgeführt"
+      }
+    },
+    "plugins/data-secure/server/standalone/application-service.js": {
+      "observeIntakePending": {
+        "status": "GEPRÜFT",
+        "purpose": "für die Statusabfrage feststellen, ob eine Dateiannahme offen ist; Aufrufer lightweightStatus und publicStatusSnapshot",
+        "invariant": "während einer Verarbeitung wird die Reservierung nicht gelesen; sonst wird nur eine bestätigte Ablehnung vor dem Lesen wiederholt, höchstens 500 ms; jeder andere Fehler sofort",
+        "trust": "Angabe zur Verarbeitung aus derselben Abfrage der Stapel; Antwort der Betriebssystemsperre",
+        "evidence": "tests/test-standalone.js (93, einer neu); zwei native Läufe am Endstand, ein Vergleichslauf am alten Paket; unabhängige Gegenprüfung am Quelltext",
+        "findings": [
+          "R-042"
+        ],
+        "remark": "neu in 1b4382c7; nur unter Windows ausgeführt"
+      }
     }
   },
   "groups": {

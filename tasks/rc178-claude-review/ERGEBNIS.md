@@ -1,12 +1,12 @@
 # RC178-Review · Ergebnis und Übergabe an Codex
 
 Gehört zum [Arbeitsauftrag](../AUFTRAG-CLAUDE-RC178-STANDALONE-REVIEW.md).
-Stand 28.11.2026, nach zwanzig Übergaben; der folgende Absatz nennt sie
+Stand 28.11.2026, nach einundzwanzig Übergaben; der folgende Absatz nennt sie
 der Reihe nach. Befunde
 und Annahmen stehen in [BEFUNDE.md](BEFUNDE.md), das Einzelregister in
 [ABDECKUNG.tsv](ABDECKUNG.tsv).
 
-Der Bericht ist über zwanzig Übergaben gewachsen. Die erste endete mit dem Remote-Stand
+Der Bericht ist über einundzwanzig Übergaben gewachsen. Die erste endete mit dem Remote-Stand
 `d07bfced` (geprüfter Code `e1afef0f`). Danach hat der Anwender beauftragt,
 die offenen Befunde zu beheben und erneut zu prüfen. Die zweite Runde umfasst
 20 Codecommits bis `a0d3e340`. Eine dritte Prüfung vor der Übergabe hat in
@@ -81,8 +81,11 @@ Anwender beauftragt, R-040 und R-041 zu beheben und die Ursache von R-042
 einzugrenzen: die Commits `2795fa32`, `8399045b` und `8369f727`; dieser
 Stand wurde als `885a9010` übergeben. Zuletzt hat der Anwender einen
 Vorschlag zur Behebung von R-042 beauftragt. Dafür ist die Ursache in der
-echten App gemessen worden; am Produkt ist dabei nichts geändert. Dieser
-Bericht beschreibt weiter den Endstand `8369f727`.
+echten App gemessen worden; am Produkt ist dabei nichts geändert; dieser
+Stand wurde als `d74f19f7` übergeben. Danach hat der Anwender Schritt 1
+des Vorschlags beauftragt: die Commits `ad621ae6` und `1b4382c7`, dazu
+`32536bd2` (Tests) und `d6d24ce4` (Dokument). Dieser Bericht beschreibt den
+Endstand `d6d24ce4`.
 
 ## Identität und Umfang
 
@@ -92,14 +95,14 @@ Bericht beschreibt weiter den Endstand `8369f727`.
 | GitHub-Arbeitsbranch | [`claude/rc178-standalone-review`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review) |
 | Eingefrorener Einstieg | `e88f1b8d100421017fb3909d77e338fd25c1b421` (`origin/codex/rc178-claude-review-handoff`) |
 | RC178-Produktbaseline | `v3.2.0-rc178` → `13ed39ff979a5f5d9bb076d35021164de380b9dd`, Fingerprint `b18ce3565265ad0a7d5fff7cb6112ea050cb853c3c62f5a9b6512ca01c824655` (nachgerechnet, 400 Quellinputs) |
-| Geprüfter Produktstand | `8369f727c4116684b68905ec44b4501900c0c1b7` (seit der achtzehnten Übergabe die Freigabe der Stapelsperre und die Statusmeldung im Core, die Arbeitsfläche, fünf Testdateien und ein Dokument; kein Rust-Code). Fingerprint `d5e7df6801019933fd15d85829329c1b8c71f4515c038b9d6971a7bd1c1fcdfa`. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der siebzehnten und achtzehnten Übergabe: `e89069eb`, Fingerprint `c92aba02…`; der fünfzehnten und sechzehnten: `8a167b09`, Fingerprint `d9999cb0…`; der vierzehnten: `3b85e395`, Fingerprint `4b88b0db…`; der dreizehnten: `d474a579`, Fingerprint `6ba59a6f…`; der elften und zwölften: `1d908311`, Fingerprint `383aa344…`; der zehnten: `0bd5e26f`, Fingerprint `5c873336…`; der neunten: `1c8e971c`, Fingerprint `b8ea7acd…`; der achten: `33595449`, Fingerprint `46dd498f…`; der siebten: `2ce74b9f`, Fingerprint `ebc54e3c…`; der sechsten: `e66bab8f`, Fingerprint `bac4432a…`; der fünften: `0f35696e`, Fingerprint `9fe7076e…`; der vierten: `0b99529c`, Fingerprint `b4466f2a…`; der dritten: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
+| Geprüfter Produktstand | `d6d24ce45f792b5a9a6606ade3fe0e17e884ee2d` (seit der zwanzigsten Übergabe die Statusabfrage im Core an zwei Stellen, zwei Testdateien und ein Dokument; kein Rust-Code). Fingerprint `2b4100836af6278eb7ef54a22c46cf454d38ccb6b771618db789b2b87fe838f3`. Alle späteren Commits ändern nur `tasks/rc178-claude-review/`. Stand der neunzehnten und zwanzigsten Übergabe: `8369f727`, Fingerprint `d5e7df68…`; der siebzehnten und achtzehnten: `e89069eb`, Fingerprint `c92aba02…`; der fünfzehnten und sechzehnten: `8a167b09`, Fingerprint `d9999cb0…`; der vierzehnten: `3b85e395`, Fingerprint `4b88b0db…`; der dreizehnten: `d474a579`, Fingerprint `6ba59a6f…`; der elften und zwölften: `1d908311`, Fingerprint `383aa344…`; der zehnten: `0bd5e26f`, Fingerprint `5c873336…`; der neunten: `1c8e971c`, Fingerprint `b8ea7acd…`; der achten: `33595449`, Fingerprint `46dd498f…`; der siebten: `2ce74b9f`, Fingerprint `ebc54e3c…`; der sechsten: `e66bab8f`, Fingerprint `bac4432a…`; der fünften: `0f35696e`, Fingerprint `9fe7076e…`; der vierten: `0b99529c`, Fingerprint `b4466f2a…`; der dritten: `ebe526ec`, Fingerprint `043e3b81…`; der zweiten: `ffab4fa7`, Fingerprint `1803bce7…`; der ersten: `e1afef0f`, Fingerprint `5496fabe…`. |
 | Prüfumgebung | Claude Fable 5.2 (`claude-fable-5-2`) in Claude Code; Windows 11 Pro 10.0.26300 x64; Node 22.23.2 für alle Tests (Host-Node 24.18.0), npm 11.16.0, cargo/rustc 1.98.1, MSVC mit SDK 10.0.26100.0, WebView2 158.0.4370.45 (bis zur dreizehnten Übergabe 158.0.4370.33), Claude CLI 2.1.280 |
 | Verfügbare Zielplattformen | Nur Windows x64. Kein Mac, kein Xcode, kein iOS-Simulator. |
-| Abdeckung | 5 136 erfasste Einheiten in 346 Dateien: 57 `GEPRÜFT`, 2 099 `TEILGEPRÜFT`, 2 980 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
+| Abdeckung | 5 139 erfasste Einheiten in 346 Dateien: 58 `GEPRÜFT`, 2 101 `TEILGEPRÜFT`, 2 980 `OFFEN`; dazu 14 Dateigruppen (6 `TEILGEPRÜFT`, 2 `OFFEN`, 6 `AUSGENOMMEN`). Zahlen je Prüfdimension unten. |
 
 Die Versionskennung `3.2.0-rc178` wurde nicht geändert. Der Stand ist kein
 Release; ein daraus gebautes Paket trägt dieselbe Versionsnummer wie RC178,
-aber den Build-Fingerprint `d5e7df68…`.
+aber den Build-Fingerprint `2b410083…`.
 
 ## Ergebnis auf einen Blick
 
@@ -665,7 +668,7 @@ aber den Build-Fingerprint `d5e7df68…`.
       Dauer wächst mit der Dateizahl, rund 0,86 Sekunden je Datei (34
       Sekunden bei 40 Dateien, 69 bei 80). Nicht instrumentiert (inzwischen
       gemessen und in zwei Angaben berichtigt: Punkt 18).
-    - **Weitere Beobachtung zu R-042, altes und neues Paket gleich:** Nach
+    - **Weitere Beobachtung zu R-042 (inzwischen geklärt und behoben, Punkt 19), altes und neues Paket gleich:** Nach
       Pause und Fortsetzen scheitert rund jede fünfte Statusabfrage sofort
       mit derselben Meldung (18 und 19 Abfragen in zwei Läufen). Nicht
       untersucht.
@@ -689,7 +692,7 @@ aber den Build-Fingerprint `d5e7df68…`.
     - **Danach rund fünf weitere Durchgänge**, bevor das Kopieren beginnt;
       dabei ist die Sperre zeitweise frei. Bei 40 Dateien vergehen zwischen
       der letzten Datei und dem Kopieren rund 77 Sekunden.
-    - **Vorschlag, Schritt 1 (empfohlen):** Die Statusabfrage liest die
+    - **Vorschlag, Schritt 1 (empfohlen; inzwischen umgesetzt und ergänzt, Punkt 19):** Die Statusabfrage liest die
       Pausenmarke nur noch, solange eine Datei des Laufs offen ist
       (`gateway/batch-progress.js`, rund drei Zeilen). Die Auswertung
       verwirft die Marke bei fertigen Läufen schon heute. Im Modell
@@ -705,7 +708,46 @@ aber den Build-Fingerprint `d5e7df68…`.
       Minuten.
     - **Nicht geprüft:** Schritt 1 in der echten App; größere Stapel,
       andere Formate, macOS.
-19. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
+19. **R-042, Schritt 1 umgesetzt am 28.11. mittags** (Einzelheiten in
+    BEFUNDE.md, Abschnitt „Nachtrag vom 28.11. mittags · R-042, Schritt 1
+    umgesetzt und in der echten App nachgeprüft“). Auftrag des Anwenders:
+    „Ja, Schritt 1“. Commits `ad621ae6` und `1b4382c7`, dazu `32536bd2`
+    (Tests) und `d6d24ce4` (Dokument).
+    - **Erster Teil (`ad621ae6`):** Die Statusabfrage liest die Pausenmarke
+      nur noch, solange eine Datei des Laufs offen ist
+      (`gateway/batch-progress.js`).
+    - **Zweiter Teil (`1b4382c7`), erst in der Nachprüfung gefunden:** Nach
+      Pause und Fortsetzen braucht die Statusabfrage die Sperre an einer
+      zweiten Stelle, der Prüfung auf eine reservierte Dateiannahme. Sie
+      entfällt jetzt, solange ein Stapel verarbeitet wird, und wartet sonst
+      bis zu einer halben Sekunde (`standalone/application-service.js`).
+    - **Neuer Lauf, in der echten App:** Am Laufende scheitert noch eine
+      Statusabfrage statt fünf, im ganzen Lauf eine statt sechs. Die Anzeige
+      wechselt auf „40 von 40“, statt rund 35 Sekunden bei „39 von 40“ zu
+      stehen.
+    - **Lauf nach Pause und Fortsetzen, in der echten App:** fünf
+      gescheiterte Statusabfragen statt dreizehn, davon eine mit fünf
+      Sekunden Wartezeit statt sechs; während der Verarbeitung keine mehr
+      (vorher vier von 181). „40 von 40“ erscheint rund 33 Sekunden früher.
+    - **Unverändert:** Die Sperre ist am Laufende so lange belegt wie zuvor
+      (37,5 Sekunden bei 40 Dateien).
+    - **Zwei Erwartungen aus dem Vorschlag trafen nicht zu:** Eine
+      Statusabfrage scheitert weiterhin, weil sie beginnt, bevor der
+      Arbeitsprozess die letzte Datei eingetragen hat. Und der Titel heißt
+      noch rund 29 Sekunden „Wird verarbeitet“, bevor er auf „Ergebnisse
+      werden bereitgestellt“ wechselt.
+    - **Mit entschieden:** Eine beschädigte Pausenmarke eines fertigen Laufs
+      lässt dessen Statusabfrage nicht mehr scheitern. Eine liegen
+      gebliebene Reservierung wird während einer Verarbeitung nicht mehr
+      von der Statusabfrage aufgeräumt, sondern danach.
+    - **Unabhängig gegengeprüft, nur lesend:** kein Blocker, beide
+      Kernaussagen bestätigt; sechs Punkte. Zwei führten zu Nachbesserungen
+      (Tests in `32536bd2`, Dokument in `d6d24ce4`), einer war schon
+      gemessen, drei sind als Grenze festgehalten.
+    - **Nicht geprüft:** 80 und 200 Dateien, „Nur umwandeln“ nach Pause und
+      Fortsetzen, andere Formate, die geführte Prüfung, macOS. Schritt 2
+      (die Sperre kürzer halten) ist offen.
+20. **Für Codex zuerst** – siehe Übergabenachricht am Ende.
 
 ## Änderungen je Thema
 
@@ -826,6 +868,9 @@ Runden vom 25.11. abends bis zur vierzehnten Übergabe (BEFUNDE.md, Abschnitte z
 | `2795fa32` | R-041 | `gateway/batch-lock-release.js`: Die Freigabe der Stapelsperre wartet bei belegter Betriebssystemsperre durch 22 Pausen (1 985 ms) statt durch vier (185 ms). `docs/canonical/TRACEABILITY.md`. | `tests/test-batch-epoch-release-busy.js` (21), `tests/test-batch-review-orchestrator.js` (47), `tests/test-native-ownership-epoch-release.js` (280 Prüfungen); Probe mit echter Betriebssystemsperre alt gegen neu | Core, alle Ziele und beide Produkte laden die Datei; belegt meldet die Sperre nur mit nativer Sperre (Standalone unter Windows und macOS). Nur unter Windows ausgeführt. |
 | `8399045b` | R-040 | `standalone/application-service.js` (`status`): neues Merkmal `delivering`. `frontend/workspace.js`: Laufkarte, Verlaufszeile und Rückfrage beim Schließen benennen die laufende Bereitstellung; für diesen Lauf keine Reparatur, kein Aufgeben, keine neue Verarbeitung. `docs/canonical/TRACEABILITY.md`. | `tests/test-standalone.js` (92, einer neu), `tests/test-standalone-workspace.js` (552, drei neu); fünf native Läufe | Nur Standalone, alle Ziele. Nur unter Windows ausgeführt. |
 | `8369f727` | R-040 | `frontend/workspace.js`: Die Verlaufszeile bietet die Reparatur auch dann nicht an, wenn der letzte Status den Lauf noch in Verarbeitung sah. | `tests/test-standalone-workspace.js` (552; der Test der Verlaufszeile ist erweitert); ein nativer Lauf | Nur Standalone, alle Ziele. Nur unter Windows ausgeführt. |
+| `ad621ae6` | R-042 | `gateway/batch-progress.js` (`publicProgress`): Die Pausenmarke wird nur noch gelesen, solange der Stapel nicht vollständig entschieden ist. `docs/canonical/TRACEABILITY.md`. | `tests/test-standalone-pause-control.js` (32, zwei neu, der zweite aus `32536bd2`); native Sperrprüfung der Pause; drei native Läufe | Core, beide Produkte laden die Datei; die Stelle wirkt nur für Standalone-Stapel. Nur unter Windows ausgeführt. |
+| `1b4382c7` | R-042 | `standalone/application-service.js` (`observeIntakePending`): Die Statusabfrage liest die Reservierung der Dateiannahme nicht, solange ein Stapel verarbeitet wird, und wiederholt sonst einen abgelehnten Zugriff bis zu einer halben Sekunde. `docs/canonical/TRACEABILITY.md`. | `tests/test-standalone.js` (93, einer neu, erweitert in `32536bd2`); zwei native Läufe, ein Vergleichslauf am alten Paket | Nur Standalone, alle Ziele; belegt meldet die Sperre nur mit nativer Sperre (Windows und macOS). Nur unter Windows ausgeführt. |
+| `32536bd2`, `d6d24ce4` | R-042 | Nur Tests und `docs/canonical/TRACEABILITY.md`, nach der unabhängigen Gegenprüfung: Die Tests vergleichen den ganzen Ausgang mit und ohne die beiden ausgelassenen Lesevorgänge; das Dokument sagt genau, was eine beschädigte Pausenmarke weiter sperrt und was weiterhin scheitert. Kein Produktcode. | die beiden Testdateien selbst | — |
 
 Nicht umgesetzt und begründet (Einzelheiten in BEFUNDE.md, „Entscheidungen je
 Befund“):
@@ -879,11 +924,12 @@ Befund“):
 - **Tests der geladenen Oberfläche** – 29 der 52 Verhalten aus dem Abgleich
   sind nur zum Teil geprüft (ABGLEICH-ALTE-OBERFLAECHE.md); nicht
   nachgezogen.
-- **R-042** – nicht behoben. Die Ursache ist gemessen, ein Vorschlag in
-  zwei Schritten liegt vor (Punkt 18): zuerst die Statusabfrage von der
-  Sperre lösen, danach die Sperre kürzer halten. Nicht untersucht ist,
-  dass nach Pause und Fortsetzen rund jede fünfte Statusabfrage sofort
-  scheitert. Entscheidung.
+- **R-042, Rest** – Die Betriebssystemsperre bleibt am Ende eines
+  Anonymisierungslaufs rund 0,87 Sekunden je Datei belegt. Eine
+  Statusabfrage scheitert dort weiterhin nach fünf Sekunden; nach Pause
+  und Fortsetzen kommen in der Bereitstellung vier kurze dazu. Schritt 2
+  des Vorschlags (zwei statt vier Prüfdurchgänge, Punkt 18) ist nicht
+  umgesetzt. Entscheidung.
 - **R-040, Rest** – Der Core weiß nicht, zu welchem Lauf ein lebender
   Arbeitsprozess gehört, und kennt nach einem Neustart der App keinen
   mehr. In beiden Fällen kann die Anzeige der Bereitstellung fehlen oder
@@ -905,8 +951,9 @@ Befund“):
 ## Tests und Nachweise
 
 Alle Läufe auf Windows 11 x64 mit Node 22.23.2. Logs liegen lokal. Die
-ersten Zeilen gelten der zwanzigsten Übergabe (Messung ohne Änderung am
-Produkt), die nächsten dem Endstand `8369f727`, dann der achtzehnten
+ersten Zeilen gelten dem Endstand `d6d24ce4`, die nächsten der zwanzigsten
+Übergabe (Messung ohne Änderung am Produkt) und dem Stand `8369f727` der
+neunzehnten, dann der achtzehnten
 Übergabe (Prüfung ohne Änderung am Produkt) und dem Stand `e89069eb` der
 siebzehnten, die folgenden halten die
 früheren Stände fest. Die elfte und die zwölfte Übergabe haben denselben
@@ -914,23 +961,34 @@ Produktstand (`1d908311`); die zwölfte hat nur den Bericht ergänzt.
 
 | Bereich | Exakter Befehl und Teststand | Umgebung und Architektur | Ergebnis und Exitcode | Beobachtung |
 | --- | --- | --- | --- | --- |
+| Headless, Endstand | `npm run test:product:headless` auf `d6d24ce4` | Windows x64 | `PASS`, 0 | „Product headless suite passed (366 headless files, no native GUI executed).“ 11:54 bis 12:44 Uhr am 28.11., im ersten Lauf auf diesem Stand. Am Stand `ad621ae6` zuvor ebenfalls bestanden (09:41 bis 10:35 Uhr). Einen Lauf auf `1b4382c7` habe ich nach sechs Minuten angehalten, um die Nachbesserungen aus der Gegenprüfung einzutragen. |
+| Rust / Clippy, Endstand | nicht erneut ausgeführt | — | — | Rust-Quellen sind seit `927fb3bd` unverändert; zuletzt am Stand `1d908311` ausgeführt (339 bestanden). Der Release-Build mit `--locked` ist für beide Pakete dieser Runde neu gelaufen. |
+| Datenschutzkern und Konverter, Endstand | nicht erneut ausgeführt | — | — | Im Core sind seit `8369f727` nur `gateway/batch-progress.js` und `standalone/application-service.js` geändert (`git diff --stat 8369f727 d6d24ce4 -- plugins native`); Datenschutzkern und Konverter sind unverändert. |
+| Gezielt, Endstand | `tests/test-standalone.js` (93, einer neu), `tests/test-standalone-pause-control.js` (32, zwei neu), `tests/test-batch-intake-reservation.js` (5), `tests/test-standalone-history.js`, `tests/test-standalone-continuation.js` (30), `tests/test-standalone-sidecar.js`, `tests/test-standalone-desktop-contract.js` (43), `tests/test-batch-processing-composition.js` (14), `tests/test-test-path-separation.js` (18); am Stand `ad621ae6` außerdem `tests/test-batch-local-delivery-diagnostics.js` (19), `tests/test-batch-user-status.js` (11), `tests/test-batch-result-projection.js` (6), `tests/test-batch-review-state.js` (8), `tests/test-batch-continuation.js` (12), `tests/test-batch-recovery.js` (36), `tests/test-batch-delivery.js` (23), `tests/test-batch-terminal-evidence.js` (15) | Windows x64 | je `PASS`, 0 | Der neue Test der Pausenmarke schlägt am Code von `d74f19f7` fehl (30 bestanden, einer nicht); der neue Test der Annahme braucht eine Funktion, die es vor `1b4382c7` nicht gibt. Die Zahlen gelten für `d6d24ce4`. |
+| Native Sperrprüfungen, Endstand | `node tests/test-native-ownership-guard.js <build-manifest>`, `tests/test-native-ownership-integration.js`, `tests/test-native-ownership-epoch-release.js`, `tests/test-native-standalone-pause-control.js` (dieselbe Angabe) | Windows x64, lokal gebaute Sperre `6d851daf…` | je `PASS`, 0 | 114, 261 und 280 Prüfungen; die Pausenprüfung mit 25 Proben. An beiden Ständen dieser Runde ausgeführt. Die Profile `native-lease-finish` und `native-processing-admission` nicht ausgeführt; ihr Code ist unverändert. |
+| Dokumentation, Endstand | `npm run test:docs` auf `d6d24ce4` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests); nach dem Berichtscommit wiederholt. |
+| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `1b4382c7` | Windows x64 | je `PASS`, 0 | Die Commits `32536bd2` und `d6d24ce4` ändern nur Tests und ein Dokument; der Build-Fingerprint ist derselbe. Paket `5bbfbb2113d99409661914412c67c03384454417a5009b1c606ef45f40f50a37`, 113 621 282 Bytes, 1 203 Einträge, Build `2b410083`. Davor am Stand `ad621ae6` dasselbe mit Paket `d25c6394…` (Build `aeff9d48`), ebenfalls `PASS`. |
+| Windows x64 Start mit Außenverbindungsprüfung, Endstand | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `5bbfbb21…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 717 ms; 76 648 ms beobachtet, 3 983 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
+| Windows x64 Oberfläche, Endstand | eigene Mess- und Startskripte, Bedienung per Windows-UI-Automation; drei Läufe am Paket `d25c6394…`, zwei am Paket `5bbfbb21…`, ein Vergleichslauf am alten Paket `aa93cefb…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde zu R-042, Schritt 1“ unter dem nativen Lauf. |
+| Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | steht aus (einundzwanzigste) | Der Bau verlangt einen sauberen Arbeitsbaum und läuft nach diesem Berichtscommit; das Ergebnis trägt der folgende Commit nach. |
+| `git diff --check`, Endstand | `git diff --check d74f19f7 HEAD` und `git diff --cached --check` für den Bericht | — | steht aus (einundzwanzigste) | — |
 | Windows x64 Oberfläche, zwanzigste Übergabe | eigenes Messskript, Bedienung per Windows-UI-Automation, Paket `aa93cefb…` (Build `d5e7df68`); ein Lauf „Anonymisieren“ mit 40 erfundenen Textdateien, daneben Aufzeichnung der Dateinamen und Sperrprobe | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Messlauf zu R-042“ unter dem nativen Lauf; 40 von 40 Ergebnissen. |
 | Nachmessung und Modell zu R-042 | eigene Skripte mit dem Produktcode von `8369f727` und der echten Betriebssystemsperre, auf dem fertigen Testprofil des Messlaufs | Windows x64, lokal gebaute Sperre `6d851daf…` | Messung, kein Test | Ein Prüfdurchgang über 40 Ergebnisse 7 716 ms. Statuspfad bei belegter Sperre: wie ausgeliefert `OWNERSHIP_GUARD_BUSY` nach 5 077 ms; mit der vorgeschlagenen Änderung (nur im Speicher) 166 ms. |
 | Dokumentation, zwanzigste Übergabe | `npm run test:docs` am Arbeitsstand mit diesem Bericht | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests). |
 | `git diff --check`, zwanzigste Übergabe | `git diff --check 885a9010` und `git diff --cached --check` | — | ohne Meldung, 0 | Nur `tasks/rc178-claude-review/` ist geändert. |
 | Headless, Rust, Paket, Cowork-Plugin, zwanzigste Übergabe | nicht erneut ausgeführt | — | — | Am Produkt ist seit `8369f727` nichts geändert; es gelten die Zeilen des Endstands darunter. |
-| Headless, Endstand | `npm run test:product:headless` auf `8369f727` | Windows x64 | `PASS`, 0 | „Product headless suite passed (366 headless files, no native GUI executed).“ 00:18 bis 01:08 Uhr am 28.11., im ersten Lauf. |
-| Rust / Clippy, Endstand | nicht erneut ausgeführt | — | — | Rust-Quellen sind seit `927fb3bd` unverändert; zuletzt am Stand `1d908311` ausgeführt (339 bestanden). Der Release-Build mit `--locked` ist für beide Pakete dieser Runde neu gelaufen. |
-| Datenschutzkern und Konverter, Endstand | nicht erneut ausgeführt | — | — | Im Core sind seit `e89069eb` nur `gateway/batch-lock-release.js` und `standalone/application-service.js` geändert (`git diff --stat e89069eb 8369f727 -- plugins native`); Datenschutzkern und Konverter sind unverändert. |
-| Gezielt, Endstand | `tests/test-standalone.js` (92, einer neu), `tests/test-standalone-workspace.js` (552, drei neu), `tests/test-batch-epoch-release-busy.js` (21), `tests/test-batch-review-orchestrator.js` (47), `tests/test-standalone-history.js`, `tests/test-standalone-continuation.js` (30), `tests/test-standalone-sidecar.js`, `tests/test-standalone-desktop-contract.js` (43), `tests/test-standalone-loaded-frontend-contract.js` (5), `tests/test-workflow-presentation.js` (55), `tests/test-test-path-separation.js` (18) | Windows x64 | je `PASS`, 0 | Der neue Core-Test schlägt am Core von `3137077f` fehl, die neuen Oberflächentests an der Oberfläche von `3137077f`; dort bricht die Datei beim ersten Fehler ab, die beiden anderen sind deshalb nicht einzeln am alten Stand gelaufen. |
-| Native Sperrprüfungen, Endstand | `node tests/test-native-ownership-guard.js <build-manifest>`, `tests/test-native-ownership-integration.js`, `tests/test-native-ownership-epoch-release.js`, `tests/test-native-standalone-pause-control.js` (dieselbe Angabe) | Windows x64, lokal gebaute Sperre `6d851daf…` | je `PASS`, 0 | 114, 261 und 280 Prüfungen; die Pausenprüfung mit 25 Proben. Die Prüfung der Freigabe hält die Sperre jetzt durch alle 22 Pausen belegt. Die Profile `native-lease-finish` und `native-processing-admission` nicht ausgeführt; ihr Code ist unverändert. |
+| Headless, Stand der neunzehnten Übergabe | `npm run test:product:headless` auf `8369f727` | Windows x64 | `PASS`, 0 | „Product headless suite passed (366 headless files, no native GUI executed).“ 00:18 bis 01:08 Uhr am 28.11., im ersten Lauf. |
+| Rust / Clippy, Stand der neunzehnten Übergabe | nicht erneut ausgeführt | — | — | Rust-Quellen sind seit `927fb3bd` unverändert; zuletzt am Stand `1d908311` ausgeführt (339 bestanden). Der Release-Build mit `--locked` ist für beide Pakete dieser Runde neu gelaufen. |
+| Datenschutzkern und Konverter, Stand der neunzehnten Übergabe | nicht erneut ausgeführt | — | — | Im Core sind seit `e89069eb` nur `gateway/batch-lock-release.js` und `standalone/application-service.js` geändert (`git diff --stat e89069eb 8369f727 -- plugins native`); Datenschutzkern und Konverter sind unverändert. |
+| Gezielt, Stand der neunzehnten Übergabe | `tests/test-standalone.js` (92, einer neu), `tests/test-standalone-workspace.js` (552, drei neu), `tests/test-batch-epoch-release-busy.js` (21), `tests/test-batch-review-orchestrator.js` (47), `tests/test-standalone-history.js`, `tests/test-standalone-continuation.js` (30), `tests/test-standalone-sidecar.js`, `tests/test-standalone-desktop-contract.js` (43), `tests/test-standalone-loaded-frontend-contract.js` (5), `tests/test-workflow-presentation.js` (55), `tests/test-test-path-separation.js` (18) | Windows x64 | je `PASS`, 0 | Der neue Core-Test schlägt am Core von `3137077f` fehl, die neuen Oberflächentests an der Oberfläche von `3137077f`; dort bricht die Datei beim ersten Fehler ab, die beiden anderen sind deshalb nicht einzeln am alten Stand gelaufen. |
+| Native Sperrprüfungen, Stand der neunzehnten Übergabe | `node tests/test-native-ownership-guard.js <build-manifest>`, `tests/test-native-ownership-integration.js`, `tests/test-native-ownership-epoch-release.js`, `tests/test-native-standalone-pause-control.js` (dieselbe Angabe) | Windows x64, lokal gebaute Sperre `6d851daf…` | je `PASS`, 0 | 114, 261 und 280 Prüfungen; die Pausenprüfung mit 25 Proben. Die Prüfung der Freigabe hält die Sperre jetzt durch alle 22 Pausen belegt. Die Profile `native-lease-finish` und `native-processing-admission` nicht ausgeführt; ihr Code ist unverändert. |
 | Probe mit echter Betriebssystemsperre, R-041 alt gegen neu | eigenes Skript wie in der achtzehnten Übergabe; einmal mit `gateway/batch-lock-release.js` von `3137077f`, einmal mit `2795fa32`; dritter Prozess belegt die Sperre zu 75 %, je 40 s, zwei Durchgänge | Windows x64, lokal gebaute Sperre | beobachtet | Alt: 14 von 80 und 12 von 82 Freigaben gescheitert. Neu: 0 von 68 und 0 von 64, längste Freigabe 1 315 ms. Sperre zu 86 % belegt, neu: 0 von 51. Sperre vier Sekunden am Stück belegt, neu: gescheitert nach 2 187 ms und 23 Versuchen, danach übernimmt ein neuer Prozess den Eintrag. |
-| Dokumentation, Endstand | `npm run test:docs` auf `8369f727` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests); nach dem Berichtscommit wiederholt. |
-| Windows x64 Paket, Endstand | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `8369f727` | Windows x64 | je `PASS`, 0 | Paket `aa93cefb6962420ddcc63c6fa062f8e29c21d6913a2e9f33e4adc3f7b9dd0fcb`, 113 620 447 Bytes, 1 203 Einträge, Build `d5e7df68`. Davor am Arbeitsstand von `8399045b` dasselbe mit Paket `41429878…` (Build `cdef0dc3`), ebenfalls `PASS`. |
-| Windows x64 Start mit Außenverbindungsprüfung, Endstand | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `aa93cefb…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 678 ms; 76 777 ms beobachtet, 4 813 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
-| Windows x64 Oberfläche, Endstand | eigene Mess- und Startskripte, Bedienung per Windows-UI-Automation; zwei Läufe am alten Paket `5f347413…`, fünf am Paket `41429878…`, einer am Paket `aa93cefb…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde zur Behebung von R-040 und R-041“ unter dem nativen Lauf. |
-| Cowork-Plugin, Endstand | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `7331165e` (Stand `8369f727`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `cf9e480b…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem Berichtscommit. Die geänderte Datei `gateway/batch-lock-release.js` gehört auch zum Plugin; ohne native Sperre meldet die Betriebssystemsperre dort nie „belegt“ (`core/ownership-control.js:56-61`), die längere Wartezeit kommt also nicht vor. |
-| `git diff --check`, Endstand | `git diff --check 3137077f HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
+| Dokumentation, Stand der neunzehnten Übergabe | `npm run test:docs` auf `8369f727` | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests); nach dem Berichtscommit wiederholt. |
+| Windows x64 Paket, Stand der neunzehnten Übergabe | `node scripts/prepare-standalone-runtime.mjs`, `cargo build --release --locked`, `node scripts/build-standalone-package.mjs`, `node scripts/verify-standalone-package.mjs`, `node tests/test-standalone-package-smoke.mjs` auf `8369f727` | Windows x64 | je `PASS`, 0 | Paket `aa93cefb6962420ddcc63c6fa062f8e29c21d6913a2e9f33e4adc3f7b9dd0fcb`, 113 620 447 Bytes, 1 203 Einträge, Build `d5e7df68`. Davor am Arbeitsstand von `8399045b` dasselbe mit Paket `41429878…` (Build `cdef0dc3`), ebenfalls `PASS`. |
+| Windows x64 Start mit Außenverbindungsprüfung, Stand der neunzehnten Übergabe | `tests/manual/standalone-native-windows-launch.ps1 -Archive … -AssertReviewWindow -AssertWorkspace -AssertNoListeners -AssertNoOutbound -EmitEvidence` gegen das Paket `aa93cefb…` | Windows x64, isoliertes Profil | `PASS`, 0 | Start 1 678 ms; 76 777 ms beobachtet, 4 813 Stichproben, 0 Lesefehler, IPv6-Kontrolle, 0 Verbindungen, 0 Loopback-Versuche, 0 TCP-Listener, 0 UDP-Endpunkte, 10 Prozesse. |
+| Windows x64 Oberfläche, Stand der neunzehnten Übergabe | eigene Mess- und Startskripte, Bedienung per Windows-UI-Automation; zwei Läufe am alten Paket `5f347413…`, fünf am Paket `41429878…`, einer am Paket `aa93cefb…` | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde zur Behebung von R-040 und R-041“ unter dem nativen Lauf. |
+| Cowork-Plugin, Stand der neunzehnten Übergabe | `npm run build`, `npm run test:plugin-zip`, `npm run validate:claude-local` | Windows x64 | je `PASS`, 0 | Ausgeführt auf `7331165e` (Stand `8369f727`, dazu nur der Bericht). Plugin-ZIP 319 Einträge, SHA-256 `cf9e480b…`. Der Bau verlangt einen sauberen Arbeitsbaum und lief deshalb nach dem Berichtscommit. Die geänderte Datei `gateway/batch-lock-release.js` gehört auch zum Plugin; ohne native Sperre meldet die Betriebssystemsperre dort nie „belegt“ (`core/ownership-control.js:56-61`), die längere Wartezeit kommt also nicht vor. |
+| `git diff --check`, Stand der neunzehnten Übergabe | `git diff --check 3137077f HEAD` und `git diff --cached --check` für den Bericht | — | `PASS`, keine Ausgabe | — |
 | Windows x64 Oberfläche, achtzehnte Übergabe | eigenes Messskript, Bedienung per Windows-UI-Automation, Paket `5f347413…` (Build `c92aba02`); fünf Läufe mit je neuem Testprofil (drei „Nur umwandeln“, zwei „Anonymisieren“ mit automatischer Maskierung) | Windows x64, isoliertes Profil | beobachtet, keine Abnahme | siehe „Runde zum Laufende“ unter dem nativen Lauf; Befunde R-040 und R-042. |
 | Probe mit echter Betriebssystemsperre, R-041 | eigenes Skript: ein Arbeitsprozess nimmt und gibt die Stapelsperre mit dem unveränderten `gateway/batch-lock-release.js` frei; Gegenspieler nach Lauf | Windows x64, lokal gebaute Sperre `6d851daf…` | beobachtet | Abfragen des Core alle 50 ms: 0 von 88 Freigaben gescheitert. Dritter Prozess belegt die Sperre zu 75 %: 16 von 77. Zu 86 %: 22 von 67. Nach einem gescheiterten Versuch und dem Ende des Prozesses nimmt ein neuer Prozess die Sperre sofort. |
 | Dokumentation, achtzehnte Übergabe | `npm run test:docs` am Arbeitsstand mit diesem Bericht | Windows x64 | `PASS`, 0 | Fünf Testdateien bestanden (31, 3, 6, 5 und 3 Tests). |
@@ -1864,9 +1922,50 @@ keine Abnahme. Am Produkt nichts geändert.
   (Lauf f der Vorrunde lief ohne und zeigt dieselbe Dauer), größere Stapel,
   andere Formate, macOS.
 
+#### Runde zu R-042, Schritt 1 (Pakete `d25c6394…`, Build `aeff9d48`, und `5bbfbb21…`, Build `2b410083`)
+
+Je Lauf ein neues isoliertes Testprofil, 40 erfundene Textdateien,
+„Anonymisieren“ mit automatischer Maskierung. Beobachtung, keine Abnahme.
+
+- **Lauf q** (Paket `d25c6394…`, nur der erste Teil; mit Aufzeichnung der
+  Dateinamen und Sperrprobe) – nach der letzten Datei 37,5 Sekunden ohne
+  freie Sperre (174 Versuche). Die erste Statusabfrage in dieser Strecke
+  scheitert nach 5 052 ms, die folgenden 20 gelingen in 58 bis 64 ms. Im
+  ganzen Lauf eine gescheiterte Statusabfrage von 297.
+- **Anzeige in Lauf q** – „39 von 40“, 14,3 Sekunden später „Wird
+  verarbeitet · 40 von 40 Dateien abgeschlossen“, weitere 29 Sekunden
+  später „Ergebnisse werden bereitgestellt“, danach „Ergebnisordner
+  öffnen“. 40 von 40.
+- **Kontrolllauf r** (dasselbe Paket, ohne Aufzeichner) – dasselbe Bild:
+  eine gescheiterte Statusabfrage von 293 (5 056 ms), dieselben Abstände.
+- **Lauf s** (dasselbe Paket, Pause nach acht Dateien und Fortsetzen) – 52
+  gescheiterte Statusabfragen von 420, alle sofort, die meisten am
+  Laufende; „40 von 40“ erscheint nicht, die Anzeige wechselt nach 375
+  Sekunden auf „Ergebnisse werden bereitgestellt“. Daraus der zweite Teil
+  der Änderung.
+- **Vergleichslauf t** (altes Paket `aa93cefb…`, Pause und Fortsetzen) – 13
+  gescheiterte Statusabfragen von 396, davon sechs nach rund fünf Sekunden;
+  „40 von 40“ erstmals nach 378 Sekunden.
+- **Lauf u** (Endstand, Pause und Fortsetzen) – fünf gescheiterte
+  Statusabfragen von 344: eine nach 5 057 ms am Laufende, vier nach je rund
+  0,55 Sekunden in der Bereitstellung. Während der Verarbeitung nach dem
+  Fortsetzen keine (0 von 182; am alten Paket 4 von 181). „40 von 40“
+  erstmals nach 345 Sekunden, „Ergebnisse werden bereitgestellt“ nach 374,
+  „Anonymisierungslauf abgeschlossen“ nach 436. 40 von 40.
+- **Lauf v** (Endstand, neuer Lauf ohne Aufzeichner) – eine gescheiterte
+  Statusabfrage von 297 (5 052 ms); „39 von 40“, 12,3 Sekunden später „40
+  von 40“, weitere 29 Sekunden später „Ergebnisse werden bereitgestellt“.
+  40 von 40.
+- **Startprobe am Endstand** – `PASS`: Start 1 717 ms, Beobachtungsfenster 77 s mit Haupt- und
+  Prüffenster, 3 983 Stichproben, kein Lesefehler, keine Verbindung,
+  0 TCP-Listener, 0 UDP-Endpunkte.
+- **Nicht beobachtet** – 80 und 200 Dateien, „Nur umwandeln“ nach Pause und
+  Fortsetzen, andere Formate, die geführte Prüfung, Klicks auf andere Läufe
+  während der belegten Strecke, macOS.
+
 ## Urteil je Prüfdimension
 
-Zahlen aus ABDECKUNG.tsv am Stand `8369f727`, nur Einzeleinheiten. Das
+Zahlen aus ABDECKUNG.tsv am Stand `d6d24ce4`, nur Einzeleinheiten. Das
 Register zählte in der ersten Runde Produktivcode hinter einem
 `#[cfg(test)]` irrtümlich als Rust-Testmodul und damit als offen. Die
 Erkennung ist korrigiert; dadurch gelten rund 460 Rust-Einheiten jetzt als
@@ -1879,9 +1978,9 @@ ist eine Korrektur der Zählung, keine zusätzliche Prüfung.
 | Anonymisierung und Zuordnungen | Neu am 25.11. abends: Name hinter einer Rolle, Namensliste unter einem Label und derselbe Name an weiteren Stellen werden ersetzt (R-033b bis d); der dadurch häufiger erreichte Stopp bei `Label Name Nummer` ist behoben (`0bd5e26f`): Redaktion und Schlussprüfung lesen Platzhalter jetzt gleich. Neu am 25.11.: Aus Word blieben Telefonnummern, Namen hinter Titeln, Geburtsdaten und Kennungen stehen, weil der Kern den maskierten Punkt nicht las (R-033, für fünf Regeln behoben). Offen bleiben vier Formen unabhängig vom Format: voller Name in Prosa ohne Hinweisverb, einzelner Nachname, Telefonnummer ohne Label, Geburtsname. Mehrere Leckmuster und eine Überredaktion behoben; zwei eigene Lecks der zweiten Runde vor der Übergabe gefunden und behoben. Gegenüber RC178 zeigt der Differenzlauf am Endstand keine Verschlechterung außer den zehn gewollten Fällen von R-024. Zugangsdaten mitten in der Zeile werden für ein Wort ersetzt (R-027, Teil). Offen: die dokumentierten Grenzen von R-027 und der Namenserkennung. Zuordnungen und CSV-/XLSX-Escaping ohne Befund. | R-001, R-002, R-017, R-024, R-026, R-027, R-033 | 10 / 251 / 443. Geführte Entscheidungen nur in einzelnen nativen Läufen, zuletzt am 27.11. drei Entscheidungen für 63 Fundstellen oft genannter Namen; `privacy/entities.js`, `credentials.js` und `person-ambiguities.js` nur in Teilen gelesen (laut Register 23 von 113 Einheiten teilgeprüft). |
 | Oberfläche, UX und Accessibility | Ablauf entspricht DS-086; kein kritischer Befund. Texte und Rollen nachgebessert. Die eingebettete Prüfung ist mehrfach nativ bedient (Ersetzen, Beibehalten, Später entscheiden und Wiederaufnahme); die Zähltexte haben ihre Einzahl. Schließen während eines Laufs führt über eine Rückfrage zur Pause; nativ bedient sind die Rückfrage, Bleiben, Pausieren und Jetzt schließen (R-032). Fehlermeldungen der geladenen Oberfläche nennen seit `8cf5dd93` und `d474a579` die Ursache und die betroffenen Dateien; der Hinweis auf einen Ergebnisordner im Netzwerk (DS-080) ist eingebaut (R-034 bis R-036), in Standalone unter Windows aber nicht erreichbar, weil dort kein Netzordner angenommen wird (R-038); die Ablehnung nennt seit `8a167b09` das Netzlaufwerk als mögliche Ursache. | R-008, R-009, R-020, R-025, R-032, R-034 bis R-036 | 11 / 245 / 0. Die 46 offenen Einheiten waren die frühere Oberfläche; sie sind entfernt, nicht geprüft. Quelltext plus Windows-Läufe; kein Screenreader, kein WKWebView; Seitenzoom nur unter Windows beobachtet. |
 | Architektur und Plattform | Grenzen Oberfläche → Rust → Core → Worker nachvollzogen; Produkttrennung in der Projektion wirksam. Fünf Befunde der Rust-Shell behoben oder eingegrenzt, zuletzt die Startverweigerung bei belegter Ordnerkette. | R-011 bis R-014, R-022, R-028, R-032 | 25 / 755 / 546. Rust-Tests nur für Windows; macOS-Zweige siehe Mac-Status. |
-| Implementierung und Wartbarkeit | `main.rs` (rund 4 500 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, vier native Befehle ohne Aufrufer in der geladenen Oberfläche). Seit RC178 ist `main.rs` um rund 420 Zeilen gewachsen. | — (Verbesserungen, nicht als Befund geführt) | 5 / 223 / 656. Kein systematischer Durchgang. |
+| Implementierung und Wartbarkeit | `main.rs` (rund 4 500 Zeilen), `ooxml.js` (226 KB) und `privacy/engine.js` sind zu groß für sichere Einzeländerungen; im Datenschutzkern überlagern sich Regeln über Ränge, sodass eine neue Regel an entfernten Stellen wirkt. Dreifache NtCreateFile-Hüllen; toter Code (`adaptive-resource-policy.js`, vier native Befehle ohne Aufrufer in der geladenen Oberfläche). Seit RC178 ist `main.rs` um rund 420 Zeilen gewachsen. | — (Verbesserungen, nicht als Befund geführt) | 6 / 224 / 656. Kein systematischer Durchgang. |
 | Datenschutz und Sicherheitsgrenzen | Export überschreibt nie, Pfade handle-relativ, Diagnose mit geschlossenem Vokabular, keine Listener. Das neue Diagnoseereignis trägt nur Fehlerklasse und Systemcode. Shell und Core bauen keine Verbindungen auf. Die WebView2-Komponente meldete sich bis zum vierten Übergabestand regelmäßig bei Microsoft; am Endstand ist in zehn Minuten keine Verbindung mehr zu beobachten. | R-010, R-012, R-031 | 0 / 20 / 168. JS-Diagnose, Ergebnisexport und Prüfspeicher nicht gelesen. |
-| Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. Verwaiste Vorbereitungen werden bereinigt; eine laufende Veröffentlichung schützt allein ihr Alter. Neu am 27.11.: Eine Leseaktion im Verlauf konnte die gemeinsame Sperre der Dokumentkontrolle stehen lassen und damit einen laufenden Stapel bis zum Neustart anhalten (R-039); behoben in `8ff4979a` und in der echten App nachgeprüft. Dass das Öffnen während eines anderen Laufs oft mit „Bitte warten“ antwortet, bleibt. Geprüft am 27.11. nachts: Nach der letzten Datei hieß der Lauf bis zum Ende der Bereitstellung „Wird vorbereitet“ (R-040); behoben in `8399045b` und `8369f727`, auch für fortgesetzte Läufe, und in der echten App nachgeprüft. Die Stapelsperre gleicher Bauart beendete bei kurz belegter Betriebssystemsperre den Lauf (R-041); sie wartet seit `2795fa32` rund zwei Sekunden. Am Ende eines Anonymisierungslaufs mit 80 Dateien scheitern die Statusabfragen über eine Minute lang, weil sie auf die Betriebssystemsperre warten, die der Arbeitsprozess hält; die Anzeige steht solange (R-042, offen; gemessen am 28.11.: Die Übergabe der letzten Datei hält die Sperre über den Abschlussnachweis, rund 0,87 Sekunden je Datei; ein Vorschlag in zwei Schritten liegt vor). | R-007, R-010, R-022 (Hypothese), R-032, R-039 | 1 / 259 / 347. Wiederaufnahme nach „Später entscheiden“ einmal, nach „Pausieren und schließen“ und nach „Jetzt schließen“ je einmal nativ beobachtet; Absturzpfade, Beenden durch das Betriebssystem und voller Datenträger nicht untersucht. |
+| Nebenläufigkeit, Zustandsmodell und Betrieb | Serielle Veröffentlichung belegt, zweispurige Vorbereitung belegt. Verwaiste Vorbereitungen werden bereinigt; eine laufende Veröffentlichung schützt allein ihr Alter. Neu am 27.11.: Eine Leseaktion im Verlauf konnte die gemeinsame Sperre der Dokumentkontrolle stehen lassen und damit einen laufenden Stapel bis zum Neustart anhalten (R-039); behoben in `8ff4979a` und in der echten App nachgeprüft. Dass das Öffnen während eines anderen Laufs oft mit „Bitte warten“ antwortet, bleibt. Geprüft am 27.11. nachts: Nach der letzten Datei hieß der Lauf bis zum Ende der Bereitstellung „Wird vorbereitet“ (R-040); behoben in `8399045b` und `8369f727`, auch für fortgesetzte Läufe, und in der echten App nachgeprüft. Die Stapelsperre gleicher Bauart beendete bei kurz belegter Betriebssystemsperre den Lauf (R-041); sie wartet seit `2795fa32` rund zwei Sekunden. Am Ende eines Anonymisierungslaufs mit 80 Dateien scheitern die Statusabfragen über eine Minute lang, weil sie auf die Betriebssystemsperre warten, die der Arbeitsprozess hält; die Anzeige steht solange (R-042; gemessen am 28.11.: Die Übergabe der letzten Datei hält die Sperre über den Abschlussnachweis, rund 0,87 Sekunden je Datei. Seit `ad621ae6` und `1b4382c7` braucht die Statusabfrage die Sperre für einen entschiedenen Lauf und während einer Verarbeitung nicht mehr: Am Laufende scheitert noch eine Abfrage statt fünf, die Anzeige läuft weiter, auch nach Pause und Fortsetzen. Die Sperre selbst bleibt so lange belegt). | R-007, R-010, R-022 (Hypothese), R-032, R-039 | 1 / 260 / 347. Wiederaufnahme nach „Später entscheiden“ einmal, nach „Pausieren und schließen“ und nach „Jetzt schließen“ je einmal nativ beobachtet; Absturzpfade, Beenden durch das Betriebssystem und voller Datenträger nicht untersucht. |
 | Leistung und Ressourcen | Keine Lastmessung, nur Vorher-nachher-Vergleiche des Datenschutzkerns: nach der zweiten Runde 109 KB Prosa 0,86 s zu 0,89 s und 328 KB 5,9 s zu 5,7 s; seit R-027 für Dokumente mit vielen Zugangsdaten-Labels 26 bis 45 % länger; seit `0bd5e26f` bei vielen Platzhaltern das 1,3- bis 1,6-Fache. Der Kern skaliert schon in RC178 überlinear. | — | Dazu Startzeit und Suite-Laufzeiten. BL-047.5 bleibt ohne Zielhostmessung. |
 | Tests und Orakel | Breite Suite mit realen Aufrufpfaden, aber teuer und mit blinden Flecken. Für den Datenschutzkern fehlt ein Vergleichsorakel: die Regressionen der zweiten Runde zeigte erst der Differenzlauf gegen den alten Kern. Die Windows-Startprobe konnte einen WebView2-Endpunkt nicht zuordnen, ihr Abbau wartete auf keinen Prozess, und ihr Messskript lief auf diesem Host nicht durch, ohne dass ein Test es zeigte; behoben. Die Tests der früheren Oberfläche prüften Code, den kein Fenster lud, und verdeckten R-034 bis R-036; sie sind entfernt. Von ihren 52 Verhalten sind an der geladenen Oberfläche 29 nur zum Teil geprüft; neun bis dahin ungeprüfte haben seit `3b85e395` einen Test (ABGLEICH-ALTE-OBERFLAECHE.md). Drei Testhelfer ließen eine vorgesehene Antwort des Core nicht zu und brachen deshalb selten ab (R-037, behoben in `e89069eb`). Ein Test schrieb das Verhalten hinter R-039 fest, ohne dessen Folge zu prüfen; er ist ersetzt. Die native Prüfung der Dokumentkontrolle belegt die Betriebssystemsperre nur für einen einzelnen Freigabeversuch; anhaltender Wettbewerb kam erst in einer eigenen Probe vor. | R-019, R-029, R-030, R-034, R-037 | Gruppe `TEILGEPRÜFT`; Bewertung im nächsten Abschnitt. |
 | Abhängigkeiten, CI und Lieferkette | Locks, Pins und Rechte sauber; paketierte JavaScript-Abhängigkeiten lokal ohne bekannten Befund. Nachweis für Windows und Schutz von Tag und Release fehlen. | R-015, R-016, R-023 | 0 / 73 / 219. Paketinhalte der Release-Assets nicht geprüft; `cargo audit` am 25.11. ausgeführt, zwei Befunde angehoben, zehn Hinweise bleiben. |
@@ -2038,15 +2137,56 @@ Swift (zweite Core-Kopie, widerspricht CLAUDE.md).
 ## Übergabenachricht zum Weiterreichen
 
 ```text
-Claude-Code-Review für DataSecure RC178, Stand nach zwanzig Übergaben (Befunde R-001 bis R-042), abgeschlossen.
+Claude-Code-Review für DataSecure RC178, Stand nach einundzwanzig Übergaben (Befunde R-001 bis R-042), abgeschlossen.
 Branch: https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/tree/claude/rc178-standalone-review
 Einstiegscommit: e88f1b8d100421017fb3909d77e338fd25c1b421
-Geprüfter Produktstand: 8369f727c4116684b68905ec44b4501900c0c1b7 (spätere Commits nur tasks/rc178-claude-review/)
+Geprüfter Produktstand: d6d24ce45f792b5a9a6606ade3fe0e17e884ee2d (spätere Commits nur tasks/rc178-claude-review/)
 Veröffentlichter Remote-HEAD mit Bericht: siehe Nachricht des Anwenders
 Ergebnisbericht: tasks/rc178-claude-review/ERGEBNIS.md am Remote-HEAD
 Für Codex zuerst prüfen (die jüngste Änderung zuerst):
-1. R-042 gemessen, Vorschlag zur Behebung, vom 28.11. vormittags auf Auftrag des Anwenders. Am Produkt
-   nichts geändert (weiter 8369f727).
+1. R-042, Schritt 1 umgesetzt (Commits ad621ae6 und 1b4382c7; dazu 32536bd2 nur Tests, d6d24ce4 nur
+   docs/canonical/TRACEABILITY.md), vom 28.11. mittags auf Auftrag des Anwenders.
+   ad621ae6, gateway/batch-progress.js, publicProgress: deps.observePauseRequested wird nur noch aufgerufen,
+   wenn core.progressFacts(state, …).complete nicht true ist. core/batch-progress.js verwirft die
+   Pausenmarke bei "complete" ohnehin. Für jeden Stapel mit einer offenen Datei bleibt alles wie bisher. Mit
+   entschieden: Eine beschädigte Pausenmarke eines vollständig entschiedenen Stapels lässt dessen
+   Statusabfrage nicht mehr scheitern (STANDALONE_PAUSE_CONTROL_INVALID); sie bleibt unberührt und sperrt
+   weiter claim/request/resume; Abschlussnachweis und Bereitstellung eines entschiedenen Stapels scheitern an
+   ihr ebenfalls nicht mehr. Die Commit-Nachricht von ad621ae6 sagt dazu ungenau "still refuses every
+   mutation". Tests: tests/test-standalone-pause-control.js (32, zwei neu; der erste am Code von d74f19f7 rot).
+   1b4382c7, standalone/application-service.js, neu observeIntakePending, benutzt von lightweightStatus und
+   publicStatusSnapshot: intakeReservation.intakeReservationActive() (ein Versuch an der Betriebssystemsperre,
+   ohne Warten) entfällt, solange batch_processing_active true ist; sonst wird eine bestätigte Ablehnung vor
+   dem Lesen (isConfirmedOwnershipBusy) bis zu 500 ms in Schritten von 10 ms wiederholt. Grund: Für einen
+   fortgesetzten Lauf (keine offene Annahme im Core) lief diese Prüfung bei jeder Statusabfrage und
+   scheiterte am Laufende sofort; mit ad621ae6 allein waren es im Lauf mit Pause und Fortsetzen 52
+   gescheiterte Statusabfragen statt 13. Das erklärt auch die früher beobachteten sofort scheiternden
+   Abfragen nach Pause und Fortsetzen. Mit entschieden: Eine liegen gebliebene Reservierung räumt die
+   Statusabfrage während einer Verarbeitung nicht mehr auf. Test: tests/test-standalone.js (93, einer neu);
+   er hält auch fest, dass alle zehn Verwendungen von local_intake_pending das Ergebnis mit
+   batch_processing_active verknüpfen.
+   In der echten App (Paket 5bbfbb21…, Build 2b410083, 40 Dateien, Anonymisieren): neuer
+   Lauf eine gescheiterte Statusabfrage statt sechs; nach Pause und Fortsetzen fünf statt dreizehn, davon
+   eine nach fünf Sekunden statt sechs, während der Verarbeitung 0 von 182 statt 4 von 181. Die Anzeige
+   wechselt auf "40 von 40". Die Betriebssystemsperre ist weiter 37,5 s am Stück belegt (Sperrprobe, 174
+   Versuche, am Paket d25c6394… mit nur ad621ae6).
+   Zu prüfen: (a) Die eine verbliebene Abfrage mit fünf Sekunden beginnt, nachdem finishLocalDelivery die
+   Sperre genommen, aber bevor es den Laufzustand geschrieben hat (gateway/batch-delivery.js:271-297); sie
+   sieht den Stapel noch offen. Schluss aus Code und Zeitlage, nicht gemessen. (b) Nach Pause und
+   Fortsetzen scheitern in der Bereitstellung vier Abfragen nach je rund 0,55 s: Dort ist die Sperre 7,4 s am
+   Stück belegt und nichts wird verarbeitet. (c) Der Titel heißt in der belegten Strecke "Wird verarbeitet ·
+   40 von 40 Dateien abgeschlossen" und wechselt erst rund 29 s später auf "Ergebnisse werden
+   bereitgestellt"; im Vorschlag (Punkt 2) hatte ich den sofortigen Wechsel vorhergesagt. (d) Ob das
+   Auslassen der Reservierungsprüfung während einer Verarbeitung und die halbe Sekunde Wartezeit recht
+   sind. (e) Schritt 2 aus Punkt 2 (zwei statt vier Prüfdurchgänge in der Übergabe) ist offen. (f) Geprüft
+   mit 40 kleinen Textdateien unter Windows; 80 und 200 Dateien, "Nur umwandeln" nach Pause und Fortsetzen,
+   andere Formate, die geführte Prüfung und macOS nicht.
+   (g) Unabhängige Gegenprüfung, nur lesend: kein Blocker. Festgehalten, nicht geändert: lightweightStatus
+   liest erst die Stapel, dann die Annahme; wechselt ein Arbeitsprozess, der nicht zu diesem Core gehört,
+   dazwischen von der Annahme in die Verarbeitung, sieht eine Abfrage keins von beiden. publicProgress
+   berechnet die Fakten eines Standalone-Stapels jetzt zweimal.
+2. R-042 gemessen, Vorschlag zur Behebung, vom 28.11. vormittags auf Auftrag des Anwenders. Am Produkt
+   damals nichts geändert (Schritt 1 inzwischen umgesetzt: Punkt 1).
    Ursache, gemessen in der echten App (Paket aa93cefb…, 40 Dateien, Anonymisieren): finishLocalDelivery
    (gateway/batch-delivery.js:259-315) läuft im Standalone als eine synchrone Transaktion unter einer
    Betriebssystemsperre (gateway/batch.js:430-432 und :900, gateway/batch-active-lock.js:475-483). Bei der
@@ -2070,10 +2210,10 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    createBoundRecord erstellt den Nachweis aus der Erfassung "davor", der Vergleich davor/danach bleibt;
    zusammen zwei statt vier Durchgänge, gerechnet die halbe belegte Zeit. (2c) ein Durchgang unter einer
    Dokumentkontrolle und (2d) Nachweis außerhalb der Übergabe: zurückgestellt.
-   Berichtigt gegenüber Punkt 2: Die Aufrufstelle ist batch-delivery.js:301, nicht
+   Berichtigt gegenüber Punkt 3: Die Aufrufstelle ist batch-delivery.js:301, nicht
    batch-processing-orchestrator.js:69-79; es sind vier Durchgänge, nicht drei; eine Verarbeitung nimmt
    höchstens 200 Dateien an (resource-limits.js:12), die Hochrechnung auf 1 000 war falsch.
-2. R-040 und R-041 behoben, R-042 eingegrenzt (offen), vom 27.11. spätnachts auf Auftrag des Anwenders.
+3. R-040 und R-041 behoben, R-042 eingegrenzt (offen), vom 27.11. spätnachts auf Auftrag des Anwenders.
    R-040 (Commits 8399045b und 8369f727): standalone/application-service.js, status, trägt jetzt
    "delivering: true", wenn der beobachtete Lauf vollständig entschieden ist, der Zustand "preparing" oder
    "export_pending" lautet und die Annahme noch offen ist oder ein Arbeitsprozess dieses Core noch lebt
@@ -2115,9 +2255,9 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    (gateway/standalone-pause.js:90-114) und ob der Abschlussnachweis dreimal prüfen und die Sperre dabei
    durchgehend belegen muss. (e) R-041 ist gelindert, nicht beseitigt. (f) Geprüft mit 80 und 40 kleinen
    Textdateien unter Windows; größere Stapel, andere Formate, die geführte Prüfung und macOS nicht.
-3. R-040, R-041 und R-042 wie am 27.11. nachts gefunden, damals ohne Änderung am Produkt (R-040 und R-041
-   inzwischen behoben, R-042 eingegrenzt: Punkt 2). Auftrag des
-   Anwenders: zwei offene Beobachtungen aus Punkt 4 prüfen.
+4. R-040, R-041 und R-042 wie am 27.11. nachts gefunden, damals ohne Änderung am Produkt (R-040 und R-041
+   inzwischen behoben, R-042 eingegrenzt: Punkt 3). Auftrag des
+   Anwenders: zwei offene Beobachtungen aus Punkt 5 prüfen.
    R-040 (mittel): Nach der letzten Datei stellt der Arbeitsprozess die Ergebnisse bereit
    (gateway/batch-worker.js:172) und endet erst danach (:215). Der Core meldet in dieser Zeit den Zustand
    "preparing", weil die Annahme bis zum Ende des Arbeitsprozesses als offen gilt und nichts mehr verarbeitet
@@ -2155,11 +2295,11 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    Betriebssystemsperre lesen muss, und welcher Schritt des Arbeitsprozesses die Sperre am Ende eines
    Anonymisierungslaufs über eine Minute hält. (c) Ob die Stapelsperre dieselbe längere Wartezeit bekommen
    soll wie die Dokumentkontrolle in 8ff4979a; der Arbeitsprozess hat keine Frist der Hülle.
-   (d) Berichtigt: Die Aussage in Punkt 4, rund acht Sekunden nach "Lauf abgeschlossen" fehle die
+   (d) Berichtigt: Die Aussage in Punkt 5, rund acht Sekunden nach "Lauf abgeschlossen" fehle die
    Schaltfläche des Ergebnisordners, war falsch gelesen; der Lauf war noch nicht als abgeschlossen gemeldet.
    Die Aussage in BEFUNDE.md, get_public_state laufe ohne Warten ab, war falsch. (e) Geprüft nur mit 80
    kleinen Textdateien unter Windows; größere Stapel, andere Formate und die geführte Prüfung nicht.
-4. R-039 behoben (Commit 8ff4979a) und R-037 behoben (Commit e89069eb), vom 27.11. spätabends auf Auftrag des
+5. R-039 behoben (Commit 8ff4979a) und R-037 behoben (Commit e89069eb), vom 27.11. spätabends auf Auftrag des
    Anwenders. R-039: gateway/standalone-document-control.js, withDocumentControl. releaseAsync wartet bei
    OWNERSHIP_GUARD_BUSY jetzt rund zwei Sekunden (RELEASE_BACKOFF_MS: 10, 25, 50, 100, danach 18-mal 100 ms)
    statt 185 ms. Danach erhält der Aufrufer wie bisher seine Ablehnung, und recoverRelease fragt mit derselben
@@ -2184,13 +2324,13 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    tests/test-native-ownership-epoch-release.js schreiben die vier Pausen fest. (c) Unverändert antwortet
    "Ergebnisordner öffnen" während eines anderen Laufs oft mit "Bitte warten" (acquireActiveLock ohne
    Wiederholung, standalone-document-control.js). (d) Wer die Betriebssystemsperre hielt, als die Freigabe in
-   der echten App scheiterte, ist nicht festgestellt; die Aussage dazu in Punkt 5 ist nicht belegt.
+   der echten App scheiterte, ist nicht festgestellt; die Aussage dazu in Punkt 6 ist nicht belegt.
    (e) macOS nicht ausgeführt. (f) Geprüft nur mit 80 kleinen Textdateien in "Nur umwandeln".
    (g) An altem und neuem Paket gleich beobachtet, nicht untersucht: Rund acht Sekunden nach "Lauf
    abgeschlossen" eines Laufs mit 80 Dateien fehlt die Schaltfläche des Ergebnisordners noch, und ein Schließen
    führt zur Rückfrage "Dieser Lauf lässt sich gerade nicht pausieren."; eine Statusabfrage dauert am Laufende
    einmal 1,5 bis 2,9 s.
-5. R-039 und R-037 wie am 27.11. abends gefunden, damals ohne Änderung am Produkt (beide inzwischen behoben, Punkt 4). R-039: In der
+6. R-039 und R-037 wie am 27.11. abends gefunden, damals ohne Änderung am Produkt (beide inzwischen behoben, Punkt 5). R-039: In der
    echten App kann die Sperre der Dokumentkontrolle hängen bleiben. Ablauf: Ein Lauf arbeitet, der Anwender
    wählt im Verlauf "Ergebnisordner öffnen" eines fertigen Laufs (frontend/workspace.js:1883-1885, :1926;
    main.rs:2819-2859 reicht ohne Wiederholung durch). resolveResultsGeneration
@@ -2215,20 +2355,20 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    innerhalb ihrer Frist erneut. Weitere Beobachtung: Ein zweiter Lauf, der ohne Abstand nach dem ersten
    gestartet wird, endet als fehlgeschlagen und nicht fortsetzbar; mit 0,5 s Abstand nicht; über die
    Oberfläche nicht erreichbar.
-6. R-038, Commit 8a167b09, vom 27.11. auf Entscheidung des Anwenders (docs/canonical/DECISIONS.md, Präzisierung
+7. R-038, Commit 8a167b09, vom 27.11. auf Entscheidung des Anwenders (docs/canonical/DECISIONS.md, Präzisierung
    DS-080 vom 27.11.2026): frontend/workspace.js (showError: folderHint, wenn configure_results mit
    AI_EXPORT_CONFLICT oder STANDALONE_OPERATION_FAILED scheitert) nennt das Netzlaufwerk als mögliche Ursache.
    Test: tests/test-standalone-workspace.js, letzter Test der Datei, dazu der angepasste Test "unknown configure
    failure never becomes a preparation diagnosis or raw text". Dokumente: PRODUCT.md, DECISIONS.md,
    CURRENT_STATE.md, TRACEABILITY.md, docs/ANLEITUNG.md. Hülle und Core sind unverändert; der Befund selbst
-   steht in Punkt 7 unter (g). Zu prüfen: (a) Der Hinweis ist eine mögliche Ursache und erscheint bei jeder
+   steht in Punkt 8 unter (g). Zu prüfen: (a) Der Hinweis ist eine mögliche Ursache und erscheint bei jeder
    Ablehnung der Ordnerwahl mit diesen beiden Codes, auch ohne Netzlaufwerk und auch unter macOS. (b) Ob
    Standalone Netzordner unterstützen soll (export_directory.rs: open_directory lässt nur Prefix::Disk zu;
    result-folder-config.js: inspectRoot vergleicht mit fs.realpathSync.native); dann mit einem echten
    Dateiserver und unter macOS testen. (c) Das Cowork-Plugin ist nicht geändert; der Core lehnt dort ein
    Netzlaufwerk mit Laufwerksbuchstaben nach einer Gegenprobe ebenfalls ab. (d) Nativ beobachtet nur mit
    \\localhost\C$.
-7. Nachprüfung vom 27.11., Commits 6e10ac80 und 3b85e395. 6e10ac80: frontend/workspace.js (reasons: vier
+8. Nachprüfung vom 27.11., Commits 6e10ac80 und 3b85e395. 6e10ac80: frontend/workspace.js (reasons: vier
    Sätze für LOCAL_REVIEW_START_MISSING, _DENIED, _ARCHITECTURE und _FAILED; sourceDetailText nennt eine
    einzelne Datei mit dem Code der Meldung nur mit Namen). 3b85e395: tests/test-standalone-workspace.js
    (acht Tests am Dateiende; das Testgerüst kennt initialCatalogue und listenFails und gibt windowEvents
@@ -2241,37 +2381,37 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    nicht ausgewertet); keine dokumentierte Anforderung gefunden. (d) Einen Wettlauf zwischen Leeren der
    Auswahl und Drop schließt selection_guard in main.rs aus, die Oberfläche allein nicht. (e) Ein
    unabhängiger Leser hat ERGEBNIS.md gegengelesen; die Berichtigungen stehen in 84474ffe, die Punkte
-   dieser Nachricht sind seitdem fortlaufend nummeriert. (f) R-037, damals Hypothese (inzwischen geklärt, Punkt 5): Der erste Lauf der Suite
+   dieser Nachricht sind seitdem fortlaufend nummeriert. (f) R-037, damals Hypothese (inzwischen geklärt, Punkt 6): Der erste Lauf der Suite
    am Endstand brach in tests/test-standalone-sidecar.js ab (tests/helpers/standalone-packaged-markdown.mjs:126-130,
    "initial readiness never retries a conflict"): resolve_history_results antwortete direkt nach Laufende
    mit STANDALONE_BUSY (resolveResultsGeneration nimmt die Sperre des Laufs; standalone-document-control.js:41-42).
    Nicht reproduziert (sieben weitere Läufe der Testdatei bestanden, vier davon gleichzeitig); zweiter Lauf der Suite bestanden; Code seit RC178 unverändert.
-   (g) R-038 (Meldung inzwischen verbessert, Punkt 6), aus einem Nachtrag vom selben Tag, nativ beobachtet: Standalone unter Windows nimmt
+   (g) R-038 (Meldung inzwischen verbessert, Punkt 7), aus einem Nachtrag vom selben Tag, nativ beobachtet: Standalone unter Windows nimmt
    keinen Ergebnisordner im Netzwerk an, entgegen docs/canonical/PRODUCT.md:270-274. UNC-Pfad:
    tauri-contract/src/export_directory.rs:1146-1149 (open_directory lässt nur Prefix::Disk zu) ergibt
    AI_EXPORT_CONFLICT. Zugeordneter Laufwerksbuchstabe: gateway/result-folder-config.js:53-63 (inspectRoot
    vergleicht mit fs.realpathSync.native, das den UNC-Namen liefert) ergibt RESULT_ROOT_UNSAFE, sichtbar als
-   STANDALONE_OPERATION_FAILED. Der Hinweis aus Punkt 8 ist dort deshalb nicht erreichbar. Der Core-Teil
+   STANDALONE_OPERATION_FAILED. Der Hinweis aus Punkt 9 ist dort deshalb nicht erreichbar. Der Core-Teil
    gilt auch für das Cowork-Plugin (dort nicht ausgeführt). Geprüft mit \\localhost\C$, nicht mit einem
    Dateiserver; macOS nicht geprüft. (h) Manuelle Maskierung in der Nachbearbeitung nativ per Tastatur
    gespeichert; über UI-Automation Invoke und einen nachgestellten Mausklick wurde nichts gespeichert und
    nichts gemeldet (Ursache offen, document-review.js: currentTextSelection, Klick auf document-redact).
-8. R-035 und R-036, Commit d474a579: frontend/workspace.js (configure: Hinweis bei
+9. R-035 und R-036, Commit d474a579: frontend/workspace.js (configure: Hinweis bei
    network_folder_notice; errorDetails, sourceDetailText, admissionHints, showError mit drittem
    Argument; fünf Texte in reasons) und workspace.css (.notice mit white-space:pre-line). Test:
    tests/test-standalone-workspace.js, fünf Tests am Dateiende. Zu prüfen: (a) der Core erkennt ein
    Netzlaufwerk nur am UNC-Pfad (gateway/result-folder-config.js, isNetworkResultFolder); zugeordnete
    Laufwerksbuchstaben und /Volumes lösen den Hinweis nicht aus; der Anwender hat entschieden, das
    vorerst so zu belassen. (b) Nativ beobachtet ist nur die abgelehnte Auswahl mit einer
-   Office-Sperrdatei (Punkt 7), nicht der Hinweis auf ein Netzlaufwerk.
+   Office-Sperrdatei (Punkt 8), nicht der Hinweis auf ein Netzlaufwerk.
    (c) Die Meldung nennt höchstens zehn Namen; Namen mit Richtungs- oder
    Zeilentrennzeichen werden gezählt, nicht gezeigt (im Dateibaum weiterhin gezeigt, Rest von R-020).
    (d) Die Korrekturen nach der Gegenprüfung sind nur getestet.
    Die Befunde stammen aus dem Einzelabgleich der 52 entfallenen Tests
    (tasks/rc178-claude-review/ABGLEICH-ALTE-OBERFLAECHE.md) und gelten auch für den Tag v3.2.0-rc178.
-   Die drei nicht belegten Punkte des Abgleichs und die neun ungeprüften Verhalten behandelt Punkt 7;
+   Die drei nicht belegten Punkte des Abgleichs und die neun ungeprüften Verhalten behandelt Punkt 8;
    29 Verhalten bleiben an der geladenen Oberfläche nur zum Teil geprüft.
-9. R-019 und R-034, Commits 8cf5dd93 und 1d908311, vom 25.11. nachts, auf Entscheidung des Anwenders:
+10. R-019 und R-034, Commits 8cf5dd93 und 1d908311, vom 25.11. nachts, auf Entscheidung des Anwenders:
    frontend/index.html, app.js und styles.css sind entfernt, ebenso tests/test-standalone-frontend.js
    (52 Tests nur für app.js) und tests/manual/standalone-ui-browser.mjs. Das Fenster lud nur
    workspace.html. tests/test-standalone-desktop-contract.js liest jetzt die geladenen Skripte;
@@ -2280,12 +2420,12 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    STANDALONE_NO_ADMISSION, BATCH_PSEUDONYM_CAPACITY_EXCEEDED und
    STANDALONE_RESULT_BINDING_UNAVAILABLE (vorher nur app.js). Zu prüfen: (a) ob von den 52
    entfallenen Tests ein Verhalten für die neue Oberfläche ungeprüft bleibt (nicht Test für Test
-   abgeglichen; nachgeholt, siehe Punkt 8); (b) die vier nativen Befehle ohne Aufrufer in der geladenen Oberfläche
+   abgeglichen; nachgeholt, siehe Punkt 9); (b) die vier nativen Befehle ohne Aufrufer in der geladenen Oberfläche
    (remove_admitted_source, open_review_window, open_local_ledger, shutdown) samt dem getrennten
    Prüffenster und capabilities/review.json; (c) der Mac- und Linux-Build (der eingebettete Ordner
    ändert sich dort ebenso; Rust-Quellen sind unverändert); (d) docs/canonical/TRACEABILITY.md nennt
    die entfernten Dateien an 18 älteren Stellen, die nicht einzeln nachgezogen sind.
-10. R-033, Commit 0bd5e26f, vom 25.11. spät: privacy/structured.js (findStructuredSpans: zweiter Blick
+11. R-033, Commit 0bd5e26f, vom 25.11. spät: privacy/structured.js (findStructuredSpans: zweiter Blick
    über maskPlaceholders, wie scanResidual den Text liest; Spannen, die einen Platzhalter oder eine
    Spanne des ersten Blicks berühren, werden verworfen) und gateway/privacy-text-operation.js
    (weitere Stellen eines Kandidatennamens werden wieder reserviert). Behebt den Stopp RESIDUAL_PII
@@ -2300,14 +2440,14 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    (d) Laufzeit des Kerndurchlaufs bei vielen Platzhaltern 1,3- bis 1,6-fach. Eine Gegenprüfung mit
    rund 1 800 gezielten und 30 000 Zufallsfällen fand keinen Fall mit mehr Klartext und keinen neuen
    Stopp.
-11. R-033b bis d, Commit 1c8e971c, vom 25.11. abends: privacy/person-ambiguities.js (ROLE_CUE,
+12. R-033b bis d, Commit 1c8e971c, vom 25.11. abends: privacy/person-ambiguities.js (ROLE_CUE,
    roleLabelNameSpans, withoutFollowingWords, labelledNameListSpans, die Ausweitung in
    personProseCandidateSpans mit der Marke "further" und ihr Überspringen in personProseAmbiguities),
    gateway/privacy-text-operation.js (weitere Stellen werden nicht reserviert; reviewOf liest erst die
    Restfunde), privacy/base.js (Rückruf unter/an), privacy/entities.js (contactAfter). Nur Standalone,
    bis auf das Telefonlabel und die maskierte Klammer. Test: tests/test-privacy-role-labels-and-name-lists.js. Drei
    Gegenprüfungen; verworfen wurden Rollen als Personenfelder, eine Regel für "Name hat … Partizip"
-   und eine für den Geburtsnamen. Zu prüfen: (a) [behoben in 0bd5e26f, siehe Punkt 10] der Stopp RESIDUAL_PII bei "Label Name Nummer"
+   und eine für den Geburtsnamen. Zu prüfen: (a) [behoben in 0bd5e26f, siehe Punkt 11] der Stopp RESIDUAL_PII bei "Label Name Nummer"
    ("Tel. Hans Müller 030 …", auch Steuer-ID, Aktenzeichen, Geburtsdatum, Personalnr., Notfallkontakt,
    Mobil), sobald der Name an anderer Stelle Personenhinweis ist; vorher gab der Kern dort Name und
    Nummer frei, und RC178 stoppt bei "Name: Hans Müller" plus dieser Zeile genauso. Die Ursache liegt
@@ -2319,7 +2459,7 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    (e) Die Korrekturen nach der dritten Gegenprüfung sind nicht mehr unabhängig gegengeprüft.
    Offen bleibt die eigentliche Lücke: voller Name in Prosa ohne Hinweisverb, einzelner Nachname,
    Telefonnummer ohne Label, Geburtsname. Der Kern kennt Namen nur an der Form.
-12. R-033, Commit 3ba2b8fb, neu am 25.11. und schon in RC178 vorhanden: Markdown aus Office- und
+13. R-033, Commit 3ba2b8fb, neu am 25.11. und schon in RC178 vorhanden: Markdown aus Office- und
    PDF-Quellen schreibt jeden Punkt als "\."; die Regeln für "Tel."/"Fax.", Titel ("Dr."), "geb.",
    "z. Hd." und abgekürzte Nummernlabels ("Personalnr.", "Az.") lasen das nicht. Aus einem
    Word-Dokument blieben Telefonnummer, Name hinter dem Titel, Geburtsdatum und Kennung im
@@ -2330,33 +2470,33 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    Text). Die maskierte Klammer hinter einem Namen liest seit 1c8e971c contactAfter. Offen: getippte
    maskierte Listen- und Hervorhebungszeichen, XLSX/PPTX/PDF nicht einzeln ausgeführt. Tragfähig
    wäre eine einheitliche unmaskierte Sicht des Kerns auf solches Markdown statt Regel für Regel.
-   R-033b bis d: siehe Punkt 11. Derselbe Commit enthält R-027: Zugangsdaten in
+   R-033b bis d: siehe Punkt 12. Derselbe Commit enthält R-027: Zugangsdaten in
    Anführungszeichen werden ganz ersetzt, mit Rückfall auf das erste Wort.
-13. R-027, Commit 283e6ed9: privacy/base.js (CREDENTIAL_INLINE_FIELD_RE), privacy/structured.js
+14. R-027, Commit 283e6ed9: privacy/base.js (CREDENTIAL_INLINE_FIELD_RE), privacy/structured.js
    (findInlineCredentialSpans, getrennt von findStructuredSpans) und gateway/privacy-text-operation.js
    (prepareTextPrivacyReview: Ersetzung nach dem Kern, nur wenn die Prüfung danach dieselben offenen
    Entscheidungen ergibt). Vier frühere Fassungen haben Namen freigegeben oder Dokumente gestoppt;
    die Gegenfälle stehen in tests/test-privacy-inline-credentials.js. Bewusst eng: ein Wort je Label
-   (seit 3ba2b8fb ein Wert in Anführungszeichen ganz, Punkt 12).
-14. privacy/engine.js, Commits cfee417a bis ffab4fa7 als Ganzes, nicht einzeln: Die Zwischenstände
+   (seit 3ba2b8fb ein Wert in Anführungszeichen ganz, Punkt 13).
+15. privacy/engine.js, Commits cfee417a bis ffab4fa7 als Ganzes, nicht einzeln: Die Zwischenstände
    bis a0d3e340 enthalten zwei Lecks (Aufzählung voller Namen, E-Mail-Adresse mit Namen in der Domain).
    Endstand: linkIdentityHits, asciiNameSpellings, matchOnly, forwardFullNames und die Link-Schleife
    der drei strengen Profile. Neu bekannt: „Meier, Anna Schmidt“ bei bekannter Anna Meier wird als
    umgestellter Name gelesen. Ein eigener Vergleich RC178-Kern gegen diesen Kern mit fremdem Korpus
    wäre der beste Gegenbeleg.
-15. Rust-Shell (5f8bf47b bis 22688d75, d5992265): nur für Windows übersetzt und getestet. Auf einem
+16. Rust-Shell (5f8bf47b bis 22688d75, d5992265): nur für Windows übersetzt und getestet. Auf einem
    Mac-Runner zuerst cargo test und clippy; 8c0dd30b und b30a6dbc übersetzen für sich nicht.
-16. R-028, Commit b71439b2: private_namespace.rs (is_contention, open_waiting) und main.rs
+17. R-028, Commit b71439b2: private_namespace.rs (is_contention, open_waiting) und main.rs
    (namespace_bootstrap_code, release_unspawned_generation). Die Freigabe der Ordnerkette ist
    unverändert; neu sind die Ursache STANDALONE_DATA_ROOT_BUSY, ein Warten von höchstens rund zwei
    Sekunden vor dem Anlegen und dass ein solcher Versuch nicht gegen die 16 Startversuche zählt.
    Zu prüfen: ob ein Rückgeben der Generation an anderer Stelle der Wiederanlauf-Logik stört, und
    der Mac-Build (der Code ist cfg(windows), übersetzt wurde nur Windows).
-17. R-029 und R-030, Commits dbf98cbf, b11a6131, 0b99529c: Die Startprobe verglich den WebView2-
+18. R-029 und R-030, Commits dbf98cbf, b11a6131, 0b99529c: Die Startprobe verglich den WebView2-
    Profilordner ohne den Unterordner EBWebView; ihr Abbau hat deshalb nie auf WebView2 gewartet und
    tut es jetzt. Im Release-Workflow und in scripts/run-pkg-04.ps1 läuft das zum ersten Mal wirklich.
-   Der UDP-Endpunkt, an dem die alte Probe scheiterte, gehört zum Verkehr aus Punkt 18.
-18. R-031, Commits 1c3f36af und 56d7c744: Bis 0b99529c (also auch in RC178) fragte die WebView2-
+   Der UDP-Endpunkt, an dem die alte Probe scheiterte, gehört zum Verkehr aus Punkt 19.
+19. R-031, Commits 1c3f36af und 56d7c744: Bis 0b99529c (also auch in RC178) fragte die WebView2-
    Komponente beim Start config.edge.skype.com ab und meldete sich danach alle 20 bis 40 Sekunden bei
    edge.microsoft.com/componentupdater, dazu eine Proxy-Suche (wpad). Jetzt starten beide Fenster
    WebView2 mit --disable-background-networking --disable-component-update --no-proxy-server
@@ -2368,7 +2508,7 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS aus seiner Umgebung entfernen soll. Die Kontrolle des
    Beobachters läuft seit 1db8c744 und 98b426dd auch über seinen Hintergrundthread; der Zweig für
    Hosts ohne IPv6 ist nicht ausgeführt.
-19. R-032, Commits 5f670a20 und 2ce74b9f, auf Entscheidung des Anwenders (DECISIONS.md, Präzisierung
+20. R-032, Commits 5f670a20 und 2ce74b9f, auf Entscheidung des Anwenders (DECISIONS.md, Präzisierung
    DS-110 vom 25.11.2026): Schließen des Hauptfensters fragt bei arbeitendem Lauf und pausiert über
    das vorhandene pause_batch. Hülle: close_prompt.rs, main.rs (request_native_close,
    acknowledge_close_request, decline_close_request, confirm_close), ipc_transport.rs (ExitGate::begun),
@@ -2382,7 +2522,7 @@ Für Codex zuerst prüfen (die jüngste Änderung zuerst):
    (workBegins/workReturns statt markWorkStarting; Klick auf "Pausieren und schließen" nach
    Verbindungsverlust). Die Rückfrage "Aufbewahrung 0 Tage" ist im Paket nicht erreichbar, weil
    configure_core_environment EU_PRIVACY_RETENTION_DAYS nicht weiterreicht.
-20. R-025, Commits 907efc14, 8c452ac4, 1126dc36 und e66bab8f: nur Texte der Oberfläche. 8c452ac4 hatte
+21. R-025, Commits 907efc14, 8c452ac4, 1126dc36 und e66bab8f: nur Texte der Oberfläche. 8c452ac4 hatte
    eine Verbform verdorben und rund fünfzehn Texte übersehen (zweite Gegenprüfung), danach fehlten
    noch zwei (dritte Gegenprüfung).
    Zu prüfen: ob weitere Zähltexte fehlen (der Wächter in tests/test-standalone-workspace.js kennt
@@ -2397,10 +2537,10 @@ zurückgenommen, weil das Zeichen die Erkennung eines Namens dahinter verhindert
 Offen oder blockiert: macOS arm64/x64 und iOS-Simulator (keine Geräte); R-006 (Listen als Tabellen),
 R-015, R-022; R-032 beim Beenden durch das Betriebssystem und bei Absturz; R-028 bei langer Belegung; R-031 hängt an nicht zugesicherten WebView2-Schaltern; Grenzen von R-027 (mehrwortige Geheimnisse, Labels in
 Überschriften, Tabellen und Links); vier Commit-Nachrichten mit falschem Backlogposten (siehe Bericht);
-Rest von R-003 (Kontrollkästchen) und von R-033 (siehe Punkte 10 und 11); Entscheidungen zu Protokollaufbewahrung, den vier nativen Befehlen ohne Aufrufer
+Rest von R-003 (Kontrollkästchen) und von R-033 (siehe Punkte 11 und 12); Entscheidungen zu Protokollaufbewahrung, den vier nativen Befehlen ohne Aufrufer
 (remove_admitted_source, open_review_window, open_local_ledger, shutdown) und Seitenzoom unter macOS/Linux;
 die Erkennung eines Netzlaufwerks nur am UNC-Pfad (nach Entscheidung des Anwenders vorerst belassen);
 29 Verhalten der geladenen Oberfläche mit nur teilweisem Test; keine Rückmeldung nach erfolgreichem Öffnen
-(Entscheidung); Vergabe der 500 weiteren Stellen eines Namens in Reihenfolge der Namen (Punkt 7); Rest von R-039 (Stapelsperre gleicher Bauart unverändert; "Bitte warten" beim Öffnen während eines anderen Laufs; Punkt 4); R-038 (Standalone unter Windows nimmt weiter keinen
+(Entscheidung); Vergabe der 500 weiteren Stellen eines Namens in Reihenfolge der Namen (Punkt 8); Rest von R-039 (Stapelsperre gleicher Bauart unverändert; "Bitte warten" beim Öffnen während eines anderen Laufs; Punkt 5); R-038 (Standalone unter Windows nimmt weiter keinen
 Ergebnisordner im Netzwerk an; jetzt erklärt, echte Unterstützung ist eine Entscheidung); rund 59 % der Einheiten im Register offen.
 ```
