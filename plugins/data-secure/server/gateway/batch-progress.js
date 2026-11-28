@@ -16,14 +16,22 @@ function createBatchProgress(deps) {
 
   function publicProgress(state, options = {}) {
     const items = Array.isArray(state?.items) ? state.items : [];
-    const progress = core.progressFacts({ ...state,
-      ...(state.product_channel === 'standalone' && deps.observePauseRequested?.(state)
-        ? { standalone_pause_requested: true } : {}) }, {
+    const statuses = {
       deliveryPendingStatus,
       deferredReviewStatus,
       mappingPendingStatus,
       preflightMappingPendingStatus
-    }, liveLocalExecutor(state));
+    };
+    // A fully decided batch has no pause left to observe: the facts ignore the
+    // request once complete. Reading the marker still needs the ownership
+    // guard, and the worker keeps that guard while it writes the terminal
+    // evidence of exactly such a batch; every status read failed for that
+    // time and the display stood still (R-042). Completeness itself does not
+    // depend on a live executor.
+    const pauseObservable = () => core.progressFacts(state, statuses, false).complete !== true;
+    const progress = core.progressFacts({ ...state,
+      ...(state.product_channel === 'standalone' && pauseObservable() && deps.observePauseRequested?.(state)
+        ? { standalone_pause_requested: true } : {}) }, statuses, liveLocalExecutor(state));
 
     // Full package hashing is restricted to terminal-evidence creation. Public
     // terminal progress performs only the durable O(n) file-identity binding.

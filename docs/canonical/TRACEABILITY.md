@@ -86,6 +86,21 @@ wird nach dessen Ende vom nächsten Prozess übernommen.
 `test-batch-epoch-release-busy.js`, `test-batch-review-orchestrator.js` und
 `test-native-ownership-epoch-release.js` prüfen die neue Folge der Wartezeiten.
 
+RC178-Review R-042 (BL-010.13, DS-086; BL-050.6) → Die Übergabe der letzten
+Datei eines Anonymisierungslaufs hält die Betriebssystemsperre über den ganzen
+Abschlussnachweis (`gateway/batch-delivery.js`, `finishLocalDelivery`), bei 40
+Dateien rund 35 Sekunden. Die Statusabfrage las in dieser Zeit die Pausenmarke
+unter derselben Sperre (`gateway/standalone-pause.js`, `observeRequested`),
+scheiterte nach je fünf Sekunden, und die Anzeige stand.
+`gateway/batch-progress.js` (`publicProgress`) liest die Pausenmarke jetzt nur
+noch, solange der Stapel nicht vollständig entschieden ist; für einen
+entschiedenen Stapel wertet `core/batch-progress.js` sie ohnehin nicht aus.
+Folge: Eine beschädigte Pausenmarke eines entschiedenen Stapels lässt dessen
+Statusabfrage nicht mehr scheitern; sie bleibt unberührt und sperrt weiter jede
+Änderung und die Statusabfrage eines Stapels mit offener Datei. Die Haltezeit
+der Sperre selbst ist unverändert. `test-standalone-pause-control.js` prüft
+beide Fälle.
+
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor
 `sidecar_entry`/Ready. Der aktuelle lokale `tauri-contract/src/main.rs`

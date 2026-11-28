@@ -184,6 +184,68 @@ test('observer retains marker validation, root refusals and never converts uncer
   }, true);
 });
 
+test('a fully decided batch is reported without observing the pause marker; any open file still observes (R-042)', () => {
+  const busy = fixed('OWNERSHIP_GUARD_BUSY');
+  const statuses = { deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+    mappingPendingStatus: 'mapping_pending' };
+  const batch = (...items) => ({ ...state(), items: items.map(status => typeof status === 'string' ? { status } : status) });
+  // The worker keeps the guard while it writes the terminal evidence: every
+  // acquisition of another process is refused for that whole time.
+  const held = fixture({ beforeOuter() { throw busy; } });
+  held.run(() => {
+    let observed = 0;
+    const progress = createBatchProgress({ ...statuses,
+      observePauseRequested(current) { observed++; return held.pause.observeRequested(current); } });
+    for (const decided of [batch('released', 'released'), batch('released', 'stopped'), batch('stopped')]) {
+      const facts = progress.publicProgress(decided, { skipResultProjection: true });
+      assert.equal(facts.complete, true); assert.equal(facts.completed, decided.items.length);
+      assert.equal(facts.pause_requested, false); assert.equal(facts.paused, false);
+    }
+    assert.equal(observed, 0, 'no marker read and therefore no guard for a decided batch');
+    assert.equal(held.top(), 0); assert.equal(held.waits(), 0);
+    // Every state that still has an open file reads the marker exactly as
+    // before and fails closed while the guard is refused.
+    const open = [batch('released', 'pending'), batch('released', 'processing'), batch('released', 'retryable'),
+      batch('released', 'delivery_pending'), batch('released', 'mapping_pending'), batch('released', 'deferred_review'),
+      batch('released', { status: 'stopped', local_mapping_exported: false }), batch()];
+    for (const [index, undecided] of open.entries()) {
+      assert.throws(() => progress.publicProgress(undecided, { skipResultProjection: true }), error => error === busy);
+      assert.equal(observed, index + 1);
+    }
+    assert.equal(held.top(), open.length * 5); assert.equal(held.waits(), open.length * 5);
+  }, true);
+  // With a free guard the answers are the ones from before the change: a
+  // request accepted for a batch that is decided meanwhile was ignored already.
+  const free = fixture();
+  free.run(() => {
+    let observed = 0;
+    const progress = createBatchProgress({ ...statuses,
+      observePauseRequested(current) { observed++; return free.pause.observeRequested(current); } });
+    const running = batch('released', 'pending');
+    free.pause.request(running);
+    assert.equal(progress.publicProgress(running, { skipResultProjection: true }).pause_requested, true);
+    assert.equal(observed, 1);
+    const decided = batch('released', 'released');
+    const facts = progress.publicProgress(decided, { skipResultProjection: true });
+    assert.equal(facts.complete, true); assert.equal(facts.pause_requested, false); assert.equal(observed, 1);
+    // Decision recorded with the change: a damaged marker of a decided batch
+    // no longer fails its status. It stays untouched and still refuses every
+    // mutation and the status of a batch with an open file.
+    const marker = path.join(free.batches, token + '.pause-0');
+    fs.unlinkSync(marker); fs.writeFileSync(marker, '{invalid');
+    assert.equal(progress.publicProgress(decided, { skipResultProjection: true }).complete, true);
+    assert.equal(fs.readFileSync(marker, 'utf8'), '{invalid');
+    assert.throws(() => progress.publicProgress(running, { skipResultProjection: true }),
+      error => error.code === 'STANDALONE_PAUSE_CONTROL_INVALID');
+    assert.throws(() => free.pause.claim(running, () => assert.fail('damaged marker blocks the next file')),
+      error => error.code === 'STANDALONE_PAUSE_CONTROL_INVALID');
+    // Another product channel never observed and still does not.
+    const plugin = { ...decided, product_channel: 'plugin' }, before = observed;
+    assert.equal(progress.publicProgress({ ...plugin, items: running.items }, { skipResultProjection: true }).complete, false);
+    assert.equal(observed, before);
+  }, true);
+});
+
 test('observer retries only pre-callback kernel Busy, outside the guard and without logical writes', () => {
   const original = fixed('OWNERSHIP_GUARD_BUSY');
   const transient = fixture({ beforeOuter(attempt) { if (attempt === 1) throw original; },
